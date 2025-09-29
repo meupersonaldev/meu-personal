@@ -3,164 +3,198 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Cores do branding Meu Personal */
+:root {
+  --meu-primary: #002C4E;
+  --meu-primary-dark: #04243D;
+  --meu-accent: #FFF373;
+  --meu-cyan: #27DFFF;
+  --meu-success: #1F8A70;
+  --meu-warning: #C58F00;
+  --meu-error: #B3261E;
+  --meu-info: #2563EB;
+}
+
 @layer base {
-  :root {
-    /* Cores do Design System */
-    --primary-dark: 0 44 78;
-    --accent-yellow: 255 243 115;
-    --accent-cyan: 39 223 255;
-
-    /* Aplicar ao Tailwind */
-    --background: 255 255 255;
-    --foreground: 32 32 32;
-    --primary: 0 44 78;
-    --primary-foreground: 255 255 255;
-    --secondary: 244 244 245;
-    --secondary-foreground: 32 32 32;
-    --muted: 244 244 245;
-    --muted-foreground: 113 113 122;
-    --accent: 255 243 115;
-    --accent-foreground: 0 44 78;
-    --destructive: 179 38 30;
-    --destructive-foreground: 255 255 255;
-    --border: 212 212 216;
-    --input: 212 212 216;
-    --ring: 39 223 255;
-    --radius: 12px;
-  }
-
-  * {
-    border-color: hsl(var(--border));
-  }
-
   body {
-    background-color: hsl(var(--background));
-    color: hsl(var(--foreground));
     font-family: 'Montserrat', system-ui, sans-serif;
   }
 
-  /* Mobile First - Base styles */
-  h1 {
-    font-size: 20px;
-    line-height: 130%;
-    letter-spacing: 0.4px;
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Montserrat', system-ui, sans-serif;
     font-weight: 600;
-    color: #FFF373;
-  }
-
-  h2 {
-    font-size: 20px;
-    line-height: 130%;
-    letter-spacing: 0.4px;
-    font-weight: 600;
-    color: white;
   }
 
   p {
-    font-size: 16px;
-    line-height: 150%;
-    letter-spacing: 0.32px;
+    font-family: 'Montserrat', system-ui, sans-serif;
     font-weight: 400;
-  }
-
-  /* Scrollbar customization */
-  ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-  }
-
-  ::-webkit-scrollbar-track {
-    background-color: #F4F4F5;
-  }
-
-  ::-webkit-scrollbar-thumb {
-    background-color: #71717A;
-    border-radius: 8px;
-  }
-
-  ::-webkit-scrollbar-thumb:hover {
-    background-color: #3F3F46;
   }
 }
 
 @layer components {
-  /* Container mobile-first */
-  .container-app {
-    width: 100%;
-    padding-left: 1rem;
-    padding-right: 1rem;
-    margin-left: auto;
-    margin-right: auto;
+  .container-meu {
+    @apply w-full px-4 mx-auto max-w-7xl;
   }
 
   @media (min-width: 640px) {
-    .container-app {
-      max-width: 640px;
-      padding-left: 1.5rem;
-      padding-right: 1.5rem;
-    }
-  }
-
-  @media (min-width: 768px) {
-    .container-app {
-      max-width: 768px;
+    .container-meu {
+      @apply px-6;
     }
   }
 
   @media (min-width: 1024px) {
-    .container-app {
-      max-width: 1024px;
-      padding-left: 2rem;
-      padding-right: 2rem;
+    .container-meu {
+      @apply px-8;
     }
   }
 
-  @media (min-width: 1280px) {
-    .container-app {
-      max-width: 1280px;
-    }
+  .btn-primary-meu {
+    @apply bg-meu-accent text-meu-primary font-semibold px-6 py-3 rounded-meu transition-all duration-200 hover:opacity-90 disabled:opacity-50;
   }
 
-  /* Mobile tab bar */
-  .mobile-tab-bar {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background-color: white;
-    border-top: 1px solid #D4D4D8;
-    display: flex;
-    justify-content: space-around;
-    align-items: center;
-    height: 4rem;
-    padding-left: 0.5rem;
-    padding-right: 0.5rem;
-    z-index: 50;
+  .btn-secondary-meu {
+    @apply bg-transparent border-2 border-meu-accent text-meu-accent font-semibold px-6 py-3 rounded-meu transition-all duration-200 hover:bg-meu-accent hover:text-meu-primary disabled:opacity-50;
   }
 
-  @media (min-width: 768px) {
-    .mobile-tab-bar {
+  .card-meu {
+    @apply bg-white rounded-meu shadow-meu p-6;
+  }
+}
+
+
+:root {
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  html {
+    @apply bg-gray-50 dark:bg-gray-900;
+    min-height: 100vh;
+    height: 100%;
+  }
+  
+  body {
+    @apply bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white;
+    min-height: 100vh;
+    height: 100%;
+  }
+  
+  #__next {
+    @apply bg-gray-50 dark:bg-gray-900;
+    min-height: 100vh;
+    height: 100%;
+  }
+}
+
+/* Dark mode básico e limpo */
+.dark {
+  color-scheme: dark;
+}
+
+/* Esconder scrollbars para melhorar a UI */
+@layer utilities {
+  .scrollbar-hide {
+    /* Firefox */
+    scrollbar-width: none;
+
+    /* Chrome, Safari and Opera */
+    &::-webkit-scrollbar {
       display: none;
     }
+
+    /* Internet Explorer and Edge */
+    -ms-overflow-style: none;
   }
 
-  .mobile-tab-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.75rem;
-    color: #4B5563;
-    padding: 0.5rem;
-    border-radius: 0.5rem;
-    transition: background-color 0.15s ease-in-out;
-  }
+  .scrollbar-thin {
+    /* Firefox */
+    scrollbar-width: thin;
 
-  .mobile-tab-item:hover {
-    background-color: #F4F4F5;
-  }
+    /* Chrome, Safari and Opera */
+    &::-webkit-scrollbar {
+      width: 4px;
+    }
 
-  .mobile-tab-item.active {
-    color: #002C4E;
+    &::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: rgba(156, 163, 175, 0.3);
+      border-radius: 2px;
+    }
+
+    &::-webkit-scrollbar-thumb:hover {
+      background: rgba(156, 163, 175, 0.5);
+    }
   }
 }

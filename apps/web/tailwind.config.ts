@@ -6,100 +6,85 @@ const config: Config = {
     './pages/**/*.{ts,tsx}',
     './components/**/*.{ts,tsx}',
     './app/**/*.{ts,tsx}',
+    './src/**/*.{ts,tsx}',
   ],
   theme: {
-    container: {
-      center: true,
-      padding: '1rem',
-      screens: {
-        '2xl': '1400px',
-      },
-    },
     extend: {
-      colors: {
-        border: '#D4D4D8',
-        input: '#D4D4D8',
-        ring: '#27DFFF',
-        background: '#FFFFFF',
-        foreground: '#202020',
-        primary: {
-          DEFAULT: '#002C4E',
-          foreground: '#FFFFFF',
-        },
-        secondary: {
-          DEFAULT: '#F4F4F5',
-          foreground: '#202020',
-        },
-        accent: {
-          DEFAULT: '#FFF373',
-          foreground: '#002C4E',
-          cyan: '#27DFFF',
-        },
-        muted: {
-          DEFAULT: '#F4F4F5',
-          foreground: '#71717A',
-        },
-        destructive: {
-          DEFAULT: '#B3261E',
-          foreground: '#FFFFFF',
-        },
-        success: {
-          DEFAULT: '#1F8A70',
-          foreground: '#FFFFFF',
-        },
-        warning: {
-          DEFAULT: '#C58F00',
-          foreground: '#FFFFFF',
-        },
-        info: {
-          DEFAULT: '#2563EB',
-          foreground: '#FFFFFF',
-        },
-        gray: {
-          50: '#F4F4F5',
-          100: '#D4D4D8',
-          400: '#71717A',
-          600: '#3F3F46',
-          900: '#111111',
-        },
-      },
       fontFamily: {
         sans: ['Montserrat', 'system-ui', 'sans-serif'],
       },
-      fontSize: {
-        'heading-1': ['20px', { lineHeight: '130%', letterSpacing: '0.4px', fontWeight: '600' }],
-        'heading-2': ['20px', { lineHeight: '130%', letterSpacing: '0.4px', fontWeight: '600' }],
-        'body': ['16px', { lineHeight: '150%', letterSpacing: '0.32px', fontWeight: '400' }],
+      colors: {
+        // Shadcn/ui system colors integradas com branding Meu Personal
+        background: 'var(--background)',
+        foreground: 'var(--foreground)',
+        card: {
+          DEFAULT: 'var(--card)',
+          foreground: 'var(--card-foreground)',
+        },
+        popover: {
+          DEFAULT: 'var(--popover)',
+          foreground: 'var(--popover-foreground)',
+        },
+        primary: {
+          DEFAULT: '#002C4E', // Meu Personal primary
+          foreground: '#FFFFFF',
+        },
+        secondary: {
+          DEFAULT: 'var(--secondary)',
+          foreground: 'var(--secondary-foreground)',
+        },
+        muted: {
+          DEFAULT: 'var(--muted)',
+          foreground: 'var(--muted-foreground)',
+        },
+        accent: {
+          DEFAULT: '#FFF373', // Meu Personal accent
+          foreground: '#002C4E',
+        },
+        destructive: {
+          DEFAULT: '#B3261E', // Meu Personal error
+          foreground: 'var(--destructive-foreground)',
+        },
+        border: 'var(--border)',
+        input: 'var(--input)',
+        ring: 'var(--ring)',
+        chart: {
+          '1': 'var(--chart-1)',
+          '2': 'var(--chart-2)',
+          '3': 'var(--chart-3)',
+          '4': 'var(--chart-4)',
+          '5': 'var(--chart-5)',
+        },
+        sidebar: {
+          DEFAULT: 'var(--sidebar)',
+          foreground: 'var(--sidebar-foreground)',
+          primary: 'var(--sidebar-primary)',
+          'primary-foreground': 'var(--sidebar-primary-foreground)',
+          accent: 'var(--sidebar-accent)',
+          'accent-foreground': 'var(--sidebar-accent-foreground)',
+          border: 'var(--sidebar-border)',
+          ring: 'var(--sidebar-ring)',
+        },
+        // Cores específicas do branding Meu Personal
+        'meu-primary': '#002C4E',
+        'meu-primary-dark': '#04243D',
+        'meu-accent': '#FFF373',
+        'meu-cyan': '#27DFFF',
+        'meu-success': '#1F8A70',
+        'meu-warning': '#C58F00',
+        'meu-error': '#B3261E',
+        'meu-info': '#2563EB',
       },
       borderRadius: {
-        sm: '8px',
-        DEFAULT: '12px',
-        lg: '16px',
-      },
-      spacing: {
-        xs: '8px',
-        sm: '16px',
-        md: '24px',
-        lg: '32px',
-        xl: '48px',
+        lg: 'var(--radius)',
+        md: 'calc(var(--radius) - 2px)',
+        sm: 'calc(var(--radius) - 4px)',
+        'meu': '12px',
+        'meu-lg': '16px',
       },
       boxShadow: {
-        sm: '0 1px 2px rgba(0,0,0,0.08)',
-        DEFAULT: '0 2px 6px rgba(0,0,0,0.12)',
-      },
-      keyframes: {
-        'accordion-down': {
-          from: { height: '0' },
-          to: { height: 'var(--radix-accordion-content-height)' },
-        },
-        'accordion-up': {
-          from: { height: 'var(--radix-accordion-content-height)' },
-          to: { height: '0' },
-        },
-      },
-      animation: {
-        'accordion-down': 'accordion-down 0.2s ease-out',
-        'accordion-up': 'accordion-up 0.2s ease-out',
+        'meu': '0 2px 6px rgba(0,0,0,0.12)',
+        'meu-lg': '0 4px 12px rgba(0,0,0,0.15)',
       },
     },
   },
