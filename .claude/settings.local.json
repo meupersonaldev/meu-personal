@@ -5,7 +5,18 @@
       "Bash(npm install:*)",
       "Bash(npx prisma:*)",
       "Bash(npm run build:*)",
-      "Bash(npm run dev:*)"
+      "Bash(npm run dev:*)",
+      "Bash(npx:*)",
+      "Bash(printf:*)",
+      "Bash(npm uninstall:*)",
+      "mcp__supabase__get_project_url",
+      "mcp__supabase__get_anon_key",
+      "mcp__supabase__list_tables",
+      "mcp__supabase__execute_sql",
+      "Bash(curl:*)",
+      "mcp__supabase__apply_migration",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []
