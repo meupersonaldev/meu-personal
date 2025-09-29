@@ -27,11 +27,24 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
 })
 
-// Routes (serão adicionadas)
-// app.use('/api/auth', authRoutes)
-// app.use('/api/users', userRoutes)
-// app.use('/api/bookings', bookingRoutes)
-// app.use('/api/credits', creditRoutes)
+// Routes
+import authRoutes from './routes/auth'
+import teachersRoutes from './routes/teachers'
+import studentsRoutes from './routes/students'
+import bookingsRoutes from './routes/bookings'
+import notificationsRoutes from './routes/notifications'
+import plansRoutes from './routes/plans'
+import approvalsRoutes from './routes/approvals'
+import paymentsRoutes from './routes/payments'
+
+app.use('/api/auth', authRoutes)
+app.use('/api/teachers', teachersRoutes)
+app.use('/api/students', studentsRoutes)
+app.use('/api/bookings', bookingsRoutes)
+app.use('/api/notifications', notificationsRoutes)
+app.use('/api/plans', plansRoutes)
+app.use('/api/approvals', approvalsRoutes)
+app.use('/api/payments', paymentsRoutes)
 
 // Error handling
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
