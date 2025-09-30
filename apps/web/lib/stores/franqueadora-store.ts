@@ -268,12 +268,22 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
               data: {
                 name: academyData.admin_name,
                 user_type: 'FRANCHISE_ADMIN'
-              }
+              },
+              emailRedirectTo: undefined  // Desabilitar redirect de confirmação
             }
           })
 
           if (authError) {
             console.error('Error creating auth user:', authError)
+
+            // Se o erro for de email inválido, pode ser configuração do Supabase
+            if (authError.message.includes('invalid') || authError.message.includes('Invalid')) {
+              throw new Error(
+                'Erro: Configure o Supabase para permitir emails sem verificação.\n' +
+                'Vá em: Authentication > Providers > Email > Desabilite "Confirm email"'
+              )
+            }
+
             throw new Error(`Erro ao criar usuário: ${authError.message}`)
           }
 
