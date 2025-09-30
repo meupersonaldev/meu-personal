@@ -7,7 +7,7 @@ import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { useFranquiaStore, TeacherPlan, StudentPlan } from '@/lib/stores/franquia-supabase-store'
+import { useFranquiaStore, TeacherPlan, StudentPlan } from '@/lib/stores/franquia-store'
 import { toast } from 'sonner'
 
 export default function PlansPage() {

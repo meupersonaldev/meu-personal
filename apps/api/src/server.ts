@@ -36,6 +36,7 @@ import notificationsRoutes from './routes/notifications'
 import plansRoutes from './routes/plans'
 import approvalsRoutes from './routes/approvals'
 import paymentsRoutes from './routes/payments'
+import franchisesRoutes from './routes/franchises'
 
 app.use('/api/auth', authRoutes)
 app.use('/api/teachers', teachersRoutes)
@@ -45,6 +46,7 @@ app.use('/api/notifications', notificationsRoutes)
 app.use('/api/plans', plansRoutes)
 app.use('/api/approvals', approvalsRoutes)
 app.use('/api/payments', paymentsRoutes)
+app.use('/api/franchises', franchisesRoutes)
 
 // Error handling
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

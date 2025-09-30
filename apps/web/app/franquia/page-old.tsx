@@ -8,7 +8,7 @@ import { Eye, EyeOff, Loader2, ArrowLeft, Building2, Users, BarChart3, Shield, S
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { useFranquiaStore } from '@/lib/stores/franquia-supabase-store'
+import { useFranquiaStore } from '@/lib/stores/franquia-store'
 
 interface FranquiaCredentials {
   email: string

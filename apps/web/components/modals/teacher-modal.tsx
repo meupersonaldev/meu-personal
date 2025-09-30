@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { toast } from 'sonner'
-import { useFranquiaStore, Teacher } from '@/lib/stores/franquia-supabase-store'
+import { useFranquiaStore, Teacher } from '@/lib/stores/franquia-store'
 
 interface TeacherModalProps {
   isOpen: boolean

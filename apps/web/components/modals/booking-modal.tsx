@@ -5,7 +5,7 @@ import { X, Calendar, Clock, User, GraduationCap, CreditCard, Loader2 } from 'lu
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
-import { useFranquiaStore } from '@/lib/stores/franquia-supabase-store'
+import { useFranquiaStore } from '@/lib/stores/franquia-store'
 
 interface BookingModalProps {
   isOpen: boolean

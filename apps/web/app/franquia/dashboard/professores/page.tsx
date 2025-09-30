@@ -22,7 +22,7 @@ import {
   Activity,
   X
 } from 'lucide-react'
-import { useFranquiaStore } from '@/lib/stores/franquia-supabase-store'
+import { useFranquiaStore } from '@/lib/stores/franquia-store'
 import { toast } from 'sonner'
 
 interface Teacher {

@@ -5,7 +5,7 @@ import { Clock, Check, X, GraduationCap, Users, Eye, AlertCircle } from 'lucide-
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { useFranquiaStore, ApprovalRequest } from '@/lib/stores/franquia-supabase-store'
+import { useFranquiaStore, ApprovalRequest } from '@/lib/stores/franquia-store'
 import { toast } from 'sonner'
 
 export default function ApprovalsPage() {

@@ -5,7 +5,7 @@ import { X, User, Mail, Phone, CreditCard, Calendar, Loader2 } from 'lucide-reac
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
-import { useFranquiaStore, Student } from '@/lib/stores/franquia-supabase-store'
+import { useFranquiaStore, Student } from '@/lib/stores/franquia-store'
 
 interface StudentModalProps {
   isOpen: boolean

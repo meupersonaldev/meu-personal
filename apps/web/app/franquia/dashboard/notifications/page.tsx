@@ -5,7 +5,7 @@ import { Bell, Check, CheckCircle, Users, GraduationCap, CreditCard, Clock, Aler
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { useFranquiaStore, Notification } from '@/lib/stores/franquia-supabase-store'
+import { useFranquiaStore, Notification } from '@/lib/stores/franquia-store'
 import { toast } from 'sonner'
 
 export default function NotificationsPage() {

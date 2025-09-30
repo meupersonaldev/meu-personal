@@ -8,7 +8,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Logo } from '@/components/ui/logo'
-import { useFranquiaStore } from '@/lib/stores/franquia-supabase-store'
+import { useFranquiaStore } from '@/lib/stores/franquia-store'
 
 export default function FranquiaLoginPage() {
   const router = useRouter()

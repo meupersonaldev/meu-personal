@@ -64,9 +64,7 @@ export default function SejaFranqueadoPage() {
         <div className="container mx-auto px-4 max-w-7xl">
           <div className="flex items-center justify-between h-24">
             {/* Logo */}
-            <Link href="/">
-              <Logo size="md" variant="default" showText={false} />
-            </Link>
+            <Logo size="md" variant="default" showText={false} href="/" />
 
             {/* Desktop Navigation */}
             <nav className="hidden md:flex items-center space-x-6">

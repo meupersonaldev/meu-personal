@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useFranquiaStore } from '@/lib/stores/franquia-supabase-store'
+import { useFranquiaStore } from '@/lib/stores/franquia-store'
 import { Button } from '@/components/ui/button'
 import { Logo } from '@/components/ui/logo'
 import { toast } from 'sonner'

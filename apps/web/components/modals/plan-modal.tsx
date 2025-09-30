@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
-import { useFranquiaStore, Plan } from '@/lib/stores/franquia-supabase-store'
+import { useFranquiaStore, Plan } from '@/lib/stores/franquia-store'
 
 interface PlanModalProps {
   isOpen: boolean

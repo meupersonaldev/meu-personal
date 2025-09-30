@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { supabase } from '@/lib/supabase'
 
+// Types
 export interface FranquiaUser {
   id: string
   name: string
@@ -9,42 +11,56 @@ export interface FranquiaUser {
   academyId: string
 }
 
+export interface Academy {
+  id: string
+  name: string
+  email: string
+  phone?: string
+  address?: string
+  city?: string
+  state?: string
+  zip_code?: string
+  is_active: boolean
+}
+
 export interface Teacher {
   id: string
   name: string
   email: string
-  phone: string
-  specialty: string
+  phone?: string
+  specialties: string[]
   status: 'active' | 'inactive' | 'pending'
-  studentsCount: number
-  rating: number
-  totalClasses: number
-  earnings: number
-  createdAt: string
+  rating?: number
+  total_reviews: number
+  commission_rate: number
+  created_at: string
 }
 
 export interface Student {
   id: string
   name: string
   email: string
-  phone: string
+  phone?: string
   credits: number
   status: 'active' | 'inactive'
-  joinDate: string
-  lastActivity: string
+  join_date: string
+  last_activity: string
   planId?: string
+  plan_id?: string
 }
 
 export interface Plan {
   id: string
   name: string
-  description: string
+  description?: string
   price: number
-  type: 'package' // Pacote de horas
+  credits_included: number
+  hoursIncluded: number
+  duration_days: number
   features: string[]
   status: 'active' | 'inactive'
-  hoursIncluded: number
-  createdAt: string
+  is_active: boolean
+  created_at: string
 }
 
 export interface Class {
@@ -55,6 +71,8 @@ export interface Class {
   time: string
   status: 'scheduled' | 'completed' | 'cancelled'
   price: number
+  duration: number
+  created_at: string
 }
 
 export interface TimeSlot {
@@ -63,566 +81,1102 @@ export interface TimeSlot {
   dayOfWeek: number // 0 = domingo, 1 = segunda, etc
   isAvailable: boolean
   maxCapacity: number
-  createdAt: string
+  created_at: string
 }
 
 export interface Analytics {
-  totalStudents: number
   totalTeachers: number
+  totalStudents: number
+  totalRevenue: number
   totalClasses: number
-  monthlyRevenue: number
-  studentsGrowth: number
-  teachersGrowth: number
-  classesGrowth: number
-  revenueGrowth: number
+  activeTeachers: number
+  activeStudents: number
+  monthlyGrowth: number
+}
+
+export interface Notification {
+  id: string
+  franchise_admin_id: string
+  type: 'new_teacher' | 'new_student' | 'payment_received' | 'plan_purchased' | 'teacher_approval_needed' | 'student_approval_needed'
+  title: string
+  message: string
+  data: any
+  is_read: boolean
+  created_at: string
+}
+
+export interface TeacherPlan {
+  id: string
+  name: string
+  description?: string
+  price: number
+  commission_rate: number
+  features: string[]
+  is_active: boolean
+  asaas_plan_id?: string
+  created_at: string
+}
+
+export interface StudentPlan {
+  id: string
+  name: string
+  description?: string
+  price: number
+  credits_included: number
+  validity_days: number
+  features: string[]
+  is_active: boolean
+  asaas_plan_id?: string
+  created_at: string
+}
+
+export interface ApprovalRequest {
+  id: string
+  type: 'teacher_registration' | 'student_registration'
+  user_id: string
+  academy_id?: string
+  status: 'pending' | 'approved' | 'rejected'
+  requested_data: any
+  reviewed_by?: string
+  reviewed_at?: string
+  rejection_reason?: string
+  created_at: string
+  user?: any
+  academy?: any
+  reviewer?: any
 }
 
 interface FranquiaState {
+  // Auth
   franquiaUser: FranquiaUser | null
+  academy: Academy | null
+  isAuthenticated: boolean
+
+  // Data
   teachers: Teacher[]
   students: Student[]
+  plans: Plan[]
   classes: Class[]
   timeSlots: TimeSlot[]
-  plans: Plan[]
-  analytics: Analytics
+  analytics: Analytics | null
 
+  // New data
+  notifications: Notification[]
+  teacherPlans: TeacherPlan[]
+  studentPlans: StudentPlan[]
+  approvalRequests: ApprovalRequest[]
+  unreadNotifications: number
+
+  // Loading states
+  isLoading: boolean
+  
   // Actions
   login: (email: string, password: string) => Promise<boolean>
   logout: () => void
-
+  setAcademy: (academy: Academy) => void
+  
   // Teachers
-  addTeacher: (teacher: Omit<Teacher, 'id' | 'createdAt'>) => void
-  updateTeacher: (id: string, updates: Partial<Teacher>) => void
-  deleteTeacher: (id: string) => void
-
+  fetchTeachers: () => Promise<void>
+  addTeacher: (teacherData: Omit<Teacher, 'id' | 'created_at'>) => Promise<boolean>
+  updateTeacher: (id: string, updates: Partial<Teacher>) => Promise<boolean>
+  deleteTeacher: (id: string) => Promise<boolean>
+  
   // Students
-  addStudent: (student: Omit<Student, 'id'>) => void
-  updateStudent: (id: string, updates: Partial<Student>) => void
-  deleteStudent: (id: string) => void
+  fetchStudents: () => Promise<void>
+  addStudent: (studentData: Omit<Student, 'id' | 'join_date'>) => Promise<boolean>
+  updateStudent: (id: string, updates: Partial<Student>) => Promise<boolean>
+  deleteStudent: (id: string) => Promise<boolean>
+  
+  // Plans
+  fetchPlans: () => Promise<void>
+  addPlan: (planData: Omit<Plan, 'id' | 'created_at'>) => Promise<boolean>
+  updatePlan: (id: string, updates: Partial<Plan>) => Promise<boolean>
+  deletePlan: (id: string) => Promise<boolean>
+  
+  // Analytics
+  fetchAnalytics: () => Promise<void>
 
-  // Classes
-  addClass: (classData: Omit<Class, 'id'>) => void
-  updateClass: (id: string, updates: Partial<Class>) => void
-  deleteClass: (id: string) => void
+  // Classes (Agendamentos)
+  fetchClasses: () => Promise<void>
+  updateClass: (id: string, updates: Partial<Class>) => Promise<boolean>
+  deleteClass: (id: string) => Promise<boolean>
 
   // Time Slots
-  addTimeSlot: (timeSlot: Omit<TimeSlot, 'id' | 'createdAt'>) => void
-  updateTimeSlot: (id: string, updates: Partial<TimeSlot>) => void
-  deleteTimeSlot: (id: string) => void
-  toggleTimeSlotAvailability: (id: string) => void
+  fetchTimeSlots: () => Promise<void>
+  toggleTimeSlotAvailability: (id: string) => Promise<boolean>
 
-  // Plans
-  addPlan: (plan: Omit<Plan, 'id' | 'createdAt'>) => void
-  updatePlan: (id: string, updates: Partial<Plan>) => void
-  deletePlan: (id: string) => void
+  // Notifications
+  fetchNotifications: () => Promise<void>
+  markNotificationAsRead: (id: string) => Promise<boolean>
+  markAllNotificationsAsRead: () => Promise<boolean>
 
-  // Analytics
-  updateAnalytics: () => void
-}
+  // Teacher Plans
+  fetchTeacherPlans: () => Promise<void>
+  createTeacherPlan: (plan: Omit<TeacherPlan, 'id' | 'created_at'>) => Promise<boolean>
 
-// Mock data realista para academia pequena
-const mockFranquiaUser: FranquiaUser = {
-  id: 'franquia-001',
-  name: 'Academia FitLife - Unidade Centro',
-  email: 'admin@fitlife.com',
-  role: 'FRANCHISE_ADMIN',
-  academyId: 'academy-001'
-}
+  // Student Plans
+  fetchStudentPlans: () => Promise<void>
+  createStudentPlan: (plan: Omit<StudentPlan, 'id' | 'created_at'>) => Promise<boolean>
 
-const mockTeachers: Teacher[] = [
-  {
-    id: 'teacher-001',
-    name: 'Maria Santos',
-    email: 'maria@email.com',
-    phone: '(11) 98765-4321',
-    specialty: 'Musculação e Funcional',
-    status: 'active',
-    studentsCount: 2,
-    rating: 4.9,
-    totalClasses: 18,
-    earnings: 630,
-    createdAt: '2024-02-15'
-  },
-  {
-    id: 'teacher-002',
-    name: 'Carlos Silva',
-    email: 'carlos@email.com',
-    phone: '(11) 98765-4322',
-    specialty: 'Crossfit e HIIT',
-    status: 'active',
-    studentsCount: 1,
-    rating: 4.7,
-    totalClasses: 12,
-    earnings: 420,
-    createdAt: '2024-03-01'
-  }
-]
-
-const mockStudents: Student[] = [
-  {
-    id: 'student-001',
-    name: 'João Silva',
-    email: 'joao@email.com',
-    phone: '(11) 99999-9999',
-    credits: 8,
-    status: 'active',
-    joinDate: '2024-02-20',
-    lastActivity: '2024-03-19',
-    planId: 'plan-001'
-  },
-  {
-    id: 'student-002',
-    name: 'Paula Santos',
-    email: 'paula@email.com',
-    phone: '(11) 99999-8888',
-    credits: 12,
-    status: 'active',
-    joinDate: '2024-03-05',
-    lastActivity: '2024-03-20',
-    planId: 'plan-002'
-  },
-  {
-    id: 'student-003',
-    name: 'Roberto Lima',
-    email: 'roberto@email.com',
-    phone: '(11) 99999-7777',
-    credits: 3,
-    status: 'active',
-    joinDate: '2024-03-10',
-    lastActivity: '2024-03-18',
-    planId: 'plan-001'
-  }
-]
-
-const mockPlans: Plan[] = [
-  {
-    id: 'plan-001',
-    name: 'Pacote Básico',
-    description: 'Ideal para quem está começando',
-    price: 50,
-    type: 'package',
-    features: [
-      '1 hora de treino',
-      'Acesso a todos os equipamentos',
-      'Suporte básico'
-    ],
-    status: 'active',
-    hoursIncluded: 1,
-    createdAt: '2024-01-15'
-  },
-  {
-    id: 'plan-002',
-    name: 'Pacote Intermediário',
-    description: 'Para quem quer treinar com regularidade',
-    price: 225,
-    type: 'package',
-    features: [
-      '5 horas de treino',
-      'Acesso a todos os equipamentos',
-      'Personal trainer incluso',
-      'Avaliação física',
-      'Desconto de 10%'
-    ],
-    status: 'active',
-    hoursIncluded: 5,
-    createdAt: '2024-01-15'
-  },
-  {
-    id: 'plan-003',
-    name: 'Pacote Premium',
-    description: 'Para treinar com máxima flexibilidade',
-    price: 400,
-    type: 'package',
-    features: [
-      '10 horas de treino',
-      'Acesso a todos os equipamentos',
-      'Personal trainer incluso',
-      'Avaliação física completa',
-      'Desconto de 20%',
-      'Prioridade no agendamento'
-    ],
-    status: 'active',
-    hoursIncluded: 10,
-    createdAt: '2024-02-01'
-  }
-]
-
-const mockClasses: Class[] = [
-  {
-    id: 'class-001',
-    teacherId: 'teacher-001',
-    studentId: 'student-001',
-    date: '2024-03-21',
-    time: '14:00',
-    status: 'scheduled',
-    price: 50
-  },
-  {
-    id: 'class-002',
-    teacherId: 'teacher-002',
-    studentId: 'student-002',
-    date: '2024-03-20',
-    time: '16:00',
-    status: 'completed',
-    price: 50
-  },
-  {
-    id: 'class-003',
-    teacherId: 'teacher-001',
-    studentId: 'student-002',
-    date: '2024-03-19',
-    time: '10:00',
-    status: 'completed',
-    price: 50
-  }
-]
-
-// Horários padrão da academia (segunda a domingo)
-const mockTimeSlots: TimeSlot[] = [
-  // Segunda-feira (1)
-  { id: 'slot-mon-06', time: '06:00', dayOfWeek: 1, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-mon-07', time: '07:00', dayOfWeek: 1, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-mon-08', time: '08:00', dayOfWeek: 1, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-mon-09', time: '09:00', dayOfWeek: 1, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-mon-10', time: '10:00', dayOfWeek: 1, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-mon-14', time: '14:00', dayOfWeek: 1, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-mon-15', time: '15:00', dayOfWeek: 1, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-mon-16', time: '16:00', dayOfWeek: 1, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-mon-17', time: '17:00', dayOfWeek: 1, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-mon-18', time: '18:00', dayOfWeek: 1, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-mon-19', time: '19:00', dayOfWeek: 1, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-mon-20', time: '20:00', dayOfWeek: 1, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-mon-21', time: '21:00', dayOfWeek: 1, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-
-  // Terça-feira (2) - alguns horários indisponíveis
-  { id: 'slot-tue-06', time: '06:00', dayOfWeek: 2, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-tue-07', time: '07:00', dayOfWeek: 2, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-tue-08', time: '08:00', dayOfWeek: 2, isAvailable: false, maxCapacity: 4, createdAt: '2024-01-01' }, // Indisponível
-  { id: 'slot-tue-09', time: '09:00', dayOfWeek: 2, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-tue-10', time: '10:00', dayOfWeek: 2, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-tue-14', time: '14:00', dayOfWeek: 2, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-tue-15', time: '15:00', dayOfWeek: 2, isAvailable: false, maxCapacity: 4, createdAt: '2024-01-01' }, // Indisponível
-  { id: 'slot-tue-16', time: '16:00', dayOfWeek: 2, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-tue-17', time: '17:00', dayOfWeek: 2, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-tue-18', time: '18:00', dayOfWeek: 2, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-tue-19', time: '19:00', dayOfWeek: 2, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-tue-20', time: '20:00', dayOfWeek: 2, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-tue-21', time: '21:00', dayOfWeek: 2, isAvailable: false, maxCapacity: 4, createdAt: '2024-01-01' }, // Indisponível
-
-  // Quarta-feira (3)
-  { id: 'slot-wed-06', time: '06:00', dayOfWeek: 3, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-wed-07', time: '07:00', dayOfWeek: 3, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-wed-08', time: '08:00', dayOfWeek: 3, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-wed-09', time: '09:00', dayOfWeek: 3, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-wed-10', time: '10:00', dayOfWeek: 3, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-wed-14', time: '14:00', dayOfWeek: 3, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-wed-15', time: '15:00', dayOfWeek: 3, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-wed-16', time: '16:00', dayOfWeek: 3, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-wed-17', time: '17:00', dayOfWeek: 3, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-wed-18', time: '18:00', dayOfWeek: 3, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-wed-19', time: '19:00', dayOfWeek: 3, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-wed-20', time: '20:00', dayOfWeek: 3, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-wed-21', time: '21:00', dayOfWeek: 3, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-
-  // Quinta-feira (4)
-  { id: 'slot-thu-06', time: '06:00', dayOfWeek: 4, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-thu-07', time: '07:00', dayOfWeek: 4, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-thu-08', time: '08:00', dayOfWeek: 4, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-thu-09', time: '09:00', dayOfWeek: 4, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-thu-10', time: '10:00', dayOfWeek: 4, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-thu-14', time: '14:00', dayOfWeek: 4, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-thu-15', time: '15:00', dayOfWeek: 4, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-thu-16', time: '16:00', dayOfWeek: 4, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-thu-17', time: '17:00', dayOfWeek: 4, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-thu-18', time: '18:00', dayOfWeek: 4, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-thu-19', time: '19:00', dayOfWeek: 4, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-thu-20', time: '20:00', dayOfWeek: 4, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-thu-21', time: '21:00', dayOfWeek: 4, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-
-  // Sexta-feira (5) - horários reduzidos
-  { id: 'slot-fri-06', time: '06:00', dayOfWeek: 5, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-fri-07', time: '07:00', dayOfWeek: 5, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-fri-08', time: '08:00', dayOfWeek: 5, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-fri-09', time: '09:00', dayOfWeek: 5, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-fri-10', time: '10:00', dayOfWeek: 5, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-fri-14', time: '14:00', dayOfWeek: 5, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-fri-15', time: '15:00', dayOfWeek: 5, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-fri-16', time: '16:00', dayOfWeek: 5, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-fri-17', time: '17:00', dayOfWeek: 5, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-fri-18', time: '18:00', dayOfWeek: 5, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-fri-19', time: '19:00', dayOfWeek: 5, isAvailable: false, maxCapacity: 4, createdAt: '2024-01-01' }, // Indisponível
-  { id: 'slot-fri-20', time: '20:00', dayOfWeek: 5, isAvailable: false, maxCapacity: 4, createdAt: '2024-01-01' }, // Indisponível
-
-  // Sábado (6) - só manhã
-  { id: 'slot-sat-08', time: '08:00', dayOfWeek: 6, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-sat-09', time: '09:00', dayOfWeek: 6, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-sat-10', time: '10:00', dayOfWeek: 6, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-  { id: 'slot-sat-11', time: '11:00', dayOfWeek: 6, isAvailable: true, maxCapacity: 4, createdAt: '2024-01-01' },
-
-  // Domingo (0) - fechado
-]
-
-const initialAnalytics: Analytics = {
-  totalStudents: 3,
-  totalTeachers: 2,
-  totalClasses: 3,
-  monthlyRevenue: 1500,
-  studentsGrowth: 50, // Crescimento alto para academia pequena
-  teachersGrowth: 0,
-  classesGrowth: 100, // Crescimento de aulas
-  revenueGrowth: 200 // Crescimento de receita
+  // Approval Requests
+  fetchApprovalRequests: () => Promise<void>
+  approveRequest: (id: string, reviewerId: string) => Promise<boolean>
+  rejectRequest: (id: string, reviewerId: string, reason: string) => Promise<boolean>
 }
 
 export const useFranquiaStore = create<FranquiaState>()(
   persist(
     (set, get) => ({
+      // Initial state
       franquiaUser: null,
-      teachers: mockTeachers,
-      students: mockStudents,
-      classes: mockClasses,
-      timeSlots: mockTimeSlots,
-      plans: mockPlans,
-      analytics: initialAnalytics,
+      academy: null,
+      isAuthenticated: false,
+      teachers: [],
+      students: [],
+      plans: [],
+      classes: [],
+      timeSlots: [],
+      analytics: null,
+      notifications: [],
+      teacherPlans: [],
+      studentPlans: [],
+      approvalRequests: [],
+      unreadNotifications: 0,
+      isLoading: false,
 
+      // Auth
       login: async (email: string, password: string) => {
-        // Simular delay de API
-        await new Promise(resolve => setTimeout(resolve, 1000))
+        try {
+          set({ isLoading: true })
+          
+          // Primeiro, buscar o usuário pelo email
+          const { data: userData, error: userError } = await supabase
+            .from('users')
+            .select('*')
+            .eq('email', email)
+            .single()
 
-        // Verificar credenciais (demo)
-        if (email === 'admin@fitlife.com' && password === 'franquia123') {
-          set({ franquiaUser: mockFranquiaUser })
+          if (userError || !userData) {
+            console.error('User not found:', userError)
+            return false
+          }
+
+          // Verificar se é admin da franquia OU super admin da franqueadora
+          let adminData = null
+          let academyId = null
+
+          // Primeiro, tentar buscar na tabela franchise_admins (admin de academia)
+          const { data: franchiseAdminData, error: franchiseAdminError } = await supabase
+            .from('franchise_admins')
+            .select('*')
+            .eq('user_id', userData.id)
+            .single()
+
+          if (franchiseAdminData) {
+            adminData = franchiseAdminData
+            academyId = franchiseAdminData.academy_id
+          } else {
+            // Se não encontrou, tentar buscar na tabela franqueadora_admins (super admin)
+            const { data: superAdminData, error: superAdminError } = await supabase
+              .from('franqueadora_admins')
+              .select('*')
+              .eq('user_id', userData.id)
+              .single()
+
+            if (superAdminData) {
+              adminData = superAdminData
+              // Super admin pode acessar qualquer academia, vamos pegar a primeira
+              const { data: firstAcademy } = await supabase
+                .from('academies')
+                .select('*')
+                .limit(1)
+                .single()
+              
+              academyId = firstAcademy?.id
+            }
+          }
+
+          if (!adminData) {
+            console.error('Admin not found in any table')
+            return false
+          }
+
+          // Buscar dados da academia separadamente
+          const { data: academyData, error: academyError } = await supabase
+            .from('academies')
+            .select('*')
+            .eq('id', academyId)
+            .single()
+
+          if (academyError || !academyData) {
+            console.error('Academy not found:', academyError)
+            return false
+          }
+
+          // Simular verificação de senha (em produção seria Supabase Auth)
+          if (password !== '123456') {
+            return false
+          }
+
+          set({
+            franquiaUser: {
+              id: userData.id,
+              name: userData.name,
+              email: userData.email,
+              role: 'FRANCHISE_ADMIN',
+              academyId: academyId
+            },
+            academy: academyData,
+            isAuthenticated: true,
+            isLoading: false
+          })
+
+          // Carregar dados iniciais (não bloquear login se falhar)
+          const {
+            fetchTeachers,
+            fetchStudents,
+            fetchPlans,
+            fetchAnalytics,
+            fetchClasses,
+            fetchTimeSlots,
+            fetchNotifications,
+            fetchTeacherPlans,
+            fetchStudentPlans,
+            fetchApprovalRequests
+          } = get()
+          try {
+            await Promise.all([
+              fetchTeachers(),
+              fetchStudents(),
+              fetchPlans(),
+              fetchAnalytics(),
+              fetchClasses(),
+              fetchTimeSlots(),
+              fetchNotifications(),
+              fetchTeacherPlans(),
+              fetchStudentPlans(),
+              fetchApprovalRequests()
+            ])
+          } catch (error) {
+            console.warn('Some initial data failed to load:', error)
+            // Não falhar o login por causa disso
+          }
+
+          console.log('Login successful, returning true')
           return true
+        } catch (error) {
+          console.error('Login error:', error)
+          set({ isLoading: false })
+          return false
         }
-
-        return false
       },
 
       logout: () => {
-        set({ franquiaUser: null })
-      },
+        set({ 
+          franquiaUser: null, 
+          academy: null,
+          isAuthenticated: false,
+          teachers: [],
+          students: [],
+          plans: [],
+          classes: [],
+          timeSlots: [],
+          analytics: null,
+          notifications: [],
+          teacherPlans: [],
+          studentPlans: [],
+          approvalRequests: [],
+          unreadNotifications: 0
+        })
 
-      // Teachers Management
-      addTeacher: (teacherData) => {
-        const newTeacher: Teacher = {
-          ...teacherData,
-          id: `teacher-${Date.now()}`,
-          createdAt: new Date().toISOString().split('T')[0]
+        // Redirecionar para landing page
+        if (typeof window !== 'undefined') {
+          window.location.href = '/'
         }
-
-        set((state) => ({
-          teachers: [...state.teachers, newTeacher]
-        }))
-
-        get().updateAnalytics()
       },
 
-      updateTeacher: (id, updates) => {
-        set((state) => ({
-          teachers: state.teachers.map(teacher =>
-            teacher.id === id ? { ...teacher, ...updates } : teacher
-          )
-        }))
-
-        get().updateAnalytics()
+      setAcademy: (academy: Academy) => {
+        set({ academy })
       },
 
-      deleteTeacher: (id) => {
-        set((state) => ({
-          teachers: state.teachers.filter(teacher => teacher.id !== id)
-        }))
+      // Teachers
+      fetchTeachers: async () => {
+        try {
+          const { academy } = get()
+          console.log('Fetching teachers for academy:', academy)
+          if (!academy) {
+            console.log('No academy set!')
+            return
+          }
 
-        get().updateAnalytics()
-      },
+          const { data, error } = await supabase
+            .from('academy_teachers')
+            .select('*')
+            .eq('academy_id', academy.id)
 
-      // Students Management
-      addStudent: (studentData) => {
-        const newStudent: Student = {
-          ...studentData,
-          id: `student-${Date.now()}`
+          console.log('Academy teachers data:', data)
+          console.log('Academy teachers error:', error)
+
+          if (error) {
+            console.error('Query error:', error)
+            set({ teachers: [] })
+            return
+          }
+
+          // Se não há dados, definir array vazio
+          if (!data || data.length === 0) {
+            console.log('No teachers found for academy')
+            set({ teachers: [] })
+            return
+          }
+
+          // Buscar dados dos usuários separadamente
+          const teacherIds = data.map(item => item.teacher_id)
+          const { data: usersData } = await supabase
+            .from('users')
+            .select('*')
+            .in('id', teacherIds)
+
+          const teachers: Teacher[] = data.map(item => {
+            const user = usersData?.find(u => u.id === item.teacher_id)
+            return {
+              id: user?.id || item.teacher_id,
+              name: user?.name || 'Professor',
+              email: user?.email || '',
+              phone: user?.phone || '',
+              specialties: [],
+              status: item.status || 'active',
+              rating: 0,
+              total_reviews: 0,
+              commission_rate: item.commission_rate || 0,
+              created_at: item.created_at
+            }
+          })
+
+          set({ teachers })
+        } catch (error) {
+          console.error('Error fetching teachers:', error)
         }
-
-        set((state) => ({
-          students: [...state.students, newStudent]
-        }))
-
-        get().updateAnalytics()
       },
 
-      updateStudent: (id, updates) => {
-        set((state) => ({
-          students: state.students.map(student =>
-            student.id === id ? { ...student, ...updates } : student
-          )
-        }))
+      addTeacher: async (teacherData) => {
+        try {
+          const { academy } = get()
+          if (!academy) return false
 
-        get().updateAnalytics()
-      },
+          // 1. Criar usuário
+          const { data: userData, error: userError } = await supabase
+            .from('users')
+            .insert({
+              name: teacherData.name,
+              email: teacherData.email,
+              phone: teacherData.phone,
+              role: 'TEACHER',
+              credits: 0
+            })
+            .select()
+            .single()
 
-      deleteStudent: (id) => {
-        set((state) => ({
-          students: state.students.filter(student => student.id !== id)
-        }))
+          if (userError) throw userError
 
-        get().updateAnalytics()
-      },
+          // 2. Criar perfil de professor
+          await supabase
+            .from('teacher_profiles')
+            .insert({
+              user_id: userData.id,
+              specialties: teacherData.specialties,
+              hourly_rate: 80.00,
+              is_available: true
+            })
 
-      // Classes Management
-      addClass: (classData) => {
-        const newClass: Class = {
-          ...classData,
-          id: `class-${Date.now()}`
+          // 3. Vincular à academia
+          await supabase
+            .from('academy_teachers')
+            .insert({
+              teacher_id: userData.id,
+              academy_id: academy.id,
+              status: teacherData.status,
+              commission_rate: teacherData.commission_rate
+            })
+
+          // Recarregar lista
+          await get().fetchTeachers()
+          return true
+        } catch (error) {
+          console.error('Error adding teacher:', error)
+          return false
         }
-
-        set((state) => ({
-          classes: [...state.classes, newClass]
-        }))
-
-        get().updateAnalytics()
       },
 
-      updateClass: (id, updates) => {
-        set((state) => ({
-          classes: state.classes.map(classItem =>
-            classItem.id === id ? { ...classItem, ...updates } : classItem
-          )
-        }))
+      updateTeacher: async (id, updates) => {
+        try {
+          // Atualizar dados do usuário
+          if (updates.name || updates.email || updates.phone) {
+            await supabase
+              .from('users')
+              .update({
+                name: updates.name,
+                email: updates.email,
+                phone: updates.phone
+              })
+              .eq('id', id)
+          }
 
-        get().updateAnalytics()
-      },
+          // Atualizar perfil do professor
+          if (updates.specialties) {
+            await supabase
+              .from('teacher_profiles')
+              .update({
+                specialties: updates.specialties
+              })
+              .eq('user_id', id)
+          }
 
-      deleteClass: (id) => {
-        set((state) => ({
-          classes: state.classes.filter(classItem => classItem.id !== id)
-        }))
+          // Atualizar vínculo com academia
+          if (updates.status || updates.commission_rate) {
+            await supabase
+              .from('academy_teachers')
+              .update({
+                status: updates.status,
+                commission_rate: updates.commission_rate
+              })
+              .eq('teacher_id', id)
+          }
 
-        get().updateAnalytics()
-      },
-
-      // Time Slots Management
-      addTimeSlot: (timeSlotData) => {
-        const newTimeSlot: TimeSlot = {
-          ...timeSlotData,
-          id: `slot-${Date.now()}`,
-          createdAt: new Date().toISOString().split('T')[0]
+          // Recarregar lista
+          await get().fetchTeachers()
+          return true
+        } catch (error) {
+          console.error('Error updating teacher:', error)
+          return false
         }
-
-        set((state) => ({
-          timeSlots: [...state.timeSlots, newTimeSlot]
-        }))
       },
 
-      updateTimeSlot: (id, updates) => {
-        set((state) => ({
-          timeSlots: state.timeSlots.map(slot =>
-            slot.id === id ? { ...slot, ...updates } : slot
-          )
-        }))
-      },
+      deleteTeacher: async (id) => {
+        try {
+          const { academy } = get()
+          if (!academy) return false
 
-      deleteTimeSlot: (id) => {
-        set((state) => ({
-          timeSlots: state.timeSlots.filter(slot => slot.id !== id)
-        }))
-      },
+          // Remover vínculo com academia (hard delete)
+          await supabase
+            .from('academy_teachers')
+            .delete()
+            .eq('teacher_id', id)
+            .eq('academy_id', academy.id)
 
-      toggleTimeSlotAvailability: (id) => {
-        set((state) => ({
-          timeSlots: state.timeSlots.map(slot =>
-            slot.id === id ? { ...slot, isAvailable: !slot.isAvailable } : slot
-          )
-        }))
-      },
+          // Deletar perfil de professor
+          await supabase
+            .from('teacher_profiles')
+            .delete()
+            .eq('user_id', id)
 
-      // Plans Management
-      addPlan: (planData) => {
-        const newPlan: Plan = {
-          ...planData,
-          id: `plan-${Date.now()}`,
-          createdAt: new Date().toISOString().split('T')[0]
+          // Deletar usuário
+          await supabase
+            .from('users')
+            .delete()
+            .eq('id', id)
+
+          // Recarregar lista
+          await get().fetchTeachers()
+          return true
+        } catch (error) {
+          console.error('Error deleting teacher:', error)
+          return false
         }
-
-        set((state) => ({
-          plans: [...state.plans, newPlan]
-        }))
       },
 
-      updatePlan: (id, updates) => {
-        set((state) => ({
-          plans: state.plans.map(plan =>
-            plan.id === id ? { ...plan, ...updates } : plan
-          )
-        }))
+      // Students
+      fetchStudents: async () => {
+        try {
+          const { academy } = get()
+          if (!academy) return
+
+          const { data, error } = await supabase
+            .from('academy_students')
+            .select(`
+              *,
+              users!academy_students_student_id_fkey(*)
+            `)
+            .eq('academy_id', academy.id)
+
+          if (error) throw error
+
+          const students: Student[] = data.map(item => ({
+            id: item.users.id,
+            name: item.users.name,
+            email: item.users.email,
+            phone: item.users.phone,
+            credits: item.users.credits,
+            status: item.status,
+            join_date: item.join_date,
+            last_activity: item.last_activity,
+            planId: item.plan_id,
+            plan_id: item.plan_id
+          }))
+
+          set({ students })
+        } catch (error) {
+          console.error('Error fetching students:', error)
+        }
       },
 
-      deletePlan: (id) => {
-        set((state) => ({
-          plans: state.plans.filter(plan => plan.id !== id)
-        }))
+      addStudent: async (studentData) => {
+        try {
+          const { academy } = get()
+          if (!academy) return false
+
+          // 1. Criar usuário
+          const { data: userData, error: userError } = await supabase
+            .from('users')
+            .insert({
+              name: studentData.name,
+              email: studentData.email,
+              phone: studentData.phone,
+              role: 'STUDENT',
+              credits: studentData.credits
+            })
+            .select()
+            .single()
+
+          if (userError) throw userError
+
+          // 2. Vincular à academia
+          await supabase
+            .from('academy_students')
+            .insert({
+              student_id: userData.id,
+              academy_id: academy.id,
+              status: studentData.status,
+              plan_id: studentData.plan_id
+            })
+
+          // Recarregar lista
+          await get().fetchStudents()
+          return true
+        } catch (error) {
+          console.error('Error adding student:', error)
+          return false
+        }
+      },
+
+      updateStudent: async (id, updates) => {
+        try {
+          // Atualizar dados do usuário
+          if (updates.name || updates.email || updates.phone || updates.credits !== undefined) {
+            await supabase
+              .from('users')
+              .update({
+                name: updates.name,
+                email: updates.email,
+                phone: updates.phone,
+                credits: updates.credits
+              })
+              .eq('id', id)
+          }
+
+          // Atualizar vínculo com academia
+          if (updates.status || updates.plan_id) {
+            await supabase
+              .from('academy_students')
+              .update({
+                status: updates.status,
+                plan_id: updates.plan_id,
+                last_activity: new Date().toISOString()
+              })
+              .eq('student_id', id)
+          }
+
+          // Recarregar lista
+          await get().fetchStudents()
+          return true
+        } catch (error) {
+          console.error('Error updating student:', error)
+          return false
+        }
+      },
+
+      deleteStudent: async (id) => {
+        try {
+          const { academy } = get()
+          if (!academy) return false
+
+          // Remover vínculo com academia (hard delete)
+          await supabase
+            .from('academy_students')
+            .delete()
+            .eq('student_id', id)
+            .eq('academy_id', academy.id)
+
+          // Deletar usuário
+          await supabase
+            .from('users')
+            .delete()
+            .eq('id', id)
+
+          // Recarregar lista
+          await get().fetchStudents()
+          return true
+        } catch (error) {
+          console.error('Error deleting student:', error)
+          return false
+        }
+      },
+
+      // Plans
+      fetchPlans: async () => {
+        try {
+          const { academy } = get()
+          if (!academy) return
+
+          const { data, error } = await supabase
+            .from('academy_plans')
+            .select('*')
+            .eq('academy_id', academy.id)
+            .order('created_at', { ascending: false })
+
+          if (error) throw error
+
+          const plans: Plan[] = (data || []).map(plan => ({
+            id: plan.id,
+            name: plan.name,
+            description: plan.description,
+            price: plan.price,
+            credits_included: plan.credits_included,
+            hoursIncluded: plan.credits_included, // Map credits to hours for now
+            duration_days: plan.duration_days,
+            features: plan.features || ['Acesso às aulas', 'Suporte personalizado'],
+            status: plan.is_active ? 'active' : 'inactive',
+            is_active: plan.is_active,
+            created_at: plan.created_at
+          }))
+
+          set({ plans })
+        } catch (error) {
+          console.error('Error fetching plans:', error)
+          set({ plans: [] })
+        }
+      },
+
+      addPlan: async (planData) => {
+        try {
+          const { academy } = get()
+          if (!academy) return false
+
+          await supabase
+            .from('academy_plans')
+            .insert({
+              ...planData,
+              academy_id: academy.id
+            })
+
+          // Recarregar lista
+          await get().fetchPlans()
+          return true
+        } catch (error) {
+          console.error('Error adding plan:', error)
+          return false
+        }
+      },
+
+      updatePlan: async (id, updates) => {
+        try {
+          await supabase
+            .from('academy_plans')
+            .update(updates)
+            .eq('id', id)
+
+          // Recarregar lista
+          await get().fetchPlans()
+          return true
+        } catch (error) {
+          console.error('Error updating plan:', error)
+          return false
+        }
+      },
+
+      deletePlan: async (id) => {
+        try {
+          await supabase
+            .from('academy_plans')
+            .update({ is_active: false })
+            .eq('id', id)
+
+          // Recarregar lista
+          await get().fetchPlans()
+          return true
+        } catch (error) {
+          console.error('Error deleting plan:', error)
+          return false
+        }
       },
 
       // Analytics
-      updateAnalytics: () => {
-        const state = get()
+      fetchAnalytics: async () => {
+        try {
+          const { academy, teachers, students, classes } = get()
+          if (!academy) return
 
-        const completedClasses = state.classes.filter(c => c.status === 'completed')
-        const totalRevenue = completedClasses.reduce((sum, c) => sum + c.price, 0)
-
-        // Calcular estatísticas dos professores
-        const teacherStats = state.teachers.map(teacher => {
-          const teacherClasses = completedClasses.filter(c => c.teacherId === teacher.id)
-          const teacherStudents = new Set(teacherClasses.map(c => c.studentId)).size
-          const teacherEarnings = teacherClasses.reduce((sum, c) => sum + (c.price * 0.7), 0) // 70% para o professor
-
-          return {
-            ...teacher,
-            studentsCount: teacherStudents,
-            totalClasses: teacherClasses.length,
-            earnings: teacherEarnings
+          // Calcular analytics básicos
+          const analytics: Analytics = {
+            totalTeachers: teachers.length,
+            totalStudents: students.length,
+            totalRevenue: students.reduce((sum, student) => sum + (student.credits * 10), 0), // Estimativa
+            totalClasses: classes.length,
+            activeTeachers: teachers.filter(t => t.status === 'active').length,
+            activeStudents: students.filter(s => s.status === 'active').length,
+            monthlyGrowth: 15.5 // Mock por enquanto
           }
-        })
 
-        // Atualizar professores com estatísticas calculadas
-        set({ teachers: teacherStats })
-
-        // Atualizar último acesso dos alunos baseado nas aulas
-        const updatedStudents = state.students.map(student => {
-          const studentClasses = completedClasses.filter(c => c.studentId === student.id)
-          if (studentClasses.length > 0) {
-            const lastClass = studentClasses.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
-            return {
-              ...student,
-              lastActivity: lastClass.date
-            }
-          }
-          return student
-        })
-
-        set({ students: updatedStudents })
-
-        const newAnalytics: Analytics = {
-          totalStudents: state.students.filter(s => s.status === 'active').length,
-          totalTeachers: state.teachers.filter(t => t.status === 'active').length,
-          totalClasses: completedClasses.length,
-          monthlyRevenue: totalRevenue,
-          studentsGrowth: Math.floor(Math.random() * 30) + 10, // 10-40% crescimento para academia pequena
-          teachersGrowth: state.teachers.filter(t => t.status === 'pending').length > 0 ? 50 : 0,
-          classesGrowth: completedClasses.length > 0 ? Math.floor(Math.random() * 20) + 15 : 0,
-          revenueGrowth: totalRevenue > 0 ? Math.floor(Math.random() * 25) + 20 : 0
+          set({ analytics })
+        } catch (error) {
+          console.error('Error fetching analytics:', error)
         }
+      },
 
-        set({ analytics: newAnalytics })
+      // Classes (Agendamentos)
+      fetchClasses: async () => {
+        try {
+          const { academy } = get()
+          if (!academy) return
+
+          // Buscar todos os bookings e filtrar por professores/alunos da academia
+          const { data, error } = await supabase
+            .from('bookings')
+            .select('*')
+            .order('date', { ascending: false })
+
+          if (error) throw error
+
+          const classes: Class[] = (data || []).map(booking => {
+            // Extrair hora da data completa
+            const bookingDate = new Date(booking.date)
+            const hours = bookingDate.getHours().toString().padStart(2, '0')
+            const minutes = bookingDate.getMinutes().toString().padStart(2, '0')
+            const time = `${hours}:${minutes}`
+            
+            // Converter data para formato YYYY-MM-DD
+            const dateOnly = bookingDate.toISOString().split('T')[0]
+            
+            // Mapear status do backend para frontend
+            let status: 'scheduled' | 'completed' | 'cancelled' = 'scheduled'
+            if (booking.status === 'COMPLETED') status = 'completed'
+            else if (booking.status === 'CANCELLED') status = 'cancelled'
+            else if (booking.status === 'CONFIRMED' || booking.status === 'PENDING') status = 'scheduled'
+
+            return {
+              id: booking.id,
+              teacherId: booking.teacher_id,
+              studentId: booking.student_id,
+              date: dateOnly,
+              time: time,
+              status: status,
+              price: booking.credits_cost || 0,
+              duration: booking.duration || 60,
+              created_at: booking.created_at
+            }
+          })
+
+          set({ classes })
+        } catch (error) {
+          console.error('Error fetching classes:', error)
+          set({ classes: [] })
+        }
+      },
+
+      updateClass: async (id, updates) => {
+        try {
+          const { error } = await supabase
+            .from('bookings')
+            .update(updates)
+            .eq('id', id)
+
+          if (error) throw error
+
+          // Recarregar lista
+          await get().fetchClasses()
+          return true
+        } catch (error) {
+          console.error('Error updating class:', error)
+          return false
+        }
+      },
+
+      deleteClass: async (id) => {
+        try {
+          const { error } = await supabase
+            .from('bookings')
+            .delete()
+            .eq('id', id)
+
+          if (error) throw error
+
+          // Recarregar lista
+          await get().fetchClasses()
+          return true
+        } catch (error) {
+          console.error('Error deleting class:', error)
+          return false
+        }
+      },
+
+      // Time Slots
+      fetchTimeSlots: async () => {
+        try {
+          const { academy } = get()
+          if (!academy) return
+
+          const { data, error } = await supabase
+            .from('academy_time_slots')
+            .select('*')
+            .eq('academy_id', academy.id)
+            .order('day_of_week', { ascending: true })
+            .order('time', { ascending: true })
+
+          if (error) throw error
+
+          const timeSlots: TimeSlot[] = (data || []).map(slot => ({
+            id: slot.id,
+            time: slot.time,
+            dayOfWeek: slot.day_of_week,
+            isAvailable: slot.is_available,
+            maxCapacity: slot.max_capacity || 1,
+            created_at: slot.created_at
+          }))
+
+          set({ timeSlots })
+        } catch (error) {
+          console.error('Error fetching time slots:', error)
+          set({ timeSlots: [] })
+        }
+      },
+
+      toggleTimeSlotAvailability: async (id) => {
+        try {
+          const { timeSlots } = get()
+          const slot = timeSlots.find(s => s.id === id)
+          if (!slot) return false
+
+          const { error } = await supabase
+            .from('academy_time_slots')
+            .update({ is_available: !slot.isAvailable })
+            .eq('id', id)
+
+          if (error) throw error
+
+          // Recarregar lista
+          await get().fetchTimeSlots()
+          return true
+        } catch (error) {
+          console.error('Error toggling time slot availability:', error)
+          return false
+        }
+      },
+
+      // Notifications
+      fetchNotifications: async () => {
+        try {
+          const { franquiaUser } = get()
+          if (!franquiaUser) return
+
+          const response = await fetch(`http://localhost:3001/api/notifications?franchise_admin_id=${franquiaUser.id}&limit=100`)
+          if (!response.ok) throw new Error('Failed to fetch notifications')
+
+          const data = await response.json()
+          const unreadCount = data.filter((n: Notification) => !n.is_read).length
+
+          set({
+            notifications: data,
+            unreadNotifications: unreadCount
+          })
+        } catch (error) {
+          console.error('Error fetching notifications:', error)
+          set({ notifications: [], unreadNotifications: 0 })
+        }
+      },
+
+      markNotificationAsRead: async (id) => {
+        try {
+          const response = await fetch(`http://localhost:3001/api/notifications/${id}/read`, {
+            method: 'PUT'
+          })
+
+          if (!response.ok) throw new Error('Failed to mark notification as read')
+
+          // Recarregar notificações
+          await get().fetchNotifications()
+          return true
+        } catch (error) {
+          console.error('Error marking notification as read:', error)
+          return false
+        }
+      },
+
+      markAllNotificationsAsRead: async () => {
+        try {
+          const { franquiaUser } = get()
+          if (!franquiaUser) return false
+
+          const response = await fetch(`http://localhost:3001/api/notifications/read-all`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              franchise_admin_id: franquiaUser.id
+            })
+          })
+
+          if (!response.ok) throw new Error('Failed to mark all notifications as read')
+
+          // Recarregar notificações
+          await get().fetchNotifications()
+          return true
+        } catch (error) {
+          console.error('Error marking all notifications as read:', error)
+          return false
+        }
+      },
+
+      // Teacher Plans
+      fetchTeacherPlans: async () => {
+        try {
+          const response = await fetch('http://localhost:3001/api/plans/teachers')
+          if (!response.ok) throw new Error('Failed to fetch teacher plans')
+
+          const data = await response.json()
+          set({ teacherPlans: data })
+        } catch (error) {
+          console.error('Error fetching teacher plans:', error)
+          set({ teacherPlans: [] })
+        }
+      },
+
+      createTeacherPlan: async (planData) => {
+        try {
+          const response = await fetch('http://localhost:3001/api/plans/teachers', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(planData)
+          })
+
+          if (!response.ok) throw new Error('Failed to create teacher plan')
+
+          // Recarregar lista
+          await get().fetchTeacherPlans()
+          return true
+        } catch (error) {
+          console.error('Error creating teacher plan:', error)
+          return false
+        }
+      },
+
+      // Student Plans
+      fetchStudentPlans: async () => {
+        try {
+          const response = await fetch('http://localhost:3001/api/plans/students')
+          if (!response.ok) throw new Error('Failed to fetch student plans')
+
+          const data = await response.json()
+          set({ studentPlans: data })
+        } catch (error) {
+          console.error('Error fetching student plans:', error)
+          set({ studentPlans: [] })
+        }
+      },
+
+      createStudentPlan: async (planData) => {
+        try {
+          const response = await fetch('http://localhost:3001/api/plans/students', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(planData)
+          })
+
+          if (!response.ok) throw new Error('Failed to create student plan')
+
+          // Recarregar lista
+          await get().fetchStudentPlans()
+          return true
+        } catch (error) {
+          console.error('Error creating student plan:', error)
+          return false
+        }
+      },
+
+      // Approval Requests
+      fetchApprovalRequests: async () => {
+        try {
+          const response = await fetch('http://localhost:3001/api/approvals?status=pending')
+          if (!response.ok) throw new Error('Failed to fetch approval requests')
+
+          const data = await response.json()
+          set({ approvalRequests: data })
+        } catch (error) {
+          console.error('Error fetching approval requests:', error)
+          set({ approvalRequests: [] })
+        }
+      },
+
+      approveRequest: async (id, reviewerId) => {
+        try {
+          const response = await fetch(`http://localhost:3001/api/approvals/${id}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              status: 'approved',
+              reviewed_by: reviewerId
+            })
+          })
+
+          if (!response.ok) throw new Error('Failed to approve request')
+
+          // Recarregar lista
+          await get().fetchApprovalRequests()
+          await get().fetchNotifications()
+          return true
+        } catch (error) {
+          console.error('Error approving request:', error)
+          return false
+        }
+      },
+
+      rejectRequest: async (id, reviewerId, reason) => {
+        try {
+          const response = await fetch(`http://localhost:3001/api/approvals/${id}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              status: 'rejected',
+              reviewed_by: reviewerId,
+              rejection_reason: reason
+            })
+          })
+
+          if (!response.ok) throw new Error('Failed to reject request')
+
+          // Recarregar lista
+          await get().fetchApprovalRequests()
+          return true
+        } catch (error) {
+          console.error('Error rejecting request:', error)
+          return false
+        }
       }
     }),
     {
       name: 'franquia-storage',
       partialize: (state) => ({
         franquiaUser: state.franquiaUser,
-        teachers: state.teachers,
-        students: state.students,
-        classes: state.classes,
-        timeSlots: state.timeSlots,
-        plans: state.plans,
-        analytics: state.analytics
+        academy: state.academy,
+        isAuthenticated: state.isAuthenticated
       })
     }
   )

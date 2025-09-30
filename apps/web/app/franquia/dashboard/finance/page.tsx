@@ -5,7 +5,7 @@ import { DollarSign, CreditCard, TrendingUp, Users, Plus, Edit, Eye, Trash2 } fr
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { useFranquiaStore } from '@/lib/stores/franquia-supabase-store'
+import { useFranquiaStore } from '@/lib/stores/franquia-store'
 import PlanModal from '@/components/modals/plan-modal'
 
 export default function FinancePage() {
