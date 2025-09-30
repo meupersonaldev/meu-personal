@@ -25,10 +25,10 @@ router.post('/login', async (req, res) => {
   try {
     const { email, password } = loginSchema.parse(req.body)
 
-    // Buscar usuário no Supabase
+    // Buscar usuário no Supabase (inclui campos de senha)
     const { data: users, error: userError } = await supabase
       .from('users')
-      .select('*')
+      .select('id, name, email, phone, role, credits, avatar_url, is_active, password_hash, password')
       .eq('email', email)
       .eq('is_active', true)
       .single()
@@ -37,10 +37,24 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ message: 'Email ou senha incorretos' })
     }
 
-    // Para simplificar, vamos usar uma senha padrão temporária: "123456"
-    // Em produção, as senhas devem estar hasheadas no banco
-    const defaultPassword = '123456'
-    if (password !== defaultPassword) {
+    // Verificar senha com suporte a migração gradual
+    let validPassword = false
+    if (users.password_hash) {
+      // Verificar hash
+      validPassword = await bcrypt.compare(password, users.password_hash)
+    } else if (users.password) {
+      // Fallback temporário: comparar texto plano e fazer upgrade para hash
+      validPassword = users.password === password
+      if (validPassword) {
+        const newHash = await bcrypt.hash(password, 10)
+        await supabase
+          .from('users')
+          .update({ password_hash: newHash, password: null, updated_at: new Date().toISOString() })
+          .eq('id', users.id)
+      }
+    }
+
+    if (!validPassword) {
       return res.status(401).json({ message: 'Email ou senha incorretos' })
     }
 
@@ -101,13 +115,15 @@ router.post('/register', async (req, res) => {
     }
 
     // Criar novo usuário no Supabase
+    const passwordHash = await bcrypt.hash(userData.password, 10)
     const newUser = {
       name: userData.name,
       email: userData.email,
       phone: userData.phone || null,
       role: userData.role,
       credits: userData.role === 'STUDENT' ? 5 : 0, // Créditos de boas-vindas
-      is_active: true
+      is_active: true,
+      password_hash: passwordHash
     }
 
     const { data: createdUser, error: createError } = await supabase
