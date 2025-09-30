@@ -1,348 +1,719 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useAuthStore } from '@/lib/stores/auth-store'
+import { useTeacherAcademies } from '@/lib/hooks/useTeacherAcademies'
+import ProfessorLayout from '@/components/layout/professor-layout'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import {
   Calendar,
-  Clock,
   MapPin,
   Plus,
-  Edit,
-  Trash2,
-  Users,
-  Check,
   X,
+  Check,
+  Loader2,
   ChevronLeft,
   ChevronRight
 } from 'lucide-react'
-import { bookingsAPI } from '@/lib/api'
-
-// Locais das academias (constantes)
-const locations = [
-  'Academia FitLife - Vila Madalena',
-  'Academia FitLife - Pinheiros',
-  'Academia FitLife - Itaim',
-  'Academia FitLife - Moema',
-  'Academia FitLife - Jardins',
-  'Academia FitLife - Brooklin'
-]
+import { toast } from 'sonner'
 
 interface Booking {
   id: string
-  studentId: string
+  studentId?: string
+  studentName?: string
   teacherId: string
-  studentName: string
+  franchiseId?: string
+  franchiseName?: string
   date: string
   duration: number
-  status: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED'
+  status: 'AVAILABLE' | 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED'
   notes?: string
   creditsCost: number
-  createdAt: string
-  updatedAt: string
 }
 
-export default function ProfessorAgenda() {
-  const { user, token } = useAuthStore()
+export default function ProfessorAgendaPage() {
+  const { user } = useAuthStore()
+  const { academies: teacherAcademies, loading: loadingAcademies } = useTeacherAcademies()
   const [bookings, setBookings] = useState<Booking[]>([])
+  const [selectedFranchise, setSelectedFranchise] = useState<string>('todas')
   const [loading, setLoading] = useState(true)
-  const [selectedDate, setSelectedDate] = useState(new Date())
+  const [currentDate, setCurrentDate] = useState(new Date())
+  const [showModal, setShowModal] = useState(false)
+  const [selectedSlot, setSelectedSlot] = useState<{ date: string; time: string } | null>(null)
+  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
+  const [selectedDate, setSelectedDate] = useState<string>('')
+  interface Slot { time: string; is_free: boolean; remaining?: number; max_capacity?: number }
+  const [availableSlots, setAvailableSlots] = useState<Slot[]>([])
+  const [loadingSlots, setLoadingSlots] = useState(false)
+  const [blocks, setBlocks] = useState<{ id: string; date: string; franchise_id: string; notes?: string }[]>([])
+  const [loadingBlocks, setLoadingBlocks] = useState(false)
 
-  // Carregar agendamentos
+  const horariosDisponiveis = [
+    '06:00', '07:00', '08:00', '09:00', '10:00', '11:00',
+    '12:00', '13:00', '14:00', '15:00', '16:00', '17:00',
+    '18:00', '19:00', '20:00', '21:00', '22:00'
+  ]
+
+  const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+
   useEffect(() => {
-    const loadBookings = async () => {
-      if (!user?.id) return
-
+    if (!user?.id) return
+    
+    const loadData = async () => {
       try {
         setLoading(true)
-        const response = await bookingsAPI.getAll({ teacher_id: user.id })
-        setBookings(response.bookings || [])
-      } catch (error) {
-        console.error('Erro ao carregar agendamentos:', error)
-        setBookings([])
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+
+        const bookingsRes = await fetch(`${API_URL}/api/bookings?teacher_id=${user.id}`)
+
+        if (bookingsRes.ok) {
+          const data = await bookingsRes.json()
+          setBookings(data.bookings || [])
+        }
+      } catch (err) {
+        console.error('Erro ao carregar dados:', err)
+        toast.error('Erro ao carregar agenda')
       } finally {
         setLoading(false)
       }
     }
 
-    loadBookings()
+    loadData()
   }, [user?.id])
 
-  const updateBookingStatus = async (bookingId: string, status: 'CONFIRMED' | 'CANCELLED') => {
-    if (!token) return
+  // Carrega horários livres quando tiver unidade e data
+  useEffect(() => {
+    const fetchSlots = async () => {
+      if (!user?.id || !selectedDate || selectedFranchise === 'todas') {
+        setAvailableSlots([])
+        return
+      }
+      try {
+        setLoadingSlots(true)
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+        const res = await fetch(`${API_URL}/api/academies/${selectedFranchise}/available-slots?date=${selectedDate}`)
+        if (res.ok) {
+          const data = await res.json()
+          const mapped: Slot[] = (data.slots || []).map((s: { time: string; is_free: boolean; remaining?: number; max_capacity?: number }) => ({ time: s.time, is_free: s.is_free, remaining: s.remaining, max_capacity: s.max_capacity }))
+          setAvailableSlots(mapped)
+        } else {
+          setAvailableSlots([])
+        }
+      } finally {
+        setLoadingSlots(false)
+      }
+    }
+    fetchSlots()
+  }, [user?.id, selectedFranchise, selectedDate])
+
+  // Carrega bloqueios do dia
+  useEffect(() => {
+    const fetchBlocks = async () => {
+      if (!user?.id || !selectedDate || selectedFranchise === 'todas') {
+        setBlocks([])
+        return
+      }
+      try {
+        setLoadingBlocks(true)
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+        const url = `${API_URL}/api/teachers/${user.id}/blocks?academy_id=${selectedFranchise}&date=${selectedDate}`
+        const res = await fetch(url)
+        if (res.ok) {
+          const data = await res.json()
+          setBlocks(data.blocks || [])
+        } else {
+          setBlocks([])
+        }
+      } finally {
+        setLoadingBlocks(false)
+      }
+    }
+    fetchBlocks()
+  }, [user?.id, selectedFranchise, selectedDate])
+
+  const fetchData = async () => {
+    if (!user?.id) return
 
     try {
-      await bookingsAPI.update(bookingId, { status }, token)
+      setLoading(true)
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
-      // Atualizar lista local
-      setBookings(bookings.map(booking =>
-        booking.id === bookingId ? { ...booking, status } : booking
-      ))
-    } catch (error) {
-      console.error('Erro ao atualizar agendamento:', error)
-      alert('Erro ao atualizar agendamento. Tente novamente.')
+      const bookingsRes = await fetch(`${API_URL}/api/bookings?teacher_id=${user.id}`)
+
+      console.log('Bookings status:', bookingsRes.status)
+
+      if (bookingsRes.ok) {
+        try {
+          const data = await bookingsRes.json()
+          setBookings(data.bookings || [])
+        } catch (err) {
+          console.error('Erro ao parsear bookings:', err)
+          setBookings([])
+        }
+      }
+    } catch (err) {
+      console.error('Erro ao carregar dados:', err)
+      toast.error('Erro ao carregar agenda')
+    } finally {
+      setLoading(false)
     }
   }
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
+  const getWeekDays = () => {
+    const startOfWeek = new Date(currentDate)
+    startOfWeek.setDate(currentDate.getDate() - currentDate.getDay())
+    
+    return Array.from({ length: 7 }, (_, i) => {
+      const day = new Date(startOfWeek)
+      day.setDate(startOfWeek.getDate() + i)
+      return day
     })
   }
 
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleTimeString('pt-BR', {
-      hour: '2-digit',
-      minute: '2-digit'
+  const weekDays = getWeekDays()
+
+  const getBookingForSlot = (date: Date, time: string) => {
+    const dateStr = date.toISOString().split('T')[0]
+    
+    return bookings.find(booking => {
+      const bookingDate = new Date(booking.date)
+      const bookingDateStr = bookingDate.toISOString().split('T')[0]
+      const bookingTime = bookingDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      
+      const matchDate = bookingDateStr === dateStr
+      const matchTime = bookingTime === time
+      const matchFranchise = selectedFranchise === 'todas' || booking.franchiseId === selectedFranchise
+      
+      return matchDate && matchTime && matchFranchise
     })
+  }
+
+  const handleSlotClick = (date: Date, time: string) => {
+    const booking = getBookingForSlot(date, time)
+    
+    if (booking) {
+      setSelectedBooking(booking)
+      setSelectedSlot(null)
+    } else {
+      setSelectedSlot({
+        date: date.toISOString().split('T')[0],
+        time
+      })
+      setSelectedBooking(null)
+    }
+    
+    setShowModal(true)
+  }
+
+  const handleCreateAvailability = async (franchiseId: string) => {
+    if (!selectedSlot || !user?.id) return
+
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      
+      const [hours, minutes] = selectedSlot.time.split(':')
+      const bookingDate = new Date(selectedSlot.date + 'T00:00:00')
+      bookingDate.setHours(parseInt(hours), parseInt(minutes), 0, 0)
+
+      const response = await fetch(`${API_URL}/api/bookings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          teacher_id: user.id,
+          student_id: null,
+          franchise_id: franchiseId,
+          date: bookingDate.toISOString(),
+          duration: 60,
+          credits_cost: 1,
+          notes: 'Horário disponível',
+          status: 'AVAILABLE'
+        })
+      })
+
+      if (response.ok) {
+        toast.success('Horário disponibilizado!')
+        fetchData()
+        setShowModal(false)
+      } else {
+        toast.error('Erro ao criar disponibilidade')
+      }
+    } catch (error) {
+      console.error('Erro:', error)
+      toast.error('Erro ao processar requisição')
+    }
+  }
+
+  const handleConfirmBooking = async (bookingId: string) => {
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+
+      const response = await fetch(`${API_URL}/api/bookings/${bookingId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'CONFIRMED' })
+      })
+
+      if (response.ok) {
+        toast.success('Aula confirmada!')
+        fetchData()
+        setShowModal(false)
+      }
+    } catch (error) {
+      toast.error('Erro ao confirmar')
+    }
+  }
+
+  const handleCancelBooking = async (bookingId: string) => {
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+
+      const response = await fetch(`${API_URL}/api/bookings/${bookingId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'CANCELLED' })
+      })
+
+      if (response.ok) {
+        toast.success('Cancelado com sucesso!')
+        fetchData()
+        setShowModal(false)
+      }
+    } catch {
+      toast.error('Erro ao cancelar')
+    }
+  }
+
+  const navigateWeek = (direction: 'prev' | 'next') => {
+    const newDate = new Date(currentDate)
+    newDate.setDate(currentDate.getDate() + (direction === 'next' ? 7 : -7))
+    setCurrentDate(newDate)
   }
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'CONFIRMED':
-        return 'bg-green-100 text-green-800'
-      case 'PENDING':
-        return 'bg-yellow-100 text-yellow-800'
-      case 'COMPLETED':
-        return 'bg-blue-100 text-blue-800'
-      case 'CANCELLED':
-        return 'bg-red-100 text-red-800'
-      default:
-        return 'bg-gray-100 text-gray-800'
+      case 'AVAILABLE': return 'bg-green-500'
+      case 'PENDING': return 'bg-yellow-500'
+      case 'CONFIRMED': return 'bg-blue-500'
+      case 'COMPLETED': return 'bg-gray-500'
+      case 'CANCELLED': return 'bg-red-500'
+      default: return 'bg-gray-300'
     }
   }
 
   const getStatusText = (status: string) => {
     switch (status) {
-      case 'CONFIRMED':
-        return 'Confirmada'
-      case 'PENDING':
-        return 'Pendente'
-      case 'COMPLETED':
-        return 'Concluída'
-      case 'CANCELLED':
-        return 'Cancelada'
-      default:
-        return status
+      case 'AVAILABLE': return 'Disponível'
+      case 'PENDING': return 'Pendente'
+      case 'CONFIRMED': return 'Confirmada'
+      case 'COMPLETED': return 'Concluída'
+      case 'CANCELLED': return 'Cancelada'
+      default: return status
     }
   }
 
-  // Filtrar agendamentos por data selecionada
-  const selectedDateString = selectedDate.toISOString().split('T')[0]
-  const filteredBookings = bookings.filter(booking => {
-    const bookingDate = new Date(booking.date).toISOString().split('T')[0]
-    return bookingDate === selectedDateString
-  })
+  if (!user || loadingAcademies) {
+    return null
+  }
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-        <div className="max-w-6xl mx-auto pt-20">
-          <div className="bg-white rounded-lg shadow-lg p-6">
-            <div className="animate-pulse">
-              <div className="h-6 bg-gray-200 rounded w-1/4 mb-4"></div>
-              <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
-              <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-            </div>
-          </div>
+      <ProfessorLayout>
+        <div className="flex items-center justify-center h-96">
+          <Loader2 className="h-8 w-8 animate-spin text-meu-primary" />
         </div>
-      </div>
+      </ProfessorLayout>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <div className="max-w-6xl mx-auto pt-20">
-        {/* Header */}
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-800 flex items-center">
-                <Calendar className="w-6 h-6 mr-2" />
-                Minha Agenda
-              </h1>
-              <p className="text-gray-600 mt-1">Gerencie seus agendamentos e horários</p>
+    <ProfessorLayout>
+      <div className="p-6 space-y-6">
+        {/* Controles de Bloqueio */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+              <div className="flex items-center space-x-3">
+                <MapPin className="h-5 w-5 text-gray-500" />
+                <select
+                  value={selectedFranchise}
+                  onChange={(e) => setSelectedFranchise(e.target.value)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-meu-primary w-full"
+                >
+                  <option value="todas">Todas as Unidades</option>
+                  {teacherAcademies.map(franchise => (
+                    <option key={franchise.id} value={franchise.id}>
+                      {franchise.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Data</label>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  min={new Date().toISOString().split('T')[0]}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+                />
+              </div>
+              <div className="flex items-center space-x-3">
+                <Button
+                  disabled={selectedFranchise === 'todas' || !selectedDate}
+                  onClick={async () => {
+                    try {
+                      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                      const res = await fetch(`${API_URL}/api/teachers/${user?.id}/blocks/day`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ academy_id: selectedFranchise, date: selectedDate })
+                      })
+                      if (res.ok) {
+                        toast.success('Dia bloqueado!')
+                        // refresh
+                        setSelectedDate(selectedDate)
+                      } else {
+                        toast.error('Erro ao bloquear o dia')
+                      }
+                    } catch {
+                      toast.error('Erro ao bloquear o dia')
+                    }
+                  }}
+                  className="bg-red-600 hover:bg-red-700 text-white"
+                >
+                  Bloquear dia
+                </Button>
+              </div>
             </div>
-          </div>
 
-          {/* Seletor de Data */}
-          <div className="flex items-center justify-center space-x-4 mb-6">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setSelectedDate(new Date(selectedDate.getTime() - 24 * 60 * 60 * 1000))}
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </Button>
+            {/* Horários livres (bloquear por horário) */}
+            {(selectedFranchise !== 'todas' && selectedDate) && (
+              <div className="mt-4">
+                <p className="text-sm font-medium mb-2">Horários livres</p>
+                {loadingSlots ? (
+                  <div className="text-sm text-gray-500">Carregando horários...</div>
+                ) : availableSlots.length === 0 ? (
+                  <div className="text-sm text-gray-500">Nenhum horário livre.</div>
+                ) : (
+                  <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+                    {availableSlots.map((slot) => (
+                      <Button
+                        key={slot.time}
+                        size="sm"
+                        variant="outline"
+                        disabled={!slot.is_free}
+                        onClick={async () => {
+                          try {
+                            const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                            const res = await fetch(`${API_URL}/api/teachers/${user?.id}/blocks/slot`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ academy_id: selectedFranchise, date: selectedDate, time: slot.time })
+                            })
+                            if (res.ok) {
+                              toast.success(`Horário ${slot.time} bloqueado!`)
+                              setSelectedDate(selectedDate)
+                            } else {
+                              toast.error('Erro ao bloquear horário')
+                            }
+                          } catch {
+                            toast.error('Erro ao bloquear horário')
+                          }
+                        }}
+                        className={`${slot.is_free ? 'hover:bg-red-600 hover:text-white' : 'cursor-not-allowed'}`}
+                      >
+                        {slot.is_free
+                          ? `Bloquear ${slot.time}${slot.max_capacity !== undefined && slot.remaining !== undefined ? ` (${slot.remaining}/${slot.max_capacity})` : ''}`
+                          : `Indisp. ${slot.time}`}
+                      </Button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
-            <div className="text-center">
-              <h2 className="text-lg font-semibold text-gray-800">
-                {selectedDate.toLocaleDateString('pt-BR', {
-                  weekday: 'long',
-                  day: 'numeric',
-                  month: 'long',
-                  year: 'numeric'
-                })}
-              </h2>
-            </div>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setSelectedDate(new Date(selectedDate.getTime() + 24 * 60 * 60 * 1000))}
-            >
-              <ChevronRight className="w-4 h-4" />
-            </Button>
-          </div>
-
-          {/* Botão para hoje */}
-          <div className="flex justify-center">
-            <Button
-              variant="outline"
-              onClick={() => setSelectedDate(new Date())}
-            >
-              Hoje
-            </Button>
-          </div>
-        </div>
-
-        {/* Lista de Agendamentos */}
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
-            <Clock className="w-5 h-5 mr-2" />
-            Agendamentos do Dia
-          </h2>
-
-          {filteredBookings.length === 0 ? (
-            <div className="text-center py-12">
-              <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-500 mb-2">
-                Nenhum agendamento para este dia
-              </h3>
-              <p className="text-gray-400">
-                Você não possui agendamentos para{' '}
-                {selectedDate.toLocaleDateString('pt-BR', {
-                  day: 'numeric',
-                  month: 'long'
-                })}
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {filteredBookings
-                .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-                .map((booking) => (
-                  <div
-                    key={booking.id}
-                    className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-4 mb-2">
-                          <div className="flex items-center space-x-2">
-                            <Clock className="w-4 h-4 text-gray-500" />
-                            <span className="font-medium text-gray-800">
-                              {formatTime(booking.date)}
-                            </span>
+            {/* Bloqueios do dia */}
+            {(selectedFranchise !== 'todas' && selectedDate) && (
+              <div className="mt-4">
+                <p className="text-sm font-medium mb-2">Bloqueios do dia</p>
+                {loadingBlocks ? (
+                  <div className="text-sm text-gray-500">Carregando bloqueios...</div>
+                ) : blocks.length === 0 ? (
+                  <div className="text-sm text-gray-500">Nenhum bloqueio para esta data.</div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                    {blocks.map((b) => {
+                      const t = new Date(b.date)
+                      const hhmm = t.toISOString().substring(11, 16)
+                      return (
+                        <div key={b.id} className="flex items-center justify-between p-2 border rounded-lg">
+                          <div>
+                            <p className="text-sm font-medium">{hhmm}</p>
+                            {b.notes && <p className="text-xs text-gray-500">{b.notes}</p>}
                           </div>
-                          <div className="flex items-center space-x-2">
-                            <Users className="w-4 h-4 text-gray-500" />
-                            <span className="text-gray-700">{booking.studentName}</span>
-                          </div>
-                          <span
-                            className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(booking.status)}`}
-                          >
-                            {getStatusText(booking.status)}
-                          </span>
-                        </div>
-
-                        {booking.notes && (
-                          <p className="text-sm text-gray-600 mb-2">
-                            <strong>Observações:</strong> {booking.notes}
-                          </p>
-                        )}
-
-                        <div className="flex items-center space-x-4 text-sm text-gray-500">
-                          <span>{booking.duration} minutos</span>
-                          <span>{booking.creditsCost} créditos</span>
-                        </div>
-                      </div>
-
-                      {booking.status === 'PENDING' && (
-                        <div className="flex space-x-2">
-                          <Button
-                            size="sm"
-                            onClick={() => updateBookingStatus(booking.id, 'CONFIRMED')}
-                            className="bg-green-600 hover:bg-green-700"
-                          >
-                            <Check className="w-4 h-4 mr-1" />
-                            Confirmar
-                          </Button>
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => updateBookingStatus(booking.id, 'CANCELLED')}
-                            className="text-red-600 border-red-300 hover:bg-red-50"
+                            onClick={async () => {
+                              try {
+                                const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                                const res = await fetch(`${API_URL}/api/teachers/${user?.id}/blocks/${b.id}`, { method: 'DELETE' })
+                                if (res.ok) {
+                                  toast.success('Bloqueio removido!')
+                                  setSelectedDate(selectedDate)
+                                } else {
+                                  toast.error('Erro ao remover bloqueio')
+                                }
+                              } catch {
+                                toast.error('Erro ao remover bloqueio')
+                              }
+                            }}
                           >
-                            <X className="w-4 h-4 mr-1" />
-                            Recusar
+                            Desbloquear
                           </Button>
                         </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Minha Agenda</h1>
+            <p className="text-gray-600">Gerencie sua disponibilidade e aulas</p>
+          </div>
+          
+          <div className="flex items-center space-x-3">
+            <MapPin className="h-5 w-5 text-gray-500" />
+            <select
+              value={selectedFranchise}
+              onChange={(e) => setSelectedFranchise(e.target.value)}
+              className="px-4 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-meu-primary"
+            >
+              <option value="todas">Todas as Unidades</option>
+              {teacherAcademies.map((franchise) => (
+                <option key={franchise.id} value={franchise.id}>
+                  {franchise.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Legenda */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex flex-wrap gap-4">
+              <div className="flex items-center space-x-2">
+                <div className="w-4 h-4 bg-green-500 rounded"></div>
+                <span className="text-sm">Disponível</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-4 h-4 bg-yellow-500 rounded"></div>
+                <span className="text-sm">Pendente</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-4 h-4 bg-blue-500 rounded"></div>
+                <span className="text-sm">Confirmada</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-4 h-4 bg-gray-500 rounded"></div>
+                <span className="text-sm">Concluída</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Navegação da Semana */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <Button variant="outline" size="sm" onClick={() => navigateWeek('prev')}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              
+              <div className="text-center">
+                <h3 className="font-semibold text-gray-900">
+                  {currentDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+                </h3>
+                <p className="text-sm text-gray-500">
+                  {weekDays[0].toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} - 
+                  {weekDays[6].toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                </p>
+              </div>
+              
+              <Button variant="outline" size="sm" onClick={() => navigateWeek('next')}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Grade de Horários */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <Calendar className="h-5 w-5 mr-2 text-meu-primary" />
+              Grade Semanal
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <div className="min-w-full">
+                {/* Cabeçalho dos dias */}
+                <div className="grid grid-cols-8 gap-2 mb-4">
+                  <div className="p-3 text-center font-medium text-gray-500">Horário</div>
+                  {weekDays.map((day) => (
+                    <div key={day.toISOString()} className="p-3 text-center">
+                      <div className="font-medium text-gray-900">{diasSemana[day.getDay()]}</div>
+                      <div className="text-sm text-gray-500">{day.getDate()}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Grade de horários */}
+                <div className="space-y-2">
+                  {horariosDisponiveis.map(time => (
+                    <div key={time} className="grid grid-cols-8 gap-2">
+                      <div className="p-3 text-center font-medium text-gray-700 bg-gray-50 rounded-lg">
+                        {time}
+                      </div>
+                      {weekDays.map(day => {
+                        const booking = getBookingForSlot(day, time)
+                        const isPast = day < new Date() && day.toDateString() !== new Date().toDateString()
+                        
+                        return (
+                          <div key={`${day.toISOString()}-${time}`} className="p-1">
+                            <button
+                              onClick={() => handleSlotClick(day, time)}
+                              disabled={isPast}
+                              className={`w-full h-16 rounded-lg text-xs font-medium transition-all ${
+                                booking
+                                  ? `${getStatusColor(booking.status)} text-white hover:opacity-80`
+                                  : isPast
+                                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                  : 'border-2 border-dashed border-gray-300 hover:border-meu-primary hover:bg-meu-primary/5'
+                              }`}
+                            >
+                              {booking ? (
+                                <div className="flex flex-col items-center justify-center h-full">
+                                  <span className="text-xs">{booking.studentName || getStatusText(booking.status)}</span>
+                                </div>
+                              ) : isPast ? (
+                                '-'
+                              ) : (
+                                <Plus className="h-4 w-4 mx-auto text-gray-400" />
+                              )}
+                            </button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Modal (com Portal) */}
+        {showModal && createPortal(
+          <div className="fixed inset-0 z-[9999] m-0 p-0 bg-black/60 backdrop-blur-sm flex items-center justify-center">
+            <Card className="max-w-md w-full">
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <span>{selectedBooking ? 'Detalhes' : 'Novo Horário'}</span>
+                  <Button variant="ghost" size="sm" onClick={() => setShowModal(false)}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {selectedBooking ? (
+                  <>
+                    <div>
+                      <p className="text-sm text-gray-600">Status:</p>
+                      <Badge className={getStatusColor(selectedBooking.status)}>
+                        {getStatusText(selectedBooking.status)}
+                      </Badge>
+                    </div>
+
+                    {selectedBooking.studentName && (
+                      <div>
+                        <p className="text-sm text-gray-600">Aluno:</p>
+                        <p className="font-medium">{selectedBooking.studentName}</p>
+                      </div>
+                    )}
+
+                    {selectedBooking.franchiseName && (
+                      <div>
+                        <p className="text-sm text-gray-600">Unidade:</p>
+                        <p className="font-medium">{selectedBooking.franchiseName}</p>
+                      </div>
+                    )}
+
+                    <div className="flex space-x-2">
+                      {selectedBooking.status === 'PENDING' && (
+                        <Button
+                          onClick={() => handleConfirmBooking(selectedBooking.id)}
+                          className="flex-1 bg-green-600"
+                        >
+                          <Check className="h-4 w-4 mr-2" />
+                          Confirmar
+                        </Button>
+                      )}
+                      {selectedBooking.status !== 'CANCELLED' && selectedBooking.status !== 'COMPLETED' && (
+                        <Button
+                          onClick={() => handleCancelBooking(selectedBooking.id)}
+                          variant="outline"
+                          className="flex-1 text-red-600"
+                        >
+                          <X className="h-4 w-4 mr-2" />
+                          Cancelar
+                        </Button>
                       )}
                     </div>
-                  </div>
-                ))}
-            </div>
-          )}
-        </div>
+                  </>
+                ) : selectedSlot ? (
+                  <>
+                    <div>
+                      <p className="text-sm text-gray-600">Horário:</p>
+                      <p className="font-medium">
+                        {new Date(selectedSlot.date).toLocaleDateString('pt-BR')} às {selectedSlot.time}
+                      </p>
+                    </div>
 
-        {/* Resumo */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
-          <div className="bg-white rounded-lg shadow-lg p-4">
-            <div className="flex items-center space-x-2">
-              <Calendar className="w-5 h-5 text-blue-600" />
-              <span className="text-sm font-medium text-gray-600">Total</span>
-            </div>
-            <p className="text-2xl font-bold text-gray-800 mt-1">
-              {bookings.length}
-            </p>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-lg p-4">
-            <div className="flex items-center space-x-2">
-              <Check className="w-5 h-5 text-green-600" />
-              <span className="text-sm font-medium text-gray-600">Confirmadas</span>
-            </div>
-            <p className="text-2xl font-bold text-gray-800 mt-1">
-              {bookings.filter(b => b.status === 'CONFIRMED').length}
-            </p>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-lg p-4">
-            <div className="flex items-center space-x-2">
-              <Clock className="w-5 h-5 text-yellow-600" />
-              <span className="text-sm font-medium text-gray-600">Pendentes</span>
-            </div>
-            <p className="text-2xl font-bold text-gray-800 mt-1">
-              {bookings.filter(b => b.status === 'PENDING').length}
-            </p>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-lg p-4">
-            <div className="flex items-center space-x-2">
-              <X className="w-5 h-5 text-red-600" />
-              <span className="text-sm font-medium text-gray-600">Canceladas</span>
-            </div>
-            <p className="text-2xl font-bold text-gray-800 mt-1">
-              {bookings.filter(b => b.status === 'CANCELLED').length}
-            </p>
-          </div>
-        </div>
+                    <div>
+                      <p className="text-sm font-medium mb-2">Disponibilizar em:</p>
+                      <div className="space-y-2">
+                        {teacherAcademies.map((franchise) => (
+                          <Button
+                            key={franchise.id}
+                            onClick={() => handleCreateAvailability(franchise.id)}
+                            variant="outline"
+                            className="w-full justify-start"
+                          >
+                            <Plus className="h-4 w-4 mr-2 text-green-600" />
+                            {franchise.name}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                ) : null}
+              </CardContent>
+            </Card>
+          </div>,
+          document.body
+        )}
       </div>
-    </div>
+    </ProfessorLayout>
   )
 }

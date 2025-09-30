@@ -2,42 +2,30 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { 
-  Home, 
   Calendar, 
-  Users, 
   CreditCard, 
   Settings, 
   LogOut,
   ChevronDown,
   ChevronRight,
-  BarChart3,
-  FileText,
-  User,
-  Bell,
   QrCode,
   LayoutDashboard,
   CalendarCheck,
-  CalendarClock,
   DollarSign,
   Wallet,
-  TrendingUp
+  Users
 } from 'lucide-react'
 
-interface ProfessorSidebarProps {
-  onShowQRCode?: () => void
-}
-
-export default function ProfessorSidebar({ onShowQRCode }: ProfessorSidebarProps = {}) {
+export default function ProfessorSidebar() {
   const { user, logout } = useAuthStore()
   const pathname = usePathname()
   const [expandedSections, setExpandedSections] = useState<string[]>(['dashboard'])
+  const [showComingSoon, setShowComingSoon] = useState(false)
 
   const toggleSection = (section: string) => {
     setExpandedSections(prev => 
@@ -56,14 +44,20 @@ export default function ProfessorSidebar({ onShowQRCode }: ProfessorSidebarProps
       isExpanded: expandedSections.includes('dashboard')
     },
     {
+      id: 'alunos',
+      label: 'Alunos',
+      icon: Users,
+      href: '/professor/alunos',
+      isExpanded: expandedSections.includes('alunos')
+    },
+    {
       id: 'agenda',
       label: 'Agenda',
       icon: Calendar,
       isExpanded: expandedSections.includes('agenda'),
       subItems: [
-        { label: 'Minhas Aulas', href: '/professor/agenda/aulas', icon: CalendarCheck },
-        { label: 'Horários Livres', href: '/professor/agenda/horarios', icon: CalendarClock },
-        { label: 'Reservar Espaço', href: '/professor/agenda/reservar', icon: Calendar }
+        { label: 'Minha Agenda', href: '/professor/agenda', icon: CalendarCheck },
+        { label: 'Reservar Espaço', href: '/professor/agenda/reservar-espaco', icon: Calendar }
       ]
     },
     {
@@ -72,9 +66,8 @@ export default function ProfessorSidebar({ onShowQRCode }: ProfessorSidebarProps
       icon: DollarSign,
       isExpanded: expandedSections.includes('financeiro'),
       subItems: [
-        { label: 'Carteira de Horas', href: '/professor/financeiro/carteira', icon: Wallet },
-        { label: 'Comprar Horas', href: '/professor/financeiro/comprar', icon: CreditCard },
-        { label: 'Histórico', href: '/professor/financeiro/historico', icon: TrendingUp }
+        { label: 'Carteira', href: '/professor/carteira', icon: Wallet },
+        { label: 'Comprar Horas', href: '/professor/comprar-horas', icon: CreditCard }
       ]
     }
   ]
@@ -82,22 +75,27 @@ export default function ProfessorSidebar({ onShowQRCode }: ProfessorSidebarProps
   return (
     <div className="w-64 h-screen fixed left-0 top-0 z-50 bg-white border-r border-gray-200 flex flex-col shadow-lg">
       
-      {/* Header do Sidebar */}
-      <div className="p-6 border-b border-gray-200">
-        {/* Perfil do Professor */}
+      {/* User Profile */}
+      <div className="p-4 border-b border-gray-200">
         <div className="flex items-center space-x-3">
-          <Avatar className="h-12 w-12 bg-meu-cyan text-meu-primary-dark">
-            <AvatarFallback className="bg-meu-cyan text-meu-primary-dark font-semibold text-lg">
-              {user?.name?.charAt(0) || 'M'}
-            </AvatarFallback>
+          <Avatar className="h-12 w-12 bg-meu-cyan">
+            {user?.avatar_url ? (
+              <img 
+                src={user.avatar_url} 
+                alt={user.name || 'Avatar'} 
+                className="w-full h-full object-cover rounded-full"
+              />
+            ) : (
+              <AvatarFallback className="bg-meu-cyan text-meu-primary-dark font-bold text-lg">
+                {user?.name?.charAt(0).toUpperCase() || 'U'}
+              </AvatarFallback>
+            )}
           </Avatar>
-          <div className="flex-1">
-            <div className="font-semibold text-gray-900 text-lg">
-              {user?.name || 'Maria Santos'}
-            </div>
-            <div className="text-sm text-gray-600">
-              Personal Trainer
-            </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-gray-900 truncate">
+              {user?.name || 'Usuário'}
+            </p>
+            <p className="text-xs text-gray-500">Personal Trainer</p>
           </div>
         </div>
       </div>
@@ -160,61 +158,53 @@ export default function ProfessorSidebar({ onShowQRCode }: ProfessorSidebarProps
           ))}
         </nav>
         
-        {/* Check-in e Histórico */}
+        {/* Check-in */}
         <div className="mt-8 pt-4 border-t border-gray-200">
           <div className="space-y-2">
             <button 
-              onClick={onShowQRCode}
+              onClick={() => setShowComingSoon(true)}
               className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-meu-accent/20 hover:text-meu-primary transition-all duration-200"
             >
               <QrCode className="h-5 w-5" />
               <span className="font-medium">Check-in</span>
             </button>
-            <Link
-              href="/professor/historico"
-              className={`flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-                pathname === '/professor/historico'
-                  ? 'bg-meu-accent text-meu-primary-dark shadow-md' 
-                  : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
-              }`}
-            >
-              <FileText className="h-5 w-5" />
-              <span className="font-medium">Histórico</span>
-            </Link>
           </div>
         </div>
       </div>
 
+      {/* Modal Em Breve */}
+      {showComingSoon && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]">
+          <div className="bg-white rounded-xl p-8 max-w-md mx-4 text-center">
+            <div className="w-16 h-16 bg-meu-accent rounded-full flex items-center justify-center mx-auto mb-4">
+              <QrCode className="h-8 w-8 text-meu-primary" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Em Breve!</h2>
+            <p className="text-gray-600 mb-6">
+              A funcionalidade de Check-in estará disponível em breve.
+            </p>
+            <Button
+              onClick={() => setShowComingSoon(false)}
+              className="w-full bg-meu-primary hover:bg-meu-primary-dark text-white"
+            >
+              Entendi
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Footer do Sidebar */}
       <div className="p-4 border-t border-gray-200 space-y-2">
-        {/* Toggle Dark/Light Mode - Temporariamente oculto */}
-        {/* <Button
-          onClick={toggleDarkMode}
-          variant="ghost"
-          className="w-full justify-start text-gray-700 hover:bg-gray-100"
-        >
-          <Moon className="h-4 w-4 mr-3" />
-          Modo Escuro
-        </Button> */}
-
-        {/* Notificações */}
-        <Button
-          variant="ghost"
-          className="w-full justify-start relative text-gray-700 hover:bg-gray-100"
-        >
-          <Bell className="h-4 w-4 mr-3" />
-          Notificações
-          <Badge className="ml-auto bg-meu-cyan text-meu-primary-dark text-xs">2</Badge>
-        </Button>
-
         {/* Configurações */}
-        <Button
-          variant="ghost"
-          className="w-full justify-start text-gray-700 hover:bg-gray-100"
-        >
-          <Settings className="h-4 w-4 mr-3" />
-          Configurações
-        </Button>
+        <Link href="/professor/configuracoes">
+          <Button
+            variant="ghost"
+            className="w-full justify-start text-gray-700 hover:bg-gray-100"
+          >
+            <Settings className="h-4 w-4 mr-3" />
+            Configurações
+          </Button>
+        </Link>
 
         {/* Logout */}
         <Button

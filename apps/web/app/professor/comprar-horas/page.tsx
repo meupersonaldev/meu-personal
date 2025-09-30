@@ -5,6 +5,9 @@ import { CreditCard, Barcode, QrCode, Check, Loader2, Clock } from 'lucide-react
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { useAuthStore } from '@/lib/stores/auth-store'
+import { useTeacherAcademies } from '@/lib/hooks/useTeacherAcademies'
+import ProfessorLayout from '@/components/layout/professor-layout'
 
 interface HoursPackage {
   id: string
@@ -17,6 +20,8 @@ interface HoursPackage {
 }
 
 export default function ComprarHorasPage() {
+  const { user } = useAuthStore()
+  const { academies, loading: loadingAcademies } = useTeacherAcademies()
   const [packages, setPackages] = useState<HoursPackage[]>([])
   const [selectedPackage, setSelectedPackage] = useState<HoursPackage | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<'PIX' | 'BOLETO' | 'CREDIT_CARD'>('PIX')
@@ -24,25 +29,28 @@ export default function ComprarHorasPage() {
   const [paymentData, setPaymentData] = useState<any>(null)
   const [step, setStep] = useState<'select-package' | 'payment' | 'success'>('select-package')
 
-  // Carregar pacotes de horas
+  // Carregar pacotes de horas disponíveis para o professor
   useEffect(() => {
-    fetch('/api/plans/teacher')
+    if (!user?.id) return
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+    fetch(`${API_URL}/api/plans/teacher/${user.id}/available`)
       .then(res => res.json())
       .then(data => setPackages(data.plans || []))
       .catch(err => console.error('Erro ao carregar pacotes:', err))
-  }, [])
+  }, [user?.id])
 
   const handlePurchase = async () => {
-    if (!selectedPackage) return
+    if (!selectedPackage || !user?.id) return
 
     setLoading(true)
 
     try {
-      const response = await fetch('/api/payments/teacher/purchase-hours', {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const response = await fetch(`${API_URL}/api/payments/teacher/purchase-hours`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          teacher_id: 'USER_ID_AQUI', // TODO: Pegar do contexto de autenticação
+          teacher_id: user.id,
           hours_package_id: selectedPackage.id,
           payment_method: paymentMethod
         })
@@ -64,8 +72,38 @@ export default function ComprarHorasPage() {
     }
   }
 
+  if (!user || loadingAcademies) {
+    return (
+      <ProfessorLayout>
+        <div className="flex items-center justify-center h-96">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        </div>
+      </ProfessorLayout>
+    )
+  }
+
+  if (academies.length === 0) {
+    return (
+      <ProfessorLayout>
+        <div className="min-h-screen bg-gray-50 py-12 px-4">
+          <div className="max-w-2xl mx-auto text-center">
+            <Clock className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">Configure suas unidades primeiro</h2>
+            <p className="text-gray-600 mb-6">
+              Para comprar pacotes de horas, você precisa configurar em quais unidades irá trabalhar.
+            </p>
+            <Button onClick={() => window.location.href = '/professor/configuracoes'}>
+              Ir para Configurações
+            </Button>
+          </div>
+        </div>
+      </ProfessorLayout>
+    )
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4">
+    <ProfessorLayout>
+      <div className="min-h-screen bg-gray-50 py-12 px-4">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="text-center mb-12">
@@ -340,6 +378,7 @@ export default function ComprarHorasPage() {
           </div>
         )}
       </div>
-    </div>
+      </div>
+    </ProfessorLayout>
   )
 }

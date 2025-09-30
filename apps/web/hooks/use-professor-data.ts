@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useAuthStore } from '@/lib/stores/auth-store'
 
 export interface Aula {
   id: string
@@ -48,101 +49,102 @@ export interface ProfessorData {
   }
 }
 
-const STORAGE_KEY = 'professor-data'
-
 const initialData: ProfessorData = {
-  aulas: [
-    {
-      id: '1',
-      data: new Date().toISOString().split('T')[0],
-      hora: '15:00',
-      aluno: 'João Silva',
-      tipo: 'Musculação',
-      status: 'confirmado',
-      unidade: 'Centro',
-      valor: 70,
-      recorrente: false,
-      observacoes: 'Primeira aula experimental'
-    }
-  ],
-  alunos: [
-    {
-      id: '1',
-      nome: 'João Silva',
-      telefone: '(11) 99999-1234',
-      email: 'joao@email.com',
-      pacoteValor: 140,
-      ultimaAula: '2024-01-20',
-      frequencia: 100,
-      ativo: true
-    },
-    {
-      id: '2',
-      nome: 'Maria Santos',
-      telefone: '(11) 99999-5678',
-      email: 'maria@email.com',
-      pacoteValor: 210,
-      ultimaAula: '2024-01-18',
-      frequencia: 75,
-      ativo: true
-    },
-    {
-      id: '3',
-      nome: 'Carlos Lima',
-      telefone: '(11) 99999-9012',
-      email: 'carlos@email.com',
-      pacoteValor: 280,
-      ultimaAula: '2024-01-15',
-      frequencia: 50,
-      ativo: false
-    }
-  ],
-  transacoes: [
-    {
-      id: '1',
-      data: new Date().toISOString().split('T')[0],
-      tipo: 'entrada',
-      descricao: 'Aula - João Silva',
-      valor: 70,
-      categoria: 'Aula'
-    }
-  ],
+  aulas: [],
+  alunos: [],
+  transacoes: [],
   stats: {
-    aulasMes: 5,
-    faturamentoEstimado: 350,
-    totalAlunos: 3,
-    aulasHoje: 1,
-    horasDisponiveis: 2
+    aulasMes: 0,
+    faturamentoEstimado: 0,
+    totalAlunos: 0,
+    aulasHoje: 0,
+    horasDisponiveis: 0
   }
 }
 
 export function useProfessorData() {
+  const { user } = useAuthStore()
   const [data, setData] = useState<ProfessorData>(initialData)
   const [loading, setLoading] = useState(true)
 
-  // Carregar dados do localStorage
+  // Buscar dados reais da API
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY)
-      if (stored) {
-        const parsedData = JSON.parse(stored)
-        setData(parsedData)
+    const fetchData = async () => {
+      if (!user?.id) {
+        setLoading(false)
+        return
       }
-    } catch (error) {
-      console.error('Erro ao carregar dados:', error)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
 
-  // Salvar dados no localStorage
-  const saveData = (newData: ProfessorData) => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newData))
-      setData(newData)
-    } catch (error) {
-      console.error('Erro ao salvar dados:', error)
+      try {
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+
+        // Buscar agendamentos
+        const bookingsResponse = await fetch(
+          `${API_URL}/api/bookings?teacher_id=${user.id}`,
+          { headers: { 'Content-Type': 'application/json' } }
+        )
+
+        if (bookingsResponse.ok) {
+          const bookingsData = await bookingsResponse.json()
+          const bookings = bookingsData.bookings || []
+
+          // Converter bookings para formato de Aula
+          const aulas: Aula[] = bookings.map((b: {
+            id: string
+            date: string
+            studentName: string
+            status: string
+            creditsCost: number
+            notes?: string
+          }) => ({
+            id: b.id,
+            data: new Date(b.date).toISOString().split('T')[0],
+            hora: new Date(b.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+            aluno: b.studentName || 'Aluno',
+            tipo: 'Treino',
+            status: b.status === 'CONFIRMED' ? 'confirmado' : b.status === 'PENDING' ? 'pendente' : 'cancelado',
+            unidade: 'Academia',
+            valor: b.creditsCost * 70, // Assumindo 70 reais por crédito
+            recorrente: false,
+            observacoes: b.notes
+          }))
+
+          // Calcular estatísticas
+          const hoje = new Date().toISOString().split('T')[0]
+          const inicioMes = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]
+          
+          const aulasHoje = aulas.filter(a => a.data === hoje && a.status === 'confirmado').length
+          const aulasMes = aulas.filter(a => a.data >= inicioMes && a.status === 'confirmado').length
+          const faturamentoEstimado = aulas
+            .filter(a => a.data >= inicioMes && a.status === 'confirmado')
+            .reduce((sum, a) => sum + a.valor, 0)
+
+          setData({
+            aulas,
+            alunos: [], // TODO: Buscar alunos da API
+            transacoes: [], // TODO: Buscar transações da API
+            stats: {
+              aulasMes,
+              faturamentoEstimado,
+              totalAlunos: new Set(aulas.map(a => a.aluno)).size,
+              aulasHoje,
+              horasDisponiveis: 0
+            }
+          })
+        }
+      } catch (error) {
+        console.error('Erro ao buscar dados:', error)
+      } finally {
+        setLoading(false)
+      }
     }
+
+    fetchData()
+  }, [user?.id])
+
+  // Salvar dados (não usado mais, mantido para compatibilidade)
+  const saveData = (newData: ProfessorData) => {
+    setData(newData)
   }
 
   // Calcular estatísticas
