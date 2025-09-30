@@ -36,7 +36,7 @@ const BRAZILIAN_STATES = [
 
 export default function AddFranchisePage() {
   const router = useRouter()
-  const { addAcademy } = useFranqueadoraStore()
+  const { addAcademy, franqueadora } = useFranqueadoraStore()
   const [isLoading, setIsLoading] = useState(false)
   
   const [formData, setFormData] = useState<FranchiseFormData>({
@@ -87,25 +87,37 @@ export default function AddFranchisePage() {
         return
       }
 
+      // Validar se tem franqueadora
+      if (!franqueadora) {
+        toast.error('Franqueadora não identificada. Faça login novamente.')
+        return
+      }
+
       // Criar objeto da franquia
       const newFranchise = {
-        id: Date.now().toString(), // Temporário até integrar com backend
+        franqueadora_id: franqueadora.id,
         name: formData.name,
         email: formData.email,
-        phone: formData.phone,
+        phone: formData.phone || null,
+        address: formData.address || null,
         city: formData.city,
         state: formData.state,
+        zip_code: formData.zip_code || null,
         franchise_fee: formData.franchise_fee,
         royalty_percentage: formData.royalty_percentage,
         monthly_revenue: formData.monthly_revenue,
-        contract_start_date: formData.contract_start_date,
-        contract_end_date: formData.contract_end_date,
-        is_active: formData.is_active,
-        created_at: new Date().toISOString()
+        contract_start_date: formData.contract_start_date || null,
+        contract_end_date: formData.contract_end_date || null,
+        is_active: formData.is_active
       }
 
-      // Adicionar ao store (futuramente será API call)
-      await addAcademy(newFranchise)
+      // Adicionar via store (Supabase)
+      const success = await addAcademy(newFranchise)
+
+      if (!success) {
+        toast.error('Erro ao salvar franquia no banco de dados')
+        return
+      }
       
       toast.success('Franquia adicionada com sucesso!')
       router.push('/franqueadora/dashboard')

@@ -15,13 +15,14 @@ import { useFranqueadoraStore } from '@/lib/stores/franqueadora-store'
 
 export default function FranqueadoraDashboard() {
   const router = useRouter()
-  const { 
-    user, 
-    isAuthenticated, 
-    academies, 
+  const {
+    user,
+    isAuthenticated,
+    academies,
     analytics,
     fetchAnalytics,
-    isLoading 
+    fetchAcademies,
+    isLoading
   } = useFranqueadoraStore()
   const [activeTab] = useState<'overview' | 'franchises' | 'leads' | 'settings'>('overview')
 
@@ -38,9 +39,10 @@ export default function FranqueadoraDashboard() {
 
   useEffect(() => {
     if (hydrated && isAuthenticated) {
+      fetchAcademies()
       fetchAnalytics()
     }
-  }, [hydrated, isAuthenticated, fetchAnalytics])
+  }, [hydrated, isAuthenticated, fetchAcademies, fetchAnalytics])
 
   if (!hydrated || isLoading) {
     return (
