@@ -978,14 +978,19 @@ export const useFranquiaStore = create<FranquiaState>()(
           const { franquiaUser } = get()
           if (!franquiaUser) return
 
-          const response = await fetch(`http://localhost:3001/api/notifications?franchise_admin_id=${franquiaUser.id}&limit=100`)
-          if (!response.ok) throw new Error('Failed to fetch notifications')
+          const { data, error } = await supabase
+            .from('franchise_notifications')
+            .select('*')
+            .eq('franchise_admin_id', franquiaUser.id)
+            .order('created_at', { ascending: false })
+            .limit(100)
 
-          const data = await response.json()
-          const unreadCount = data.filter((n: Notification) => !n.is_read).length
+          if (error) throw error
+
+          const unreadCount = data?.filter((n: Notification) => !n.is_read).length || 0
 
           set({
-            notifications: data,
+            notifications: data || [],
             unreadNotifications: unreadCount
           })
         } catch (error) {
@@ -996,11 +1001,12 @@ export const useFranquiaStore = create<FranquiaState>()(
 
       markNotificationAsRead: async (id) => {
         try {
-          const response = await fetch(`http://localhost:3001/api/notifications/${id}/read`, {
-            method: 'PUT'
-          })
+          const { error } = await supabase
+            .from('franchise_notifications')
+            .update({ is_read: true })
+            .eq('id', id)
 
-          if (!response.ok) throw new Error('Failed to mark notification as read')
+          if (error) throw error
 
           // Recarregar notificações
           await get().fetchNotifications()
@@ -1016,17 +1022,13 @@ export const useFranquiaStore = create<FranquiaState>()(
           const { franquiaUser } = get()
           if (!franquiaUser) return false
 
-          const response = await fetch(`http://localhost:3001/api/notifications/read-all`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              franchise_admin_id: franquiaUser.id
-            })
-          })
+          const { error } = await supabase
+            .from('franchise_notifications')
+            .update({ is_read: true })
+            .eq('franchise_admin_id', franquiaUser.id)
+            .eq('is_read', false)
 
-          if (!response.ok) throw new Error('Failed to mark all notifications as read')
+          if (error) throw error
 
           // Recarregar notificações
           await get().fetchNotifications()
@@ -1040,11 +1042,15 @@ export const useFranquiaStore = create<FranquiaState>()(
       // Teacher Plans
       fetchTeacherPlans: async () => {
         try {
-          const response = await fetch('http://localhost:3001/api/plans/teachers')
-          if (!response.ok) throw new Error('Failed to fetch teacher plans')
+          const { data, error } = await supabase
+            .from('teacher_plans')
+            .select('*')
+            .eq('is_active', true)
+            .order('created_at', { ascending: false })
 
-          const data = await response.json()
-          set({ teacherPlans: data })
+          if (error) throw error
+
+          set({ teacherPlans: data || [] })
         } catch (error) {
           console.error('Error fetching teacher plans:', error)
           set({ teacherPlans: [] })
@@ -1053,15 +1059,11 @@ export const useFranquiaStore = create<FranquiaState>()(
 
       createTeacherPlan: async (planData) => {
         try {
-          const response = await fetch('http://localhost:3001/api/plans/teachers', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(planData)
-          })
+          const { error } = await supabase
+            .from('teacher_plans')
+            .insert([planData])
 
-          if (!response.ok) throw new Error('Failed to create teacher plan')
+          if (error) throw error
 
           // Recarregar lista
           await get().fetchTeacherPlans()
@@ -1072,14 +1074,22 @@ export const useFranquiaStore = create<FranquiaState>()(
         }
       },
 
-      // Student Plans
+      // Student Plans (usa academy_plans)
       fetchStudentPlans: async () => {
         try {
-          const response = await fetch('http://localhost:3001/api/plans/students')
-          if (!response.ok) throw new Error('Failed to fetch student plans')
+          const { academy } = get()
+          if (!academy) return
 
-          const data = await response.json()
-          set({ studentPlans: data })
+          const { data, error } = await supabase
+            .from('academy_plans')
+            .select('*')
+            .eq('academy_id', academy.id)
+            .eq('is_active', true)
+            .order('created_at', { ascending: false })
+
+          if (error) throw error
+
+          set({ studentPlans: data || [] })
         } catch (error) {
           console.error('Error fetching student plans:', error)
           set({ studentPlans: [] })
@@ -1088,15 +1098,14 @@ export const useFranquiaStore = create<FranquiaState>()(
 
       createStudentPlan: async (planData) => {
         try {
-          const response = await fetch('http://localhost:3001/api/plans/students', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(planData)
-          })
+          const { academy } = get()
+          if (!academy) return false
 
-          if (!response.ok) throw new Error('Failed to create student plan')
+          const { error } = await supabase
+            .from('academy_plans')
+            .insert([{ ...planData, academy_id: academy.id }])
+
+          if (error) throw error
 
           // Recarregar lista
           await get().fetchStudentPlans()
@@ -1110,11 +1119,23 @@ export const useFranquiaStore = create<FranquiaState>()(
       // Approval Requests
       fetchApprovalRequests: async () => {
         try {
-          const response = await fetch('http://localhost:3001/api/approvals?status=pending')
-          if (!response.ok) throw new Error('Failed to fetch approval requests')
+          const { academy } = get()
+          if (!academy) return
 
-          const data = await response.json()
-          set({ approvalRequests: data })
+          const { data, error } = await supabase
+            .from('approval_requests')
+            .select(`
+              *,
+              user:users(*),
+              academy:academies(*)
+            `)
+            .eq('academy_id', academy.id)
+            .eq('status', 'pending')
+            .order('created_at', { ascending: false })
+
+          if (error) throw error
+
+          set({ approvalRequests: data || [] })
         } catch (error) {
           console.error('Error fetching approval requests:', error)
           set({ approvalRequests: [] })
@@ -1123,18 +1144,16 @@ export const useFranquiaStore = create<FranquiaState>()(
 
       approveRequest: async (id, reviewerId) => {
         try {
-          const response = await fetch(`http://localhost:3001/api/approvals/${id}`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
+          const { error } = await supabase
+            .from('approval_requests')
+            .update({
               status: 'approved',
-              reviewed_by: reviewerId
+              reviewed_by: reviewerId,
+              reviewed_at: new Date().toISOString()
             })
-          })
+            .eq('id', id)
 
-          if (!response.ok) throw new Error('Failed to approve request')
+          if (error) throw error
 
           // Recarregar lista
           await get().fetchApprovalRequests()
@@ -1148,19 +1167,17 @@ export const useFranquiaStore = create<FranquiaState>()(
 
       rejectRequest: async (id, reviewerId, reason) => {
         try {
-          const response = await fetch(`http://localhost:3001/api/approvals/${id}`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
+          const { error } = await supabase
+            .from('approval_requests')
+            .update({
               status: 'rejected',
               reviewed_by: reviewerId,
+              reviewed_at: new Date().toISOString(),
               rejection_reason: reason
             })
-          })
+            .eq('id', id)
 
-          if (!response.ok) throw new Error('Failed to reject request')
+          if (error) throw error
 
           // Recarregar lista
           await get().fetchApprovalRequests()
