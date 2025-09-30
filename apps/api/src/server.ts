@@ -30,6 +30,10 @@ app.get('/health', (req, res) => {
 // Routes
 import authRoutes from './routes/auth'
 import teachersRoutes from './routes/teachers'
+import teacherStudentsRoutes from './routes/teacher-students'
+import teacherPreferencesRoutes from './routes/teacher-preferences'
+import usersRoutes from './routes/users'
+import academiesRoutes from './routes/academies'
 import studentsRoutes from './routes/students'
 import bookingsRoutes from './routes/bookings'
 import notificationsRoutes from './routes/notifications'
@@ -37,9 +41,15 @@ import plansRoutes from './routes/plans'
 import approvalsRoutes from './routes/approvals'
 import paymentsRoutes from './routes/payments'
 import franchisesRoutes from './routes/franchises'
+import webhooksRoutes from './routes/webhooks'
+import checkoutRoutes from './routes/checkout'
 
 app.use('/api/auth', authRoutes)
+app.use('/api/users', usersRoutes)
+app.use('/api/academies', academiesRoutes)
 app.use('/api/teachers', teachersRoutes)
+app.use('/api/teachers', teacherStudentsRoutes)
+app.use('/api/teachers', teacherPreferencesRoutes)
 app.use('/api/students', studentsRoutes)
 app.use('/api/bookings', bookingsRoutes)
 app.use('/api/notifications', notificationsRoutes)
@@ -47,6 +57,8 @@ app.use('/api/plans', plansRoutes)
 app.use('/api/approvals', approvalsRoutes)
 app.use('/api/payments', paymentsRoutes)
 app.use('/api/franchises', franchisesRoutes)
+app.use('/api/webhooks', webhooksRoutes)
+app.use('/api/checkout', checkoutRoutes)
 
 // Error handling
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

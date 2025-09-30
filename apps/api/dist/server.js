@@ -24,6 +24,28 @@ app.use(express_1.default.urlencoded({ extended: true }));
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+const auth_1 = __importDefault(require("./routes/auth"));
+const teachers_1 = __importDefault(require("./routes/teachers"));
+const students_1 = __importDefault(require("./routes/students"));
+const bookings_1 = __importDefault(require("./routes/bookings"));
+const notifications_1 = __importDefault(require("./routes/notifications"));
+const plans_1 = __importDefault(require("./routes/plans"));
+const approvals_1 = __importDefault(require("./routes/approvals"));
+const payments_1 = __importDefault(require("./routes/payments"));
+const franchises_1 = __importDefault(require("./routes/franchises"));
+const webhooks_1 = __importDefault(require("./routes/webhooks"));
+const checkout_1 = __importDefault(require("./routes/checkout"));
+app.use('/api/auth', auth_1.default);
+app.use('/api/teachers', teachers_1.default);
+app.use('/api/students', students_1.default);
+app.use('/api/bookings', bookings_1.default);
+app.use('/api/notifications', notifications_1.default);
+app.use('/api/plans', plans_1.default);
+app.use('/api/approvals', approvals_1.default);
+app.use('/api/payments', payments_1.default);
+app.use('/api/franchises', franchises_1.default);
+app.use('/api/webhooks', webhooks_1.default);
+app.use('/api/checkout', checkout_1.default);
 app.use((err, req, res, next) => {
     console.error(err.stack);
     res.status(err.status || 500).json({

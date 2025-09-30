@@ -13,6 +13,194 @@ const teacherSchema = z.object({
   is_available: z.boolean().optional()
 })
 
+// ---------------- BLOQUEIOS DE AGENDA ----------------
+// POST /api/teachers/:id/blocks/slot
+router.post('/:id/blocks/slot', async (req, res) => {
+  try {
+    const { id } = req.params // teacherId
+    const { academy_id, date, time, notes } = req.body as {
+      academy_id: string
+      date: string // YYYY-MM-DD
+      time: string // HH:mm
+      notes?: string
+    }
+
+    if (!academy_id || !date || !time) {
+      return res.status(400).json({ error: 'academy_id, date e time são obrigatórios' })
+    }
+
+    const [hours, minutes] = String(time).split(':').map((n: string) => parseInt(n, 10))
+    const d = new Date(`${date}T00:00:00Z`)
+    d.setUTCHours(hours, minutes, 0, 0)
+
+    // Descobrir duração do slot pela configuração da academia
+    const dow = new Date(`${date}T00:00:00Z`).getUTCDay()
+    const { data: slotCfg } = await supabase
+      .from('academy_time_slots')
+      .select('time, duration_minutes')
+      .eq('academy_id', academy_id)
+      .eq('day_of_week', dow)
+      .eq('time', `${String(time).padStart(5, '0')}:00`)
+      .single()
+    const duration = slotCfg && typeof slotCfg.duration_minutes === 'number' && slotCfg.duration_minutes > 0 ? slotCfg.duration_minutes : 60
+
+    const { data: booking, error } = await supabase
+      .from('bookings')
+      .insert({
+        teacher_id: id,
+        franchise_id: academy_id,
+        student_id: null,
+        date: d.toISOString(),
+        duration,
+        credits_cost: 0,
+        status: 'BLOCKED',
+        notes: notes || 'Bloqueio de agenda'
+      })
+      .select()
+      .single()
+
+    if (error) throw error
+    res.status(201).json({ booking })
+  } catch (error: any) {
+    console.error('Erro ao bloquear slot:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// POST /api/teachers/:id/blocks/day
+router.post('/:id/blocks/day', async (req, res) => {
+  try {
+    const { id } = req.params // teacherId
+    const { academy_id, date, notes } = req.body as { academy_id: string; date: string; notes?: string }
+    if (!academy_id || !date) {
+      return res.status(400).json({ error: 'academy_id e date são obrigatórios' })
+    }
+
+    // Calcular dia da semana
+    const reqDate = new Date(`${date}T00:00:00Z`)
+    const dow = reqDate.getUTCDay()
+
+    // Buscar slots configurados
+    const { data: slots, error: slotsError } = await supabase
+      .from('academy_time_slots')
+      .select('time, max_capacity, is_available')
+      .eq('academy_id', academy_id)
+      .eq('day_of_week', dow)
+      .eq('is_available', true)
+      .order('time')
+    if (slotsError) throw slotsError
+
+    // Bookings do dia
+    const startISO = new Date(`${date}T00:00:00Z`).toISOString()
+    const endISO = new Date(`${date}T23:59:59Z`).toISOString()
+    const { data: bookings, error: bookingsError } = await supabase
+      .from('bookings')
+      .select('date, status')
+      .eq('franchise_id', academy_id)
+      .gte('date', startISO)
+      .lte('date', endISO)
+    if (bookingsError) throw bookingsError
+
+    const occ: Record<string, number> = {}
+    for (const b of bookings || []) {
+      if (b.status === 'CANCELLED') continue
+      const t = new Date(b.date)
+      const hhmm = t.toISOString().substring(11, 16)
+      occ[hhmm] = (occ[hhmm] || 0) + 1
+    }
+
+    const toBlock: { date: string; duration: number; notes?: string }[] = []
+    for (const s of slots || []) {
+      const hhmm = String(s.time).substring(0, 5)
+      const current = occ[hhmm] || 0
+      const max = s.max_capacity ?? 1
+      const remaining = Math.max(0, max - current)
+      if (remaining > 0) {
+        const [h, m] = hhmm.split(':').map((n: string) => parseInt(n, 10))
+        const d = new Date(`${date}T00:00:00Z`)
+        d.setUTCHours(h, m, 0, 0)
+        const duration = typeof (s as any).duration_minutes === 'number' && (s as any).duration_minutes > 0 ? (s as any).duration_minutes : 60
+        toBlock.push({ date: d.toISOString(), duration, notes })
+      }
+    }
+
+    let created: any[] = []
+    if (toBlock.length > 0) {
+      const payload = toBlock.map(b => ({
+        teacher_id: id,
+        franchise_id: academy_id,
+        student_id: null,
+        date: b.date,
+        duration: b.duration,
+        credits_cost: 0,
+        status: 'BLOCKED',
+        notes: b.notes || 'Bloqueio de agenda (dia)'
+      }))
+      const { data, error } = await supabase.from('bookings').insert(payload).select()
+      if (error) throw error
+      created = data || []
+    }
+
+    res.status(201).json({ created })
+  } catch (error: any) {
+    console.error('Erro ao bloquear dia:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// GET /api/teachers/:id/blocks
+router.get('/:id/blocks', async (req, res) => {
+  try {
+    const { id } = req.params
+    const { academy_id, date } = req.query as { academy_id?: string; date?: string }
+
+    let query = supabase
+      .from('bookings')
+      .select('id, date, duration, status, notes, franchise_id')
+      .eq('teacher_id', id)
+      .eq('status', 'BLOCKED')
+
+    if (academy_id) query = query.eq('franchise_id', academy_id)
+    if (date) {
+      const startISO = new Date(`${date}T00:00:00Z`).toISOString()
+      const endISO = new Date(`${date}T23:59:59Z`).toISOString()
+      query = query.gte('date', startISO).lte('date', endISO)
+    }
+
+    const { data, error } = await query.order('date')
+    if (error) throw error
+    res.json({ blocks: data || [] })
+  } catch (error: any) {
+    console.error('Erro ao listar bloqueios:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// DELETE /api/teachers/:id/blocks/:bookingId (desbloquear)
+router.delete('/:id/blocks/:bookingId', async (req, res) => {
+  try {
+    const { id, bookingId } = req.params
+    // Verificar se booking pertence ao teacher
+    const { data: booking } = await supabase
+      .from('bookings')
+      .select('id, teacher_id')
+      .eq('id', bookingId)
+      .single()
+    if (!booking || booking.teacher_id !== id) {
+      return res.status(404).json({ error: 'Bloqueio não encontrado' })
+    }
+
+    const { error } = await supabase
+      .from('bookings')
+      .update({ status: 'CANCELLED', updated_at: new Date().toISOString() })
+      .eq('id', bookingId)
+    if (error) throw error
+    res.json({ success: true })
+  } catch (error: any) {
+    console.error('Erro ao desbloquear:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
 // Schema para criação de professor
 const createTeacherSchema = z.object({
   name: z.string().min(1, 'Nome é obrigatório'),
@@ -30,7 +218,7 @@ const createTeacherSchema = z.object({
 // GET /api/teachers - Listar todos os professores
 router.get('/', async (req, res) => {
   try {
-    const { academy_id } = req.query
+    const { academy_id, city, state } = req.query
 
     let query = supabase
       .from('users')
@@ -52,9 +240,13 @@ router.get('/', async (req, res) => {
           status,
           commission_rate,
           academies (
+            id,
             name,
             city,
-            state
+            state,
+            address,
+            phone,
+            email
           )
         ),
         teacher_subscriptions (
@@ -71,6 +263,8 @@ router.get('/', async (req, res) => {
         )
       `)
       .eq('role', 'TEACHER')
+      .eq('is_active', true)
+      .eq('academy_teachers.status', 'active')
       .order('created_at', { ascending: false })
 
     if (academy_id) {
@@ -84,7 +278,31 @@ router.get('/', async (req, res) => {
       return res.status(500).json({ error: 'Erro interno do servidor' })
     }
 
-    res.json(teachers)
+    // Filtrar por cidade/estado se fornecido
+    let filteredTeachers = teachers || []
+
+    if (city) {
+      filteredTeachers = filteredTeachers.filter(teacher =>
+        teacher.academy_teachers?.some((at: any) =>
+          at.academies?.city?.toLowerCase().includes((city as string).toLowerCase())
+        )
+      )
+    }
+
+    if (state) {
+      filteredTeachers = filteredTeachers.filter(teacher =>
+        teacher.academy_teachers?.some((at: any) =>
+          at.academies?.state?.toLowerCase() === (state as string).toLowerCase()
+        )
+      )
+    }
+
+    // Filtrar apenas professores disponíveis
+    filteredTeachers = filteredTeachers.filter(teacher =>
+      teacher.teacher_profiles?.[0]?.is_available === true
+    )
+
+    res.json(filteredTeachers)
 
   } catch (error) {
     console.error('Erro interno:', error)

@@ -15,7 +15,8 @@ router.get('/', async (req, res) => {
     let query = supabase
       .from('academies')
       .select('*')
-      .order('created_at', { ascending: false })
+      .eq('is_active', true)
+      .order('name', { ascending: true })
 
     if (franqueadora_id) {
       query = query.eq('franqueadora_id', franqueadora_id)
@@ -25,7 +26,17 @@ router.get('/', async (req, res) => {
 
     if (error) throw error
 
-    res.json(data)
+    // Mapear para o formato esperado pelo frontend
+    const franchises = (data || []).map(academy => ({
+      id: academy.id,
+      name: academy.name,
+      address: academy.address,
+      city: academy.city,
+      state: academy.state,
+      is_active: academy.is_active
+    }))
+
+    res.json({ franchises })
   } catch (error: any) {
     console.error('Error fetching franchises:', error)
     res.status(500).json({ error: error.message })
