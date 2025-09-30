@@ -74,24 +74,11 @@ export default function FranquiaDashboard() {
 
   // Carregar dados ao montar
   useEffect(() => {
-    console.log('Dashboard useEffect executado')
-    console.log('fetchTeachers:', fetchTeachers)
-    console.log('fetchStudents:', fetchStudents)
-    
-    // Configurar academia (hardcoded por enquanto - depois pegar do auth)
-    setAcademy({
-      id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-      name: 'Academia FitLife - Centro',
-      email: 'admin@fitlife.com',
-      is_active: true
-    })
+    // Academia já vem do login via Supabase - não sobrescrever!
 
     // Buscar dados
-    console.log('Chamando fetchTeachers...')
     fetchTeachers()
-    console.log('Chamando fetchStudents...')
     fetchStudents()
-    console.log('Chamando fetchAnalytics...')
     fetchAnalytics()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

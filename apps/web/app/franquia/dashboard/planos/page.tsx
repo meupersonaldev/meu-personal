@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
+import { useFranquiaStore } from '@/lib/stores/franquia-store'
 
 interface StudentPlan {
   id: string
@@ -33,12 +34,21 @@ interface TeacherPlan {
 }
 
 export default function PlanosPage() {
+  const { academy } = useFranquiaStore()
   const [studentPlans, setStudentPlans] = useState<StudentPlan[]>([])
   const [teacherPlans, setTeacherPlans] = useState<TeacherPlan[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'student' | 'teacher'>('student')
   const [editingPlan, setEditingPlan] = useState<any>(null)
   const [showModal, setShowModal] = useState(false)
+
+  // Verificar se academia está carregada
+  useEffect(() => {
+    console.log('Academia no store:', academy)
+    if (!academy) {
+      console.warn('Academia não carregada! Faça login novamente.')
+    }
+  }, [academy])
 
   // Carregar planos
   useEffect(() => {
@@ -113,22 +123,41 @@ export default function PlanosPage() {
     if (!editingPlan) return
 
     try {
-      const endpoint = editingPlan.type === 'student' 
-        ? 'http://localhost:3001/api/plans/students' 
+      const endpoint = editingPlan.type === 'student'
+        ? 'http://localhost:3001/api/plans/students'
         : 'http://localhost:3001/api/plans/teachers'
 
       const method = editingPlan.id ? 'PUT' : 'POST'
       const url = editingPlan.id ? `${endpoint}/${editingPlan.id}` : endpoint
 
       // Remover campo 'type' antes de enviar
-      const { type, ...planData } = editingPlan
+      const { type, validity_days, ...planData } = editingPlan
 
-      console.log('Salvando plano:', { method, url, planData })
+      // Obter academy_id do store Zustand
+      const academy_id = academy?.id
+
+      console.log('Debug academy_id:', { academy_id, academy })
+
+      if (editingPlan.type === 'student' && !academy_id) {
+        toast.error('Erro: academia não identificada. Faça login novamente.')
+        return
+      }
+
+      // Converter validity_days para duration_days e adicionar academy_id
+      const finalPlanData = {
+        ...planData,
+        ...(editingPlan.type === 'student' && {
+          duration_days: validity_days || 30,
+          academy_id
+        })
+      }
+
+      console.log('Salvando plano:', { method, url, planData: finalPlanData })
 
       const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(planData)
+        body: JSON.stringify(finalPlanData)
       })
 
       const result = await response.json()

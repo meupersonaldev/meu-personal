@@ -312,10 +312,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             .from('franchise_admins')
             .insert([{
               user_id: authData.user.id,
-              academy_id: academy.id,
-              name: admin_name,
-              email: admin_email,
-              role: 'ADMIN'
+              academy_id: academy.id
             }])
 
           if (adminError) {

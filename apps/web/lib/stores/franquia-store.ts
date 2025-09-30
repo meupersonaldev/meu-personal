@@ -123,7 +123,7 @@ export interface StudentPlan {
   description?: string
   price: number
   credits_included: number
-  validity_days: number
+  duration_days: number
   features: string[]
   is_active: boolean
   asaas_plan_id?: string
@@ -1110,7 +1110,10 @@ export const useFranquiaStore = create<FranquiaState>()(
             .eq('status', 'pending')
             .order('created_at', { ascending: false })
 
-          if (error) throw error
+          if (error) {
+            console.error('Error fetching approval requests:', error)
+            throw error
+          }
 
           set({ approvalRequests: data || [] })
         } catch (error) {

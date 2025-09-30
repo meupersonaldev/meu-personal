@@ -89,7 +89,7 @@ export default function PlansPage() {
       description: studentPlanForm.description,
       price: parseFloat(studentPlanForm.price),
       credits_included: parseInt(studentPlanForm.credits_included),
-      validity_days: parseInt(studentPlanForm.validity_days),
+      duration_days: parseInt(studentPlanForm.validity_days),
       features: studentPlanForm.features.filter(f => f.trim() !== ''),
       is_active: true
     })
@@ -281,7 +281,7 @@ export default function PlansPage() {
                     R$ {plan.price.toFixed(2)}
                   </div>
                   <div className="text-sm text-gray-600 mb-3">
-                    {plan.credits_included} créditos • {plan.validity_days} dias
+                    {plan.credits_included} créditos • {plan.duration_days} dias
                   </div>
                   {plan.description && (
                     <p className="text-sm text-gray-600 mb-3">{plan.description}</p>
