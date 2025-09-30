@@ -1,6 +1,7 @@
 import express from 'express'
 import { supabase } from '../lib/supabase'
 import { createNotification } from './notifications'
+import { asaasService } from '../services/asaas.service'
 
 const router = express.Router()
 
@@ -24,10 +25,56 @@ router.get('/teacher', async (req, res) => {
   }
 })
 
+// Buscar planos disponíveis para um professor específico (baseado nas academias dele)
+router.get('/teacher/:teacherId/available', async (req, res) => {
+  try {
+    const { teacherId } = req.params
+
+    // Buscar academy_ids do professor
+    const { data: prefs } = await supabase
+      .from('teacher_preferences')
+      .select('academy_ids')
+      .eq('teacher_id', teacherId)
+      .single()
+
+    const academyIds = prefs?.academy_ids || []
+
+    // Se não tiver academias configuradas, retornar todos os planos
+    if (academyIds.length === 0) {
+      const { data, error } = await supabase
+        .from('teacher_plans')
+        .select('*')
+        .eq('is_active', true)
+        .order('price', { ascending: true })
+
+      if (error) throw error
+      return res.json({ plans: data || [] })
+    }
+
+    // Buscar planos vinculados às academias do professor
+    // Nota: teacher_plans não tem academy_id, então retornamos todos os planos ativos
+    // Se no futuro quiser vincular planos a academias, adicione academy_id em teacher_plans
+    const { data, error } = await supabase
+      .from('teacher_plans')
+      .select('*')
+      .eq('is_active', true)
+      .order('price', { ascending: true })
+
+    if (error) throw error
+
+    res.json({ plans: data || [], academies: academyIds })
+  } catch (error) {
+    console.error('Error fetching available teacher plans:', error)
+    res.status(500).json({ error: 'Erro interno do servidor' })
+  }
+})
+
 // Criar plano para professores
+// NOTA: Planos de professor também são cobranças únicas (pacotes de horas)
+// Quando o professor comprar, criamos uma cobrança única (payment) no Asaas
 router.post('/teachers', async (req, res) => {
   try {
-    const { name, description, price, hours_included, validity_days, commission_rate, features = [] } = req.body
+    const { name, description, price, hours_included, commission_rate, features = [] } = req.body
 
     if (!name || !price || !commission_rate) {
       return res.status(400).json({
@@ -35,6 +82,7 @@ router.post('/teachers', async (req, res) => {
       })
     }
 
+    // Criar plano no banco de dados
     const { data, error } = await supabase
       .from('teacher_plans')
       .insert({
@@ -42,9 +90,10 @@ router.post('/teachers', async (req, res) => {
         description,
         price,
         hours_included,
-        validity_days,
         commission_rate,
-        features
+        features,
+        // asaas_plan_id não é usado - cobrança única criada na compra
+        asaas_plan_id: null
       })
       .select()
       .single()
@@ -218,7 +267,7 @@ router.post('/teachers/subscriptions', async (req, res) => {
 router.get('/student', async (req, res) => {
   try {
     const { data, error } = await supabase
-      .from('student_plans')
+      .from('academy_plans')
       .select('*')
       .eq('is_active', true)
       .order('price', { ascending: true })
@@ -233,25 +282,31 @@ router.get('/student', async (req, res) => {
 })
 
 // Criar plano para alunos
+// NOTA: Planos de aluno não são criados no Asaas como "planos"
+// Quando o aluno comprar, criamos uma cobrança única (payment) no Asaas
 router.post('/students', async (req, res) => {
   try {
-    const { name, description, price, credits_included, validity_days, features = [] } = req.body
+    const { academy_id, name, description, price, credits_included, duration_days, features = [] } = req.body
 
-    if (!name || !price || !credits_included || !validity_days) {
+    if (!academy_id || !name || !price || !credits_included) {
       return res.status(400).json({
-        error: 'name, price, credits_included e validity_days são obrigatórios'
+        error: 'academy_id, name, price e credits_included são obrigatórios'
       })
     }
 
+    // Criar plano no banco de dados
     const { data, error } = await supabase
-      .from('student_plans')
+      .from('academy_plans')
       .insert({
+        academy_id,
         name,
         description,
         price,
         credits_included,
-        validity_days,
-        features
+        duration_days: duration_days || 30,
+        features,
+        // asaas_plan_id não é usado para planos de aluno (cobranças únicas)
+        asaas_plan_id: null
       })
       .select()
       .single()
@@ -269,16 +324,16 @@ router.post('/students', async (req, res) => {
 router.put('/students/:id', async (req, res) => {
   try {
     const { id } = req.params
-    const { name, description, price, credits_included, validity_days, features, is_active } = req.body
+    const { name, description, price, credits_included, duration_days, features, is_active } = req.body
 
     const { data, error } = await supabase
-      .from('student_plans')
+      .from('academy_plans')
       .update({
         name,
         description,
         price,
         credits_included,
-        validity_days,
+        duration_days,
         features,
         is_active,
         updated_at: new Date().toISOString()
@@ -302,7 +357,7 @@ router.delete('/students/:id', async (req, res) => {
     const { id } = req.params
 
     const { error } = await supabase
-      .from('student_plans')
+      .from('academy_plans')
       .delete()
       .eq('id', id)
 
@@ -366,7 +421,7 @@ router.post('/students/subscriptions', async (req, res) => {
 
     // Buscar detalhes do plano
     const { data: plan } = await supabase
-      .from('student_plans')
+      .from('academy_plans')
       .select('*')
       .eq('id', plan_id)
       .single()

@@ -107,6 +107,30 @@ export class AsaasService {
   }
 
   /**
+   * Gerar link de pagamento (checkout simplificado)
+   * Retorna URL para o cliente finalizar o pagamento
+   */
+  async generatePaymentLink(paymentId: string) {
+    try {
+      const response = await this.api.get(`/payments/${paymentId}/identificationField`)
+      return {
+        success: true,
+        data: {
+          paymentUrl: response.data.invoiceUrl,
+          bankSlipUrl: response.data.bankSlipUrl,
+          pixCode: response.data.payload
+        }
+      }
+    } catch (error: any) {
+      console.error('Erro ao gerar link de pagamento:', error.response?.data || error.message)
+      return {
+        success: false,
+        error: error.response?.data?.errors || error.message
+      }
+    }
+  }
+
+  /**
    * Criar assinatura recorrente (para professores com plano mensal)
    */
   async createSubscription(data: AsaasSubscription) {
@@ -183,12 +207,42 @@ export class AsaasService {
   }
 
   /**
+   * Criar plano de assinatura no Asaas (para planos recorrentes de professores)
+   * Note: Asaas chama isso de "subscription plan"
+   */
+  async createSubscriptionPlan(data: {
+    name: string
+    description?: string
+    value: number
+    cycle: 'MONTHLY' | 'QUARTERLY' | 'YEARLY'
+  }) {
+    try {
+      const response = await this.api.post('/subscriptions/plans', {
+        name: data.name,
+        description: data.description || data.name,
+        value: data.value,
+        cycle: data.cycle
+      })
+      return {
+        success: true,
+        data: response.data
+      }
+    } catch (error: any) {
+      console.error('Erro ao criar plano de assinatura Asaas:', error.response?.data || error.message)
+      return {
+        success: false,
+        error: error.response?.data?.errors || error.message
+      }
+    }
+  }
+
+  /**
    * Processar webhook do Asaas
    * Eventos: PAYMENT_CREATED, PAYMENT_CONFIRMED, PAYMENT_RECEIVED, PAYMENT_OVERDUE, etc
    */
   async processWebhook(event: any) {
     console.log('Webhook Asaas recebido:', event.event, event.payment?.id)
-    
+
     return {
       event: event.event,
       paymentId: event.payment?.id,
