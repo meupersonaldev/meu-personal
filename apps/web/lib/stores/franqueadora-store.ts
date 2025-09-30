@@ -258,19 +258,67 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
         }
       },
 
-      addAcademy: async (academyData) => {
+      addAcademy: async (academyData: any) => {
         try {
-          const { data, error } = await supabase
+          // 1. Criar usuário no Supabase Auth
+          const { data: authData, error: authError } = await supabase.auth.signUp({
+            email: academyData.admin_email,
+            password: academyData.admin_password,
+            options: {
+              data: {
+                name: academyData.admin_name,
+                user_type: 'FRANCHISE_ADMIN'
+              }
+            }
+          })
+
+          if (authError) {
+            console.error('Error creating auth user:', authError)
+            throw new Error(`Erro ao criar usuário: ${authError.message}`)
+          }
+
+          if (!authData.user) {
+            throw new Error('Usuário não foi criado')
+          }
+
+          // 2. Inserir dados da academia (sem os campos de admin)
+          const { admin_email, admin_password, admin_name, ...academyFields } = academyData
+
+          const { data: academy, error: academyError } = await supabase
             .from('academies')
-            .insert([academyData])
+            .insert([academyFields])
             .select()
             .single()
 
-          if (error) throw error
+          if (academyError) {
+            console.error('Error creating academy:', academyError)
+            // Tentar remover o usuário criado se a academia falhar
+            await supabase.auth.admin.deleteUser(authData.user.id)
+            throw academyError
+          }
+
+          // 3. Criar registro em franchise_admins
+          const { error: adminError } = await supabase
+            .from('franchise_admins')
+            .insert([{
+              user_id: authData.user.id,
+              academy_id: academy.id,
+              name: admin_name,
+              email: admin_email,
+              role: 'ADMIN'
+            }])
+
+          if (adminError) {
+            console.error('Error creating franchise admin:', adminError)
+            // Rollback: remover academia e usuário
+            await supabase.from('academies').delete().eq('id', academy.id)
+            await supabase.auth.admin.deleteUser(authData.user.id)
+            throw adminError
+          }
 
           // Atualizar lista local
           set(state => ({
-            academies: [...state.academies, data]
+            academies: [...state.academies, academy]
           }))
 
           return true

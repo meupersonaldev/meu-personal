@@ -27,6 +27,10 @@ interface FranchiseFormData {
   manager_phone: string
   manager_email: string
   notes: string
+  // Campos de login
+  admin_email: string
+  admin_password: string
+  admin_name: string
 }
 
 const BRAZILIAN_STATES = [
@@ -56,7 +60,11 @@ export default function AddFranchisePage() {
     manager_name: '',
     manager_phone: '',
     manager_email: '',
-    notes: ''
+    notes: '',
+    // Campos de login
+    admin_email: '',
+    admin_password: '',
+    admin_name: ''
   })
 
   const handleInputChange = (field: keyof FranchiseFormData, value: string | number | boolean) => {
@@ -74,6 +82,17 @@ export default function AddFranchisePage() {
       // Validações básicas
       if (!formData.name || !formData.email || !formData.city || !formData.state) {
         toast.error('Preencha todos os campos obrigatórios')
+        return
+      }
+
+      // Validar campos de admin
+      if (!formData.admin_email || !formData.admin_password || !formData.admin_name) {
+        toast.error('Preencha email, senha e nome do administrador da franquia')
+        return
+      }
+
+      if (formData.admin_password.length < 6) {
+        toast.error('A senha deve ter no mínimo 6 caracteres')
         return
       }
 
@@ -108,18 +127,22 @@ export default function AddFranchisePage() {
         monthly_revenue: formData.monthly_revenue,
         contract_start_date: formData.contract_start_date || null,
         contract_end_date: formData.contract_end_date || null,
-        is_active: formData.is_active
+        is_active: formData.is_active,
+        // Dados do admin
+        admin_email: formData.admin_email,
+        admin_password: formData.admin_password,
+        admin_name: formData.admin_name
       }
 
-      // Adicionar via store (Supabase)
+      // Adicionar via store (Supabase) - agora cria usuário também
       const success = await addAcademy(newFranchise)
 
       if (!success) {
         toast.error('Erro ao salvar franquia no banco de dados')
         return
       }
-      
-      toast.success('Franquia adicionada com sucesso!')
+
+      toast.success('Franquia e usuário admin criados com sucesso!')
       router.push('/franqueadora/dashboard')
       
     } catch (error) {
@@ -253,6 +276,62 @@ export default function AddFranchisePage() {
                   onChange={(e) => handleInputChange('franchise_fee', parseFloat(e.target.value) || 0)}
                   placeholder="50000.00"
                 />
+              </div>
+            </div>
+          </Card>
+
+          {/* Dados do Administrador da Franquia */}
+          <Card className="p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-6">Administrador da Franquia</h2>
+            <p className="text-sm text-gray-600 mb-6">
+              Crie o login para o administrador gerenciar a franquia no sistema
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label htmlFor="admin_name" className="block text-sm font-medium text-gray-700 mb-2">
+                  Nome do Administrador *
+                </label>
+                <Input
+                  id="admin_name"
+                  type="text"
+                  value={formData.admin_name}
+                  onChange={(e) => handleInputChange('admin_name', e.target.value)}
+                  placeholder="João Silva"
+                  required
+                />
+              </div>
+
+              <div>
+                <label htmlFor="admin_email" className="block text-sm font-medium text-gray-700 mb-2">
+                  Email de Login *
+                </label>
+                <Input
+                  id="admin_email"
+                  type="email"
+                  value={formData.admin_email}
+                  onChange={(e) => handleInputChange('admin_email', e.target.value)}
+                  placeholder="admin@franquia.com"
+                  required
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label htmlFor="admin_password" className="block text-sm font-medium text-gray-700 mb-2">
+                  Senha de Acesso * (mínimo 6 caracteres)
+                </label>
+                <Input
+                  id="admin_password"
+                  type="password"
+                  value={formData.admin_password}
+                  onChange={(e) => handleInputChange('admin_password', e.target.value)}
+                  placeholder="••••••••"
+                  minLength={6}
+                  required
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Esta senha será usada pelo administrador para acessar o painel da franquia
+                </p>
               </div>
             </div>
           </Card>

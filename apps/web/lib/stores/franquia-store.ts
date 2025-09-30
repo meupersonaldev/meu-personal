@@ -248,60 +248,36 @@ export const useFranquiaStore = create<FranquiaState>()(
       login: async (email: string, password: string) => {
         try {
           set({ isLoading: true })
-          
-          // Primeiro, buscar o usuário pelo email
-          const { data: userData, error: userError } = await supabase
-            .from('users')
-            .select('*')
-            .eq('email', email)
-            .single()
 
-          if (userError || !userData) {
-            console.error('User not found:', userError)
+          // 1. Fazer login com Supabase Auth
+          const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+            email,
+            password
+          })
+
+          if (authError || !authData.user) {
+            console.error('Auth error:', authError)
+            set({ isLoading: false })
             return false
           }
 
-          // Verificar se é admin da franquia OU super admin da franqueadora
-          let adminData = null
-          let academyId = null
-
-          // Primeiro, tentar buscar na tabela franchise_admins (admin de academia)
-          const { data: franchiseAdminData, error: franchiseAdminError } = await supabase
+          // 2. Buscar dados do admin na tabela franchise_admins
+          const { data: franchiseAdminData, error: adminError } = await supabase
             .from('franchise_admins')
             .select('*')
-            .eq('user_id', userData.id)
+            .eq('user_id', authData.user.id)
             .single()
 
-          if (franchiseAdminData) {
-            adminData = franchiseAdminData
-            academyId = franchiseAdminData.academy_id
-          } else {
-            // Se não encontrou, tentar buscar na tabela franqueadora_admins (super admin)
-            const { data: superAdminData, error: superAdminError } = await supabase
-              .from('franqueadora_admins')
-              .select('*')
-              .eq('user_id', userData.id)
-              .single()
-
-            if (superAdminData) {
-              adminData = superAdminData
-              // Super admin pode acessar qualquer academia, vamos pegar a primeira
-              const { data: firstAcademy } = await supabase
-                .from('academies')
-                .select('*')
-                .limit(1)
-                .single()
-              
-              academyId = firstAcademy?.id
-            }
-          }
-
-          if (!adminData) {
-            console.error('Admin not found in any table')
+          if (adminError || !franchiseAdminData) {
+            console.error('Admin not found:', adminError)
+            await supabase.auth.signOut()
+            set({ isLoading: false })
             return false
           }
 
-          // Buscar dados da academia separadamente
+          const academyId = franchiseAdminData.academy_id
+
+          // 3. Buscar dados da academia
           const { data: academyData, error: academyError } = await supabase
             .from('academies')
             .select('*')
@@ -310,19 +286,17 @@ export const useFranquiaStore = create<FranquiaState>()(
 
           if (academyError || !academyData) {
             console.error('Academy not found:', academyError)
+            await supabase.auth.signOut()
+            set({ isLoading: false })
             return false
           }
 
-          // Simular verificação de senha (em produção seria Supabase Auth)
-          if (password !== '123456') {
-            return false
-          }
-
+          // 4. Definir estado do usuário
           set({
             franquiaUser: {
-              id: userData.id,
-              name: userData.name,
-              email: userData.email,
+              id: franchiseAdminData.user_id,
+              name: franchiseAdminData.name,
+              email: franchiseAdminData.email,
               role: 'FRANCHISE_ADMIN',
               academyId: academyId
             },
@@ -371,9 +345,12 @@ export const useFranquiaStore = create<FranquiaState>()(
         }
       },
 
-      logout: () => {
-        set({ 
-          franquiaUser: null, 
+      logout: async () => {
+        // Fazer logout do Supabase Auth
+        await supabase.auth.signOut()
+
+        set({
+          franquiaUser: null,
           academy: null,
           isAuthenticated: false,
           teachers: [],
