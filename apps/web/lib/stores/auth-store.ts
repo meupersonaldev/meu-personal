@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware'
 import { supabase } from '@/lib/supabase'
 // import type { User as SupabaseUser } from '@supabase/supabase-js' // Removido - não usado
 
-export type UserRole = 'STUDENT' | 'TEACHER'
+export type UserRole = 'STUDENT' | 'TEACHER' | 'ADMIN'
 
 export interface User {
   id: string
@@ -77,39 +77,39 @@ export const useAuthStore = create<AuthState>()(
 
       login: async (email: string, password: string) => {
         try {
-          const { data, error } = await supabase.auth.signInWithPassword({
-            email,
-            password
+          // Usar a API do backend para login
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          
+          const response = await fetch(`${API_URL}/api/auth/login`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ email, password })
           })
 
-          if (error) {
-            console.error('Login error:', error)
+          const data = await response.json()
+
+          if (!response.ok) {
+            console.error('Login error:', data.message)
             return false
           }
 
+          // Atualizar estado com os dados do usuário
           if (data.user) {
-            // Buscar dados completos do usuário
-            const { data: userData } = await supabase
-              .from('users')
-              .select('*')
-              .eq('id', data.user.id)
-              .single()
-
-            if (userData) {
-              set({
-                user: {
-                  id: userData.id,
-                  name: userData.name,
-                  email: userData.email,
-                  phone: userData.phone,
-                  role: userData.role,
-                  credits: userData.credits,
-                  avatar_url: userData.avatar_url
-                },
-                isAuthenticated: true
-              })
-              return true
-            }
+            set({
+              user: {
+                id: data.user.id,
+                name: data.user.name,
+                email: data.user.email,
+                phone: data.user.phone,
+                role: data.user.role,
+                credits: data.user.credits,
+                avatar_url: data.user.avatarUrl
+              },
+              isAuthenticated: true
+            })
+            return true
           }
 
           return false
@@ -121,70 +121,55 @@ export const useAuthStore = create<AuthState>()(
 
       register: async (userData) => {
         try {
-          // 1. Criar usuário no Supabase Auth
-          const { data: authData, error: authError } = await supabase.auth.signUp({
-            email: userData.email,
-            password: userData.password
+          // Usar a API do backend para registro (não depende do Supabase Auth)
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          
+          const response = await fetch(`${API_URL}/api/auth/register`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              name: userData.name,
+              email: userData.email,
+              password: userData.password,
+              phone: userData.phone,
+              role: userData.role
+            })
           })
 
-          if (authError) {
-            console.error('Auth signup error:', authError)
-            return false
+          const data = await response.json()
+
+          if (!response.ok) {
+            // Retornar objeto com erro para mostrar mensagem específica
+            throw new Error(data.message || 'Erro ao criar conta')
           }
 
-          if (authData.user) {
-            // 2. Criar perfil na tabela users
-            const { data: userProfile, error: profileError } = await supabase
-              .from('users')
-              .insert({
-                id: authData.user.id,
-                name: userData.name,
-                email: userData.email,
-                phone: userData.phone,
-                role: userData.role,
-                credits: userData.role === 'STUDENT' ? 5 : 0 // Créditos de boas-vindas
-              })
-              .select()
-              .single()
+          // Atualizar estado com os dados do usuário
+          if (data.user) {
+            set({
+              user: {
+                id: data.user.id,
+                name: data.user.name,
+                email: data.user.email,
+                phone: data.user.phone,
+                role: data.user.role,
+                credits: data.user.credits,
+                avatar_url: data.user.avatarUrl
+              },
+              isAuthenticated: true
+            })
 
-            if (profileError) {
-              console.error('Profile creation error:', profileError)
-              return false
-            }
-
-            // 3. Se for professor, criar perfil de professor
-            if (userData.role === 'TEACHER') {
-              await supabase
-                .from('teacher_profiles')
-                .insert({
-                  user_id: authData.user.id,
-                  hourly_rate: 80.00,
-                  is_available: true
-                })
-            }
-
-            // 4. Atualizar estado
-            if (userProfile) {
-              set({
-                user: {
-                  id: userProfile.id,
-                  name: userProfile.name,
-                  email: userProfile.email,
-                  phone: userProfile.phone,
-                  role: userProfile.role,
-                  credits: userProfile.credits,
-                  avatar_url: userProfile.avatar_url
-                },
-                isAuthenticated: true
-              })
-              return true
-            }
+            // Fazer login no Supabase Auth para manter sessão (opcional)
+            // Por enquanto vamos pular isso já que o Auth está desabilitado
+            
+            return true
           }
 
           return false
         } catch (error) {
-          console.error('Registration error:', error)
-          return false
+          console.error('Registration error:', error instanceof Error ? error.message : error)
+          throw error // Re-throw para capturar no componente
         }
       },
 

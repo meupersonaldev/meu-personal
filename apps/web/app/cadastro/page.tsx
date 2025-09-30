@@ -55,10 +55,11 @@ export default function CadastroPage() {
         toast.success('Conta criada com sucesso!')
         router.push(formData.role === 'STUDENT' ? '/aluno/inicio' : '/professor/dashboard')
       } else {
-        toast.error('Email já está em uso')
+        toast.error('Erro ao criar conta. Tente novamente.')
       }
-    } catch {
-      toast.error('Erro ao criar conta. Tente novamente.')
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao criar conta. Tente novamente.'
+      toast.error(errorMessage)
     } finally {
       setIsLoading(false)
     }

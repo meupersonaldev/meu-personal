@@ -30,29 +30,22 @@ export default function LoginPage() {
       if (success) {
         toast.success('Login realizado com sucesso!')
         
-        // Redirecionamento imediato e direto
-        if (formData.email === 'joao@email.com') {
-          console.log('Redirecting João to student dashboard')
-          location.replace('/dashboard/aluno')
-        } else if (formData.email === 'maria@email.com') {
-          console.log('Redirecting Maria to teacher dashboard')
-          location.replace('/dashboard/professor')
+        // Buscar dados do usuário após login
+        const user = useAuthStore.getState().user
+        console.log('User after login:', user)
+        
+        // Redirecionar baseado no role
+        if (user?.role === 'STUDENT') {
+          router.push('/aluno/inicio')
+        } else if (user?.role === 'TEACHER') {
+          router.push('/professor/dashboard')
         } else {
-          // Para outros usuários, verificar role
-          const user = useAuthStore.getState().user
-          console.log('User after login:', user)
-          if (user?.role === 'STUDENT') {
-            location.replace('/dashboard/aluno')
-          } else if (user?.role === 'TEACHER') {
-            location.replace('/dashboard/professor')
-          } else {
-            location.replace('/')
-          }
+          router.push('/')
         }
       } else {
         toast.error('Email ou senha incorretos')
       }
-    } catch (error) {
+    } catch {
       toast.error('Erro no login. Tente novamente.')
     } finally {
       setIsLoading(false)
@@ -68,18 +61,19 @@ export default function LoginPage() {
       if (success) {
         toast.success('Login demo realizado!')
 
-        // Redirecionamento imediato
-        if (email === 'joao@email.com') {
-          console.log('Demo login - redirecting to student dashboard')
-          location.replace('/dashboard/aluno')
-        } else if (email === 'maria@email.com') {
-          console.log('Demo login - redirecting to teacher dashboard')
-          location.replace('/dashboard/professor')
+        // Buscar dados do usuário após login
+        const user = useAuthStore.getState().user
+        
+        // Redirecionar baseado no role
+        if (user?.role === 'STUDENT') {
+          router.push('/aluno/inicio')
+        } else if (user?.role === 'TEACHER') {
+          router.push('/professor/dashboard')
         } else {
-          location.replace('/')
+          router.push('/')
         }
       }
-    } catch (error) {
+    } catch {
       toast.error('Erro no login demo')
     } finally {
       setIsLoading(false)
