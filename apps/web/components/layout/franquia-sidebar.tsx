@@ -22,7 +22,8 @@ import {
   UserCheck,
   Bell,
   CreditCard,
-  Clock
+  Clock,
+  Settings
 } from 'lucide-react'
 
 export default function FranquiaSidebar() {
@@ -55,26 +56,25 @@ export default function FranquiaSidebar() {
       isExpanded: expandedSections.includes('overview')
     },
     {
-      id: 'notifications',
-      label: 'Notificações',
-      icon: Bell,
-      href: '/franquia/dashboard/notifications',
-      isExpanded: expandedSections.includes('notifications'),
-      badge: unreadNotifications > 0 ? unreadNotifications : undefined
+      id: 'agenda',
+      label: 'Agenda da Academia',
+      icon: Calendar,
+      href: '/franquia/dashboard/agenda',
+      isExpanded: expandedSections.includes('agenda')
     },
     {
-      id: 'approvals',
+      id: 'historico',
       label: 'Agendamentos',
       icon: CalendarCheck,
-      href: '/franquia/dashboard/approvals',
-      isExpanded: expandedSections.includes('approvals')
+      href: '/franquia/dashboard/historico-agendamentos',
+      isExpanded: expandedSections.includes('historico')
     },
     {
-      id: 'plans',
-      label: 'Gestão de Planos',
-      icon: CreditCard,
-      href: '/franquia/dashboard/planos',
-      isExpanded: expandedSections.includes('plans')
+      id: 'checkins',
+      label: 'Check-ins',
+      icon: UserCheck,
+      href: '/franquia/dashboard/historico-checkins',
+      isExpanded: expandedSections.includes('checkins')
     },
     {
       id: 'users',
@@ -87,15 +87,25 @@ export default function FranquiaSidebar() {
       ]
     },
     {
-      id: 'operations',
-      label: 'Operações',
-      icon: Building2,
-      isExpanded: expandedSections.includes('operations'),
-      subItems: [
-        { label: 'Agenda da Academia', href: '/franquia/dashboard/agenda', icon: Calendar },
-        { label: 'Agendamentos', href: '/franquia/dashboard/agendamentos', icon: CalendarCheck },
-        { label: 'Financeiro', href: '/franquia/dashboard/finance', icon: DollarSign }
-      ]
+      id: 'plans',
+      label: 'Gestão de Planos',
+      icon: CreditCard,
+      href: '/franquia/dashboard/planos',
+      isExpanded: expandedSections.includes('plans')
+    },
+    {
+      id: 'finance',
+      label: 'Financeiro',
+      icon: DollarSign,
+      href: '/franquia/dashboard/finance',
+      isExpanded: expandedSections.includes('finance')
+    },
+    {
+      id: 'settings',
+      label: 'Configurações',
+      icon: Settings,
+      href: '/franquia/dashboard/configuracoes',
+      isExpanded: expandedSections.includes('settings')
     }
   ]
 
@@ -152,11 +162,6 @@ export default function FranquiaSidebar() {
                     <item.icon className="h-5 w-5" />
                     <span className="font-medium">{item.label}</span>
                   </div>
-                  {item.badge && (
-                    <span className="bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                      {item.badge > 99 ? '99+' : item.badge}
-                    </span>
-                  )}
                 </Link>
               ) : (
                 <button
