@@ -805,6 +805,32 @@ export const useFranquiaStore = create<FranquiaState>()(
           const { academy, teachers, students, classes } = get()
           if (!academy) return
 
+          // Calcular crescimento mensal real baseado em join_date
+          let monthlyGrowth = 0
+          const now = new Date()
+          const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+          const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+          const twoMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, 1)
+
+          // Alunos que entraram no mês atual
+          const currentMonthStudents = students.filter(s => {
+            const joinDate = new Date(s.join_date)
+            return joinDate >= currentMonth
+          }).length
+
+          // Alunos que entraram no mês anterior
+          const lastMonthStudents = students.filter(s => {
+            const joinDate = new Date(s.join_date)
+            return joinDate >= lastMonth && joinDate < currentMonth
+          }).length
+
+          // Calcular crescimento percentual
+          if (lastMonthStudents > 0) {
+            monthlyGrowth = ((currentMonthStudents - lastMonthStudents) / lastMonthStudents) * 100
+          } else if (currentMonthStudents > 0) {
+            monthlyGrowth = 100 // 100% se não havia alunos no mês anterior
+          }
+
           // Calcular analytics básicos
           const analytics: Analytics = {
             totalTeachers: teachers.length,
@@ -813,7 +839,7 @@ export const useFranquiaStore = create<FranquiaState>()(
             totalClasses: classes.length,
             activeTeachers: teachers.filter(t => t.status === 'active').length,
             activeStudents: students.filter(s => s.status === 'active').length,
-            monthlyGrowth: 15.5 // Mock por enquanto
+            monthlyGrowth: Number(monthlyGrowth.toFixed(1))
           }
 
           set({ analytics })
@@ -828,10 +854,25 @@ export const useFranquiaStore = create<FranquiaState>()(
           const { academy } = get()
           if (!academy) return
 
-          // Buscar todos os bookings e filtrar por professores/alunos da academia
+          // Buscar IDs dos professores da academia
+          const { data: academyTeachers } = await supabase
+            .from('academy_teachers')
+            .select('teacher_id')
+            .eq('academy_id', academy.id)
+
+          const teacherIds = academyTeachers?.map(at => at.teacher_id) || []
+
+          // Se não há professores, não há aulas
+          if (teacherIds.length === 0) {
+            set({ classes: [] })
+            return
+          }
+
+          // Buscar bookings apenas dos professores da academia
           const { data, error } = await supabase
             .from('bookings')
             .select('*')
+            .in('teacher_id', teacherIds)
             .order('date', { ascending: false })
 
           if (error) throw error
