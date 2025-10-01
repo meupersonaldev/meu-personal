@@ -248,29 +248,43 @@ export const useFranquiaStore = create<FranquiaState>()(
       login: async (email: string, password: string) => {
         try {
           set({ isLoading: true })
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
-          // 1. Fazer login com Supabase Auth
-          const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-            email,
-            password
+          // 1. Fazer login via API
+          const response = await fetch(`${API_URL}/api/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
           })
 
-          if (authError || !authData.user) {
-            console.error('Auth error:', authError)
+          if (!response.ok) {
+            const error = await response.json()
+            console.error('Login error:', error)
             set({ isLoading: false })
             return false
           }
+
+          const { token, user } = await response.json()
+
+          // Verificar se é FRANCHISE_ADMIN
+          if (user.role !== 'FRANCHISE_ADMIN') {
+            console.error('User is not a franchise admin')
+            set({ isLoading: false })
+            return false
+          }
+
+          // Salvar token
+          localStorage.setItem('auth_token', token)
 
           // 2. Buscar dados do admin na tabela franchise_admins
           const { data: franchiseAdminData, error: adminError } = await supabase
             .from('franchise_admins')
             .select('*')
-            .eq('user_id', authData.user.id)
+            .eq('user_id', user.id)
             .single()
 
           if (adminError || !franchiseAdminData) {
             console.error('Admin not found:', adminError)
-            await supabase.auth.signOut()
             set({ isLoading: false })
             return false
           }
@@ -286,7 +300,6 @@ export const useFranquiaStore = create<FranquiaState>()(
 
           if (academyError || !academyData) {
             console.error('Academy not found:', academyError)
-            await supabase.auth.signOut()
             set({ isLoading: false })
             return false
           }
@@ -294,9 +307,9 @@ export const useFranquiaStore = create<FranquiaState>()(
           // 4. Definir estado do usuário
           set({
             franquiaUser: {
-              id: franchiseAdminData.user_id,
-              name: franchiseAdminData.name,
-              email: franchiseAdminData.email,
+              id: user.id,
+              name: user.name,
+              email: user.email,
               role: 'FRANCHISE_ADMIN',
               academyId: academyId
             },
@@ -315,8 +328,7 @@ export const useFranquiaStore = create<FranquiaState>()(
             fetchTimeSlots,
             fetchNotifications,
             fetchTeacherPlans,
-            fetchStudentPlans,
-            fetchApprovalRequests
+            fetchStudentPlans
           } = get()
           try {
             await Promise.all([
@@ -328,8 +340,8 @@ export const useFranquiaStore = create<FranquiaState>()(
               fetchTimeSlots(),
               fetchNotifications(),
               fetchTeacherPlans(),
-              fetchStudentPlans(),
-              fetchApprovalRequests()
+              fetchStudentPlans()
+              // Não buscar approval_requests - apenas para agendamentos
             ])
           } catch (error) {
             console.warn('Some initial data failed to load:', error)
@@ -1111,13 +1123,14 @@ export const useFranquiaStore = create<FranquiaState>()(
             .order('created_at', { ascending: false })
 
           if (error) {
-            console.error('Error fetching approval requests:', error)
-            throw error
+            // Silenciar erro - não é crítico para o login
+            set({ approvalRequests: [] })
+            return
           }
 
           set({ approvalRequests: data || [] })
         } catch (error) {
-          console.error('Error fetching approval requests:', error)
+          // Silenciar erro - não é crítico para o login
           set({ approvalRequests: [] })
         }
       },
