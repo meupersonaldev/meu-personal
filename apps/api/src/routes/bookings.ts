@@ -13,11 +13,11 @@ const bookingSchema = z.object({
   duration: z.number().min(30).max(180).optional().default(60),
   notes: z.string().optional(),
   credits_cost: z.number().min(1).optional().default(1),
-  status: z.enum(['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'AVAILABLE']).optional().default('PENDING')
+  status: z.enum(['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'AVAILABLE', 'BLOCKED']).optional().default('PENDING')
 })
 
 const updateBookingSchema = z.object({
-  status: z.enum(['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'AVAILABLE']).optional(),
+  status: z.enum(['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'AVAILABLE', 'BLOCKED']).optional(),
   notes: z.string().optional()
 })
 

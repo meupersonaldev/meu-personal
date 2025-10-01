@@ -77,13 +77,13 @@ router.put('/:id', async (req, res) => {
   }
 })
 
-export default router
-
 // GET /api/academies/:id/available-slots?date=YYYY-MM-DD
 router.get('/:id/available-slots', async (req, res) => {
   try {
+    console.log('📍 GET /api/academies/:id/available-slots')
     const { id } = req.params
     const { date } = req.query as { date?: string }
+    console.log('Params:', { id, date })
 
     if (!date) {
       return res.status(400).json({ error: 'date é obrigatório (YYYY-MM-DD)' })
@@ -92,6 +92,7 @@ router.get('/:id/available-slots', async (req, res) => {
     // Calcular dia da semana (0-6, domingo = 0)
     const reqDate = new Date(`${date}T00:00:00Z`)
     const dow = reqDate.getUTCDay()
+    console.log('Day of week:', dow)
 
     // Buscar configurações da academia (horários de funcionamento)
     const { data: academy, error: academyError } = await supabase
@@ -125,15 +126,20 @@ router.get('/:id/available-slots', async (req, res) => {
     }
 
     // Buscar slots configurados para a academia nesse dia da semana
+    console.log('Buscando slots...')
     const { data: slots, error: slotsError } = await supabase
       .from('academy_time_slots')
-      .select('time, max_capacity, is_available, duration_minutes')
+      .select('time, max_capacity, is_available')
       .eq('academy_id', id)
       .eq('day_of_week', dow)
       .eq('is_available', true)
       .order('time')
 
-    if (slotsError) throw slotsError
+    console.log('Slots encontrados:', slots?.length || 0)
+    if (slotsError) {
+      console.error('Erro ao buscar slots:', slotsError)
+      throw slotsError
+    }
 
     // Filtrar slots dentro do horário de funcionamento
     const filteredSlots = (slots || []).filter((s: any) => {
@@ -169,14 +175,13 @@ router.get('/:id/available-slots', async (req, res) => {
       const current = occ[hhmm] || 0
       const max = s.max_capacity ?? 1
       const remaining = Math.max(0, max - current)
-      const slot_duration = typeof s.duration_minutes === 'number' && s.duration_minutes > 0 ? s.duration_minutes : 60
       return {
         time: hhmm,
         max_capacity: max,
         current_occupancy: current,
         remaining,
         is_free: remaining > 0,
-        slot_duration
+        slot_duration: 60 // Duração padrão de 60 minutos
       }
     })
 
@@ -193,3 +198,5 @@ router.get('/:id/available-slots', async (req, res) => {
     res.status(500).json({ error: error.message })
   }
 })
+
+export default router

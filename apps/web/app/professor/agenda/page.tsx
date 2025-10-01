@@ -28,7 +28,7 @@ interface Booking {
   franchiseId?: string
   date: string
   duration: number
-  status: 'AVAILABLE' | 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED'
+  status: 'AVAILABLE' | 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED' | 'BLOCKED'
   notes?: string
   creditsCost: number
 }
@@ -55,13 +55,13 @@ export default function ProfessorAgendaPage() {
   const [blocks, setBlocks] = useState<{ id: string; date: string; franchise_id: string; notes?: string }[]>([])
   const [loadingBlocks, setLoadingBlocks] = useState(false)
   const [existingBookingInSlot, setExistingBookingInSlot] = useState<Booking | null>(null)
+  const [selectedHoursToBlock, setSelectedHoursToBlock] = useState<string[]>([])
 
   const horariosDisponiveis = [
     '06:00', '07:00', '08:00', '09:00', '10:00', '11:00',
     '12:00', '13:00', '14:00', '15:00', '16:00', '17:00',
     '18:00', '19:00', '20:00', '21:00', '22:00'
   ]
-
   const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 
   useEffect(() => {
@@ -88,42 +88,55 @@ export default function ProfessorAgendaPage() {
 
     loadData()
   }, [user?.id])
+  const fetchSlots = async () => {
+    if (!user?.id || !selectedDate || selectedFranchise === 'todas') {
+      setAvailableSlots([])
+      return
+    }
+    try {
+      setLoadingSlots(true)
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const res = await fetch(`${API_URL}/api/academies/${selectedFranchise}/available-slots?date=${selectedDate}`)
+      if (res.ok) {
+        const data = await res.json()
+        const mapped: Slot[] = (data.slots || []).map((s: { time: string; is_free: boolean; remaining?: number; max_capacity?: number }) => ({ time: s.time, is_free: s.is_free, remaining: s.remaining, max_capacity: s.max_capacity }))
+        setAvailableSlots(mapped)
+      } else {
+        setAvailableSlots([])
+      }
+    } finally {
+      setLoadingSlots(false)
+    }
+  }
 
   // Carrega horários livres quando tiver unidade e data
   useEffect(() => {
-    const fetchSlots = async () => {
-      if (!user?.id || !selectedDate || selectedFranchise === 'todas') {
-        setAvailableSlots([])
-        return
-      }
-      try {
-        setLoadingSlots(true)
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-        const res = await fetch(`${API_URL}/api/academies/${selectedFranchise}/available-slots?date=${selectedDate}`)
-        if (res.ok) {
-          const data = await res.json()
-          const mapped: Slot[] = (data.slots || []).map((s: { time: string; is_free: boolean; remaining?: number; max_capacity?: number }) => ({ time: s.time, is_free: s.is_free, remaining: s.remaining, max_capacity: s.max_capacity }))
-          setAvailableSlots(mapped)
-        } else {
-          setAvailableSlots([])
-        }
-      } finally {
-        setLoadingSlots(false)
-      }
-    }
     fetchSlots()
   }, [user?.id, selectedFranchise, selectedDate])
 
-  // Carrega bloqueios do dia
-  useEffect(() => {
-    const fetchBlocks = async () => {
-      if (!user?.id || !selectedDate || selectedFranchise === 'todas') {
-        setBlocks([])
-        return
-      }
-      try {
-        setLoadingBlocks(true)
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+  const fetchBlocks = async () => {
+    if (!user?.id || !selectedDate) {
+      setBlocks([])
+      return
+    }
+    try {
+      setLoadingBlocks(true)
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      
+      if (selectedFranchise === 'todas') {
+        // Buscar bloqueios de todas as unidades
+        const allBlocks: any[] = []
+        for (const academy of teacherAcademies) {
+          const url = `${API_URL}/api/teachers/${user.id}/blocks?academy_id=${academy.id}&date=${selectedDate}`
+          const res = await fetch(url)
+          if (res.ok) {
+            const data = await res.json()
+            allBlocks.push(...(data.blocks || []))
+          }
+        }
+        setBlocks(allBlocks)
+      } else {
+        // Buscar bloqueios de uma unidade específica
         const url = `${API_URL}/api/teachers/${user.id}/blocks?academy_id=${selectedFranchise}&date=${selectedDate}`
         const res = await fetch(url)
         if (res.ok) {
@@ -132,10 +145,14 @@ export default function ProfessorAgendaPage() {
         } else {
           setBlocks([])
         }
-      } finally {
-        setLoadingBlocks(false)
       }
+    } finally {
+      setLoadingBlocks(false)
     }
+  }
+
+  // Carrega bloqueios do dia
+  useEffect(() => {
     fetchBlocks()
   }, [user?.id, selectedFranchise, selectedDate])
 
@@ -147,8 +164,6 @@ export default function ProfessorAgendaPage() {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
       const bookingsRes = await fetch(`${API_URL}/api/bookings?teacher_id=${user.id}`)
-
-      console.log('Bookings status:', bookingsRes.status)
 
       if (bookingsRes.ok) {
         try {
@@ -183,7 +198,7 @@ export default function ProfessorAgendaPage() {
   const getBookingForSlot = (date: Date, time: string) => {
     const dateStr = date.toISOString().split('T')[0]
     
-    return bookings.find(booking => {
+    const found = bookings.find(booking => {
       const bookingDate = new Date(booking.date)
       const bookingDateStr = bookingDate.toISOString().split('T')[0]
       const bookingTime = bookingDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
@@ -194,6 +209,8 @@ export default function ProfessorAgendaPage() {
       
       return matchDate && matchTime && matchFranchise
     })
+    
+    return found
   }
 
   const getAcademyName = (franchiseId?: string) => {
@@ -346,6 +363,7 @@ export default function ProfessorAgendaPage() {
       case 'CONFIRMED': return 'bg-blue-500'
       case 'COMPLETED': return 'bg-gray-500'
       case 'CANCELLED': return 'bg-red-500'
+      case 'BLOCKED': return 'bg-orange-500'
       default: return 'bg-gray-300'
     }
   }
@@ -357,6 +375,7 @@ export default function ProfessorAgendaPage() {
       case 'CONFIRMED': return 'Confirmada'
       case 'COMPLETED': return 'Concluída'
       case 'CANCELLED': return 'Cancelada'
+      case 'BLOCKED': return 'Bloqueado'
       default: return status
     }
   }
@@ -407,94 +426,204 @@ export default function ProfessorAgendaPage() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-meu-primary focus:border-transparent"
                 />
               </div>
-              <div className="flex items-center space-x-3">
-                <Button
-                  disabled={selectedFranchise === 'todas' || !selectedDate}
-                  onClick={async () => {
-                    try {
-                      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-                      const res = await fetch(`${API_URL}/api/teachers/${user?.id}/blocks/day`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ academy_id: selectedFranchise, date: selectedDate })
-                      })
-                      if (res.ok) {
-                        toast.success('Dia bloqueado!')
-                        // refresh
-                        setSelectedDate(selectedDate)
-                      } else {
-                        toast.error('Erro ao bloquear o dia')
-                      }
-                    } catch {
-                      toast.error('Erro ao bloquear o dia')
-                    }
-                  }}
-                  className="bg-red-600 hover:bg-red-700 text-white"
-                >
-                  Bloquear dia
-                </Button>
-              </div>
             </div>
 
-            {/* Horários livres (bloquear por horário) */}
-            {(selectedFranchise !== 'todas' && selectedDate) && (
+            {/* Seleção de horários para bloquear */}
+            {selectedDate && (
               <div className="mt-4">
-                <p className="text-sm font-medium mb-2">Horários livres</p>
-                {loadingSlots ? (
-                  <div className="text-sm text-gray-500">Carregando horários...</div>
-                ) : availableSlots.length === 0 ? (
-                  <div className="text-sm text-gray-500">Nenhum horário livre.</div>
-                ) : (
-                  <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
-                    {availableSlots.map((slot) => (
-                      <Button
-                        key={slot.time}
-                        size="sm"
-                        variant="outline"
-                        disabled={!slot.is_free}
-                        onClick={async () => {
-                          try {
-                            const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-                            const res = await fetch(`${API_URL}/api/teachers/${user?.id}/blocks/slot`, {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ academy_id: selectedFranchise, date: selectedDate, time: slot.time })
-                            })
-                            if (res.ok) {
-                              toast.success(`Horário ${slot.time} bloqueado!`)
-                              setSelectedDate(selectedDate)
-                            } else {
-                              toast.error('Erro ao bloquear horário')
-                            }
-                          } catch {
-                            toast.error('Erro ao bloquear horário')
+                <p className="text-sm font-medium mb-2">
+                  Selecione os horários para bloquear
+                  {selectedFranchise === 'todas' ? ' em todas as unidades' : ` na ${teacherAcademies.find(a => a.id === selectedFranchise)?.name}`}:
+                </p>
+                <div className="grid grid-cols-4 md:grid-cols-8 gap-2 mb-3">
+                  {horariosDisponiveis.map((hora) => {
+                    // Verificar se já está bloqueado
+                    const isBlocked = blocks.some(b => {
+                      const t = new Date(b.date)
+                      const hhmm = t.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
+                      return hhmm === hora
+                    })
+                    
+                    return (
+                      <button
+                        key={hora}
+                        disabled={isBlocked}
+                        onClick={() => {
+                          if (selectedHoursToBlock.includes(hora)) {
+                            setSelectedHoursToBlock(selectedHoursToBlock.filter(h => h !== hora))
+                          } else {
+                            setSelectedHoursToBlock([...selectedHoursToBlock, hora])
                           }
                         }}
-                        className={`${slot.is_free ? 'hover:bg-red-600 hover:text-white' : 'cursor-not-allowed'}`}
+                        className={`px-3 py-2 text-sm rounded-lg border-2 transition-all ${
+                          isBlocked
+                            ? 'bg-gray-200 text-gray-400 border-gray-300 cursor-not-allowed'
+                            : selectedHoursToBlock.includes(hora)
+                            ? 'bg-red-600 text-white border-red-600'
+                            : 'bg-white text-gray-700 border-gray-300 hover:border-red-600'
+                        }`}
                       >
-                        {slot.is_free
-                          ? `Bloquear ${slot.time}${slot.max_capacity !== undefined && slot.remaining !== undefined ? ` (${slot.remaining}/${slot.max_capacity})` : ''}`
-                          : `Indisp. ${slot.time}`}
-                      </Button>
-                    ))}
-                  </div>
-                )}
+                        {hora}
+                      </button>
+                    )
+                  })}
+                </div>
+                <div className="flex items-center space-x-3">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      // Selecionar apenas os não bloqueados
+                      const available = horariosDisponiveis.filter(hora => {
+                        return !blocks.some(b => {
+                          const t = new Date(b.date)
+                          const hhmm = t.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
+                          return hhmm === hora
+                        })
+                      })
+                      setSelectedHoursToBlock(available)
+                    }}
+                  >
+                    Selecionar todos
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setSelectedHoursToBlock([])}
+                  >
+                    Limpar seleção
+                  </Button>
+                  <Button
+                    disabled={selectedHoursToBlock.length === 0}
+                    onClick={async () => {
+                      try {
+                        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                        
+                        // Se "todas", bloquear em cada unidade
+                        if (selectedFranchise === 'todas') {
+                          let totalCreated = 0
+                          for (const academy of teacherAcademies) {
+                            const res = await fetch(`${API_URL}/api/teachers/${user?.id}/blocks/custom`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ 
+                                academy_id: academy.id, 
+                                date: selectedDate,
+                                hours: selectedHoursToBlock
+                              })
+                            })
+                            if (res.ok) {
+                              const result = await res.json()
+                              totalCreated += result.created?.length || 0
+                            }
+                          }
+                          toast.success(`${totalCreated} horário(s) bloqueado(s) em ${teacherAcademies.length} unidade(s)!`)
+                          setSelectedHoursToBlock([])
+                          await fetchData()
+                          await fetchBlocks()
+                          await fetchSlots()
+                        } else {
+                          // Bloquear apenas na unidade selecionada
+                          const res = await fetch(`${API_URL}/api/teachers/${user?.id}/blocks/custom`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ 
+                              academy_id: selectedFranchise, 
+                              date: selectedDate,
+                              hours: selectedHoursToBlock
+                            })
+                          })
+                          if (res.ok) {
+                            const result = await res.json()
+                            const count = result.created?.length || 0
+                            toast.success(`${count} horário(s) bloqueado(s)!`)
+                            setSelectedHoursToBlock([])
+                            await fetchData()
+                            await fetchBlocks()
+                            await fetchSlots()
+                          } else {
+                            const errorData = await res.json()
+                            toast.error(errorData.error || 'Erro ao bloquear horários')
+                          }
+                        }
+                      } catch {
+                        toast.error('Erro ao bloquear horários')
+                      }
+                    }}
+                    className="bg-red-600 hover:bg-red-700 text-white"
+                  >
+                    Bloquear {selectedHoursToBlock.length} horário(s) {selectedFranchise === 'todas' ? `em ${teacherAcademies.length} unidade(s)` : ''}
+                  </Button>
+                </div>
               </div>
             )}
 
+
             {/* Bloqueios do dia */}
-            {(selectedFranchise !== 'todas' && selectedDate) && (
+            {selectedDate && (
               <div className="mt-4">
-                <p className="text-sm font-medium mb-2">Bloqueios do dia</p>
+                <p className="text-sm font-medium mb-2">
+                  Bloqueios do dia {selectedFranchise === 'todas' ? '(todas as unidades)' : ''}
+                </p>
                 {loadingBlocks ? (
                   <div className="text-sm text-gray-500">Carregando bloqueios...</div>
                 ) : blocks.length === 0 ? (
                   <div className="text-sm text-gray-500">Nenhum bloqueio para esta data.</div>
+                ) : selectedFranchise === 'todas' ? (
+                  // Agrupar por horário quando "todas" estiver selecionado
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                    {(() => {
+                      // Agrupar bloqueios por horário
+                      const groupedByTime: Record<string, any[]> = {}
+                      blocks.forEach(b => {
+                        const t = new Date(b.date)
+                        const hhmm = t.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
+                        if (!groupedByTime[hhmm]) groupedByTime[hhmm] = []
+                        groupedByTime[hhmm].push(b)
+                      })
+                      
+                      return Object.entries(groupedByTime).sort().map(([hhmm, blocksAtTime]) => (
+                        <div key={hhmm} className="flex items-center justify-between p-2 border rounded-lg">
+                          <div>
+                            <p className="text-sm font-medium">{hhmm}</p>
+                            <p className="text-xs text-gray-500">
+                              🔒 {blocksAtTime.length} unidade(s)
+                            </p>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={async () => {
+                              try {
+                                const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                                // Desbloquear todos os bloqueios desse horário
+                                let removed = 0
+                                for (const b of blocksAtTime) {
+                                  const res = await fetch(`${API_URL}/api/teachers/${user?.id}/blocks/${b.id}`, { method: 'DELETE' })
+                                  if (res.ok) removed++
+                                }
+                                toast.success(`${removed} bloqueio(s) removido(s)!`)
+                                // Recarregar tudo
+                                await fetchData()
+                                await fetchBlocks()
+                                await fetchSlots()
+                              } catch {
+                                toast.error('Erro ao remover bloqueios')
+                              }
+                            }}
+                          >
+                            Desbloquear todas
+                          </Button>
+                        </div>
+                      ))
+                    })()}
+                  </div>
                 ) : (
+                  // Mostrar lista normal quando unidade específica estiver selecionada
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                     {blocks.map((b) => {
                       const t = new Date(b.date)
-                      const hhmm = t.toISOString().substring(11, 16)
+                      const hhmm = t.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
                       return (
                         <div key={b.id} className="flex items-center justify-between p-2 border rounded-lg">
                           <div>
@@ -510,7 +639,10 @@ export default function ProfessorAgendaPage() {
                                 const res = await fetch(`${API_URL}/api/teachers/${user?.id}/blocks/${b.id}`, { method: 'DELETE' })
                                 if (res.ok) {
                                   toast.success('Bloqueio removido!')
-                                  setSelectedDate(selectedDate)
+                                  // Recarregar tudo
+                                  await fetchData()
+                                  await fetchBlocks()
+                                  await fetchSlots()
                                 } else {
                                   toast.error('Erro ao remover bloqueio')
                                 }
@@ -574,6 +706,10 @@ export default function ProfessorAgendaPage() {
                 <div className="w-4 h-4 bg-gray-500 rounded"></div>
                 <span className="text-sm">Concluída</span>
               </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-4 h-4 bg-orange-500 rounded"></div>
+                <span className="text-sm">Bloqueado</span>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -636,6 +772,19 @@ export default function ProfessorAgendaPage() {
                         const booking = getBookingForSlot(day, time)
                         const isPast = day < new Date() && day.toDateString() !== new Date().toDateString()
                         
+                        // Contar quantas unidades estão bloqueadas nesse horário
+                        const dateStr = day.toISOString().split('T')[0]
+                        const blockedAcademiesCount = booking?.status === 'BLOCKED' ? teacherAcademies.filter(academy => {
+                          return bookings.some(b => {
+                            const bookingDate = new Date(b.date)
+                            const bookingDateStr = bookingDate.toISOString().split('T')[0]
+                            const bookingTime = bookingDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                            return bookingDateStr === dateStr && bookingTime === time && b.franchiseId === academy.id && b.status === 'BLOCKED'
+                          })
+                        }).length : 0
+                        
+                        const blockedInAllAcademies = blockedAcademiesCount === teacherAcademies.length && teacherAcademies.length > 1
+                        
                         return (
                           <div key={`${day.toISOString()}-${time}`} className="p-1">
                             <button
@@ -651,8 +800,20 @@ export default function ProfessorAgendaPage() {
                             >
                               {booking ? (
                                 <div className="flex flex-col items-center justify-center h-full p-1">
-                                  <span className="text-xs font-semibold">{booking.studentName || getStatusText(booking.status)}</span>
-                                  {booking.franchiseId && (
+                                  <span className="text-xs font-semibold">
+                                    {booking.studentName || getStatusText(booking.status)}
+                                  </span>
+                                  {booking.status === 'BLOCKED' && blockedAcademiesCount > 1 && (
+                                    <span className="text-[10px] opacity-90 mt-0.5 truncate w-full text-center">
+                                      🔒 {blockedAcademiesCount} unidade(s)
+                                    </span>
+                                  )}
+                                  {booking.status === 'BLOCKED' && blockedAcademiesCount === 1 && booking.franchiseId && (
+                                    <span className="text-[10px] opacity-90 mt-0.5 truncate w-full text-center">
+                                      📍 {getAcademyName(booking.franchiseId)}
+                                    </span>
+                                  )}
+                                  {booking.status !== 'BLOCKED' && booking.franchiseId && (
                                     <span className="text-[10px] opacity-90 mt-0.5 truncate w-full text-center">
                                       📍 {getAcademyName(booking.franchiseId)}
                                     </span>

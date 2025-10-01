@@ -35,14 +35,8 @@ router.post('/:id/blocks/slot', async (req, res) => {
 
     // Descobrir duração do slot pela configuração da academia
     const dow = new Date(`${date}T00:00:00Z`).getUTCDay()
-    const { data: slotCfg } = await supabase
-      .from('academy_time_slots')
-      .select('time, duration_minutes')
-      .eq('academy_id', academy_id)
-      .eq('day_of_week', dow)
-      .eq('time', `${String(time).padStart(5, '0')}:00`)
-      .single()
-    const duration = slotCfg && typeof slotCfg.duration_minutes === 'number' && slotCfg.duration_minutes > 0 ? slotCfg.duration_minutes : 60
+    // Duração padrão de 60 minutos (coluna duration_minutes não existe)
+    const duration = 60
 
     const { data: booking, error } = await supabase
       .from('bookings')
@@ -67,61 +61,66 @@ router.post('/:id/blocks/slot', async (req, res) => {
   }
 })
 
-// POST /api/teachers/:id/blocks/day
+// POST /api/teachers/:id/blocks/custom (bloquear horários específicos)
+router.post('/:id/blocks/custom', async (req, res) => {
+  try {
+    const { id } = req.params
+    const { academy_id, date, hours } = req.body as { academy_id: string; date: string; hours: string[] }
+    
+    if (!academy_id || !date || !hours || hours.length === 0) {
+      return res.status(400).json({ error: 'academy_id, date e hours são obrigatórios' })
+    }
+
+    const toBlock: { date: string; duration: number }[] = []
+    for (const hhmm of hours) {
+      const [h, m] = hhmm.split(':').map(Number)
+      const d = new Date(`${date}T00:00:00Z`)
+      d.setUTCHours(h + 3, m, 0, 0) // Adiciona 3h para compensar timezone Brasil
+      toBlock.push({ date: d.toISOString(), duration: 60 })
+    }
+
+    const payload = toBlock.map(b => ({
+      teacher_id: id,
+      franchise_id: academy_id,
+      student_id: null,
+      date: b.date,
+      duration: b.duration,
+      credits_cost: 0,
+      status: 'BLOCKED',
+      notes: 'Bloqueio de agenda'
+    }))
+
+    const { data, error } = await supabase.from('bookings').insert(payload).select()
+    if (error) throw error
+
+    res.status(201).json({ created: data || [] })
+  } catch (error: any) {
+    console.error('Erro ao bloquear horários:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// POST /api/teachers/:id/blocks/day (DEPRECATED - manter para compatibilidade)
 router.post('/:id/blocks/day', async (req, res) => {
   try {
     const { id } = req.params // teacherId
     const { academy_id, date, notes } = req.body as { academy_id: string; date: string; notes?: string }
+    
     if (!academy_id || !date) {
       return res.status(400).json({ error: 'academy_id e date são obrigatórios' })
     }
 
-    // Calcular dia da semana
-    const reqDate = new Date(`${date}T00:00:00Z`)
-    const dow = reqDate.getUTCDay()
-
-    // Buscar slots configurados
-    const { data: slots, error: slotsError } = await supabase
-      .from('academy_time_slots')
-      .select('time, max_capacity, is_available')
-      .eq('academy_id', academy_id)
-      .eq('day_of_week', dow)
-      .eq('is_available', true)
-      .order('time')
-    if (slotsError) throw slotsError
-
-    // Bookings do dia
-    const startISO = new Date(`${date}T00:00:00Z`).toISOString()
-    const endISO = new Date(`${date}T23:59:59Z`).toISOString()
-    const { data: bookings, error: bookingsError } = await supabase
-      .from('bookings')
-      .select('date, status')
-      .eq('franchise_id', academy_id)
-      .gte('date', startISO)
-      .lte('date', endISO)
-    if (bookingsError) throw bookingsError
-
-    const occ: Record<string, number> = {}
-    for (const b of bookings || []) {
-      if (b.status === 'CANCELLED') continue
-      const t = new Date(b.date)
-      const hhmm = t.toISOString().substring(11, 16)
-      occ[hhmm] = (occ[hhmm] || 0) + 1
-    }
-
+    // Bloquear TODOS os horários do dia (06:00 às 22:00)
+    const allHours = ['06:00', '07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00']
+    
     const toBlock: { date: string; duration: number; notes?: string }[] = []
-    for (const s of slots || []) {
-      const hhmm = String(s.time).substring(0, 5)
-      const current = occ[hhmm] || 0
-      const max = s.max_capacity ?? 1
-      const remaining = Math.max(0, max - current)
-      if (remaining > 0) {
-        const [h, m] = hhmm.split(':').map((n: string) => parseInt(n, 10))
-        const d = new Date(`${date}T00:00:00Z`)
-        d.setUTCHours(h, m, 0, 0)
-        const duration = typeof (s as any).duration_minutes === 'number' && (s as any).duration_minutes > 0 ? (s as any).duration_minutes : 60
-        toBlock.push({ date: d.toISOString(), duration, notes })
-      }
+    for (const hhmm of allHours) {
+      // Criar data ajustando para UTC (adicionar 3h para compensar Brasil UTC-3)
+      const [h, m] = hhmm.split(':').map(Number)
+      const d = new Date(`${date}T00:00:00Z`)
+      d.setUTCHours(h + 3, m, 0, 0) // Adiciona 3h para compensar timezone
+      const duration = 60 // Duração padrão de 60 minutos
+      toBlock.push({ date: d.toISOString(), duration, notes })
     }
 
     let created: any[] = []
@@ -190,14 +189,38 @@ router.delete('/:id/blocks/:bookingId', async (req, res) => {
       return res.status(404).json({ error: 'Bloqueio não encontrado' })
     }
 
+    // DELETE real do banco
     const { error } = await supabase
       .from('bookings')
-      .update({ status: 'CANCELLED', updated_at: new Date().toISOString() })
+      .delete()
       .eq('id', bookingId)
     if (error) throw error
     res.json({ success: true })
   } catch (error: any) {
     console.error('Erro ao desbloquear:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// DELETE /api/teachers/:id/blocks/all (limpar todos os bloqueios de uma data)
+router.delete('/:id/blocks/all/:date', async (req, res) => {
+  try {
+    const { id, date } = req.params
+    const startISO = new Date(`${date}T00:00:00Z`).toISOString()
+    const endISO = new Date(`${date}T23:59:59Z`).toISOString()
+    
+    const { error } = await supabase
+      .from('bookings')
+      .delete()
+      .eq('teacher_id', id)
+      .eq('status', 'BLOCKED')
+      .gte('date', startISO)
+      .lte('date', endISO)
+    
+    if (error) throw error
+    res.json({ success: true, message: 'Todos os bloqueios removidos' })
+  } catch (error: any) {
+    console.error('Erro ao limpar bloqueios:', error)
     res.status(500).json({ error: error.message })
   }
 })
