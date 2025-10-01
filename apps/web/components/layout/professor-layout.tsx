@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import ProfessorSidebar from './professor-sidebar'
 import ProfessorHeader from './professor-header'
 
@@ -8,8 +9,18 @@ interface ProfessorLayoutProps {
 }
 
 export default function ProfessorLayout({ children }: ProfessorLayoutProps) {
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  if (!mounted) {
+    return null
+  }
+
   return (
-    <div className="min-h-screen">
+    <div className="hidden md:block min-h-screen">
       {/* Background principal */}
       <div className="min-h-screen bg-gray-50">
         

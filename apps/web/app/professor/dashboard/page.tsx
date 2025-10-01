@@ -6,6 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import ProfessorLayout from '@/components/layout/professor-layout'
+import { MobileHeader } from '@/components/mobile/MobileHeader'
+import { MobileBottomNav } from '@/components/mobile/MobileBottomNav'
+import { MobileSearchBar } from '@/components/mobile/MobileSearchBar'
+import { MobileCard } from '@/components/mobile/MobileCard'
 import {
   Clock,
   Calendar,
@@ -59,37 +63,36 @@ export default function ProfessorDashboardPage() {
       setError(null)
 
       try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
-      // Buscar agendamentos do professor (todos os não cancelados)
-      const bookingsResponse = await fetch(
-        `${API_URL}/api/bookings?teacher_id=${user.id}`,
-        { headers: { 'Content-Type': 'application/json' } }
-      )
+        // Buscar agendamentos do professor
+        const bookingsResponse = await fetch(
+          `${API_URL}/api/bookings?teacher_id=${user.id}`,
+          { headers: { 'Content-Type': 'application/json' } }
+        )
 
-      if (!bookingsResponse.ok) {
-        const errorData = await bookingsResponse.json().catch(() => ({}))
-        console.error('Erro ao buscar agendamentos:', errorData)
-        throw new Error(errorData.message || 'Erro ao buscar agendamentos')
-      }
+        if (!bookingsResponse.ok) {
+          const errorData = await bookingsResponse.json().catch(() => ({}))
+          console.error('Erro ao buscar agendamentos:', errorData)
+          throw new Error(errorData.message || 'Erro ao buscar agendamentos')
+        }
 
-      const bookingsData = await bookingsResponse.json()
-      // Filtrar apenas PENDING e CONFIRMED no frontend
-      const activeBookings = (bookingsData.bookings || []).filter(
-        (b: Booking) => b.status === 'PENDING' || b.status === 'CONFIRMED'
-      )
-      setBookings(activeBookings)
+        const bookingsData = await bookingsResponse.json()
+        const activeBookings = (bookingsData.bookings || []).filter(
+          (b: Booking) => b.status === 'PENDING' || b.status === 'CONFIRMED'
+        )
+        setBookings(activeBookings)
 
-      // Buscar estatísticas do professor
-      const statsResponse = await fetch(
-        `${API_URL}/api/teachers/${user.id}/stats`,
-        { headers: { 'Content-Type': 'application/json' } }
-      )
+        // Buscar estatísticas do professor
+        const statsResponse = await fetch(
+          `${API_URL}/api/teachers/${user.id}/stats`,
+          { headers: { 'Content-Type': 'application/json' } }
+        )
 
-      if (statsResponse.ok) {
-        const statsData = await statsResponse.json()
+        if (statsResponse.ok) {
+          const statsData = await statsResponse.json()
           setStats(statsData)
-      }
+        }
       } catch (err) {
         console.error('Erro ao carregar dados:', err)
         setError('Erro ao carregar dados do dashboard')
@@ -101,52 +104,8 @@ export default function ProfessorDashboardPage() {
     loadData()
   }, [user?.id])
 
-  const fetchDashboardData = async () => {
-    if (!user?.id) return
+  if (!user) return null
 
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-
-      const bookingsResponse = await fetch(
-        `${API_URL}/api/bookings?teacher_id=${user.id}`,
-        { headers: { 'Content-Type': 'application/json' } }
-      )
-
-      if (!bookingsResponse.ok) {
-        throw new Error('Erro ao buscar agendamentos')
-      }
-
-      const bookingsData = await bookingsResponse.json()
-      const activeBookings = (bookingsData.bookings || []).filter(
-        (b: Booking) => b.status === 'PENDING' || b.status === 'CONFIRMED'
-      )
-      setBookings(activeBookings)
-
-      const statsResponse = await fetch(
-        `${API_URL}/api/teachers/${user.id}/stats`,
-        { headers: { 'Content-Type': 'application/json' } }
-      )
-
-      if (statsResponse.ok) {
-        const statsData = await statsResponse.json()
-        setStats(statsData)
-      }
-    } catch (err) {
-      console.error('Erro ao carregar dados:', err)
-      setError('Erro ao carregar dados do dashboard')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  if (!user) {
-    return null
-  }
-
-  // Loading state
   if (isLoading) {
     return (
       <ProfessorLayout>
@@ -157,32 +116,155 @@ export default function ProfessorDashboardPage() {
     )
   }
 
-  // Error state
   if (error) {
     return (
       <ProfessorLayout>
-        <div className="flex flex-col items-center justify-center h-96 space-y-4">
+        <div className="flex flex-col items-center justify-center h-96 space-y-4 px-4">
           <AlertCircle className="h-12 w-12 text-red-500" />
-          <p className="text-gray-600">{error}</p>
-          <Button onClick={fetchDashboardData}>Tentar novamente</Button>
+          <p className="text-gray-600 text-center">{error}</p>
+          <Button onClick={() => window.location.reload()}>Tentar novamente</Button>
         </div>
       </ProfessorLayout>
     )
   }
 
-  // Calcular dados
-  const todayBookings = bookings.filter(b => {
-    const bookingDate = new Date(b.date)
-    const today = new Date()
-    return bookingDate.toDateString() === today.toDateString()
-  })
-
   const pendingBookings = bookings.filter(b => b.status === 'PENDING')
 
   return (
-    <ProfessorLayout>
-      <div className="p-6 space-y-8">
-        
+    <>
+      {/* Mobile View */}
+      <div className="md:hidden w-full min-h-screen bg-gray-50 pb-20">
+        <MobileHeader />
+        <MobileSearchBar placeholder="Procure por aluno, aula ou data..." />
+
+        <div className="w-full px-4 py-4 space-y-4 overflow-x-hidden">
+          {/* Stats Cards Mobile */}
+          <div className="w-full grid grid-cols-2 gap-3">
+            <MobileCard padding="sm" className="!p-3.5">
+              <div className="flex flex-col w-full">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#002C4E] to-[#27DFFF] flex items-center justify-center mb-2.5">
+                  <DollarSign className="h-5 w-5 text-white" />
+                </div>
+                <span className="text-xs text-gray-500 font-medium mb-1">Faturamento Mensal</span>
+                <p className="text-2xl font-bold text-gray-900 mb-0.5">
+                  R$ {stats?.monthly_earnings?.current_month?.toFixed(0) || '0'}
+                </p>
+                <span className="text-[10px] text-gray-400">R$ {stats?.hourly_rate || 0}/hora</span>
+              </div>
+            </MobileCard>
+
+            <MobileCard padding="sm" className="!p-3.5">
+              <div className="flex flex-col w-full">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#FFF373] to-yellow-400 flex items-center justify-center mb-2.5">
+                  <Activity className="h-5 w-5 text-[#002C4E]" />
+                </div>
+                <span className="text-xs text-gray-500 font-medium mb-1">Aulas Realizadas</span>
+                <p className="text-2xl font-bold text-gray-900 mb-0.5">{stats?.completed_bookings || 0}</p>
+                <span className="text-[10px] text-gray-400">{stats?.total_bookings || 0} total</span>
+              </div>
+            </MobileCard>
+
+            <MobileCard padding="sm" className="!p-3.5">
+              <div className="flex flex-col w-full">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#27DFFF] to-cyan-400 flex items-center justify-center mb-2.5">
+                  <Users className="h-5 w-5 text-white" />
+                </div>
+                <span className="text-xs text-gray-500 font-medium mb-1">Total de Alunos</span>
+                <p className="text-2xl font-bold text-gray-900 mb-0.5">{stats?.total_students || 0}</p>
+                <span className="text-[10px] text-gray-400">Alunos ativos</span>
+              </div>
+            </MobileCard>
+
+            <MobileCard padding="sm" className="!p-3.5">
+              <div className="flex flex-col w-full">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center mb-2.5">
+                  <Clock className="h-5 w-5 text-white" />
+                </div>
+                <span className="text-xs text-gray-500 font-medium mb-1">Pendentes</span>
+                <p className="text-2xl font-bold text-gray-900 mb-0.5">{pendingBookings.length}</p>
+                <span className="text-[10px] text-gray-400">Aguardando</span>
+              </div>
+            </MobileCard>
+          </div>
+
+          {/* Próximas Aulas Mobile */}
+          <div className="w-full">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base font-bold text-gray-900">Próximas Aulas</h2>
+              <button className="text-xs text-[#002C4E] font-semibold">Ver todas</button>
+            </div>
+
+            {bookings.length === 0 ? (
+              <MobileCard className="!p-8">
+                <div className="text-center">
+                  <Calendar className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-500 text-sm font-medium">Nenhuma aula agendada</p>
+                  <p className="text-gray-400 text-xs mt-1">Aguarde os alunos agendarem</p>
+                </div>
+              </MobileCard>
+            ) : (
+              <div className="w-full space-y-3">
+                {bookings.slice(0, 5).map((booking) => (
+                  <MobileCard key={booking.id} className="!p-3.5">
+                    <div className="flex items-start space-x-3 w-full">
+                      <div className="relative flex-shrink-0">
+                        <div className="w-12 h-12 bg-gradient-to-br from-[#002C4E] to-[#27DFFF] rounded-xl flex items-center justify-center text-white font-bold">
+                          {booking.studentName?.substring(0, 2).toUpperCase() || 'AL'}
+                        </div>
+                        <div className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white ${
+                          booking.status === 'CONFIRMED' ? 'bg-green-500' : 'bg-amber-500'
+                        }`} />
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2 mb-1.5">
+                          <h3 className="font-bold text-gray-900 text-sm leading-tight">
+                            {booking.studentName}
+                          </h3>
+                          <Badge
+                            className={`text-[10px] px-2 py-0.5 ${
+                              booking.status === 'CONFIRMED'
+                                ? 'bg-green-100 text-green-700'
+                                : 'bg-amber-100 text-amber-700'
+                            }`}
+                          >
+                            {booking.status === 'CONFIRMED' ? 'Confirmada' : 'Pendente'}
+                          </Badge>
+                        </div>
+
+                        <div className="flex items-center gap-3 text-[11px] text-gray-600 mb-2">
+                          <div className="flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            <span>{new Date(booking.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            <span>{new Date(booking.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Activity className="h-3 w-3" />
+                            <span>{booking.duration}min</span>
+                          </div>
+                        </div>
+
+                        {booking.notes && (
+                          <p className="text-[11px] text-gray-500 line-clamp-1">{booking.notes}</p>
+                        )}
+                      </div>
+                    </div>
+                  </MobileCard>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <MobileBottomNav />
+      </div>
+
+      {/* Desktop View */}
+      <ProfessorLayout>
+        <div className="p-6 space-y-8">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -197,8 +279,7 @@ export default function ProfessorDashboardPage() {
 
         {/* KPIs */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {/* Faturamento */}
-          <Card className="border border-gray-200 shadow-sm hover:shadow-lg transition-all duration-300">
+          <Card className="border border-gray-200 shadow-sm hover:shadow-lg transition-all">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-meu-primary to-meu-primary-dark text-white">
@@ -215,8 +296,7 @@ export default function ProfessorDashboardPage() {
             </CardContent>
           </Card>
 
-          {/* Aulas */}
-          <Card className="border border-gray-200 shadow-sm hover:shadow-lg transition-all duration-300">
+          <Card className="border border-gray-200 shadow-sm hover:shadow-lg transition-all">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-meu-accent to-yellow-400 text-meu-primary-dark">
@@ -226,15 +306,12 @@ export default function ProfessorDashboardPage() {
               <div>
                 <p className="text-sm font-medium text-gray-500 mb-1">Aulas Realizadas</p>
                 <p className="text-3xl font-bold text-gray-900 mb-2">{stats?.completed_bookings || 0}</p>
-                <p className="text-sm text-gray-600">
-                  {stats?.total_bookings || 0} agendamentos no total
-                </p>
+                <p className="text-sm text-gray-600">{stats?.total_bookings || 0} agendamentos no total</p>
               </div>
             </CardContent>
           </Card>
 
-          {/* Alunos */}
-          <Card className="border border-gray-200 shadow-sm hover:shadow-lg transition-all duration-300">
+          <Card className="border border-gray-200 shadow-sm hover:shadow-lg transition-all">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-meu-cyan to-cyan-400 text-white">
@@ -249,8 +326,7 @@ export default function ProfessorDashboardPage() {
             </CardContent>
           </Card>
 
-          {/* Pendentes */}
-          <Card className="border border-gray-200 shadow-sm hover:shadow-lg transition-all duration-300">
+          <Card className="border border-gray-200 shadow-sm hover:shadow-lg transition-all">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-orange-600 text-white">
@@ -266,14 +342,14 @@ export default function ProfessorDashboardPage() {
           </Card>
         </div>
 
-        {/* Próximas Aulas */}
+        {/* Próximas Aulas Desktop */}
         <Card className="bg-white border border-gray-200 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-4">
             <div>
               <CardTitle className="text-xl font-bold text-gray-900 mb-1">
                 Próximas Aulas
               </CardTitle>
-              <p className="text-sm text-gray-500">{todayBookings.length} aula(s) hoje</p>
+              <p className="text-sm text-gray-500">{bookings.length} aula(s) agendada(s)</p>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -285,9 +361,9 @@ export default function ProfessorDashboardPage() {
               </div>
             ) : (
               bookings.map((booking) => (
-                <div 
-                  key={booking.id} 
-                  className="p-5 bg-gradient-to-r from-gray-50 to-gray-50/50 rounded-2xl border border-gray-100 hover:shadow-lg hover:border-meu-primary/20 transition-all duration-300"
+                <div
+                  key={booking.id}
+                  className="p-5 bg-gradient-to-r from-gray-50 to-gray-50/50 rounded-2xl border border-gray-100 hover:shadow-lg hover:border-meu-primary/20 transition-all"
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex items-start space-x-4">
@@ -304,7 +380,7 @@ export default function ProfessorDashboardPage() {
                           <h4 className="font-bold text-gray-900 text-lg">
                             {booking.studentName}
                           </h4>
-                          <Badge 
+                          <Badge
                             className={`${
                               booking.status === 'CONFIRMED'
                                 ? 'bg-green-100 text-green-700 border-green-200'
@@ -323,9 +399,7 @@ export default function ProfessorDashboardPage() {
                           </div>
                           <div className="flex items-center space-x-2">
                             <Calendar className="h-4 w-4 text-meu-primary" />
-                            <span>
-                              {new Date(booking.date).toLocaleDateString('pt-BR')}
-                            </span>
+                            <span>{new Date(booking.date).toLocaleDateString('pt-BR')}</span>
                           </div>
                           <div className="flex items-center space-x-2">
                             <Activity className="h-4 w-4 text-meu-primary" />
@@ -344,16 +418,13 @@ export default function ProfessorDashboardPage() {
                       </div>
                     </div>
                     {booking.status === 'PENDING' && (
-                      <div className="flex flex-col space-y-2">
-                        <Button 
-                          size="sm" 
-                          className="bg-green-500 text-white hover:bg-green-600"
-                          onClick={() => {/* TODO: Confirmar aula */}}
-                        >
-                          <CheckCircle className="h-4 w-4 mr-1" />
-                          Confirmar
-                        </Button>
-                      </div>
+                      <Button
+                        size="sm"
+                        className="bg-green-500 text-white hover:bg-green-600"
+                      >
+                        <CheckCircle className="h-4 w-4 mr-1" />
+                        Confirmar
+                      </Button>
                     )}
                   </div>
                 </div>
@@ -361,7 +432,8 @@ export default function ProfessorDashboardPage() {
             )}
           </CardContent>
         </Card>
-      </div>
-    </ProfessorLayout>
+        </div>
+      </ProfessorLayout>
+    </>
   )
 }
