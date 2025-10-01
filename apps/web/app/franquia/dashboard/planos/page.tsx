@@ -50,19 +50,27 @@ export default function PlanosPage() {
     }
   }, [academy])
 
-  // Carregar planos
+  // Carregar planos quando academy estiver disponível
   useEffect(() => {
-    loadPlans()
-  }, [])
+    if (academy?.id) {
+      loadPlans()
+    }
+  }, [academy?.id])
 
   const loadPlans = async () => {
     setLoading(true)
     try {
       console.log('Carregando planos...')
-      
+
+      if (!academy?.id) {
+        console.warn('Academia não carregada ainda')
+        setLoading(false)
+        return
+      }
+
       const [studentRes, teacherRes] = await Promise.all([
-        fetch('http://localhost:3001/api/plans/student'),
-        fetch('http://localhost:3001/api/plans/teacher')
+        fetch(`http://localhost:3001/api/plans/student?academy_id=${academy.id}`),
+        fetch(`http://localhost:3001/api/plans/teacher?academy_id=${academy.id}`)
       ])
 
       console.log('Student response:', studentRes.status)
@@ -138,7 +146,7 @@ export default function PlanosPage() {
 
       console.log('Debug academy_id:', { academy_id, academy })
 
-      if (editingPlan.type === 'student' && !academy_id) {
+      if (!academy_id) {
         toast.error('Erro: academia não identificada. Faça login novamente.')
         return
       }
@@ -146,9 +154,9 @@ export default function PlanosPage() {
       // Converter validity_days para duration_days e adicionar academy_id
       const finalPlanData = {
         ...planData,
+        academy_id,
         ...(editingPlan.type === 'student' && {
-          duration_days: validity_days || 30,
-          academy_id
+          duration_days: validity_days || 30
         })
       }
 

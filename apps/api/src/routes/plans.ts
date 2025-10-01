@@ -10,9 +10,17 @@ const router = express.Router()
 // Buscar planos de professores
 router.get('/teacher', async (req, res) => {
   try {
+    const { academy_id } = req.query
+
+    // Se academy_id não for fornecido, retornar erro
+    if (!academy_id) {
+      return res.status(400).json({ error: 'academy_id é obrigatório' })
+    }
+
     const { data, error } = await supabase
       .from('teacher_plans')
       .select('*')
+      .eq('academy_id', academy_id)
       .eq('is_active', true)
       .order('price', { ascending: true })
 
@@ -74,11 +82,11 @@ router.get('/teacher/:teacherId/available', async (req, res) => {
 // Quando o professor comprar, criamos uma cobrança única (payment) no Asaas
 router.post('/teachers', async (req, res) => {
   try {
-    const { name, description, price, hours_included, commission_rate, features = [] } = req.body
+    const { academy_id, name, description, price, hours_included, commission_rate, features = [] } = req.body
 
-    if (!name || !price || !commission_rate) {
+    if (!academy_id || !name || !price || !commission_rate) {
       return res.status(400).json({
-        error: 'name, price e commission_rate são obrigatórios'
+        error: 'academy_id, name, price e commission_rate são obrigatórios'
       })
     }
 
@@ -86,6 +94,7 @@ router.post('/teachers', async (req, res) => {
     const { data, error } = await supabase
       .from('teacher_plans')
       .insert({
+        academy_id,
         name,
         description,
         price,
@@ -266,9 +275,17 @@ router.post('/teachers/subscriptions', async (req, res) => {
 // Buscar planos de alunos
 router.get('/student', async (req, res) => {
   try {
+    const { academy_id } = req.query
+
+    // Se academy_id não for fornecido, retornar erro
+    if (!academy_id) {
+      return res.status(400).json({ error: 'academy_id é obrigatório' })
+    }
+
     const { data, error } = await supabase
       .from('academy_plans')
       .select('*')
+      .eq('academy_id', academy_id)
       .eq('is_active', true)
       .order('price', { ascending: true })
 
