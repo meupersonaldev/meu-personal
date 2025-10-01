@@ -1,74 +1,132 @@
 'use client'
 
-import { useEffect } from 'react'
-import { Clock, Check, X, GraduationCap, Users, Eye, AlertCircle } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Clock, Check, X, Calendar, User, GraduationCap, AlertCircle, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { useFranquiaStore, ApprovalRequest } from '@/lib/stores/franquia-store'
+import { useFranquiaStore } from '@/lib/stores/franquia-store'
 import { toast } from 'sonner'
 
+interface PendingBooking {
+  id: string
+  student_id: string
+  teacher_id: string
+  date: string
+  duration: number
+  notes?: string
+  credits_cost: number
+  created_at: string
+  studentName?: string
+  teacherName?: string
+}
+
 export default function ApprovalsPage() {
-  const {
-    approvalRequests,
-    fetchApprovalRequests,
-    approveRequest,
-    rejectRequest,
-    franquiaUser
-  } = useFranquiaStore()
+  const { teachers, students, fetchTeachers, fetchStudents } = useFranquiaStore()
+  const [pendingBookings, setPendingBookings] = useState<PendingBooking[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selectedBooking, setSelectedBooking] = useState<PendingBooking | null>(null)
 
   useEffect(() => {
-    fetchApprovalRequests()
-  }, [fetchApprovalRequests])
+    loadData()
+  }, [])
 
-  const handleApprove = async (id: string) => {
-    if (!franquiaUser) return
-
-    const success = await approveRequest(id, franquiaUser.id)
-    if (success) {
-      toast.success('Solicitação aprovada com sucesso!')
-    } else {
-      toast.error('Erro ao aprovar solicitação')
+  const loadData = async () => {
+    setLoading(true)
+    try {
+      await Promise.all([fetchTeachers(), fetchStudents()])
+      await fetchPendingBookings()
+    } catch (error) {
+      console.error('Error loading data:', error)
+      toast.error('Erro ao carregar dados')
+    } finally {
+      setLoading(false)
     }
   }
 
-  const handleReject = async (id: string) => {
-    if (!franquiaUser) return
+  const fetchPendingBookings = async () => {
+    try {
+      // Buscar bookings com status PENDING da academia atual
+      const response = await fetch(`http://localhost:3001/api/bookings?status=PENDING`)
 
+      if (!response.ok) throw new Error('Failed to fetch bookings')
+
+      const data = await response.json()
+
+      // Enriquecer com nomes de alunos e professores
+      const enrichedBookings = data.bookings?.map((booking: any) => ({
+        ...booking,
+        studentName: students.find(s => s.id === booking.student_id)?.name || 'Aluno não encontrado',
+        teacherName: teachers.find(t => t.id === booking.teacher_id)?.name || 'Professor não encontrado'
+      })) || []
+
+      setPendingBookings(enrichedBookings)
+    } catch (error) {
+      console.error('Error fetching pending bookings:', error)
+      setPendingBookings([])
+    }
+  }
+
+  const handleApprove = async (bookingId: string) => {
+    try {
+      const response = await fetch(`http://localhost:3001/api/bookings/${bookingId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'CONFIRMED' })
+      })
+
+      if (!response.ok) throw new Error('Failed to approve booking')
+
+      toast.success('Agendamento aprovado com sucesso!')
+      await fetchPendingBookings()
+    } catch (error) {
+      console.error('Error approving booking:', error)
+      toast.error('Erro ao aprovar agendamento')
+    }
+  }
+
+  const handleReject = async (bookingId: string) => {
     const reason = prompt('Motivo da rejeição:')
     if (!reason || reason.trim() === '') {
       toast.error('É necessário informar um motivo para a rejeição')
       return
     }
 
-    const success = await rejectRequest(id, franquiaUser.id, reason)
-    if (success) {
-      toast.success('Solicitação rejeitada')
-    } else {
-      toast.error('Erro ao rejeitar solicitação')
+    try {
+      const response = await fetch(`http://localhost:3001/api/bookings/${bookingId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'CANCELLED',
+          notes: `Rejeitado: ${reason}`
+        })
+      })
+
+      if (!response.ok) throw new Error('Failed to reject booking')
+
+      toast.success('Agendamento rejeitado')
+      await fetchPendingBookings()
+    } catch (error) {
+      console.error('Error rejecting booking:', error)
+      toast.error('Erro ao rejeitar agendamento')
     }
   }
 
-  const getRequestIcon = (type: ApprovalRequest['type']) => {
-    switch (type) {
-      case 'teacher_registration':
-        return <GraduationCap className="h-5 w-5 text-blue-600" />
-      case 'student_registration':
-        return <Users className="h-5 w-5 text-green-600" />
-      default:
-        return <Clock className="h-5 w-5 text-gray-600" />
-    }
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
+    return date.toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric'
+    })
   }
 
-  const getRequestTitle = (type: ApprovalRequest['type']) => {
-    switch (type) {
-      case 'teacher_registration':
-        return 'Cadastro de Professor'
-      case 'student_registration':
-        return 'Cadastro de Aluno'
-      default:
-        return 'Solicitação'
-    }
+  const formatTime = (dateString: string) => {
+    const date = new Date(dateString)
+    return date.toLocaleTimeString('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit'
+    })
   }
 
   const formatTimeAgo = (dateString: string) => {
@@ -88,8 +146,15 @@ export default function ApprovalsPage() {
     }
   }
 
-  const teacherRequests = approvalRequests.filter(r => r.type === 'teacher_registration')
-  const studentRequests = approvalRequests.filter(r => r.type === 'student_registration')
+  if (loading) {
+    return (
+      <div className="p-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-gray-500">Carregando aprovações...</div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="p-6">
@@ -97,29 +162,41 @@ export default function ApprovalsPage() {
       <div className="mb-8">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Aprovações Pendentes</h1>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Aprovação de Agendamentos</h1>
             <p className="text-gray-600">
-              Analise e aprove solicitações de cadastro de professores e alunos
+              Analise e aprove aulas agendadas por alunos e professores
             </p>
           </div>
           <div className="flex items-center space-x-4">
-            <Badge className="bg-orange-100 text-orange-800">
-              {approvalRequests.length} pendentes
+            <Badge className="bg-orange-100 text-orange-800 text-lg px-4 py-2">
+              {pendingBookings.length} pendente{pendingBookings.length !== 1 ? 's' : ''}
             </Badge>
           </div>
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+      {/* Stats Card */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <Card className="p-6">
+          <div className="flex items-center space-x-4">
+            <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
+              <Clock className="h-6 w-6 text-orange-600" />
+            </div>
+            <div>
+              <div className="text-sm text-gray-600 mb-1">Aguardando Aprovação</div>
+              <div className="text-2xl font-bold text-orange-600">{pendingBookings.length}</div>
+            </div>
+          </div>
+        </Card>
+
         <Card className="p-6">
           <div className="flex items-center space-x-4">
             <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-              <GraduationCap className="h-6 w-6 text-blue-600" />
+              <Calendar className="h-6 w-6 text-blue-600" />
             </div>
             <div>
-              <div className="text-sm text-gray-600 mb-1">Professores Pendentes</div>
-              <div className="text-2xl font-bold text-blue-600">{teacherRequests.length}</div>
+              <div className="text-sm text-gray-600 mb-1">Total de Aulas</div>
+              <div className="text-2xl font-bold text-blue-600">{pendingBookings.length}</div>
             </div>
           </div>
         </Card>
@@ -127,35 +204,39 @@ export default function ApprovalsPage() {
         <Card className="p-6">
           <div className="flex items-center space-x-4">
             <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-              <Users className="h-6 w-6 text-green-600" />
+              <GraduationCap className="h-6 w-6 text-green-600" />
             </div>
             <div>
-              <div className="text-sm text-gray-600 mb-1">Alunos Pendentes</div>
-              <div className="text-2xl font-bold text-green-600">{studentRequests.length}</div>
+              <div className="text-sm text-gray-600 mb-1">Professores Envolvidos</div>
+              <div className="text-2xl font-bold text-green-600">
+                {new Set(pendingBookings.map(b => b.teacher_id)).size}
+              </div>
             </div>
           </div>
         </Card>
       </div>
 
-      {/* Requests List */}
+      {/* Bookings List */}
       <div className="space-y-6">
-        {approvalRequests.length === 0 ? (
+        {pendingBookings.length === 0 ? (
           <Card className="p-8 text-center">
             <Clock className="h-12 w-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">
-              Nenhuma aprovação pendente
+              Nenhum agendamento pendente
             </h3>
             <p className="text-gray-600">
-              Todas as solicitações foram processadas. Você está em dia!
+              Todos os agendamentos foram processados. Você está em dia!
             </p>
           </Card>
         ) : (
-          approvalRequests.map((request) => (
-            <Card key={request.id} className="p-6 border-l-4 border-l-orange-500">
+          pendingBookings.map((booking) => (
+            <Card key={booking.id} className="p-6 border-l-4 border-l-orange-500 hover:shadow-lg transition-shadow">
               <div className="flex items-start space-x-4">
                 {/* Icon */}
                 <div className="flex-shrink-0 mt-1">
-                  {getRequestIcon(request.type)}
+                  <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
+                    <Calendar className="h-5 w-5 text-orange-600" />
+                  </div>
                 </div>
 
                 {/* Content */}
@@ -164,98 +245,91 @@ export default function ApprovalsPage() {
                     <div className="flex-1">
                       <div className="flex items-center space-x-2 mb-2">
                         <h3 className="text-lg font-semibold text-gray-900">
-                          {getRequestTitle(request.type)}
+                          Agendamento de Aula
                         </h3>
                         <Badge variant="outline" className="text-xs text-orange-600 border-orange-200">
                           PENDENTE
                         </Badge>
                       </div>
 
-                      <div className="mb-4">
-                        <p className="text-gray-700 font-medium">
-                          {request.user?.name || 'Nome não disponível'}
-                        </p>
-                        <p className="text-gray-600 text-sm">
-                          {request.user?.email || 'Email não disponível'}
-                        </p>
-                        {request.academy && (
-                          <p className="text-gray-600 text-sm">
-                            Academia: {request.academy.name}
-                          </p>
-                        )}
-                      </div>
+                      {/* Booking Details */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div className="space-y-2">
+                          <div className="flex items-center space-x-2 text-sm">
+                            <User className="h-4 w-4 text-gray-500" />
+                            <span className="text-gray-700">
+                              <span className="font-medium">Aluno:</span> {booking.studentName}
+                            </span>
+                          </div>
+                          <div className="flex items-center space-x-2 text-sm">
+                            <GraduationCap className="h-4 w-4 text-gray-500" />
+                            <span className="text-gray-700">
+                              <span className="font-medium">Professor:</span> {booking.teacherName}
+                            </span>
+                          </div>
+                        </div>
 
-                      <div className="mb-4">
-                        <h4 className="text-sm font-medium text-gray-700 mb-2">
-                          Dados da Solicitação:
-                        </h4>
-                        <div className="bg-gray-50 rounded-lg p-3 text-sm">
-                          {request.type === 'teacher_registration' && (
-                            <div className="space-y-1">
-                              {request.requested_data.specialties && (
-                                <div>
-                                  <span className="font-medium">Especialidades:</span>{' '}
-                                  {Array.isArray(request.requested_data.specialties)
-                                    ? request.requested_data.specialties.join(', ')
-                                    : request.requested_data.specialties
-                                  }
-                                </div>
-                              )}
-                              {request.requested_data.hourly_rate && (
-                                <div>
-                                  <span className="font-medium">Valor/hora:</span>{' '}
-                                  R$ {request.requested_data.hourly_rate}
-                                </div>
-                              )}
-                              {request.requested_data.experience && (
-                                <div>
-                                  <span className="font-medium">Experiência:</span>{' '}
-                                  {request.requested_data.experience}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                          {request.type === 'student_registration' && (
-                            <div className="space-y-1">
-                              {request.requested_data.goals && (
-                                <div>
-                                  <span className="font-medium">Objetivos:</span>{' '}
-                                  {request.requested_data.goals}
-                                </div>
-                              )}
-                              {request.requested_data.preferred_schedule && (
-                                <div>
-                                  <span className="font-medium">Horário preferido:</span>{' '}
-                                  {request.requested_data.preferred_schedule}
-                                </div>
-                              )}
-                            </div>
-                          )}
+                        <div className="space-y-2">
+                          <div className="flex items-center space-x-2 text-sm">
+                            <Calendar className="h-4 w-4 text-gray-500" />
+                            <span className="text-gray-700">
+                              <span className="font-medium">Data:</span> {formatDate(booking.date)}
+                            </span>
+                          </div>
+                          <div className="flex items-center space-x-2 text-sm">
+                            <Clock className="h-4 w-4 text-gray-500" />
+                            <span className="text-gray-700">
+                              <span className="font-medium">Horário:</span> {formatTime(booking.date)} ({booking.duration} min)
+                            </span>
+                          </div>
                         </div>
                       </div>
 
+                      {/* Notes */}
+                      {booking.notes && (
+                        <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                          <div className="text-sm font-medium text-gray-700 mb-1">Observações:</div>
+                          <div className="text-sm text-gray-600">{booking.notes}</div>
+                        </div>
+                      )}
+
+                      {/* Credits Cost */}
+                      <div className="mb-4">
+                        <Badge className="bg-blue-100 text-blue-800">
+                          {booking.credits_cost} crédito{booking.credits_cost !== 1 ? 's' : ''}
+                        </Badge>
+                      </div>
+
                       <div className="flex items-center space-x-4 text-xs text-gray-500 mb-4">
-                        <span>Solicitado {formatTimeAgo(request.created_at)}</span>
+                        <span>Solicitado {formatTimeAgo(booking.created_at)}</span>
                         <span>•</span>
-                        <span>{new Date(request.created_at).toLocaleDateString('pt-BR')}</span>
+                        <span>{new Date(booking.created_at).toLocaleDateString('pt-BR')}</span>
                       </div>
 
                       {/* Actions */}
                       <div className="flex items-center space-x-3">
                         <Button
-                          onClick={() => handleApprove(request.id)}
+                          onClick={() => handleApprove(booking.id)}
                           className="bg-green-600 hover:bg-green-700 text-white"
                         >
                           <Check className="h-4 w-4 mr-2" />
-                          Aprovar
+                          Aprovar Agendamento
                         </Button>
                         <Button
-                          onClick={() => handleReject(request.id)}
+                          onClick={() => handleReject(booking.id)}
                           variant="outline"
                           className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
                         >
                           <X className="h-4 w-4 mr-2" />
                           Rejeitar
+                        </Button>
+                        <Button
+                          onClick={() => setSelectedBooking(booking)}
+                          variant="ghost"
+                          className="text-gray-600"
+                        >
+                          <Eye className="h-4 w-4 mr-2" />
+                          Detalhes
                         </Button>
                       </div>
                     </div>
@@ -268,23 +342,105 @@ export default function ApprovalsPage() {
       </div>
 
       {/* Info Section */}
-      {approvalRequests.length > 0 && (
+      {pendingBookings.length > 0 && (
         <Card className="mt-8 p-6 bg-blue-50 border-blue-200">
           <div className="flex items-start space-x-3">
             <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5" />
             <div>
               <h4 className="text-sm font-medium text-blue-900 mb-1">
-                Importante sobre Aprovações
+                Importante sobre Aprovações de Agendamentos
               </h4>
               <div className="text-sm text-blue-700 space-y-1">
-                <p>• Professores aprovados poderão oferecer aulas na plataforma</p>
-                <p>• Alunos aprovados serão vinculados à academia selecionada</p>
-                <p>• Rejeições devem ser justificadas para transparência</p>
-                <p>• Notificações são enviadas automaticamente após cada decisão</p>
+                <p>• Ao aprovar, a aula será confirmada e o aluno/professor serão notificados</p>
+                <p>• Rejeições devem ser justificadas para transparência com alunos e professores</p>
+                <p>• Créditos só são debitados após a confirmação do agendamento</p>
+                <p>• Aulas confirmadas aparecem na agenda da academia e do professor</p>
               </div>
             </div>
           </div>
         </Card>
+      )}
+
+      {/* Details Modal */}
+      {selectedBooking && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">Detalhes do Agendamento</h2>
+                <Button
+                  onClick={() => setSelectedBooking(null)}
+                  variant="ghost"
+                  size="sm"
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <div className="text-sm text-gray-600 mb-1">Aluno</div>
+                    <div className="font-medium text-gray-900">{selectedBooking.studentName}</div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-gray-600 mb-1">Professor</div>
+                    <div className="font-medium text-gray-900">{selectedBooking.teacherName}</div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-gray-600 mb-1">Data</div>
+                    <div className="font-medium text-gray-900">{formatDate(selectedBooking.date)}</div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-gray-600 mb-1">Horário</div>
+                    <div className="font-medium text-gray-900">{formatTime(selectedBooking.date)}</div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-gray-600 mb-1">Duração</div>
+                    <div className="font-medium text-gray-900">{selectedBooking.duration} minutos</div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-gray-600 mb-1">Custo</div>
+                    <div className="font-medium text-gray-900">{selectedBooking.credits_cost} créditos</div>
+                  </div>
+                </div>
+
+                {selectedBooking.notes && (
+                  <div>
+                    <div className="text-sm text-gray-600 mb-1">Observações</div>
+                    <div className="p-3 bg-gray-50 rounded-lg text-gray-900">
+                      {selectedBooking.notes}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center space-x-3 pt-4">
+                  <Button
+                    onClick={() => {
+                      handleApprove(selectedBooking.id)
+                      setSelectedBooking(null)
+                    }}
+                    className="flex-1 bg-green-600 hover:bg-green-700"
+                  >
+                    <Check className="h-4 w-4 mr-2" />
+                    Aprovar
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      handleReject(selectedBooking.id)
+                      setSelectedBooking(null)
+                    }}
+                    variant="outline"
+                    className="flex-1 text-red-600 hover:bg-red-50 border-red-200"
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    Rejeitar
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </Card>
+        </div>
       )}
     </div>
   )

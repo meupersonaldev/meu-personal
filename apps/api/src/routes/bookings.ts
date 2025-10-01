@@ -293,7 +293,8 @@ router.post('/', async (req, res) => {
 })
 
 // PUT /api/bookings/:id - Atualizar agendamento
-router.put('/:id', async (req, res) => {
+// PATCH /api/bookings/:id - Atualizar agendamento parcialmente
+const updateBookingHandler = async (req: express.Request, res: express.Response) => {
   try {
     const { id } = req.params
     const updateData = updateBookingSchema.parse(req.body)
@@ -333,7 +334,10 @@ router.put('/:id', async (req, res) => {
     console.error('Erro interno:', error)
     res.status(500).json({ message: 'Erro interno do servidor' })
   }
-})
+}
+
+router.put('/:id', updateBookingHandler)
+router.patch('/:id', updateBookingHandler)
 
 // DELETE /api/bookings/:id - Deletar ou Cancelar agendamento
 router.delete('/:id', async (req, res) => {
