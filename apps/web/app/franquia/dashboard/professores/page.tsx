@@ -77,12 +77,7 @@ export default function ProfessoresPage() {
 
   // Carregar dados ao montar
   useEffect(() => {
-    setAcademy({
-      id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-      name: 'Academia FitLife - Centro',
-      email: 'admin@fitlife.com',
-      is_active: true
-    })
+    // Academy já vem do login via store - não precisa setar manualmente
     fetchTeachers().finally(() => setLoading(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
