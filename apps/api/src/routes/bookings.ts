@@ -411,4 +411,102 @@ router.delete('/:id', async (req, res) => {
   }
 })
 
+// POST /api/bookings/checkin/validate - Validar check-in de professores via QR Code
+router.post('/checkin/validate', async (req, res) => {
+  try {
+    const checkinSchema = z.object({
+      academy_id: z.string().uuid(),
+      teacher_id: z.string().uuid(),
+      tolerance_before_min: z.number().int().min(0).max(180).optional().default(30),
+      tolerance_after_min: z.number().int().min(0).max(180).optional().default(30)
+    })
+
+    const { academy_id, teacher_id, tolerance_before_min, tolerance_after_min } = checkinSchema.parse(req.body)
+
+    const now = new Date()
+    const broadWindowStart = new Date(now.getTime() - (tolerance_before_min + 120) * 60000).toISOString()
+    const broadWindowEnd = new Date(now.getTime() + (tolerance_after_min + 120) * 60000).toISOString()
+
+    const { data: bookings, error } = await supabase
+      .from('bookings')
+      .select('id, date, duration, status, student_id')
+      .eq('teacher_id', teacher_id)
+      .eq('franchise_id', academy_id)
+      .gte('date', broadWindowStart)
+      .lte('date', broadWindowEnd)
+      .neq('status', 'CANCELLED')
+
+    if (error) {
+      console.error('Erro ao buscar bookings para check-in:', error)
+      return res.status(500).json({ allowed: false, message: 'Erro ao validar check-in' })
+    }
+
+    const candidate = (bookings || []).filter(b => b.student_id).find(b => {
+      const start = new Date(b.date)
+      const end = new Date(start.getTime() + ((b.duration || 60) * 60000))
+      const startWithTolerance = new Date(start.getTime() - tolerance_before_min * 60000)
+      const endWithTolerance = new Date(end.getTime() + tolerance_after_min * 60000)
+      return now >= startWithTolerance && now <= endWithTolerance
+    })
+
+    if (!candidate) {
+      try {
+        await supabase.from('checkins').insert({
+          academy_id,
+          teacher_id,
+          booking_id: null,
+          status: 'DENIED',
+          reason: 'NO_VALID_BOOKING_IN_WINDOW',
+          method: 'QRCODE',
+          created_at: new Date().toISOString()
+        })
+      } catch (e) {
+        // Tabela pode não existir
+      }
+
+      return res.status(200).json({
+        allowed: false,
+        message: 'Professor não possui agendamento válido neste horário desta unidade.'
+      })
+    }
+
+    try {
+      await supabase.from('checkins').insert({
+        academy_id,
+        teacher_id,
+        booking_id: candidate.id,
+        status: 'GRANTED',
+        reason: null,
+        method: 'QRCODE',
+        created_at: new Date().toISOString()
+      })
+    } catch (e) {
+      // Tabela pode não existir
+    }
+
+    if (candidate.status === 'PENDING') {
+      await supabase
+        .from('bookings')
+        .update({ status: 'CONFIRMED', updated_at: new Date().toISOString() })
+        .eq('id', candidate.id)
+    }
+
+    return res.status(200).json({
+      allowed: true,
+      booking: {
+        id: candidate.id,
+        start: new Date(candidate.date).toISOString(),
+        duration: candidate.duration || 60
+      },
+      message: 'Acesso liberado'
+    })
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ allowed: false, message: 'Dados inválidos', errors: err.errors })
+    }
+    console.error('Erro inesperado no check-in:', err)
+    return res.status(500).json({ allowed: false, message: 'Erro interno' })
+  }
+})
+
 export default router

@@ -43,6 +43,9 @@ import paymentsRoutes from './routes/payments'
 import franchisesRoutes from './routes/franchises'
 import webhooksRoutes from './routes/webhooks'
 import checkoutRoutes from './routes/checkout'
+import checkinsRoutes from './routes/checkins'
+import financialRoutes from './routes/financial'
+import calendarRoutes from './routes/calendar'
 
 app.use('/api/auth', authRoutes)
 app.use('/api/users', usersRoutes)
@@ -58,6 +61,9 @@ app.use('/api/approvals', approvalsRoutes)
 app.use('/api/payments', paymentsRoutes)
 app.use('/api/franchises', franchisesRoutes)
 app.use('/api/webhooks', webhooksRoutes)
+app.use('/api/checkins', checkinsRoutes)
+app.use('/api/financial', financialRoutes)
+app.use('/api/calendar', calendarRoutes)
 app.use('/api/checkout', checkoutRoutes)
 
 // Error handling

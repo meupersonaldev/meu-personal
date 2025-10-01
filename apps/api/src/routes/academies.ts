@@ -52,6 +52,31 @@ router.get('/:id', async (req, res) => {
   }
 })
 
+// PUT /api/academies/:id - Atualizar academia
+router.put('/:id', async (req, res) => {
+  try {
+    const { id } = req.params
+    const updateData = req.body
+
+    const { data, error } = await supabase
+      .from('academies')
+      .update({
+        ...updateData,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) throw error
+
+    res.json({ academy: data, message: 'Academia atualizada com sucesso' })
+  } catch (error: any) {
+    console.error('Error updating academy:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
 export default router
 
 // GET /api/academies/:id/available-slots?date=YYYY-MM-DD
@@ -68,6 +93,37 @@ router.get('/:id/available-slots', async (req, res) => {
     const reqDate = new Date(`${date}T00:00:00Z`)
     const dow = reqDate.getUTCDay()
 
+    // Buscar configurações da academia (horários de funcionamento)
+    const { data: academy, error: academyError } = await supabase
+      .from('academies')
+      .select('schedule')
+      .eq('id', id)
+      .single()
+
+    if (academyError) throw academyError
+
+    // Verificar se a academia está aberta neste dia
+    let daySchedule = null
+    if (academy?.schedule) {
+      try {
+        const schedule = typeof academy.schedule === 'string' 
+          ? JSON.parse(academy.schedule) 
+          : academy.schedule
+        daySchedule = schedule.find((s: any) => s.day === String(dow))
+      } catch (e) {
+        console.error('Erro ao parsear schedule:', e)
+      }
+    }
+
+    // Se academia fechada neste dia, retornar slots vazios
+    if (!daySchedule || !daySchedule.isOpen) {
+      return res.json({ 
+        slots: [], 
+        message: 'Academia fechada neste dia',
+        isOpen: false 
+      })
+    }
+
     // Buscar slots configurados para a academia nesse dia da semana
     const { data: slots, error: slotsError } = await supabase
       .from('academy_time_slots')
@@ -78,6 +134,12 @@ router.get('/:id/available-slots', async (req, res) => {
       .order('time')
 
     if (slotsError) throw slotsError
+
+    // Filtrar slots dentro do horário de funcionamento
+    const filteredSlots = (slots || []).filter((s: any) => {
+      const slotTime = String(s.time).substring(0, 5) // HH:MM
+      return slotTime >= daySchedule.openingTime && slotTime <= daySchedule.closingTime
+    })
 
     // Buscar bookings do dia para essa academia (não cancelados)
     const startISO = new Date(`${date}T00:00:00Z`).toISOString()
@@ -101,7 +163,7 @@ router.get('/:id/available-slots', async (req, res) => {
       occ[hhmm] = (occ[hhmm] || 0) + 1
     }
 
-    const result = (slots || []).map((s: any) => {
+    const result = filteredSlots.map((s: any) => {
       // s.time vem como HH:MM:SS
       const hhmm = String(s.time).substring(0, 5)
       const current = occ[hhmm] || 0
@@ -118,7 +180,14 @@ router.get('/:id/available-slots', async (req, res) => {
       }
     })
 
-    res.json({ slots: result })
+    res.json({ 
+      slots: result,
+      isOpen: true,
+      daySchedule: {
+        openingTime: daySchedule.openingTime,
+        closingTime: daySchedule.closingTime
+      }
+    })
   } catch (error: any) {
     console.error('Error fetching available slots:', error)
     res.status(500).json({ error: error.message })
