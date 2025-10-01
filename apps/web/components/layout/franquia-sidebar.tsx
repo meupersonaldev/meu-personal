@@ -126,10 +126,10 @@ export default function FranquiaSidebar() {
             Bem-vindo
           </div>
           <div className="font-semibold text-white text-lg">
-            Admin Meu Personal
+            {franquiaUser?.name || 'Admin'}
           </div>
           <div className="text-sm text-white">
-            Administrador
+            {franquiaUser?.role === 'FRANCHISE_ADMIN' ? 'Administrador' : franquiaUser?.role}
           </div>
         </div>
       </div>

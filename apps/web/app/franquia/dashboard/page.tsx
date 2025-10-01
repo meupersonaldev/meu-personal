@@ -562,7 +562,7 @@ export default function FranquiaDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">Dashboard da Franquia</h1>
-                <p className="text-sm text-gray-600">Bem-vindo, Admin Meu Personal</p>
+                <p className="text-sm text-gray-600">Bem-vindo, {franquiaUser?.name || 'Admin'}</p>
               </div>
               <Button variant="ghost" size="sm">
                 <Bell className="h-4 w-4" />
