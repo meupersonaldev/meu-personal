@@ -113,7 +113,7 @@ interface FranqueadoraState {
   
   // Academies/Franchises
   fetchAcademies: () => Promise<void>
-  addAcademy: (academy: Omit<Academy, 'id'>) => Promise<boolean>
+  addAcademy: (academy: Omit<Academy, 'id'> & { admin_name?: string; admin_email?: string; admin_password?: string }) => Promise<boolean>
   updateAcademy: (id: string, updates: Partial<Academy>) => Promise<boolean>
   deleteAcademy: (id: string) => Promise<boolean>
   fetchAcademyStats: (academyId: string) => Promise<AcademyStats | null>
@@ -258,6 +258,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
         }
       },
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       addAcademy: async (academyData: any) => {
         try {
           const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
@@ -281,7 +282,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             throw new Error(error.message || 'Erro ao criar franquia')
           }
 
-          const { academy, admin } = await response.json()
+          const { academy } = await response.json()
 
           // A API já cria o franchise_admin, só atualizar lista local
           set(state => ({
@@ -593,6 +594,28 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             ['QUALIFIED', 'PROPOSAL_SENT', 'NEGOTIATING', 'CLOSED_WON'].includes(lead.status))
           const closedWonLeads = leads.filter(lead => lead.status === 'CLOSED_WON')
           
+          // Calcular crescimento mensal real baseado em franquias criadas
+          const now = new Date()
+          const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+          const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+          
+          const currentMonthFranchises = academies.filter(a => 
+            new Date(a.created_at) >= currentMonth
+          ).length
+          
+          const lastMonthFranchises = academies.filter(a => {
+            const createdDate = new Date(a.created_at)
+            return createdDate >= lastMonth && createdDate < currentMonth
+          }).length
+          
+          // Calcular percentual de crescimento
+          let monthlyGrowth = 0
+          if (lastMonthFranchises > 0) {
+            monthlyGrowth = ((currentMonthFranchises - lastMonthFranchises) / lastMonthFranchises) * 100
+          } else if (currentMonthFranchises > 0) {
+            monthlyGrowth = 100 // 100% se não havia franquias no mês anterior
+          }
+          
           const analytics: ConsolidatedAnalytics = {
             totalFranchises: academies.length,
             activeFranchises: academies.filter(a => a.is_active).length,
@@ -601,7 +624,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             averageRevenuePerFranchise: academies.length > 0 ? totalRevenue / academies.length : 0,
             totalLeads: leads.length,
             conversionRate: qualifiedLeads.length > 0 ? (closedWonLeads.length / qualifiedLeads.length) * 100 : 0,
-            monthlyGrowth: 12.5 // Mock por enquanto
+            monthlyGrowth: Math.round(monthlyGrowth * 10) / 10 // Arredondar para 1 casa decimal
           }
 
           console.log('fetchAnalytics: Final analytics:', analytics)

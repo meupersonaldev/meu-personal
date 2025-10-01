@@ -7,7 +7,10 @@ import {
   DollarSign,
   BarChart3,
   Bell,
-  MapPin
+  MapPin,
+  Users,
+  TrendingUp,
+  Activity
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -69,7 +72,8 @@ export default function FranqueadoraDashboard() {
       case 'overview':
         return (
           <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {/* KPIs Principais - Linha 1 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
               <Card className="p-6">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
@@ -91,7 +95,9 @@ export default function FranqueadoraDashboard() {
                   <div className="ml-4">
                     <p className="text-sm font-medium text-gray-600">Franquias Ativas</p>
                     <p className="text-2xl font-bold text-gray-900">{analytics?.activeFranchises || 0}</p>
-                    <p className="text-sm text-blue-600">{academies.filter(a => a.is_active).length} operando</p>
+                    <p className="text-sm text-blue-600">
+                      {((analytics?.activeFranchises || 0) / (analytics?.totalFranchises || 1) * 100).toFixed(0)}% da rede
+                    </p>
                   </div>
                 </div>
               </Card>
@@ -103,8 +109,91 @@ export default function FranqueadoraDashboard() {
                   </div>
                   <div className="ml-4">
                     <p className="text-sm font-medium text-gray-600">Receita Total</p>
-                    <p className="text-2xl font-bold text-gray-900">R$ {analytics ? ((analytics.totalRevenue || 0) / 1000).toFixed(1) : '0'}k</p>
-                    <p className="text-sm text-green-600">+{analytics?.monthlyGrowth?.toFixed(1) || 0}% este mês</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      R$ {analytics ? ((analytics.totalRevenue || 0) / 1000).toFixed(1) : '0'}k
+                    </p>
+                    <p className="text-sm text-green-600">
+                      Média: R$ {analytics ? ((analytics.averageRevenuePerFranchise || 0) / 1000).toFixed(1) : '0'}k
+                    </p>
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="p-6 bg-gradient-to-br from-green-50 to-emerald-50 border-green-200">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <DollarSign className="h-8 w-8 text-green-700" />
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-green-700">Royalties Mensais</p>
+                    <p className="text-2xl font-bold text-green-900">
+                      R$ {analytics ? ((analytics.totalRoyalties || 0) / 1000).toFixed(1) : '0'}k
+                    </p>
+                    <p className="text-sm text-green-600">Receita da franqueadora</p>
+                  </div>
+                </div>
+              </Card>
+            </div>
+
+            {/* KPIs Secundários - Linha 2 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+              <Card className="p-6">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <Users className="h-8 w-8 text-purple-600" />
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-gray-600">Leads Totais</p>
+                    <p className="text-2xl font-bold text-gray-900">{analytics?.totalLeads || 0}</p>
+                    <p className="text-sm text-purple-600">Pipeline de vendas</p>
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="p-6">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <TrendingUp className="h-8 w-8 text-orange-600" />
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-gray-600">Taxa de Conversão</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {analytics?.conversionRate?.toFixed(1) || 0}%
+                    </p>
+                    <p className="text-sm text-orange-600">Leads → Franquias</p>
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="p-6">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <MapPin className="h-8 w-8 text-cyan-600" />
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-gray-600">Estados Atendidos</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {new Set(academies.map(a => a.state)).size}
+                    </p>
+                    <p className="text-sm text-cyan-600">Cobertura nacional</p>
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="p-6">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <Activity className="h-8 w-8 text-pink-600" />
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-gray-600">Royalty Médio</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {academies.length > 0 
+                        ? (academies.reduce((sum, a) => sum + a.royalty_percentage, 0) / academies.length).toFixed(1)
+                        : '0'
+                      }%
+                    </p>
+                    <p className="text-sm text-pink-600">Taxa padrão da rede</p>
                   </div>
                 </div>
               </Card>
@@ -113,12 +202,55 @@ export default function FranqueadoraDashboard() {
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
               <Card className="p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Crescimento de Franquias</h3>
-                <div className="h-64 bg-gray-100 rounded-lg flex items-center justify-center">
-                  <div className="text-center text-gray-500">
-                    <BarChart3 className="h-12 w-12 mx-auto mb-2" />
-                    <p>Gráfico de Crescimento Mensal</p>
-                  </div>
-                </div>
+                <p className="text-sm text-gray-500 mb-4">Franquias criadas nos últimos 6 meses</p>
+                {(() => {
+                  // Calcular dados dos últimos 6 meses
+                  const now = new Date()
+                  const monthsData = []
+                  
+                  for (let i = 5; i >= 0; i--) {
+                    const monthDate = new Date(now.getFullYear(), now.getMonth() - i, 1)
+                    const nextMonthDate = new Date(now.getFullYear(), now.getMonth() - i + 1, 1)
+                    
+                    const count = academies.filter(a => {
+                      const createdDate = new Date(a.created_at)
+                      return createdDate >= monthDate && createdDate < nextMonthDate
+                    }).length
+                    
+                    monthsData.push({
+                      month: monthDate.toLocaleDateString('pt-BR', { month: 'short' }),
+                      count
+                    })
+                  }
+                  
+                  const maxCount = Math.max(...monthsData.map(m => m.count), 1)
+                  
+                  return (
+                    <div className="h-56">
+                      <div className="flex items-end justify-between h-full space-x-2">
+                        {monthsData.map((data, index) => (
+                          <div key={index} className="flex-1 flex flex-col items-center justify-end h-full">
+                            <div className="w-full flex flex-col items-center justify-end h-full pb-8">
+                              <span className="text-xs font-semibold text-meu-primary mb-1">
+                                {data.count}
+                              </span>
+                              <div 
+                                className="w-full bg-gradient-to-t from-meu-primary to-meu-cyan rounded-t-lg transition-all duration-500 hover:opacity-80"
+                                style={{ 
+                                  height: `${(data.count / maxCount) * 100}%`,
+                                  minHeight: data.count > 0 ? '8px' : '0px'
+                                }}
+                              />
+                            </div>
+                            <span className="text-xs text-gray-600 capitalize mt-2">
+                              {data.month}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })()}
               </Card>
 
               <Card className="p-6">
