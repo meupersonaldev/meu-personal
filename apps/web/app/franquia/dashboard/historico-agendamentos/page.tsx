@@ -54,14 +54,22 @@ export default function AgendamentosGestaoPage() {
 
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      const response = await fetch(`${API_URL}/api/bookings?franchise_id=${franquiaUser.academyId}`)
+      const url = `${API_URL}/api/bookings?franchise_id=${franquiaUser.academyId}`
+      console.log('Fetching bookings from:', url)
+
+      const response = await fetch(url)
       if (!response.ok) throw new Error('Failed to fetch bookings')
 
       const data = await response.json()
+      console.log('Bookings received:', data.bookings)
 
       // Enriquecer com nomes e filtrar apenas bookings com alunos (não disponibilidades vazias)
       const enrichedBookings = data.bookings
-        ?.filter((b: any) => b.student_id || b.studentId) // Apenas aulas agendadas (com aluno)
+        ?.filter((b: any) => {
+          const hasStudent = b.student_id || b.studentId
+          console.log('Booking:', b.id, 'has student?', hasStudent, b)
+          return hasStudent
+        })
         .map((booking: any) => ({
           ...booking,
           student_id: booking.student_id || booking.studentId,
@@ -70,6 +78,7 @@ export default function AgendamentosGestaoPage() {
           teacherName: booking.teacherName || teachers.find(t => t.id === booking.teacherId || t.id === booking.teacher_id)?.name || 'Professor não encontrado'
         })) || []
 
+      console.log('Enriched bookings:', enrichedBookings)
       setBookings(enrichedBookings)
     } catch (error) {
       console.error('Error fetching bookings:', error)
