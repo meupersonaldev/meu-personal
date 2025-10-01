@@ -102,6 +102,7 @@ export default function FranquiaDashboard() {
       case 'overview':
         return (
           <div className="space-y-6">
+            {/* KPIs Principais - Linha 1 */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
               <Card className="p-6">
                 <div className="flex items-center">
@@ -111,7 +112,9 @@ export default function FranquiaDashboard() {
                   <div className="ml-4">
                     <p className="text-sm font-medium text-gray-600">Total Alunos</p>
                     <p className="text-2xl font-bold text-gray-900">{students.length}</p>
-                    <p className="text-sm text-green-600">+{analytics?.monthlyGrowth ?? 0}% este mês</p>
+                    <p className="text-sm text-blue-600">
+                      {students.filter(s => s.status === 'active').length} ativos
+                    </p>
                   </div>
                 </div>
               </Card>
@@ -124,7 +127,10 @@ export default function FranquiaDashboard() {
                   <div className="ml-4">
                     <p className="text-sm font-medium text-gray-600">Professores</p>
                     <p className="text-2xl font-bold text-gray-900">{teachers.length}</p>
-                    <p className="text-sm text-emerald-600">{teachers.filter(t => t.status === 'active').length} ativos, {teachers.filter(t => t.status === 'pending').length} pendente</p>
+                    <p className="text-sm text-emerald-600">
+                      {teachers.filter(t => t.status === 'active').length} ativos
+                      {teachers.filter(t => t.status === 'pending').length > 0 && `, ${teachers.filter(t => t.status === 'pending').length} pendente(s)`}
+                    </p>
                   </div>
                 </div>
               </Card>
@@ -137,7 +143,40 @@ export default function FranquiaDashboard() {
                   <div className="ml-4">
                     <p className="text-sm font-medium text-gray-600">Aulas Este Mês</p>
                     <p className="text-2xl font-bold text-gray-900">{analytics?.totalClasses || 0}</p>
-                    <p className="text-sm text-purple-600">+{analytics?.monthlyGrowth ?? 0}% vs mês anterior</p>
+                    <p className="text-sm text-purple-600">Agendamentos ativos</p>
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="p-6 bg-gradient-to-br from-amber-50 to-yellow-50 border-amber-200">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <DollarSign className="h-8 w-8 text-amber-700" />
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-amber-700">Receita Mensal</p>
+                    <p className="text-2xl font-bold text-amber-900">
+                      R$ {analytics ? ((analytics.totalRevenue || 0) / 1000).toFixed(1) : '0'}k
+                    </p>
+                    <p className="text-sm text-amber-600">Faturamento estimado</p>
+                  </div>
+                </div>
+              </Card>
+            </div>
+
+            {/* KPIs Secundários - Linha 2 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+              <Card className="p-6">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <DollarSign className="h-8 w-8 text-green-600" />
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-gray-600">Créditos Ativos</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {students.reduce((sum, s) => sum + s.credits, 0)}
+                    </p>
+                    <p className="text-sm text-green-600">Em circulação</p>
                   </div>
                 </div>
               </Card>
@@ -145,12 +184,53 @@ export default function FranquiaDashboard() {
               <Card className="p-6">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
-                    <DollarSign className="h-8 w-8 text-amber-600" />
+                    <BarChart3 className="h-8 w-8 text-cyan-600" />
                   </div>
                   <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-600">Receita Estimada</p>
-                    <p className="text-2xl font-bold text-gray-900">R$ {analytics ? ((analytics.totalRevenue || 0) / 1000).toFixed(1) : '0'}k</p>
-                    <p className="text-sm text-amber-600">+{analytics?.monthlyGrowth ?? 0}% este mês</p>
+                    <p className="text-sm font-medium text-gray-600">Taxa de Ocupação</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {students.length > 0 
+                        ? ((students.filter(s => s.status === 'active').length / students.length) * 100).toFixed(0)
+                        : '0'
+                      }%
+                    </p>
+                    <p className="text-sm text-cyan-600">Alunos ativos</p>
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="p-6">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <Users className="h-8 w-8 text-pink-600" />
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-gray-600">Média Alunos/Prof</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {teachers.filter(t => t.status === 'active').length > 0
+                        ? (students.filter(s => s.status === 'active').length / teachers.filter(t => t.status === 'active').length).toFixed(1)
+                        : '0'
+                      }
+                    </p>
+                    <p className="text-sm text-pink-600">Distribuição</p>
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="p-6">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <GraduationCap className="h-8 w-8 text-indigo-600" />
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-gray-600">Avaliação Média</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {teachers.length > 0
+                        ? (teachers.reduce((sum, t) => sum + (t.rating || 0), 0) / teachers.length).toFixed(1)
+                        : '0.0'
+                      }
+                    </p>
+                    <p className="text-sm text-indigo-600">⭐ Professores</p>
                   </div>
                 </div>
               </Card>
@@ -158,13 +238,55 @@ export default function FranquiaDashboard() {
 
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
               <Card className="p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Aulas por Dia</h3>
-                <div className="h-64 bg-gray-100 rounded-lg flex items-center justify-center">
-                  <div className="text-center text-gray-500">
-                    <BarChart3 className="h-12 w-12 mx-auto mb-2" />
-                    <p>Gráfico de Aulas Diárias</p>
-                  </div>
-                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Crescimento de Alunos</h3>
+                <p className="text-sm text-gray-500 mb-4">Alunos cadastrados nos últimos 6 meses</p>
+                {(() => {
+                  const now = new Date()
+                  const monthsData = []
+                  
+                  for (let i = 5; i >= 0; i--) {
+                    const monthDate = new Date(now.getFullYear(), now.getMonth() - i, 1)
+                    const nextMonthDate = new Date(now.getFullYear(), now.getMonth() - i + 1, 1)
+                    
+                    const count = students.filter(s => {
+                      const joinDate = new Date(s.join_date)
+                      return joinDate >= monthDate && joinDate < nextMonthDate
+                    }).length
+                    
+                    monthsData.push({
+                      month: monthDate.toLocaleDateString('pt-BR', { month: 'short' }),
+                      count
+                    })
+                  }
+                  
+                  const maxCount = Math.max(...monthsData.map(m => m.count), 1)
+                  
+                  return (
+                    <div className="h-56">
+                      <div className="flex items-end justify-between h-full space-x-2">
+                        {monthsData.map((data, index) => (
+                          <div key={index} className="flex-1 flex flex-col items-center justify-end h-full">
+                            <div className="w-full flex flex-col items-center justify-end h-full pb-8">
+                              <span className="text-xs font-semibold text-blue-600 mb-1">
+                                {data.count}
+                              </span>
+                              <div 
+                                className="w-full bg-gradient-to-t from-blue-500 to-cyan-400 rounded-t-lg transition-all duration-500 hover:opacity-80"
+                                style={{ 
+                                  height: `${(data.count / maxCount) * 100}%`,
+                                  minHeight: data.count > 0 ? '8px' : '0px'
+                                }}
+                              />
+                            </div>
+                            <span className="text-xs text-gray-600 capitalize mt-2">
+                              {data.month}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })()}
               </Card>
 
               <Card className="p-6">
