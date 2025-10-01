@@ -44,7 +44,14 @@ export default function NotificationsBell() {
         { credentials: 'include' }
       )
 
-      if (!response.ok) throw new Error('Failed to fetch notifications')
+      if (!response.ok) {
+        // Silenciar erro se for 404 (tabela ainda não existe)
+        if (response.status === 404 || response.status === 500) {
+          console.warn('Notifications endpoint not available yet')
+          return
+        }
+        throw new Error('Failed to fetch notifications')
+      }
 
       const data = await response.json()
       setNotifications(data.notifications || [])

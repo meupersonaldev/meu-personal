@@ -176,6 +176,7 @@ interface FranquiaState {
   login: (email: string, password: string) => Promise<boolean>
   logout: () => void
   setAcademy: (academy: Academy) => void
+  setFranquiaUser: (user: FranquiaUser) => void
   
   // Teachers
   fetchTeachers: () => Promise<void>
@@ -388,6 +389,10 @@ export const useFranquiaStore = create<FranquiaState>()(
 
       setAcademy: (academy: Academy) => {
         set({ academy })
+      },
+
+      setFranquiaUser: (user: FranquiaUser) => {
+        set({ franquiaUser: user })
       },
 
       // Teachers
