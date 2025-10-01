@@ -56,6 +56,7 @@ export default function FranquiaLayout({ children }: FranquiaLayoutProps) {
                     {franquiaUser?.name?.charAt(0).toUpperCase() || <User className="h-5 w-5" />}
                   </div>
                 )}
+              </div>
             </div>
           </div>
         </header>
