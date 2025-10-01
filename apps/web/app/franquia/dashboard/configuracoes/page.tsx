@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useFranquiaStore } from '@/lib/stores/franquia-store'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Download, Copy, Printer, Building2, QrCode, Settings, Loader2 } from 'lucide-react'
+import { Download, Copy, Printer, Building2, QrCode, Settings, Loader2, User, Upload, Camera } from 'lucide-react'
 import { toast } from 'sonner'
 import QRCodeSVG from 'react-qr-code'
 
@@ -30,9 +30,11 @@ type AcademySettings = {
 }
 
 export default function ConfiguracoesPage() {
-  const { franquiaUser } = useFranquiaStore()
-  const [activeTab, setActiveTab] = useState<'geral' | 'qrcode' | 'sistema'>('geral')
+  const { franquiaUser, setFranquiaUser } = useFranquiaStore()
+  const [activeTab, setActiveTab] = useState<'perfil' | 'geral' | 'qrcode' | 'sistema'>('perfil')
   const [loading, setLoading] = useState(false)
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [settings, setSettings] = useState<AcademySettings>({
     name: '',
     email: '',
@@ -108,6 +110,56 @@ export default function ConfiguracoesPage() {
       }
     } catch (error) {
       console.error('Erro ao carregar configurações:', error)
+    }
+  }
+
+  async function handleAvatarUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    // Validar tamanho (2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Imagem muito grande. Tamanho máximo: 2MB')
+      return
+    }
+
+    // Validar tipo
+    if (!file.type.startsWith('image/')) {
+      toast.error('Formato inválido. Use JPG ou PNG')
+      return
+    }
+
+    setUploadingAvatar(true)
+    try {
+      const formData = new FormData()
+      formData.append('avatar', file)
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/${franquiaUser?.id}/avatar`, {
+        method: 'POST',
+        credentials: 'include',
+        body: formData
+      })
+
+      if (response.ok) {
+        const { avatar_url } = await response.json()
+
+        // Atualizar store
+        if (franquiaUser) {
+          setFranquiaUser({
+            ...franquiaUser,
+            avatar_url
+          })
+        }
+
+        toast.success('Avatar atualizado com sucesso!')
+      } else {
+        toast.error('Erro ao fazer upload do avatar')
+      }
+    } catch (error) {
+      console.error('Erro ao fazer upload:', error)
+      toast.error('Erro ao fazer upload do avatar')
+    } finally {
+      setUploadingAvatar(false)
     }
   }
 
@@ -203,6 +255,14 @@ export default function ConfiguracoesPage() {
       <div className="border-b border-gray-200">
         <div className="flex space-x-1 -mb-px">
           <Button
+            onClick={() => setActiveTab('perfil')}
+            variant={activeTab === 'perfil' ? 'default' : 'ghost'}
+            className="flex-1"
+          >
+            <User className="h-4 w-4 mr-2" />
+            Meu Perfil
+          </Button>
+          <Button
             onClick={() => setActiveTab('geral')}
             variant={activeTab === 'geral' ? 'default' : 'ghost'}
             className="flex-1"
@@ -231,6 +291,116 @@ export default function ConfiguracoesPage() {
 
       {/* Conteúdo das Abas */}
       <div className="pb-8">
+        {/* Aba: Meu Perfil */}
+        {activeTab === 'perfil' && (
+          <Card className="p-8 border-t-4 border-t-meu-primary shadow-sm">
+            <div className="flex items-center space-x-3 mb-8">
+              <User className="h-6 w-6 text-meu-primary" />
+              <h3 className="text-xl font-bold text-gray-900">Meu Perfil</h3>
+            </div>
+
+            <div className="space-y-8">
+              {/* Avatar Section */}
+              <div className="flex items-start space-x-6">
+                <div className="relative group">
+                  {franquiaUser?.avatar_url ? (
+                    <img
+                      src={franquiaUser.avatar_url}
+                      alt={franquiaUser.name}
+                      className="w-24 h-24 rounded-full object-cover shadow-lg ring-4 ring-meu-cyan/20"
+                    />
+                  ) : (
+                    <div className="w-24 h-24 rounded-full bg-gradient-to-br from-meu-primary to-meu-cyan flex items-center justify-center text-white text-3xl font-bold shadow-lg">
+                      {franquiaUser?.name?.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadingAvatar}
+                    className="absolute bottom-0 right-0 w-8 h-8 bg-white rounded-full shadow-lg flex items-center justify-center text-meu-primary hover:bg-meu-cyan hover:text-white transition-all border-2 border-white disabled:opacity-50"
+                  >
+                    {uploadingAvatar ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Camera className="h-4 w-4" />
+                    )}
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleAvatarUpload}
+                  />
+                </div>
+
+                <div className="flex-1">
+                  <h4 className="font-semibold text-gray-900 mb-1">{franquiaUser?.name}</h4>
+                  <p className="text-sm text-gray-600 mb-4">{franquiaUser?.email}</p>
+                  <Button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadingAvatar}
+                    variant="outline"
+                    size="sm"
+                    className="border-meu-cyan text-meu-primary hover:bg-meu-cyan/10"
+                  >
+                    {uploadingAvatar ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Enviando...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-4 w-4 mr-2" />
+                        Alterar foto
+                      </>
+                    )}
+                  </Button>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Formatos aceitos: JPG, PNG. Tamanho máximo: 2MB
+                  </p>
+                </div>
+              </div>
+
+              {/* User Info */}
+              <div className="grid md:grid-cols-2 gap-6 pt-6 border-t">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Nome Completo</label>
+                  <Input
+                    value={franquiaUser?.name || ''}
+                    disabled
+                    className="bg-gray-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                  <Input
+                    value={franquiaUser?.email || ''}
+                    disabled
+                    className="bg-gray-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Academia</label>
+                  <Input
+                    value={franquiaUser?.academyName || 'Carregando...'}
+                    disabled
+                    className="bg-gray-50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Função</label>
+                  <Input
+                    value="Administrador da Academia"
+                    disabled
+                    className="bg-gray-50"
+                  />
+                </div>
+              </div>
+            </div>
+          </Card>
+        )}
+
         {/* Aba: Informações Gerais */}
         {activeTab === 'geral' && (
           <Card className="p-8 border-t-4 border-t-meu-primary shadow-sm">

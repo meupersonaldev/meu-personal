@@ -46,6 +46,10 @@ import checkoutRoutes from './routes/checkout'
 import checkinsRoutes from './routes/checkins'
 import financialRoutes from './routes/financial'
 import calendarRoutes from './routes/calendar'
+import uploadRoutes from './routes/upload'
+
+// Servir arquivos estáticos de uploads
+app.use('/uploads', express.static('uploads'))
 
 app.use('/api/auth', authRoutes)
 app.use('/api/users', usersRoutes)
@@ -65,6 +69,7 @@ app.use('/api/checkins', checkinsRoutes)
 app.use('/api/financial', financialRoutes)
 app.use('/api/calendar', calendarRoutes)
 app.use('/api/checkout', checkoutRoutes)
+app.use('/api', uploadRoutes)
 
 // Error handling
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

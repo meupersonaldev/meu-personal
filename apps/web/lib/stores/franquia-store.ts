@@ -9,6 +9,8 @@ export interface FranquiaUser {
   email: string
   role: 'FRANCHISE_ADMIN'
   academyId: string
+  academyName?: string
+  avatar_url?: string
 }
 
 export interface Academy {

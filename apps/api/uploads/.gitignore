@@ -1,0 +1,7 @@
+# Ignorar todos os uploads exceto .gitkeep
+*
+!.gitkeep
+!.gitignore
+!avatars/
+avatars/*
+!avatars/.gitkeep
