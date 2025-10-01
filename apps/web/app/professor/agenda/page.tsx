@@ -76,37 +76,6 @@ export default function ProfessorAgendaPage() {
 
         if (bookingsRes.ok) {
           const data = await bookingsRes.json()
-          console.log('📊 Total bookings carregados:', data.bookings?.length || 0)
-          
-          // Debug detalhado dos bookings
-          console.log('🔍 Todos os bookings com horário 10:00:')
-          data.bookings?.forEach((b: any) => {
-            const bDate = new Date(b.date)
-            const bTime = bDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-            if (bTime === '10:00') {
-              console.log('  📅', {
-                id: b.id,
-                status: b.status,
-                franchiseId: b.franchiseId,
-                franchiseName: teacherAcademies.find(a => a.id === b.franchiseId)?.name,
-                date: b.date,
-                parsedDate: bDate.toISOString(),
-                day: bDate.getDate(),
-                time: bTime
-              })
-            }
-          })
-          
-          console.log('📋 Bookings quinta 09:00:', data.bookings?.filter((b: any) => {
-            const bDate = new Date(b.date)
-            const bTime = bDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-            return bTime === '09:00' && bDate.getDate() === 3
-          }).map((b: any) => ({
-            id: b.id,
-            status: b.status,
-            franchiseId: b.franchiseId,
-            date: b.date
-          })) || [])
           setBookings(data.bookings || [])
         }
       } catch (err) {
@@ -255,20 +224,6 @@ export default function ProfessorAgendaPage() {
       const matchDate = bookingDateStr === dateStr
       const matchTime = bookingTime === time
       
-      // Debug para quinta 10:00
-      if (time === '10:00' && dateStr === '2025-10-03') {
-        console.log('🔍 Comparando booking:', {
-          bookingId: booking.id,
-          bookingDate: booking.date,
-          bookingDateStr,
-          bookingTime,
-          targetDate: dateStr,
-          targetTime: time,
-          matchDate,
-          matchTime,
-          willInclude: matchDate && matchTime
-        })
-      }
       
       return matchDate && matchTime
     })
@@ -868,20 +823,6 @@ export default function ProfessorAgendaPage() {
                         // Buscar TODOS os bookings nesse slot
                         const allBookingsInSlot = getAllBookingsForSlot(day, time)
                         
-                        // Debug para quinta 10:00
-                        if (time === '10:00' && day.getDate() === 3) {
-                          console.log('🔍 Debug quinta 10:00:', {
-                            dateStr: day.toISOString().split('T')[0],
-                            totalBookings: allBookingsInSlot.length,
-                            bookings: allBookingsInSlot.map(b => ({
-                              id: b.id,
-                              status: b.status,
-                              franchiseId: b.franchiseId,
-                              franchiseName: getAcademyName(b.franchiseId),
-                              date: b.date
-                            }))
-                          })
-                        }
                         
                         // Contar por status
                         const blockedAcademiesCount = allBookingsInSlot.filter(b => b.status === 'BLOCKED').length
@@ -1109,15 +1050,9 @@ export default function ProfessorAgendaPage() {
                                 let errors = 0
                                 
                                 // Criar disponibilidade em cada unidade sequencialmente
-                                console.log('🔄 Iniciando criação em', teacherAcademies.length, 'unidades')
-                                console.log('📅 Data/hora enviada:', bookingDate.toISOString())
-                                console.log('📅 Data/hora local:', bookingDate.toLocaleString('pt-BR'))
-                                console.log('📅 Slot selecionado:', { date: selectedSlot.date, time: selectedSlot.time })
                                 
                                 for (let i = 0; i < teacherAcademies.length; i++) {
                                   const academy = teacherAcademies[i]
-                                  console.log(`🏢 [${i+1}/${teacherAcademies.length}] Criando em: ${academy.name} (${academy.id})`)
-                                  
                                   try {
                                     const payload = {
                                       teacher_id: user.id,
@@ -1129,7 +1064,6 @@ export default function ProfessorAgendaPage() {
                                       notes: 'Horário disponível',
                                       status: 'AVAILABLE'
                                     }
-                                    console.log(`📤 Payload para ${academy.name}:`, payload)
                                     
                                     const response = await fetch(`${API_URL}/api/bookings`, {
                                       method: 'POST',
@@ -1137,24 +1071,15 @@ export default function ProfessorAgendaPage() {
                                       body: JSON.stringify(payload)
                                     })
                                     
-                                    console.log(`📥 Response ${academy.name}:`, response.status, response.statusText)
-                                    
                                     if (response.ok) {
-                                      const result = await response.json()
-                                      console.log(`✅ Sucesso em ${academy.name}:`, result)
                                       created++
                                     } else {
-                                      const errorText = await response.text()
-                                      console.error(`❌ Erro ${response.status} em ${academy.name}:`, errorText)
                                       errors++
                                     }
                                   } catch (err) {
-                                    console.error(`💥 Exception em ${academy.name}:`, err)
                                     errors++
                                   }
                                 }
-                                
-                                console.log('📊 Resultado final:', { created, errors })
                                 
                                 if (created > 0) {
                                   toast.success(`Horário disponibilizado em ${created} unidade(s)!`)
