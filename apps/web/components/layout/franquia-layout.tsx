@@ -45,7 +45,7 @@ export default function FranquiaLayout({ children }: FranquiaLayoutProps) {
                     {franquiaUser?.email || ''}
                   </div>
                 </div>
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-medium">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-meu-primary to-meu-cyan flex items-center justify-center text-white font-medium shadow-md">
                   {franquiaUser?.name?.charAt(0).toUpperCase() || <User className="h-5 w-5" />}
                 </div>
               </div>

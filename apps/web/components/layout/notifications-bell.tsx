@@ -152,9 +152,9 @@ export default function NotificationsBell() {
         className="relative hover:bg-gray-100 transition-colors"
         onClick={() => setShowPanel(!showPanel)}
       >
-        <Bell className={`h-5 w-5 ${unreadCount > 0 ? 'text-blue-600' : 'text-gray-600'}`} />
+        <Bell className={`h-5 w-5 ${unreadCount > 0 ? 'text-meu-cyan' : 'text-gray-600'}`} />
         {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-gradient-to-br from-red-500 to-pink-600 text-white text-xs flex items-center justify-center font-semibold shadow-lg animate-pulse">
+          <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-gradient-to-br from-meu-error to-red-600 text-white text-xs flex items-center justify-center font-semibold shadow-lg animate-pulse">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
@@ -168,13 +168,13 @@ export default function NotificationsBell() {
           />
           <Card className="absolute right-0 top-14 w-[420px] max-h-[600px] overflow-hidden z-50 shadow-2xl border-2 border-gray-100 rounded-xl">
             {/* Header with gradient */}
-            <div className="p-5 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-purple-50">
+            <div className="p-5 border-b border-gray-200 bg-gradient-to-r from-meu-primary/5 to-meu-cyan/5">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center space-x-2">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-meu-primary to-meu-cyan flex items-center justify-center shadow-md">
                     <Bell className="h-4 w-4 text-white" />
                   </div>
-                  <h3 className="font-bold text-gray-900 text-lg">Notificações</h3>
+                  <h3 className="font-bold text-meu-primary text-lg">Notificações</h3>
                 </div>
                 <Button
                   onClick={() => setShowPanel(false)}
@@ -188,7 +188,7 @@ export default function NotificationsBell() {
               <div className="flex items-center justify-between">
                 <p className="text-sm text-gray-600">
                   {unreadCount > 0 ? (
-                    <span className="font-medium text-blue-600">
+                    <span className="font-medium text-meu-cyan">
                       {unreadCount} não lida{unreadCount !== 1 ? 's' : ''}
                     </span>
                   ) : (
@@ -227,7 +227,7 @@ export default function NotificationsBell() {
                       key={notification.id}
                       className={`p-4 transition-all duration-200 ${
                         !notification.read
-                          ? 'bg-gradient-to-r from-blue-50 to-purple-50 hover:from-blue-100 hover:to-purple-100'
+                          ? 'bg-gradient-to-r from-meu-primary/5 to-meu-cyan/5 hover:from-meu-primary/10 hover:to-meu-cyan/10'
                           : 'bg-white hover:bg-gray-50'
                       }`}
                       style={{
@@ -238,7 +238,7 @@ export default function NotificationsBell() {
                         {/* Icon with gradient background */}
                         <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm ${
                           !notification.read
-                            ? 'bg-gradient-to-br from-blue-500 to-purple-600'
+                            ? 'bg-gradient-to-br from-meu-primary to-meu-cyan'
                             : 'bg-gray-200'
                         }`}>
                           <span className="text-xl">
@@ -252,7 +252,7 @@ export default function NotificationsBell() {
                               {notification.title}
                             </h4>
                             {!notification.read && (
-                              <Badge className="ml-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white text-xs border-0 shadow-sm">
+                              <Badge className="ml-2 bg-gradient-to-r from-meu-primary to-meu-cyan text-white text-xs border-0 shadow-sm">
                                 Nova
                               </Badge>
                             )}
