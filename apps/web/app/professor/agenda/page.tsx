@@ -26,12 +26,16 @@ interface Booking {
   studentName?: string
   teacherId: string
   franchiseId?: string
-  franchiseName?: string
   date: string
   duration: number
   status: 'AVAILABLE' | 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED'
   notes?: string
   creditsCost: number
+}
+
+interface Academy {
+  id: string
+  name: string
 }
 
 export default function ProfessorAgendaPage() {
@@ -50,6 +54,7 @@ export default function ProfessorAgendaPage() {
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [blocks, setBlocks] = useState<{ id: string; date: string; franchise_id: string; notes?: string }[]>([])
   const [loadingBlocks, setLoadingBlocks] = useState(false)
+  const [existingBookingInSlot, setExistingBookingInSlot] = useState<Booking | null>(null)
 
   const horariosDisponiveis = [
     '06:00', '07:00', '08:00', '09:00', '10:00', '11:00',
@@ -191,18 +196,39 @@ export default function ProfessorAgendaPage() {
     })
   }
 
+  const getAcademyName = (franchiseId?: string) => {
+    if (!franchiseId) return null
+    const academy = teacherAcademies.find(a => a.id === franchiseId)
+    return academy?.name || 'Unidade'
+  }
+
   const handleSlotClick = (date: Date, time: string) => {
     const booking = getBookingForSlot(date, time)
     
     if (booking) {
       setSelectedBooking(booking)
       setSelectedSlot(null)
+      setExistingBookingInSlot(null)
     } else {
+      // Verificar se existe agendamento no mesmo horário em OUTRA unidade
+      const dateStr = date.toISOString().split('T')[0]
+      const existingInOtherUnit = bookings.find(b => {
+        const bookingDate = new Date(b.date)
+        const bookingDateStr = bookingDate.toISOString().split('T')[0]
+        const bookingTime = bookingDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+        
+        return bookingDateStr === dateStr && 
+               bookingTime === time && 
+               !b.studentId && // Apenas disponibilidades vazias
+               b.status === 'AVAILABLE'
+      })
+      
       setSelectedSlot({
         date: date.toISOString().split('T')[0],
         time
       })
       setSelectedBooking(null)
+      setExistingBookingInSlot(existingInOtherUnit || null)
     }
     
     setShowModal(true)
@@ -238,7 +264,8 @@ export default function ProfessorAgendaPage() {
         fetchData()
         setShowModal(false)
       } else {
-        toast.error('Erro ao criar disponibilidade')
+        const errorData = await response.json()
+        toast.error(errorData.message || 'Erro ao criar disponibilidade')
       }
     } catch (error) {
       console.error('Erro:', error)
@@ -283,6 +310,26 @@ export default function ProfessorAgendaPage() {
       }
     } catch {
       toast.error('Erro ao cancelar')
+    }
+  }
+
+  const handleDeleteBooking = async (bookingId: string) => {
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+
+      const response = await fetch(`${API_URL}/api/bookings/${bookingId}`, {
+        method: 'DELETE'
+      })
+
+      if (response.ok) {
+        toast.success('Disponibilidade removida!')
+        fetchData()
+        setShowModal(false)
+      } else {
+        toast.error('Erro ao remover')
+      }
+    } catch {
+      toast.error('Erro ao remover')
     }
   }
 
@@ -603,8 +650,13 @@ export default function ProfessorAgendaPage() {
                               }`}
                             >
                               {booking ? (
-                                <div className="flex flex-col items-center justify-center h-full">
-                                  <span className="text-xs">{booking.studentName || getStatusText(booking.status)}</span>
+                                <div className="flex flex-col items-center justify-center h-full p-1">
+                                  <span className="text-xs font-semibold">{booking.studentName || getStatusText(booking.status)}</span>
+                                  {booking.franchiseId && (
+                                    <span className="text-[10px] opacity-90 mt-0.5 truncate w-full text-center">
+                                      📍 {getAcademyName(booking.franchiseId)}
+                                    </span>
+                                  )}
                                 </div>
                               ) : isPast ? (
                                 '-'
@@ -652,31 +704,43 @@ export default function ProfessorAgendaPage() {
                       </div>
                     )}
 
-                    {selectedBooking.franchiseName && (
+                    {selectedBooking.franchiseId && (
                       <div>
                         <p className="text-sm text-gray-600">Unidade:</p>
-                        <p className="font-medium">{selectedBooking.franchiseName}</p>
+                        <p className="font-medium">📍 {getAcademyName(selectedBooking.franchiseId)}</p>
                       </div>
                     )}
 
-                    <div className="flex space-x-2">
-                      {selectedBooking.status === 'PENDING' && (
+                    <div className="flex flex-col space-y-2">
+                      <div className="flex space-x-2">
+                        {selectedBooking.status === 'PENDING' && (
+                          <Button
+                            onClick={() => handleConfirmBooking(selectedBooking.id)}
+                            className="flex-1 bg-green-600"
+                          >
+                            <Check className="h-4 w-4 mr-2" />
+                            Confirmar
+                          </Button>
+                        )}
+                        {selectedBooking.status !== 'CANCELLED' && selectedBooking.status !== 'COMPLETED' && (
+                          <Button
+                            onClick={() => handleCancelBooking(selectedBooking.id)}
+                            variant="outline"
+                            className="flex-1 text-red-600"
+                          >
+                            <X className="h-4 w-4 mr-2" />
+                            Cancelar
+                          </Button>
+                        )}
+                      </div>
+                      
+                      {(selectedBooking.status === 'AVAILABLE' || selectedBooking.status === 'CANCELLED') && !selectedBooking.studentId && (
                         <Button
-                          onClick={() => handleConfirmBooking(selectedBooking.id)}
-                          className="flex-1 bg-green-600"
+                          onClick={() => handleDeleteBooking(selectedBooking.id)}
+                          variant="destructive"
+                          className="w-full text-white"
                         >
-                          <Check className="h-4 w-4 mr-2" />
-                          Confirmar
-                        </Button>
-                      )}
-                      {selectedBooking.status !== 'CANCELLED' && selectedBooking.status !== 'COMPLETED' && (
-                        <Button
-                          onClick={() => handleCancelBooking(selectedBooking.id)}
-                          variant="outline"
-                          className="flex-1 text-red-600"
-                        >
-                          <X className="h-4 w-4 mr-2" />
-                          Cancelar
+                          🗑️ Remover {selectedBooking.status === 'CANCELLED' ? 'Cancelado' : 'Disponibilidade'}
                         </Button>
                       )}
                     </div>
@@ -686,9 +750,20 @@ export default function ProfessorAgendaPage() {
                     <div>
                       <p className="text-sm text-gray-600">Horário:</p>
                       <p className="font-medium">
-                        {new Date(selectedSlot.date).toLocaleDateString('pt-BR')} às {selectedSlot.time}
+                        {new Date(selectedSlot.date + 'T00:00:00').toLocaleDateString('pt-BR')} às {selectedSlot.time}
                       </p>
                     </div>
+
+                    {existingBookingInSlot && (
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                        <p className="text-sm text-yellow-800">
+                          ⚠️ <strong>Atenção:</strong> Você já tem uma disponibilidade neste horário na{' '}
+                          <strong>{getAcademyName(existingBookingInSlot.franchiseId)}</strong>.
+                          <br />
+                          Ao criar em outra unidade, a anterior será <strong>substituída</strong>.
+                        </p>
+                      </div>
+                    )}
 
                     <div>
                       <p className="text-sm font-medium mb-2">Disponibilizar em:</p>
