@@ -44,28 +44,35 @@ router.get('/summary', async (req, res) => {
         startDate.setDate(now.getDate() - 30)
     }
 
-    // Buscar alunos da academia
-    const { data: students, error: studentsError } = await supabase
-      .from('users')
+    // Buscar alunos da academia via academy_students
+    const { data: academyStudents, error: studentsError } = await supabase
+      .from('academy_students')
       .select(`
         id,
-        name,
         status,
-        created_at,
-        student_plans (
-          plan_id,
-          status,
-          student_plans:plan_id (
-            name,
-            price,
-            credits
-          )
+        student_id,
+        plan_id,
+        join_date,
+        users:student_id (
+          id,
+          name,
+          email
+        ),
+        academy_plans:plan_id (
+          id,
+          name,
+          price
         )
       `)
-      .eq('role', 'STUDENT')
-      .gte('created_at', startDate.toISOString())
+      .eq('academy_id', academy_id)
+      .gte('join_date', startDate.toISOString())
 
-    if (studentsError) throw studentsError
+    if (studentsError) {
+      console.error('Error fetching students:', studentsError)
+      throw studentsError
+    }
+
+    const students = academyStudents || []
 
     // Buscar agendamentos concluídos
     const { data: bookings, error: bookingsError } = await supabase
@@ -86,23 +93,16 @@ router.get('/summary', async (req, res) => {
 
     if (bookingsError) throw bookingsError
 
-    // Buscar planos da academia
-    const { data: plans, error: plansError } = await supabase
-      .from('student_plans')
-      .select('*, plan:plans(*)')
-      .eq('academy_id', academy_id)
-      .eq('status', 'ACTIVE')
-
-    if (plansError) throw plansError
-
     // Calcular métricas
-    const activeSubscriptions = (students || []).filter((s: any) => s.status === 'active').length
-    const totalStudents = (students || []).length
+    const activeSubscriptions = students.filter((s: any) => s.status === 'active').length
+    const totalStudents = students.length
 
-    // Receita de planos
-    const planRevenue = (plans || []).reduce((sum: number, sp: any) => {
-      return sum + (sp.plan?.price || 0)
-    }, 0)
+    // Receita de planos (dos alunos ativos)
+    const planRevenue = students
+      .filter((s: any) => s.status === 'active' && s.academy_plans)
+      .reduce((sum: number, s: any) => {
+        return sum + (s.academy_plans?.price || 0)
+      }, 0)
 
     // Receita de aulas avulsas (baseado em créditos)
     const classRevenue = (bookings || []).reduce((sum: number, b: any) => {
@@ -115,16 +115,17 @@ router.get('/summary', async (req, res) => {
     // Agrupar receita por plano
     const revenueByPlan = new Map<string, { name: string; revenue: number; count: number }>()
     
-    ;(plans || []).forEach((sp: any) => {
-      if (sp.plan) {
-        const current = revenueByPlan.get(sp.plan.id) || { 
-          name: sp.plan.name, 
+    students.forEach((student: any) => {
+      if (student.academy_plans && student.status === 'active') {
+        const plan = student.academy_plans
+        const current = revenueByPlan.get(plan.id) || { 
+          name: plan.name, 
           revenue: 0, 
           count: 0 
         }
-        revenueByPlan.set(sp.plan.id, {
-          name: sp.plan.name,
-          revenue: current.revenue + sp.plan.price,
+        revenueByPlan.set(plan.id, {
+          name: plan.name,
+          revenue: current.revenue + plan.price,
           count: current.count + 1
         })
       }
@@ -167,16 +168,16 @@ router.get('/summary', async (req, res) => {
     }))
 
     // Adicionar transações de planos
-    ;(plans || []).forEach((sp: any) => {
-      if (sp.plan) {
+    students.forEach((student: any) => {
+      if (student.academy_plans) {
         transactions.push({
-          id: `plan-${sp.id}`,
-          studentName: sp.student?.name || 'Aluno não encontrado',
+          id: `plan-${student.id}`,
+          studentName: student.users?.name || 'Aluno não encontrado',
           teacherName: '-',
-          planName: sp.plan.name,
-          amount: sp.plan.price,
-          date: sp.created_at,
-          status: sp.status === 'ACTIVE' ? 'completed' : 'pending',
+          planName: student.academy_plans.name,
+          amount: student.academy_plans.price,
+          date: student.join_date,
+          status: student.status === 'active' ? 'completed' : 'pending',
           type: 'plan'
         })
       }

@@ -39,23 +39,33 @@ export default function FinancePage() {
   }, [periodFilter])
 
   const fetchFinancialData = async () => {
-    if (!franquiaUser?.academyId) return
+    if (!franquiaUser?.academyId) {
+      console.log('No academy ID found')
+      return
+    }
 
     setLoading(true)
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      const response = await fetch(
-        `${API_URL}/api/financial/summary?academy_id=${franquiaUser.academyId}&period=${periodFilter}`,
-        { credentials: 'include' }
-      )
-
-      if (!response.ok) throw new Error('Failed to fetch financial data')
+      const url = `${API_URL}/api/financial/summary?academy_id=${franquiaUser.academyId}&period=${periodFilter}`
+      console.log('Fetching financial data from:', url)
+      
+      const response = await fetch(url, { credentials: 'include' })
+      
+      console.log('Response status:', response.status)
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('Error response:', errorText)
+        throw new Error(`Failed to fetch financial data: ${response.status}`)
+      }
 
       const data = await response.json()
+      console.log('Financial data received:', data)
       setSummary(data)
     } catch (error) {
       console.error('Error fetching financial data:', error)
-      toast.error('Erro ao carregar dados financeiros')
+      toast.error('Erro ao carregar dados financeiros. Verifique se o servidor está rodando.')
     } finally {
       setLoading(false)
     }
