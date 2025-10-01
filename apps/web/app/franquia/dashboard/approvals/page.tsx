@@ -48,7 +48,8 @@ export default function AgendamentosGestaoPage() {
 
   const fetchBookings = async () => {
     try {
-      const response = await fetch(`http://localhost:3001/api/bookings`)
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const response = await fetch(`${API_URL}/api/bookings`)
       if (!response.ok) throw new Error('Failed to fetch bookings')
 
       const data = await response.json()
@@ -76,7 +77,8 @@ export default function AgendamentosGestaoPage() {
     const reason = prompt('Motivo do cancelamento (opcional):')
 
     try {
-      const response = await fetch(`http://localhost:3001/api/bookings/${bookingId}`, {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const response = await fetch(`${API_URL}/api/bookings/${bookingId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -97,7 +99,8 @@ export default function AgendamentosGestaoPage() {
 
   const handleComplete = async (bookingId: string) => {
     try {
-      const response = await fetch(`http://localhost:3001/api/bookings/${bookingId}`, {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const response = await fetch(`${API_URL}/api/bookings/${bookingId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'COMPLETED' })

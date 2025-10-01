@@ -68,9 +68,10 @@ export default function PlanosPage() {
         return
       }
 
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
       const [studentRes, teacherRes] = await Promise.all([
-        fetch(`http://localhost:3001/api/plans/student?academy_id=${academy.id}`),
-        fetch(`http://localhost:3001/api/plans/teacher?academy_id=${academy.id}`)
+        fetch(`${API_URL}/api/plans/student?academy_id=${academy.id}`),
+        fetch(`${API_URL}/api/plans/teacher?academy_id=${academy.id}`)
       ])
 
       console.log('Student response:', studentRes.status)
@@ -131,9 +132,10 @@ export default function PlanosPage() {
     if (!editingPlan) return
 
     try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
       const endpoint = editingPlan.type === 'student'
-        ? 'http://localhost:3001/api/plans/students'
-        : 'http://localhost:3001/api/plans/teachers'
+        ? `${API_URL}/api/plans/students`
+        : `${API_URL}/api/plans/teachers`
 
       const method = editingPlan.id ? 'PUT' : 'POST'
       const url = editingPlan.id ? `${endpoint}/${editingPlan.id}` : endpoint
@@ -191,9 +193,10 @@ export default function PlanosPage() {
 
   const handleToggleActive = async (plan: any, type: 'student' | 'teacher') => {
     try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
       const endpoint = type === 'student' 
-        ? `http://localhost:3001/api/plans/students/${plan.id}` 
-        : `http://localhost:3001/api/plans/teachers/${plan.id}`
+        ? `${API_URL}/api/plans/students/${plan.id}` 
+        : `${API_URL}/api/plans/teachers/${plan.id}`
 
       const response = await fetch(endpoint, {
         method: 'PUT',
@@ -215,9 +218,10 @@ export default function PlanosPage() {
     }
 
     try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
       const endpoint = type === 'student' 
-        ? `http://localhost:3001/api/plans/students/${plan.id}` 
-        : `http://localhost:3001/api/plans/teachers/${plan.id}`
+        ? `${API_URL}/api/plans/students/${plan.id}` 
+        : `${API_URL}/api/plans/teachers/${plan.id}`
 
       const response = await fetch(endpoint, {
         method: 'DELETE'
