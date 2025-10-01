@@ -148,13 +148,13 @@ export default function NotificationsBell() {
     <div className="relative">
       <Button
         variant="ghost"
-        size="sm"
-        className="relative"
+        size="icon"
+        className="relative hover:bg-gray-100 transition-colors"
         onClick={() => setShowPanel(!showPanel)}
       >
-        <Bell className="h-5 w-5" />
+        <Bell className={`h-5 w-5 ${unreadCount > 0 ? 'text-blue-600' : 'text-gray-600'}`} />
         {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center animate-pulse">
+          <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-gradient-to-br from-red-500 to-pink-600 text-white text-xs flex items-center justify-center font-semibold shadow-lg animate-pulse">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
@@ -163,102 +163,137 @@ export default function NotificationsBell() {
       {showPanel && (
         <>
           <div
-            className="fixed inset-0 z-40"
+            className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm"
             onClick={() => setShowPanel(false)}
           />
-          <Card className="absolute right-0 top-12 w-96 max-h-[500px] overflow-hidden z-50 shadow-xl">
-            <div className="p-4 border-b flex items-center justify-between bg-gray-50">
-              <div>
-                <h3 className="font-semibold text-gray-900">Notificações</h3>
-                <p className="text-xs text-gray-600">
-                  {unreadCount} não lida{unreadCount !== 1 ? 's' : ''}
-                </p>
+          <Card className="absolute right-0 top-14 w-[420px] max-h-[600px] overflow-hidden z-50 shadow-2xl border-2 border-gray-100 rounded-xl">
+            {/* Header with gradient */}
+            <div className="p-5 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-purple-50">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center space-x-2">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                    <Bell className="h-4 w-4 text-white" />
+                  </div>
+                  <h3 className="font-bold text-gray-900 text-lg">Notificações</h3>
+                </div>
+                <Button
+                  onClick={() => setShowPanel(false)}
+                  variant="ghost"
+                  size="sm"
+                  className="hover:bg-white/60 rounded-full"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
               </div>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-gray-600">
+                  {unreadCount > 0 ? (
+                    <span className="font-medium text-blue-600">
+                      {unreadCount} não lida{unreadCount !== 1 ? 's' : ''}
+                    </span>
+                  ) : (
+                    <span>Tudo em dia! ✨</span>
+                  )}
+                </p>
                 {unreadCount > 0 && (
                   <Button
                     onClick={markAllAsRead}
                     disabled={loading}
                     variant="ghost"
                     size="sm"
-                    className="text-xs"
+                    className="text-xs hover:bg-white/60 rounded-full"
                   >
-                    <Check className="h-4 w-4 mr-1" />
+                    <Check className="h-3 w-3 mr-1" />
                     Marcar todas
                   </Button>
                 )}
-                <Button
-                  onClick={() => setShowPanel(false)}
-                  variant="ghost"
-                  size="sm"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
               </div>
             </div>
 
-            <div className="overflow-y-auto max-h-[400px]">
+            {/* Notifications List */}
+            <div className="overflow-y-auto max-h-[480px] bg-gray-50">
               {notifications.length === 0 ? (
-                <div className="p-8 text-center text-gray-500">
-                  <Bell className="h-12 w-12 mx-auto mb-3 text-gray-400" />
-                  <p>Nenhuma notificação</p>
+                <div className="p-12 text-center">
+                  <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
+                    <Bell className="h-10 w-10 text-gray-400" />
+                  </div>
+                  <h4 className="font-medium text-gray-900 mb-1">Nenhuma notificação</h4>
+                  <p className="text-sm text-gray-500">Você está em dia! 🎉</p>
                 </div>
               ) : (
-                notifications.map((notification) => (
-                  <div
-                    key={notification.id}
-                    className={`p-4 border-b hover:bg-gray-50 transition-colors ${
-                      !notification.read ? 'bg-blue-50' : ''
-                    }`}
-                  >
-                    <div className="flex items-start space-x-3">
-                      <div className="text-2xl flex-shrink-0">
-                        {getNotificationIcon(notification.type)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between mb-1">
-                          <h4 className="font-medium text-sm text-gray-900">
-                            {notification.title}
-                          </h4>
-                          {!notification.read && (
-                            <Badge className="ml-2 bg-blue-500 text-white text-xs">
-                              Nova
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-sm text-gray-600 mb-2">
-                          {notification.message}
-                        </p>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-gray-500">
-                            {formatDate(notification.created_at)}
+                <div className="divide-y divide-gray-200">
+                  {notifications.map((notification, index) => (
+                    <div
+                      key={notification.id}
+                      className={`p-4 transition-all duration-200 ${
+                        !notification.read
+                          ? 'bg-gradient-to-r from-blue-50 to-purple-50 hover:from-blue-100 hover:to-purple-100'
+                          : 'bg-white hover:bg-gray-50'
+                      }`}
+                      style={{
+                        animationDelay: `${index * 50}ms`
+                      }}
+                    >
+                      <div className="flex items-start space-x-3">
+                        {/* Icon with gradient background */}
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm ${
+                          !notification.read
+                            ? 'bg-gradient-to-br from-blue-500 to-purple-600'
+                            : 'bg-gray-200'
+                        }`}>
+                          <span className="text-xl">
+                            {getNotificationIcon(notification.type)}
                           </span>
-                          <div className="flex items-center space-x-2">
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between mb-1">
+                            <h4 className="font-semibold text-sm text-gray-900">
+                              {notification.title}
+                            </h4>
                             {!notification.read && (
+                              <Badge className="ml-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white text-xs border-0 shadow-sm">
+                                Nova
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-700 mb-2 leading-relaxed">
+                            {notification.message}
+                          </p>
+
+                          {/* Actions row */}
+                          <div className="flex items-center justify-between mt-3">
+                            <span className="text-xs text-gray-500 font-medium flex items-center">
+                              <span className="w-1.5 h-1.5 rounded-full bg-gray-400 mr-1.5"></span>
+                              {formatDate(notification.created_at)}
+                            </span>
+                            <div className="flex items-center space-x-1">
+                              {!notification.read && (
+                                <Button
+                                  onClick={() => markAsRead(notification.id)}
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-xs h-7 hover:bg-white/60 rounded-full"
+                                >
+                                  <Check className="h-3 w-3 mr-1" />
+                                  Marcar lida
+                                </Button>
+                              )}
                               <Button
-                                onClick={() => markAsRead(notification.id)}
+                                onClick={() => deleteNotification(notification.id)}
                                 variant="ghost"
                                 size="sm"
-                                className="text-xs h-7"
+                                className="text-xs h-7 text-red-600 hover:bg-red-50 rounded-full"
                               >
-                                <Check className="h-3 w-3 mr-1" />
-                                Marcar lida
+                                <Trash2 className="h-3 w-3" />
                               </Button>
-                            )}
-                            <Button
-                              onClick={() => deleteNotification(notification.id)}
-                              variant="ghost"
-                              size="sm"
-                              className="text-xs h-7 text-red-600 hover:text-red-700"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
+                            </div>
                           </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  ))}
+                </div>
               )}
             </div>
           </Card>
