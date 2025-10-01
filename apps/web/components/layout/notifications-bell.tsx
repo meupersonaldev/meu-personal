@@ -45,19 +45,15 @@ export default function NotificationsBell() {
       )
 
       if (!response.ok) {
-        // Silenciar erro se for 404 (tabela ainda não existe)
-        if (response.status === 404 || response.status === 500) {
-          console.warn('Notifications endpoint not available yet')
-          return
-        }
-        throw new Error('Failed to fetch notifications')
+        // Silenciar erro - API ainda não está pronta ou tabela não existe
+        return
       }
 
       const data = await response.json()
       setNotifications(data.notifications || [])
       setUnreadCount(data.unreadCount || 0)
     } catch (error) {
-      console.error('Error fetching notifications:', error)
+      // Silenciar erro de fetch - API pode não estar rodando ainda
     }
   }
 
