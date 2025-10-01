@@ -1,14 +1,14 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Clock, Check, X, Calendar, User, GraduationCap, AlertCircle, Eye } from 'lucide-react'
+import { Calendar, User, GraduationCap, AlertCircle, Eye, X, CheckCircle, XCircle, Clock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { useFranquiaStore } from '@/lib/stores/franquia-store'
 import { toast } from 'sonner'
 
-interface PendingBooking {
+interface Booking {
   id: string
   student_id: string
   teacher_id: string
@@ -16,16 +16,18 @@ interface PendingBooking {
   duration: number
   notes?: string
   credits_cost: number
+  status: string
   created_at: string
   studentName?: string
   teacherName?: string
 }
 
-export default function ApprovalsPage() {
+export default function AgendamentosGestaoPage() {
   const { teachers, students, fetchTeachers, fetchStudents } = useFranquiaStore()
-  const [pendingBookings, setPendingBookings] = useState<PendingBooking[]>([])
+  const [bookings, setBookings] = useState<Booking[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedBooking, setSelectedBooking] = useState<PendingBooking | null>(null)
+  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
+  const [statusFilter, setStatusFilter] = useState<'all' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED'>('all')
 
   useEffect(() => {
     loadData()
@@ -35,7 +37,7 @@ export default function ApprovalsPage() {
     setLoading(true)
     try {
       await Promise.all([fetchTeachers(), fetchStudents()])
-      await fetchPendingBookings()
+      await fetchBookings()
     } catch (error) {
       console.error('Error loading data:', error)
       toast.error('Erro ao carregar dados')
@@ -44,53 +46,34 @@ export default function ApprovalsPage() {
     }
   }
 
-  const fetchPendingBookings = async () => {
+  const fetchBookings = async () => {
     try {
-      // Buscar bookings com status PENDING da academia atual
-      const response = await fetch(`http://localhost:3001/api/bookings?status=PENDING`)
-
+      const response = await fetch(`http://localhost:3001/api/bookings`)
       if (!response.ok) throw new Error('Failed to fetch bookings')
 
       const data = await response.json()
 
-      // Enriquecer com nomes de alunos e professores
-      const enrichedBookings = data.bookings?.map((booking: any) => ({
-        ...booking,
-        studentName: students.find(s => s.id === booking.student_id)?.name || 'Aluno não encontrado',
-        teacherName: teachers.find(t => t.id === booking.teacher_id)?.name || 'Professor não encontrado'
-      })) || []
+      // Enriquecer com nomes e filtrar apenas bookings com alunos (não disponibilidades vazias)
+      const enrichedBookings = data.bookings
+        ?.filter((b: any) => b.student_id) // Apenas aulas agendadas (com aluno)
+        .map((booking: any) => ({
+          ...booking,
+          studentName: students.find(s => s.id === booking.studentId || s.id === booking.student_id)?.name || 'Aluno não encontrado',
+          teacherName: teachers.find(t => t.id === booking.teacherId || t.id === booking.teacher_id)?.name || 'Professor não encontrado'
+        })) || []
 
-      setPendingBookings(enrichedBookings)
+      setBookings(enrichedBookings)
     } catch (error) {
-      console.error('Error fetching pending bookings:', error)
-      setPendingBookings([])
+      console.error('Error fetching bookings:', error)
+      setBookings([])
     }
   }
 
-  const handleApprove = async (bookingId: string) => {
-    try {
-      const response = await fetch(`http://localhost:3001/api/bookings/${bookingId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'CONFIRMED' })
-      })
+  const handleCancel = async (bookingId: string) => {
+    const confirmation = confirm('Tem certeza que deseja cancelar este agendamento?')
+    if (!confirmation) return
 
-      if (!response.ok) throw new Error('Failed to approve booking')
-
-      toast.success('Agendamento aprovado com sucesso!')
-      await fetchPendingBookings()
-    } catch (error) {
-      console.error('Error approving booking:', error)
-      toast.error('Erro ao aprovar agendamento')
-    }
-  }
-
-  const handleReject = async (bookingId: string) => {
-    const reason = prompt('Motivo da rejeição:')
-    if (!reason || reason.trim() === '') {
-      toast.error('É necessário informar um motivo para a rejeição')
-      return
-    }
+    const reason = prompt('Motivo do cancelamento (opcional):')
 
     try {
       const response = await fetch(`http://localhost:3001/api/bookings/${bookingId}`, {
@@ -98,17 +81,35 @@ export default function ApprovalsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           status: 'CANCELLED',
-          notes: `Rejeitado: ${reason}`
+          notes: reason ? `Cancelado pela academia: ${reason}` : 'Cancelado pela academia'
         })
       })
 
-      if (!response.ok) throw new Error('Failed to reject booking')
+      if (!response.ok) throw new Error('Failed to cancel booking')
 
-      toast.success('Agendamento rejeitado')
-      await fetchPendingBookings()
+      toast.success('Agendamento cancelado com sucesso')
+      await fetchBookings()
     } catch (error) {
-      console.error('Error rejecting booking:', error)
-      toast.error('Erro ao rejeitar agendamento')
+      console.error('Error canceling booking:', error)
+      toast.error('Erro ao cancelar agendamento')
+    }
+  }
+
+  const handleComplete = async (bookingId: string) => {
+    try {
+      const response = await fetch(`http://localhost:3001/api/bookings/${bookingId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'COMPLETED' })
+      })
+
+      if (!response.ok) throw new Error('Failed to complete booking')
+
+      toast.success('Aula marcada como concluída')
+      await fetchBookings()
+    } catch (error) {
+      console.error('Error completing booking:', error)
+      toast.error('Erro ao marcar como concluída')
     }
   }
 
@@ -129,32 +130,36 @@ export default function ApprovalsPage() {
     })
   }
 
-  const formatTimeAgo = (dateString: string) => {
-    const date = new Date(dateString)
-    const now = new Date()
-    const diffInMs = now.getTime() - date.getTime()
-    const diffInHours = diffInMs / (1000 * 60 * 60)
-
-    if (diffInHours < 1) {
-      const diffInMinutes = Math.floor(diffInMs / (1000 * 60))
-      return `${diffInMinutes} min atrás`
-    } else if (diffInHours < 24) {
-      return `${Math.floor(diffInHours)} h atrás`
-    } else {
-      const diffInDays = Math.floor(diffInHours / 24)
-      return `${diffInDays} dias atrás`
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'CONFIRMED':
+        return <Badge className="bg-green-100 text-green-800">Confirmado</Badge>
+      case 'COMPLETED':
+        return <Badge className="bg-blue-100 text-blue-800">Concluído</Badge>
+      case 'CANCELLED':
+        return <Badge className="bg-red-100 text-red-800">Cancelado</Badge>
+      default:
+        return <Badge className="bg-gray-100 text-gray-800">{status}</Badge>
     }
   }
+
+  const filteredBookings = statusFilter === 'all'
+    ? bookings
+    : bookings.filter(b => b.status === statusFilter)
 
   if (loading) {
     return (
       <div className="p-6">
         <div className="flex items-center justify-center h-64">
-          <div className="text-gray-500">Carregando aprovações...</div>
+          <div className="text-gray-500">Carregando agendamentos...</div>
         </div>
       </div>
     )
   }
+
+  const confirmedBookings = bookings.filter(b => b.status === 'CONFIRMED').length
+  const completedBookings = bookings.filter(b => b.status === 'COMPLETED').length
+  const cancelledBookings = bookings.filter(b => b.status === 'CANCELLED').length
 
   return (
     <div className="p-6">
@@ -162,41 +167,36 @@ export default function ApprovalsPage() {
       <div className="mb-8">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Aprovação de Agendamentos</h1>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Gestão de Agendamentos</h1>
             <p className="text-gray-600">
-              Analise e aprove aulas agendadas por alunos e professores
+              Visualize e gerencie todas as aulas agendadas na academia
             </p>
           </div>
-          <div className="flex items-center space-x-4">
-            <Badge className="bg-orange-100 text-orange-800 text-lg px-4 py-2">
-              {pendingBookings.length} pendente{pendingBookings.length !== 1 ? 's' : ''}
-            </Badge>
+          <div className="flex items-center space-x-3">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as any)}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
+            >
+              <option value="all">Todos</option>
+              <option value="CONFIRMED">Confirmados</option>
+              <option value="COMPLETED">Concluídos</option>
+              <option value="CANCELLED">Cancelados</option>
+            </select>
           </div>
         </div>
       </div>
 
-      {/* Stats Card */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <Card className="p-6">
-          <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
-              <Clock className="h-6 w-6 text-orange-600" />
-            </div>
-            <div>
-              <div className="text-sm text-gray-600 mb-1">Aguardando Aprovação</div>
-              <div className="text-2xl font-bold text-orange-600">{pendingBookings.length}</div>
-            </div>
-          </div>
-        </Card>
-
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <Card className="p-6">
           <div className="flex items-center space-x-4">
             <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
               <Calendar className="h-6 w-6 text-blue-600" />
             </div>
             <div>
-              <div className="text-sm text-gray-600 mb-1">Total de Aulas</div>
-              <div className="text-2xl font-bold text-blue-600">{pendingBookings.length}</div>
+              <div className="text-sm text-gray-600 mb-1">Total</div>
+              <div className="text-2xl font-bold text-blue-600">{bookings.length}</div>
             </div>
           </div>
         </Card>
@@ -204,13 +204,35 @@ export default function ApprovalsPage() {
         <Card className="p-6">
           <div className="flex items-center space-x-4">
             <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-              <GraduationCap className="h-6 w-6 text-green-600" />
+              <CheckCircle className="h-6 w-6 text-green-600" />
             </div>
             <div>
-              <div className="text-sm text-gray-600 mb-1">Professores Envolvidos</div>
-              <div className="text-2xl font-bold text-green-600">
-                {new Set(pendingBookings.map(b => b.teacher_id)).size}
-              </div>
+              <div className="text-sm text-gray-600 mb-1">Confirmados</div>
+              <div className="text-2xl font-bold text-green-600">{confirmedBookings}</div>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-6">
+          <div className="flex items-center space-x-4">
+            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+              <CheckCircle className="h-6 w-6 text-blue-600" />
+            </div>
+            <div>
+              <div className="text-sm text-gray-600 mb-1">Concluídos</div>
+              <div className="text-2xl font-bold text-blue-600">{completedBookings}</div>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-6">
+          <div className="flex items-center space-x-4">
+            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+              <XCircle className="h-6 w-6 text-red-600" />
+            </div>
+            <div>
+              <div className="text-sm text-gray-600 mb-1">Cancelados</div>
+              <div className="text-2xl font-bold text-red-600">{cancelledBookings}</div>
             </div>
           </div>
         </Card>
@@ -218,24 +240,27 @@ export default function ApprovalsPage() {
 
       {/* Bookings List */}
       <div className="space-y-6">
-        {pendingBookings.length === 0 ? (
+        {filteredBookings.length === 0 ? (
           <Card className="p-8 text-center">
-            <Clock className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">
-              Nenhum agendamento pendente
+              Nenhum agendamento encontrado
             </h3>
             <p className="text-gray-600">
-              Todos os agendamentos foram processados. Você está em dia!
+              {statusFilter === 'all'
+                ? 'Ainda não há aulas agendadas na academia'
+                : `Nenhum agendamento com status "${statusFilter}"`
+              }
             </p>
           </Card>
         ) : (
-          pendingBookings.map((booking) => (
-            <Card key={booking.id} className="p-6 border-l-4 border-l-orange-500 hover:shadow-lg transition-shadow">
+          filteredBookings.map((booking) => (
+            <Card key={booking.id} className="p-6 hover:shadow-lg transition-shadow">
               <div className="flex items-start space-x-4">
                 {/* Icon */}
                 <div className="flex-shrink-0 mt-1">
-                  <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
-                    <Calendar className="h-5 w-5 text-orange-600" />
+                  <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                    <Calendar className="h-5 w-5 text-blue-600" />
                   </div>
                 </div>
 
@@ -243,13 +268,11 @@ export default function ApprovalsPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex-1">
-                      <div className="flex items-center space-x-2 mb-2">
+                      <div className="flex items-center space-x-2 mb-3">
                         <h3 className="text-lg font-semibold text-gray-900">
-                          Agendamento de Aula
+                          Aula Agendada
                         </h3>
-                        <Badge variant="outline" className="text-xs text-orange-600 border-orange-200">
-                          PENDENTE
-                        </Badge>
+                        {getStatusBadge(booking.status)}
                       </div>
 
                       {/* Booking Details */}
@@ -293,38 +316,32 @@ export default function ApprovalsPage() {
                         </div>
                       )}
 
-                      {/* Credits Cost */}
-                      <div className="mb-4">
-                        <Badge className="bg-blue-100 text-blue-800">
-                          {booking.credits_cost} crédito{booking.credits_cost !== 1 ? 's' : ''}
-                        </Badge>
-                      </div>
-
-                      <div className="flex items-center space-x-4 text-xs text-gray-500 mb-4">
-                        <span>Solicitado {formatTimeAgo(booking.created_at)}</span>
-                        <span>•</span>
-                        <span>{new Date(booking.created_at).toLocaleDateString('pt-BR')}</span>
-                      </div>
-
                       {/* Actions */}
                       <div className="flex items-center space-x-3">
-                        <Button
-                          onClick={() => handleApprove(booking.id)}
-                          className="bg-green-600 hover:bg-green-700 text-white"
-                        >
-                          <Check className="h-4 w-4 mr-2" />
-                          Aprovar Agendamento
-                        </Button>
-                        <Button
-                          onClick={() => handleReject(booking.id)}
-                          variant="outline"
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                        >
-                          <X className="h-4 w-4 mr-2" />
-                          Rejeitar
-                        </Button>
+                        {booking.status === 'CONFIRMED' && (
+                          <>
+                            <Button
+                              onClick={() => handleComplete(booking.id)}
+                              size="sm"
+                              className="bg-blue-600 hover:bg-blue-700 text-white"
+                            >
+                              <CheckCircle className="h-4 w-4 mr-2" />
+                              Marcar como Concluída
+                            </Button>
+                            <Button
+                              onClick={() => handleCancel(booking.id)}
+                              size="sm"
+                              variant="outline"
+                              className="text-red-600 hover:bg-red-50 border-red-200"
+                            >
+                              <X className="h-4 w-4 mr-2" />
+                              Cancelar Aula
+                            </Button>
+                          </>
+                        )}
                         <Button
                           onClick={() => setSelectedBooking(booking)}
+                          size="sm"
                           variant="ghost"
                           className="text-gray-600"
                         >
@@ -342,19 +359,19 @@ export default function ApprovalsPage() {
       </div>
 
       {/* Info Section */}
-      {pendingBookings.length > 0 && (
+      {bookings.length > 0 && (
         <Card className="mt-8 p-6 bg-blue-50 border-blue-200">
           <div className="flex items-start space-x-3">
             <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5" />
             <div>
               <h4 className="text-sm font-medium text-blue-900 mb-1">
-                Importante sobre Aprovações de Agendamentos
+                Sobre a Gestão de Agendamentos
               </h4>
               <div className="text-sm text-blue-700 space-y-1">
-                <p>• Ao aprovar, a aula será confirmada e o aluno/professor serão notificados</p>
-                <p>• Rejeições devem ser justificadas para transparência com alunos e professores</p>
-                <p>• Créditos só são debitados após a confirmação do agendamento</p>
-                <p>• Aulas confirmadas aparecem na agenda da academia e do professor</p>
+                <p>• Aulas são agendadas diretamente pelos alunos nos horários disponíveis dos professores</p>
+                <p>• Você pode cancelar aulas confirmadas se necessário</p>
+                <p>• Marque aulas como concluídas após a realização</p>
+                <p>• Use os filtros para visualizar agendamentos por status</p>
               </div>
             </div>
           </div>
@@ -380,6 +397,14 @@ export default function ApprovalsPage() {
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
+                    <div className="text-sm text-gray-600 mb-1">Status</div>
+                    {getStatusBadge(selectedBooking.status)}
+                  </div>
+                  <div>
+                    <div className="text-sm text-gray-600 mb-1">Custo</div>
+                    <div className="font-medium text-gray-900">{selectedBooking.credits_cost} créditos</div>
+                  </div>
+                  <div>
                     <div className="text-sm text-gray-600 mb-1">Aluno</div>
                     <div className="font-medium text-gray-900">{selectedBooking.studentName}</div>
                   </div>
@@ -400,8 +425,10 @@ export default function ApprovalsPage() {
                     <div className="font-medium text-gray-900">{selectedBooking.duration} minutos</div>
                   </div>
                   <div>
-                    <div className="text-sm text-gray-600 mb-1">Custo</div>
-                    <div className="font-medium text-gray-900">{selectedBooking.credits_cost} créditos</div>
+                    <div className="text-sm text-gray-600 mb-1">Criado em</div>
+                    <div className="font-medium text-gray-900">
+                      {new Date(selectedBooking.created_at).toLocaleDateString('pt-BR')}
+                    </div>
                   </div>
                 </div>
 
@@ -414,29 +441,31 @@ export default function ApprovalsPage() {
                   </div>
                 )}
 
-                <div className="flex items-center space-x-3 pt-4">
-                  <Button
-                    onClick={() => {
-                      handleApprove(selectedBooking.id)
-                      setSelectedBooking(null)
-                    }}
-                    className="flex-1 bg-green-600 hover:bg-green-700"
-                  >
-                    <Check className="h-4 w-4 mr-2" />
-                    Aprovar
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      handleReject(selectedBooking.id)
-                      setSelectedBooking(null)
-                    }}
-                    variant="outline"
-                    className="flex-1 text-red-600 hover:bg-red-50 border-red-200"
-                  >
-                    <X className="h-4 w-4 mr-2" />
-                    Rejeitar
-                  </Button>
-                </div>
+                {selectedBooking.status === 'CONFIRMED' && (
+                  <div className="flex items-center space-x-3 pt-4">
+                    <Button
+                      onClick={() => {
+                        handleComplete(selectedBooking.id)
+                        setSelectedBooking(null)
+                      }}
+                      className="flex-1 bg-blue-600 hover:bg-blue-700"
+                    >
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Marcar como Concluída
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        handleCancel(selectedBooking.id)
+                        setSelectedBooking(null)
+                      }}
+                      variant="outline"
+                      className="flex-1 text-red-600 hover:bg-red-50 border-red-200"
+                    >
+                      <X className="h-4 w-4 mr-2" />
+                      Cancelar
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           </Card>

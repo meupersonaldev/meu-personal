@@ -64,8 +64,8 @@ export default function FranquiaSidebar() {
     },
     {
       id: 'approvals',
-      label: 'Aprovações',
-      icon: Clock,
+      label: 'Agendamentos',
+      icon: CalendarCheck,
       href: '/franquia/dashboard/approvals',
       isExpanded: expandedSections.includes('approvals')
     },
