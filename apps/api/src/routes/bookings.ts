@@ -235,10 +235,12 @@ router.post('/', async (req, res) => {
         })
       }
 
-      // Se existir apenas disponibilidade (sem aluno), deletar antes de criar nova
-      const availableBookings = existingBookings?.filter(b => b.student_id === null) || []
+      // Se existir disponibilidade na MESMA unidade, deletar antes de criar nova
+      const availableBookings = existingBookings?.filter(b => 
+        b.student_id === null && b.franchise_id === bookingData.franchise_id && b.date.getTime() === bookingData.date.getTime()
+      ) || []
       if (availableBookings.length > 0) {
-        console.log('🗑️ Removendo disponibilidades antigas no mesmo horário...')
+        console.log('🗑️ Removendo disponibilidades antigas na mesma unidade...')
         for (const oldBooking of availableBookings) {
           await supabase
             .from('bookings')

@@ -213,6 +213,24 @@ export default function ProfessorAgendaPage() {
     return found
   }
 
+  const getAllBookingsForSlot = (date: Date, time: string) => {
+    const dateStr = date.toISOString().split('T')[0]
+    
+    const filtered = bookings.filter(booking => {
+      const bookingDate = new Date(booking.date)
+      const bookingDateStr = bookingDate.toISOString().split('T')[0]
+      const bookingTime = bookingDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      
+      const matchDate = bookingDateStr === dateStr
+      const matchTime = bookingTime === time
+      
+      
+      return matchDate && matchTime
+    })
+    
+    return filtered
+  }
+
   const getAcademyName = (franchiseId?: string) => {
     if (!franchiseId) return null
     const academy = teacherAcademies.find(a => a.id === franchiseId)
@@ -334,17 +352,48 @@ export default function ProfessorAgendaPage() {
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
-      const response = await fetch(`${API_URL}/api/bookings/${bookingId}`, {
-        method: 'DELETE'
-      })
+      // Se filtro está em "todas as unidades", remover de todas
+      if (selectedFranchise === 'todas' && selectedBooking) {
+        const bookingDate = new Date(selectedBooking.date)
+        const bookingDateStr = bookingDate.toISOString().split('T')[0]
+        const bookingTime = bookingDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+        
+        // Buscar todas as disponibilidades no mesmo horário
+        const allBookingsInSlot = bookings.filter(b => {
+          const bDate = new Date(b.date)
+          const bDateStr = bDate.toISOString().split('T')[0]
+          const bTime = bDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+          return bDateStr === bookingDateStr && bTime === bookingTime && b.status === 'AVAILABLE'
+        })
 
-      if (response.ok) {
-        toast.success('Disponibilidade removida!')
-        fetchData()
-        setShowModal(false)
+        let removed = 0
+        for (const booking of allBookingsInSlot) {
+          const response = await fetch(`${API_URL}/api/bookings/${booking.id}`, {
+            method: 'DELETE'
+          })
+          if (response.ok) removed++
+        }
+
+        if (removed > 0) {
+          toast.success(`${removed} disponibilidade(s) removida(s) de todas as unidades!`)
+        } else {
+          toast.error('Erro ao remover disponibilidades')
+        }
       } else {
-        toast.error('Erro ao remover')
+        // Filtro em unidade específica - remover apenas essa
+        const response = await fetch(`${API_URL}/api/bookings/${bookingId}`, {
+          method: 'DELETE'
+        })
+
+        if (response.ok) {
+          toast.success('Disponibilidade removida!')
+        } else {
+          toast.error('Erro ao remover')
+        }
       }
+
+      fetchData()
+      setShowModal(false)
     } catch {
       toast.error('Erro ao remover')
     }
@@ -769,21 +818,37 @@ export default function ProfessorAgendaPage() {
                         {time}
                       </div>
                       {weekDays.map(day => {
-                        const booking = getBookingForSlot(day, time)
                         const isPast = day < new Date() && day.toDateString() !== new Date().toDateString()
                         
-                        // Contar quantas unidades estão bloqueadas nesse horário
-                        const dateStr = day.toISOString().split('T')[0]
-                        const blockedAcademiesCount = booking?.status === 'BLOCKED' ? teacherAcademies.filter(academy => {
-                          return bookings.some(b => {
-                            const bookingDate = new Date(b.date)
-                            const bookingDateStr = bookingDate.toISOString().split('T')[0]
-                            const bookingTime = bookingDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-                            return bookingDateStr === dateStr && bookingTime === time && b.franchiseId === academy.id && b.status === 'BLOCKED'
-                          })
-                        }).length : 0
+                        // Buscar TODOS os bookings nesse slot
+                        const allBookingsInSlot = getAllBookingsForSlot(day, time)
+                        
+                        
+                        // Contar por status
+                        const blockedAcademiesCount = allBookingsInSlot.filter(b => b.status === 'BLOCKED').length
+                        const availableAcademiesCount = allBookingsInSlot.filter(b => b.status === 'AVAILABLE').length
+                        const pendingCount = allBookingsInSlot.filter(b => b.status === 'PENDING').length
+                        const confirmedCount = allBookingsInSlot.filter(b => b.status === 'CONFIRMED').length
+                        
+                        // Determinar qual booking mostrar (prioridade: PENDING > CONFIRMED > AVAILABLE > BLOCKED)
+                        let displayBooking = null
+                        if (pendingCount > 0) {
+                          displayBooking = allBookingsInSlot.find(b => b.status === 'PENDING')
+                        } else if (confirmedCount > 0) {
+                          displayBooking = allBookingsInSlot.find(b => b.status === 'CONFIRMED')
+                        } else if (availableAcademiesCount > 0) {
+                          displayBooking = allBookingsInSlot.find(b => b.status === 'AVAILABLE')
+                        } else if (blockedAcademiesCount > 0) {
+                          displayBooking = allBookingsInSlot.find(b => b.status === 'BLOCKED')
+                        }
+                        
+                        // Filtrar por unidade se não for "todas"
+                        const booking = selectedFranchise === 'todas' 
+                          ? displayBooking 
+                          : allBookingsInSlot.find(b => b.franchiseId === selectedFranchise)
                         
                         const blockedInAllAcademies = blockedAcademiesCount === teacherAcademies.length && teacherAcademies.length > 1
+                        const availableInMultiple = availableAcademiesCount > 1
                         
                         return (
                           <div key={`${day.toISOString()}-${time}`} className="p-1">
@@ -813,7 +878,17 @@ export default function ProfessorAgendaPage() {
                                       📍 {getAcademyName(booking.franchiseId)}
                                     </span>
                                   )}
-                                  {booking.status !== 'BLOCKED' && booking.franchiseId && (
+                                  {booking.status === 'AVAILABLE' && availableInMultiple && (
+                                    <span className="text-[10px] opacity-90 mt-0.5 truncate w-full text-center">
+                                      🔓 {availableAcademiesCount} unidade(s)
+                                    </span>
+                                  )}
+                                  {booking.status === 'AVAILABLE' && !availableInMultiple && booking.franchiseId && (
+                                    <span className="text-[10px] opacity-90 mt-0.5 truncate w-full text-center">
+                                      📍 {getAcademyName(booking.franchiseId)}
+                                    </span>
+                                  )}
+                                  {booking.status !== 'BLOCKED' && booking.status !== 'AVAILABLE' && booking.franchiseId && (
                                     <span className="text-[10px] opacity-90 mt-0.5 truncate w-full text-center">
                                       📍 {getAcademyName(booking.franchiseId)}
                                     </span>
@@ -867,8 +942,26 @@ export default function ProfessorAgendaPage() {
 
                     {selectedBooking.franchiseId && (
                       <div>
-                        <p className="text-sm text-gray-600">Unidade:</p>
-                        <p className="font-medium">📍 {getAcademyName(selectedBooking.franchiseId)}</p>
+                        <p className="text-sm text-gray-600">
+                          {selectedFranchise === 'todas' && selectedBooking.status === 'AVAILABLE' ? 'Removendo de:' : 'Unidade:'}
+                        </p>
+                        <p className="font-medium">
+                          {selectedFranchise === 'todas' && selectedBooking.status === 'AVAILABLE' ? (
+                            `🔓 ${(() => {
+                              const bookingDate = new Date(selectedBooking.date)
+                              const bookingDateStr = bookingDate.toISOString().split('T')[0]
+                              const bookingTime = bookingDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                              return bookings.filter(b => {
+                                const bDate = new Date(b.date)
+                                const bDateStr = bDate.toISOString().split('T')[0]
+                                const bTime = bDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                                return bDateStr === bookingDateStr && bTime === bookingTime && b.status === 'AVAILABLE'
+                              }).length
+                            })()} unidade(s)`
+                          ) : (
+                            `📍 ${getAcademyName(selectedBooking.franchiseId)}`
+                          )}
+                        </p>
                       </div>
                     )}
 
@@ -929,6 +1022,87 @@ export default function ProfessorAgendaPage() {
                     <div>
                       <p className="text-sm font-medium mb-2">Disponibilizar em:</p>
                       <div className="space-y-2">
+                        {/* Opção: Todas as unidades */}
+                        {teacherAcademies.length > 1 && (
+                          <Button
+                            onClick={async () => {
+                              if (!selectedSlot || !user?.id) return
+                              try {
+                                const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                                const [hours, minutes] = selectedSlot.time.split(':')
+                                // Criar data em UTC para evitar problemas de timezone
+                                const bookingDate = new Date(selectedSlot.date + 'T00:00:00Z')
+                                bookingDate.setUTCHours(parseInt(hours) + 3, parseInt(minutes), 0, 0) // +3 para compensar UTC-3
+
+                                // Primeiro, remover qualquer disponibilidade existente neste horário
+                                const existingBookings = bookings.filter(b => {
+                                  const bDate = new Date(b.date)
+                                  const bDateStr = bDate.toISOString().split('T')[0]
+                                  const bTime = bDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                                  return bDateStr === selectedSlot.date && bTime === selectedSlot.time && b.status === 'AVAILABLE'
+                                })
+
+                                for (const booking of existingBookings) {
+                                  await fetch(`${API_URL}/api/bookings/${booking.id}`, { method: 'DELETE' })
+                                }
+
+                                let created = 0
+                                let errors = 0
+                                
+                                // Criar disponibilidade em cada unidade sequencialmente
+                                
+                                for (let i = 0; i < teacherAcademies.length; i++) {
+                                  const academy = teacherAcademies[i]
+                                  try {
+                                    const payload = {
+                                      teacher_id: user.id,
+                                      student_id: null,
+                                      franchise_id: academy.id,
+                                      date: bookingDate.toISOString(),
+                                      duration: 60,
+                                      credits_cost: 1,
+                                      notes: 'Horário disponível',
+                                      status: 'AVAILABLE'
+                                    }
+                                    
+                                    const response = await fetch(`${API_URL}/api/bookings`, {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify(payload)
+                                    })
+                                    
+                                    if (response.ok) {
+                                      created++
+                                    } else {
+                                      errors++
+                                    }
+                                  } catch (err) {
+                                    errors++
+                                  }
+                                }
+                                
+                                if (created > 0) {
+                                  toast.success(`Horário disponibilizado em ${created} unidade(s)!`)
+                                }
+                                if (errors > 0) {
+                                  toast.error(`${errors} erro(s) ao criar disponibilidades`)
+                                }
+                                
+                                await fetchData()
+                                setShowModal(false)
+                              } catch (error) {
+                                console.error('Erro geral:', error)
+                                toast.error('Erro ao processar requisição')
+                              }
+                            }}
+                            className="w-full justify-start bg-green-600 text-white hover:bg-green-700"
+                          >
+                            <Plus className="h-4 w-4 mr-2" />
+                            🔓 Todas as unidades ({teacherAcademies.length})
+                          </Button>
+                        )}
+                        
+                        {/* Opções individuais */}
                         {teacherAcademies.map((franchise) => (
                           <Button
                             key={franchise.id}
