@@ -411,6 +411,215 @@ router.delete('/:id', async (req, res) => {
   }
 })
 
+// POST /api/bookings/smart-booking - Criar agendamento inteligente (aluno existente ou externo)
+router.post('/smart-booking', async (req, res) => {
+  try {
+    const smartBookingSchema = z.object({
+      teacher_id: z.string().uuid(),
+      franchise_id: z.string().uuid(),
+      date: z.string(),
+      duration: z.number().min(30).max(180).optional().default(60),
+      notes: z.string().optional(),
+
+      // Cenário 1: Aluno existente (veio pelo app)
+      student_id: z.string().uuid().optional(),
+
+      // Cenário 2: Aluno externo (professor traz)
+      external_student: z.object({
+        name: z.string().min(2),
+        email: z.string().email(),
+        phone: z.string().optional()
+      }).optional(),
+
+      // Forma de pagamento
+      payment_source: z.enum(['student_credits', 'teacher_credits', 'academy_guest']),
+      credits_cost: z.number().min(1).optional().default(1)
+    })
+
+    const validatedData = smartBookingSchema.parse(req.body)
+    const { teacher_id, franchise_id, date, duration, notes, student_id, external_student, payment_source, credits_cost } = validatedData
+
+    // Validação: precisa ter UM dos dois (student_id OU external_student)
+    if (!student_id && !external_student) {
+      return res.status(400).json({
+        error: 'Você deve fornecer student_id (aluno existente) ou external_student (aluno novo)'
+      })
+    }
+
+    if (student_id && external_student) {
+      return res.status(400).json({
+        error: 'Forneça apenas student_id OU external_student, não ambos'
+      })
+    }
+
+    let finalStudentId = student_id
+
+    // CENÁRIO 2: Aluno externo - criar novo usuário
+    if (external_student) {
+      // Verificar se email já existe
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('id, role')
+        .eq('email', external_student.email)
+        .single()
+
+      if (existingUser) {
+        // Email existe - usar esse usuário
+        finalStudentId = existingUser.id
+
+        // Verificar se já está vinculado à academia
+        const { data: academyLink } = await supabase
+          .from('academy_students')
+          .select('id')
+          .eq('student_id', existingUser.id)
+          .eq('academy_id', franchise_id)
+          .single()
+
+        // Se não está vinculado, vincular agora
+        if (!academyLink) {
+          await supabase
+            .from('academy_students')
+            .insert({
+              student_id: existingUser.id,
+              academy_id: franchise_id,
+              status: 'active',
+              plan_id: null // Aluno externo sem plano
+            })
+        }
+      } else {
+        // Email não existe - criar novo usuário
+        const { data: newUser, error: userError } = await supabase
+          .from('users')
+          .insert({
+            name: external_student.name,
+            email: external_student.email,
+            phone: external_student.phone,
+            role: 'STUDENT',
+            is_active: true
+          })
+          .select()
+          .single()
+
+        if (userError) {
+          console.error('Erro ao criar usuário externo:', userError)
+          return res.status(500).json({ error: 'Erro ao criar aluno externo' })
+        }
+
+        finalStudentId = newUser.id
+
+        // Vincular à academia (sem plano)
+        const { error: academyError } = await supabase
+          .from('academy_students')
+          .insert({
+            student_id: newUser.id,
+            academy_id: franchise_id,
+            status: 'active',
+            plan_id: null
+          })
+
+        if (academyError) {
+          console.error('Erro ao vincular aluno à academia:', academyError)
+          // Rollback: remover usuário criado
+          await supabase.from('users').delete().eq('id', newUser.id)
+          return res.status(500).json({ error: 'Erro ao vincular aluno à academia' })
+        }
+      }
+    }
+
+    // CENÁRIO 1: Aluno existente - validar créditos se necessário
+    if (student_id && payment_source === 'student_credits') {
+      const { data: subscription } = await supabase
+        .from('student_subscriptions')
+        .select('credits_remaining')
+        .eq('student_id', student_id)
+        .eq('status', 'active')
+        .single()
+
+      if (!subscription || subscription.credits_remaining < credits_cost) {
+        return res.status(400).json({
+          error: 'Aluno não possui créditos suficientes',
+          available_credits: subscription?.credits_remaining || 0,
+          required_credits: credits_cost
+        })
+      }
+    }
+
+    // Validar disponibilidade do horário na academia
+    const startDate = new Date(date)
+    const endDate = new Date(startDate.getTime() + duration * 60000)
+
+    const { data: conflictingBookings, error: conflictError } = await supabase
+      .from('bookings')
+      .select('id')
+      .eq('franchise_id', franchise_id)
+      .eq('teacher_id', teacher_id)
+      .gte('date', startDate.toISOString())
+      .lt('date', endDate.toISOString())
+      .neq('status', 'CANCELLED')
+
+    if (conflictError) {
+      console.error('Erro ao verificar conflitos:', conflictError)
+      return res.status(500).json({ error: 'Erro ao validar disponibilidade' })
+    }
+
+    if (conflictingBookings && conflictingBookings.length > 0) {
+      return res.status(409).json({
+        error: 'Professor já possui agendamento neste horário nesta academia'
+      })
+    }
+
+    // Criar booking
+    const { data: booking, error: bookingError } = await supabase
+      .from('bookings')
+      .insert({
+        student_id: finalStudentId,
+        teacher_id,
+        franchise_id,
+        date: startDate.toISOString(),
+        duration,
+        notes,
+        credits_cost,
+        status: payment_source === 'student_credits' ? 'PENDING' : 'CONFIRMED',
+        payment_source,
+        created_at: new Date().toISOString()
+      })
+      .select(`
+        *,
+        student:users!bookings_student_id_fkey (id, name, email, phone),
+        teacher:users!bookings_teacher_id_fkey (id, name, email),
+        franchise:academies!bookings_franchise_id_fkey (id, name, city)
+      `)
+      .single()
+
+    if (bookingError) {
+      console.error('Erro ao criar booking:', bookingError)
+      return res.status(500).json({ error: 'Erro ao criar agendamento' })
+    }
+
+    // Se pagamento com créditos do aluno, descontar
+    if (payment_source === 'student_credits') {
+      await supabase.rpc('decrement_student_credits', {
+        p_student_id: finalStudentId,
+        p_credits: credits_cost
+      })
+    }
+
+    return res.status(201).json({
+      booking,
+      message: external_student
+        ? 'Agendamento criado! Aluno externo cadastrado na academia.'
+        : 'Agendamento criado com sucesso!',
+      student_was_created: !!external_student
+    })
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Dados inválidos', details: err.errors })
+    }
+    console.error('Erro no smart booking:', err)
+    return res.status(500).json({ error: 'Erro interno ao criar agendamento' })
+  }
+})
+
 // POST /api/bookings/checkin/validate - Validar check-in de professores via QR Code
 router.post('/checkin/validate', async (req, res) => {
   try {
