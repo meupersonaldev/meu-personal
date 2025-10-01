@@ -1,6 +1,7 @@
 import express from 'express'
 import { z } from 'zod'
 import { supabase } from '../lib/supabase'
+import { createNotification } from './notifications'
 
 const router = express.Router()
 
@@ -606,6 +607,20 @@ router.post('/smart-booking', async (req, res) => {
         p_credits: credits_cost
       })
     }
+
+    // Criar notificação para a academia
+    await createNotification(
+      franchise_id,
+      'new_booking',
+      'Novo Agendamento',
+      `${booking.student?.name || 'Aluno'} agendou aula com ${booking.teacher?.name || 'Professor'} para ${new Date(booking.date).toLocaleString('pt-BR')}`,
+      {
+        booking_id: booking.id,
+        student_id: finalStudentId,
+        teacher_id,
+        date: booking.date
+      }
+    )
 
     return res.status(201).json({
       booking,

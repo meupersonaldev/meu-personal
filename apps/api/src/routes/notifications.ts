@@ -1,4 +1,5 @@
 import express from 'express'
+import { z } from 'zod'
 import { supabase } from '../config/supabase'
 
 const router = express.Router()
@@ -6,17 +7,52 @@ const router = express.Router()
 // Buscar notificações
 router.get('/', async (req, res) => {
   try {
-    const { franchise_admin_id, user_id, limit = 50, unread } = req.query
+    const { academy_id, franchise_admin_id, user_id, limit = 50, unread_only } = req.query
 
-    const userId = franchise_admin_id || user_id
+    const academyId = academy_id || franchise_admin_id
+    const userId = user_id
 
-    if (!userId) {
-      return res.status(400).json({ error: 'user_id ou franchise_admin_id é obrigatório' })
+    if (!academyId && !userId) {
+      return res.status(400).json({ error: 'academy_id ou user_id é obrigatório' })
     }
 
-    // Por enquanto, retornar array vazio para não quebrar o frontend
-    // TODO: Criar tabela de notificações para professores/alunos
-    res.json({ notifications: [] })
+    let query = supabase
+      .from('notifications')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(parseInt(limit as string))
+
+    if (academyId) {
+      query = query.eq('academy_id', academyId)
+    }
+
+    if (unread_only === 'true') {
+      query = query.eq('read', false)
+    }
+
+    const { data: notifications, error } = await query
+
+    if (error) {
+      console.error('Error fetching notifications:', error)
+      return res.status(500).json({ error: 'Erro ao buscar notificações' })
+    }
+
+    // Contar não lidas
+    let countQuery = supabase
+      .from('notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('read', false)
+
+    if (academyId) {
+      countQuery = countQuery.eq('academy_id', academyId)
+    }
+
+    const { count: unreadCount } = await countQuery
+
+    res.json({
+      notifications: notifications || [],
+      unreadCount: unreadCount || 0
+    })
   } catch (error) {
     console.error('Error fetching notifications:', error)
     res.status(500).json({ error: 'Erro interno do servidor' })
@@ -24,18 +60,26 @@ router.get('/', async (req, res) => {
 })
 
 // Marcar notificação como lida
-router.put('/:id/read', async (req, res) => {
+router.patch('/:id/read', async (req, res) => {
   try {
     const { id } = req.params
 
-    const { error } = await supabase
-      .from('franchise_notifications')
-      .update({ is_read: true })
+    const { data: notification, error } = await supabase
+      .from('notifications')
+      .update({
+        read: true,
+        updated_at: new Date().toISOString()
+      })
       .eq('id', id)
+      .select()
+      .single()
 
-    if (error) throw error
+    if (error) {
+      console.error('Error marking notification as read:', error)
+      return res.status(500).json({ error: 'Erro ao marcar como lida' })
+    }
 
-    res.json({ success: true })
+    res.json({ notification })
   } catch (error) {
     console.error('Error marking notification as read:', error)
     res.status(500).json({ error: 'Erro interno do servidor' })
@@ -43,23 +87,29 @@ router.put('/:id/read', async (req, res) => {
 })
 
 // Marcar todas as notificações como lidas
-router.put('/read-all', async (req, res) => {
+router.patch('/mark-all-read', async (req, res) => {
   try {
-    const { franchise_admin_id } = req.body
+    const { academy_id } = req.body
 
-    if (!franchise_admin_id) {
-      return res.status(400).json({ error: 'franchise_admin_id é obrigatório' })
+    if (!academy_id) {
+      return res.status(400).json({ error: 'academy_id é obrigatório' })
     }
 
     const { error } = await supabase
-      .from('franchise_notifications')
-      .update({ is_read: true })
-      .eq('franchise_admin_id', franchise_admin_id)
-      .eq('is_read', false)
+      .from('notifications')
+      .update({
+        read: true,
+        updated_at: new Date().toISOString()
+      })
+      .eq('academy_id', academy_id)
+      .eq('read', false)
 
-    if (error) throw error
+    if (error) {
+      console.error('Error marking all as read:', error)
+      return res.status(500).json({ error: 'Erro ao marcar todas como lidas' })
+    }
 
-    res.json({ success: true })
+    res.json({ message: 'Todas marcadas como lidas' })
   } catch (error) {
     console.error('Error marking all notifications as read:', error)
     res.status(500).json({ error: 'Erro interno do servidor' })
@@ -69,61 +119,85 @@ router.put('/read-all', async (req, res) => {
 // Criar notificação (usado internamente pelo sistema)
 router.post('/', async (req, res) => {
   try {
-    const { franchise_admin_id, type, title, message, data = {} } = req.body
+    const notificationSchema = z.object({
+      academy_id: z.string().uuid(),
+      type: z.enum(['new_booking', 'booking_cancelled', 'checkin', 'new_student']),
+      title: z.string().min(1).max(255),
+      message: z.string().min(1),
+      data: z.record(z.any()).optional()
+    })
 
-    if (!franchise_admin_id || !type || !title || !message) {
-      return res.status(400).json({
-        error: 'franchise_admin_id, type, title e message são obrigatórios'
-      })
-    }
+    const validatedData = notificationSchema.parse(req.body)
 
     const { data: notification, error } = await supabase
-      .from('franchise_notifications')
+      .from('notifications')
       .insert({
-        franchise_admin_id,
-        type,
-        title,
-        message,
-        data
+        ...validatedData,
+        read: false,
+        created_at: new Date().toISOString()
       })
       .select()
       .single()
 
-    if (error) throw error
+    if (error) {
+      console.error('Error creating notification:', error)
+      return res.status(500).json({ error: 'Erro ao criar notificação' })
+    }
 
-    res.status(201).json(notification)
+    res.status(201).json({ notification })
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Dados inválidos', details: err.errors })
+    }
+    console.error('Error creating notification:', err)
+    res.status(500).json({ error: 'Erro interno do servidor' })
+  }
+})
+
+// DELETE /api/notifications/:id - Deletar notificação
+router.delete('/:id', async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const { error } = await supabase
+      .from('notifications')
+      .delete()
+      .eq('id', id)
+
+    if (error) {
+      console.error('Error deleting notification:', error)
+      return res.status(500).json({ error: 'Erro ao deletar notificação' })
+    }
+
+    res.json({ message: 'Notificação deletada' })
   } catch (error) {
-    console.error('Error creating notification:', error)
+    console.error('Error deleting notification:', error)
     res.status(500).json({ error: 'Erro interno do servidor' })
   }
 })
 
 // Função auxiliar para criar notificação (exportada para uso em outras rotas)
 export async function createNotification(
-  franchise_admin_id: string,
-  type: string,
+  academy_id: string,
+  type: 'new_booking' | 'booking_cancelled' | 'checkin' | 'new_student',
   title: string,
   message: string,
   data: any = {}
 ) {
   try {
-    const { data: notification, error } = await supabase
-      .from('franchise_notifications')
-      .insert({
-        franchise_admin_id,
-        type,
-        title,
-        message,
-        data
-      })
-      .select()
-      .single()
-
-    if (error) throw error
-    return notification
+    await supabase.from('notifications').insert({
+      academy_id,
+      type,
+      title,
+      message,
+      data,
+      read: false,
+      created_at: new Date().toISOString()
+    })
+    return true
   } catch (error) {
     console.error('Error creating notification:', error)
-    return null
+    return false
   }
 }
 
