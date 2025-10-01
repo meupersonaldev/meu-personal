@@ -1,11 +1,97 @@
 import { Router } from 'express'
 import { supabase } from '../lib/supabase'
+import bcrypt from 'bcryptjs'
 
 const router = Router()
 
 // ============================================
 // ROTAS DA FRANQUEADORA
 // ============================================
+
+// POST /api/franchises/create - Criar franquia com admin
+router.post('/create', async (req, res) => {
+  try {
+    const { academy, admin } = req.body
+
+    // 1. Criar usuário admin
+    const hashedPassword = await bcrypt.hash(admin.password, 10)
+
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .insert({
+        name: admin.name,
+        email: admin.email,
+        password_hash: hashedPassword,
+        role: 'FRANCHISE_ADMIN',
+        is_active: true
+      })
+      .select()
+      .single()
+
+    if (userError) {
+      console.error('Error creating user:', userError)
+      throw new Error('Erro ao criar usuário admin')
+    }
+
+    // 2. Criar academia
+    const { data: newAcademy, error: academyError } = await supabase
+      .from('academies')
+      .insert({
+        franqueadora_id: academy.franqueadora_id,
+        name: academy.name,
+        email: academy.email,
+        phone: academy.phone,
+        address: academy.address,
+        city: academy.city,
+        state: academy.state,
+        zip_code: academy.zip_code,
+        franchise_fee: academy.franchise_fee || 0,
+        royalty_percentage: academy.royalty_percentage || 0,
+        monthly_revenue: 0,
+        contract_start_date: academy.contract_start_date,
+        contract_end_date: academy.contract_end_date,
+        is_active: true
+      })
+      .select()
+      .single()
+
+    if (academyError) {
+      console.error('Error creating academy:', academyError)
+      // Rollback: deletar usuário
+      await supabase.from('users').delete().eq('id', user.id)
+      throw new Error('Erro ao criar academia')
+    }
+
+    // 3. Criar vínculo franchise_admin
+    const { error: franchiseAdminError } = await supabase
+      .from('franchise_admins')
+      .insert({
+        user_id: user.id,
+        academy_id: newAcademy.id
+      })
+
+    if (franchiseAdminError) {
+      console.error('Error creating franchise admin link:', franchiseAdminError)
+      // Rollback: deletar usuário e academia
+      await supabase.from('users').delete().eq('id', user.id)
+      await supabase.from('academies').delete().eq('id', newAcademy.id)
+      throw new Error('Erro ao vincular admin à academia')
+    }
+
+    res.status(201).json({
+      academy: newAcademy,
+      admin: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role
+      }
+    })
+  } catch (error: any) {
+    console.error('Error creating franchise with admin:', error)
+    res.status(500).json({ error: error.message || 'Erro ao criar franquia' })
+  }
+})
 
 // GET /api/franchises - Listar todas as franquias (academias)
 router.get('/', async (req, res) => {
@@ -141,25 +227,75 @@ router.put('/:id', async (req, res) => {
   }
 })
 
-// DELETE /api/franchises/:id - Deletar franquia (soft delete)
+// DELETE /api/franchises/:id - Deletar franquia (hard delete)
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params
 
-    const { data, error } = await supabase
+    // 1. Buscar admins da franquia para deletar depois
+    const { data: admins } = await supabase
+      .from('franchise_admins')
+      .select('user_id')
+      .eq('academy_id', id)
+
+    // 2. Deletar vínculo franchise_admins
+    await supabase
+      .from('franchise_admins')
+      .delete()
+      .eq('academy_id', id)
+
+    // 3. Deletar academy_teachers
+    await supabase
+      .from('academy_teachers')
+      .delete()
+      .eq('academy_id', id)
+
+    // 4. Deletar academy_students
+    await supabase
+      .from('academy_students')
+      .delete()
+      .eq('academy_id', id)
+
+    // 5. Deletar academy_plans
+    await supabase
+      .from('academy_plans')
+      .delete()
+      .eq('academy_id', id)
+
+    // 6. Deletar academy_time_slots
+    await supabase
+      .from('academy_time_slots')
+      .delete()
+      .eq('academy_id', id)
+
+    // 7. Deletar a academia
+    const { error: academyError } = await supabase
       .from('academies')
-      .update({ is_active: false })
+      .delete()
       .eq('id', id)
-      .select()
-      .single()
 
-    if (error) throw error
+    if (academyError) throw academyError
 
-    if (!data) {
-      return res.status(404).json({ error: 'Franchise not found' })
+    // 8. Deletar usuários admin que eram apenas dessa franquia
+    if (admins && admins.length > 0) {
+      for (const admin of admins) {
+        // Verificar se o usuário é admin de outras franquias
+        const { data: otherAdminRoles } = await supabase
+          .from('franchise_admins')
+          .select('id')
+          .eq('user_id', admin.user_id)
+
+        // Se não tem outras franquias, deletar usuário
+        if (!otherAdminRoles || otherAdminRoles.length === 0) {
+          await supabase
+            .from('users')
+            .delete()
+            .eq('id', admin.user_id)
+        }
+      }
     }
 
-    res.json({ message: 'Franchise deactivated successfully' })
+    res.json({ message: 'Franchise deleted successfully' })
   } catch (error: any) {
     console.error('Error deleting franchise:', error)
     res.status(500).json({ error: error.message })

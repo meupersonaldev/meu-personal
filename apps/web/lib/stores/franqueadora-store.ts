@@ -260,70 +260,30 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
 
       addAcademy: async (academyData: any) => {
         try {
-          // 1. Criar usuário no Supabase Auth
-          const { data: authData, error: authError } = await supabase.auth.signUp({
-            email: academyData.admin_email,
-            password: academyData.admin_password,
-            options: {
-              data: {
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+
+          // Enviar tudo para a API do backend criar
+          const response = await fetch(`${API_URL}/api/franchises/create`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              academy: academyData,
+              admin: {
                 name: academyData.admin_name,
-                user_type: 'FRANCHISE_ADMIN'
-              },
-              emailRedirectTo: undefined  // Desabilitar redirect de confirmação
-            }
+                email: academyData.admin_email,
+                password: academyData.admin_password
+              }
+            })
           })
 
-          if (authError) {
-            console.error('Error creating auth user:', authError)
-
-            // Se o erro for de email inválido, pode ser configuração do Supabase
-            if (authError.message.includes('invalid') || authError.message.includes('Invalid')) {
-              throw new Error(
-                'Erro: Configure o Supabase para permitir emails sem verificação.\n' +
-                'Vá em: Authentication > Providers > Email > Desabilite "Confirm email"'
-              )
-            }
-
-            throw new Error(`Erro ao criar usuário: ${authError.message}`)
+          if (!response.ok) {
+            const error = await response.json()
+            throw new Error(error.message || 'Erro ao criar franquia')
           }
 
-          if (!authData.user) {
-            throw new Error('Usuário não foi criado')
-          }
+          const { academy, admin } = await response.json()
 
-          // 2. Inserir dados da academia (sem os campos de admin)
-          const { admin_email, admin_password, admin_name, ...academyFields } = academyData
-
-          const { data: academy, error: academyError } = await supabase
-            .from('academies')
-            .insert([academyFields])
-            .select()
-            .single()
-
-          if (academyError) {
-            console.error('Error creating academy:', academyError)
-            // Tentar remover o usuário criado se a academia falhar
-            await supabase.auth.admin.deleteUser(authData.user.id)
-            throw academyError
-          }
-
-          // 3. Criar registro em franchise_admins
-          const { error: adminError } = await supabase
-            .from('franchise_admins')
-            .insert([{
-              user_id: authData.user.id,
-              academy_id: academy.id
-            }])
-
-          if (adminError) {
-            console.error('Error creating franchise admin:', adminError)
-            // Rollback: remover academia e usuário
-            await supabase.from('academies').delete().eq('id', academy.id)
-            await supabase.auth.admin.deleteUser(authData.user.id)
-            throw adminError
-          }
-
-          // Atualizar lista local
+          // A API já cria o franchise_admin, só atualizar lista local
           set(state => ({
             academies: [...state.academies, academy]
           }))
