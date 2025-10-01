@@ -20,7 +20,8 @@
       "Bash(find:*)",
       "mcp__supabase__get_logs",
       "Bash(cat:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(git mv:*)"
     ],
     "deny": [],
     "ask": []
