@@ -41,20 +41,46 @@ export default function FinancePage() {
     return Array.from(planRevenue.values()).sort((a, b) => b.revenue - a.revenue)
   }, [students, plans])
 
-  // Histórico de transações (mock - substituir por dados reais)
+  // Histórico de transações baseado em agendamentos concluídos
   const transactions = useMemo(() => {
-    return students.map(student => {
-      const plan = plans.find(p => p.id === student.planId)
-      return {
-        id: student.id,
-        studentName: student.name,
-        planName: plan?.name || 'Plano não encontrado',
-        amount: plan?.price || 0,
-        date: student.join_date,
-        status: student.status === 'active' ? 'completed' : 'pending'
-      }
-    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-  }, [students, plans])
+    // Gerar transações baseadas em aulas concluídas
+    const bookingTransactions = classes
+      .filter(c => c.status === 'completed')
+      .map(classItem => {
+        const student = students.find(s => s.id === classItem.studentId)
+        const teacher = teachers.find(t => t.id === classItem.teacherId)
+        return {
+          id: classItem.id,
+          studentName: student?.name || 'Aluno não encontrado',
+          teacherName: teacher?.name || 'Professor não encontrado',
+          planName: 'Aula Avulsa',
+          amount: classItem.price,
+          date: classItem.date,
+          status: 'completed' as const,
+          type: 'class' as const
+        }
+      })
+
+    // Adicionar transações de planos (assinaturas)
+    const planTransactions = students
+      .filter(s => s.planId)
+      .map(student => {
+        const plan = plans.find(p => p.id === student.planId)
+        return {
+          id: `plan-${student.id}`,
+          studentName: student.name,
+          teacherName: '-',
+          planName: plan?.name || 'Plano não encontrado',
+          amount: plan?.price || 0,
+          date: student.join_date,
+          status: student.status === 'active' ? ('completed' as const) : ('pending' as const),
+          type: 'plan' as const
+        }
+      })
+
+    return [...bookingTransactions, ...planTransactions]
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  }, [students, plans, classes, teachers])
 
   // Crescimento mensal (calculado)
   const monthlyGrowth = analytics?.monthlyGrowth || 0
