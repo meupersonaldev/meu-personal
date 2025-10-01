@@ -23,7 +23,7 @@ interface Booking {
 }
 
 export default function AgendamentosGestaoPage() {
-  const { teachers, students, fetchTeachers, fetchStudents } = useFranquiaStore()
+  const { teachers, students, fetchTeachers, fetchStudents, franquiaUser } = useFranquiaStore()
   const [bookings, setBookings] = useState<Booking[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
@@ -47,20 +47,27 @@ export default function AgendamentosGestaoPage() {
   }
 
   const fetchBookings = async () => {
+    if (!franquiaUser?.academyId) {
+      console.log('No academy ID found')
+      return
+    }
+
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      const response = await fetch(`${API_URL}/api/bookings`)
+      const response = await fetch(`${API_URL}/api/bookings?franchise_id=${franquiaUser.academyId}`)
       if (!response.ok) throw new Error('Failed to fetch bookings')
 
       const data = await response.json()
 
       // Enriquecer com nomes e filtrar apenas bookings com alunos (não disponibilidades vazias)
       const enrichedBookings = data.bookings
-        ?.filter((b: any) => b.student_id) // Apenas aulas agendadas (com aluno)
+        ?.filter((b: any) => b.student_id || b.studentId) // Apenas aulas agendadas (com aluno)
         .map((booking: any) => ({
           ...booking,
-          studentName: students.find(s => s.id === booking.studentId || s.id === booking.student_id)?.name || 'Aluno não encontrado',
-          teacherName: teachers.find(t => t.id === booking.teacherId || t.id === booking.teacher_id)?.name || 'Professor não encontrado'
+          student_id: booking.student_id || booking.studentId,
+          teacher_id: booking.teacher_id || booking.teacherId,
+          studentName: booking.studentName || students.find(s => s.id === booking.studentId || s.id === booking.student_id)?.name || 'Aluno não encontrado',
+          teacherName: booking.teacherName || teachers.find(t => t.id === booking.teacherId || t.id === booking.teacher_id)?.name || 'Professor não encontrado'
         })) || []
 
       setBookings(enrichedBookings)

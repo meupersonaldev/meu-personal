@@ -24,7 +24,7 @@ const updateBookingSchema = z.object({
 // GET /api/bookings - Listar agendamentos
 router.get('/', async (req, res) => {
   try {
-    const { student_id, teacher_id, status } = req.query
+    const { student_id, teacher_id, franchise_id, status } = req.query
 
     let query = supabase
       .from('bookings')
@@ -40,6 +40,9 @@ router.get('/', async (req, res) => {
     }
     if (teacher_id) {
       query = query.eq('teacher_id', teacher_id)
+    }
+    if (franchise_id) {
+      query = query.eq('franchise_id', franchise_id)
     }
     if (status) {
       query = query.eq('status', status)
