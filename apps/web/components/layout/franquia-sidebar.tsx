@@ -94,8 +94,7 @@ export default function FranquiaSidebar() {
       subItems: [
         { label: 'Agenda da Academia', href: '/franquia/dashboard/agenda', icon: Calendar },
         { label: 'Agendamentos', href: '/franquia/dashboard/agendamentos', icon: CalendarCheck },
-        { label: 'Financeiro', href: '/franquia/dashboard/finance', icon: DollarSign },
-        { label: 'Relatórios', href: '/franquia/dashboard/reports', icon: FileText }
+        { label: 'Financeiro', href: '/franquia/dashboard/finance', icon: DollarSign }
       ]
     }
   ]
