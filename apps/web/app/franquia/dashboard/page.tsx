@@ -1,21 +1,22 @@
 
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Users,
   GraduationCap,
   Calendar,
   DollarSign,
-  Filter,
-  Plus,
+  BarChart3,
   Eye,
   Edit,
   Trash2,
+  Plus,
+  Filter,
   Shield,
-  BarChart3,
-  Bell
+  CreditCard,
+  Clock
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -26,6 +27,7 @@ import { useFranquiaStore, Teacher, Student } from '@/lib/stores/franquia-store'
 import TeacherModal from '@/components/modals/teacher-modal'
 import StudentModal from '@/components/modals/student-modal'
 import type { Teacher as LegacyTeacher, Student as LegacyStudent } from '@/lib/stores/franquia-store'
+import NotificationsBell from '@/components/layout/notifications-bell'
 
 // Tipos locais para compatibilidade com os Modais (que usam o store legado)
 type ModalTeacher = {
@@ -66,8 +68,7 @@ export default function FranquiaDashboard() {
     deleteStudent,
     fetchTeachers,
     fetchStudents,
-    fetchAnalytics,
-    setAcademy
+    fetchAnalytics
   } = useFranquiaStore()
   const [activeTab] = useState<'overview' | 'teachers' | 'students' | 'settings'>('overview')
   const [searchTerm, setSearchTerm] = useState('')
@@ -448,8 +449,9 @@ export default function FranquiaDashboard() {
                           <span>{student.email}</span>
                           <span>{student.phone}</span>
                         </div>
-                        <div className="flex items-center mt-1 space-x-4 text-sm text-gray-500">
-                          <span>📅 Membro desde {new Date(student.join_date ?? Date.now()).toLocaleDateString()}</span>
+                        <div className="flex items-center mt-1 space-x-2 text-sm text-gray-500">
+                          <Calendar className="h-4 w-4 mr-1" />
+                          <span className="whitespace-nowrap">Membro desde {new Date(student.join_date ?? Date.now()).toLocaleDateString()}</span>
                         </div>
                       </div>
                     </div>
@@ -461,8 +463,14 @@ export default function FranquiaDashboard() {
                           {student.status === 'active' ? 'Ativo' : 'Inativo'}
                         </Badge>
                         <div className="mt-2 space-y-1 text-sm text-gray-600">
-                          <p>💳 {student.credits} créditos</p>
-                          <p>🕒 Última atividade: {student.last_activity ? new Date(student.last_activity).toLocaleDateString() : 'N/A'}</p>
+                          <div className="flex items-center space-x-2">
+                            <CreditCard className="h-4 w-4 text-gray-500" />
+                            <span>{student.credits} créditos</span>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Clock className="h-4 w-4 text-gray-500" />
+                            <span>Última atividade: {student.last_activity ? new Date(student.last_activity).toLocaleDateString() : 'N/A'}</span>
+                          </div>
                         </div>
                       </div>
                       <div className="flex space-x-2">
@@ -686,9 +694,7 @@ export default function FranquiaDashboard() {
                 <h1 className="text-2xl font-bold text-gray-900">Dashboard da Franquia</h1>
                 <p className="text-sm text-gray-600">Bem-vindo, {franquiaUser?.name || 'Admin'}</p>
               </div>
-              <Button variant="ghost" size="sm">
-                <Bell className="h-4 w-4" />
-              </Button>
+              <NotificationsBell />
             </div>
           </div>
 
@@ -697,9 +703,7 @@ export default function FranquiaDashboard() {
               <p className="text-sm uppercase tracking-wide text-gray-500">Painel</p>
               <h1 className="text-3xl font-bold text-gray-900">Dashboard da Franquia</h1>
             </div>
-            <Button variant="ghost" size="sm">
-              <Bell className="h-4 w-4" />
-            </Button>
+            <NotificationsBell />
           </div>
 
         <div className="space-y-6">
