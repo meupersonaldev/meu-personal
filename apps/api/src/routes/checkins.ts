@@ -17,18 +17,26 @@ const router = Router()
 // GET /api/checkins?academy_id=xxx - Listar check-ins de uma academia
 router.get('/', async (req, res) => {
   try {
-    const { academy_id } = req.query
+    const { academy_id, teacher_id } = req.query as { academy_id?: string; teacher_id?: string }
 
-    if (!academy_id) {
-      return res.status(400).json({ error: 'academy_id é obrigatório' })
-    }
-
-    const { data, error } = await supabase
+    let query = supabase
       .from('checkins')
       .select('*')
-      .eq('academy_id', academy_id)
       .order('created_at', { ascending: false })
-      .limit(500) // Últimos 500 registros
+      .limit(500)
+
+    if (academy_id) {
+      query = query.eq('academy_id', academy_id)
+    }
+    if (teacher_id) {
+      query = query.eq('teacher_id', teacher_id)
+    }
+
+    if (!academy_id && !teacher_id) {
+      return res.status(400).json({ error: 'academy_id ou teacher_id é obrigatório' })
+    }
+
+    const { data, error } = await query
 
     if (error) {
       // Se tabela não existe, retorna array vazio

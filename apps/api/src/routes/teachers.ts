@@ -439,6 +439,26 @@ router.get('/:id', async (req, res) => {
       return res.status(500).json({ error: 'Erro interno do servidor' })
     }
 
+    // Se não tem teacher_profile, criar um automaticamente
+    if (!teacher.teacher_profiles || teacher.teacher_profiles.length === 0) {
+      const { data: newProfile } = await supabase
+        .from('teacher_profiles')
+        .insert({
+          user_id: id,
+          bio: '',
+          specialties: [],
+          hourly_rate: 0,
+          rating: null,
+          total_reviews: 0,
+          availability: {},
+          is_available: true
+        })
+        .select()
+        .single()
+
+      teacher.teacher_profiles = newProfile ? [newProfile] : []
+    }
+
     res.json(teacher)
 
   } catch (error) {
@@ -871,6 +891,44 @@ router.put('/:id/availability', async (req, res) => {
   } catch (error) {
     console.error('Erro ao processar requisição:', error)
     res.status(500).json({ error: 'Erro interno do servidor' })
+  }
+})
+
+// GET /api/teachers/:id/academies - Listar academias vinculadas ao professor
+router.get('/:id/academies', async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const { data, error } = await supabase
+      .from('academy_teachers')
+      .select(`
+        academy_id,
+        status,
+        academies (
+          id,
+          name,
+          city,
+          state
+        )
+      `)
+      .eq('teacher_id', id)
+
+    if (error) throw error
+
+    const academies = (data || [])
+      .filter((at: any) => at.status === 'active' && at.academies)
+      .map((at: any) => ({
+        id: at.academies.id,
+        name: at.academies.name,
+        city: at.academies.city,
+        state: at.academies.state
+      }))
+
+
+    res.json({ academies })
+  } catch (error: any) {
+    console.error('Erro ao listar academias do professor:', error)
+    res.status(500).json({ error: error.message })
   }
 })
 
