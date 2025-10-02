@@ -2,7 +2,7 @@ import express from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { z } from 'zod'
-import { supabase } from '../lib/supabase'
+import { supabase } from '../config/supabase'
 
 const router = express.Router()
 

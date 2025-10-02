@@ -51,12 +51,12 @@ import uploadRoutes from './routes/upload'
 
 // Servir arquivos estáticos de uploads
 app.use('/uploads', express.static('uploads'))
+app.use('/api/auth', authRoutes)
 app.use('/api/users', usersRoutes)
 app.use('/api/academies', academiesRoutes)
 app.use('/api/teachers', teachersRoutes)
 app.use('/api/teachers', teacherStudentsRoutes)
 app.use('/api/teachers', teacherPreferencesRoutes)
-app.use('/api/students', studentsRoutes)
 app.use('/api/bookings', bookingsRoutes)
 app.use('/api/notifications', notificationsRoutes)
 app.use('/api/plans', plansRoutes)

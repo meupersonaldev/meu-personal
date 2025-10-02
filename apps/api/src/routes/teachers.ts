@@ -367,7 +367,10 @@ router.get('/:id', async (req, res) => {
     const { data: teacher, error } = await supabase
       .from('users')
       .select(`
-        *,
+        id,
+        name,
+        email,
+        role,
         teacher_profiles (
           id,
           bio,
@@ -377,54 +380,6 @@ router.get('/:id', async (req, res) => {
           total_reviews,
           availability,
           is_available
-        ),
-        academy_teachers (
-          id,
-          academy_id,
-          status,
-          commission_rate,
-          academies (
-            name,
-            email,
-            phone,
-            address,
-            city,
-            state
-          )
-        ),
-        teacher_subscriptions (
-          id,
-          status,
-          start_date,
-          end_date,
-          next_due_date,
-          asaas_subscription_id,
-          teacher_plans (
-            name,
-            description,
-            price,
-            commission_rate,
-            features
-          )
-        ),
-        bookings (
-          id,
-          date,
-          duration,
-          status,
-          notes,
-          credits_cost,
-          student:users!bookings_student_id_fkey (
-            name,
-            email
-          )
-        ),
-        transactions (
-          id,
-          type,
-          amount,
-          description,
-          created_at
         )
       `)
       .eq('id', id)
@@ -471,8 +426,14 @@ router.get('/:id', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params
+    
+    // Validação simples de autenticação
+    const authHeader = req.headers.authorization
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ message: 'Token de acesso não fornecido' })
+    }
+    
     const updateData = teacherSchema.parse(req.body)
-
     // Verificar se o professor existe
     const { data: teacher, error: teacherError } = await supabase
       .from('users')
