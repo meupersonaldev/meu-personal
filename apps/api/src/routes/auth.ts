@@ -20,6 +20,11 @@ const registerSchema = z.object({
   role: z.enum(['STUDENT', 'TEACHER']).default('STUDENT')
 })
 
+const forgotPasswordSchema = z.object({
+  email: z.string().email('Email inválido')
+})
+
+
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
   try {
@@ -241,6 +246,99 @@ router.get('/me', async (req, res) => {
 
   } catch (error) {
     res.status(401).json({ message: 'Token inválido' })
+  }
+})
+
+// POST /api/auth/forgot-password
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = forgotPasswordSchema.parse(req.body)
+
+    // Usar Supabase Auth para enviar email de recuperação
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${process.env.FRONTEND_URL}/redefinir-senha`
+    })
+
+    // Sempre retornar sucesso por segurança (não expor se email existe)
+    res.json({
+      message: 'Se o email estiver cadastrado, você receberá instruções para redefinir sua senha.'
+    })
+
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        message: 'Email inválido',
+        errors: error.errors
+      })
+    }
+
+    console.error('Erro em forgot-password:', error)
+    res.status(500).json({ message: 'Erro interno do servidor' })
+  }
+})
+
+// POST /api/auth/reset-password
+// Este endpoint agora apenas valida o token do Supabase Auth
+// A atualização da senha é feita diretamente pelo frontend usando updateUser
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { password } = z.object({
+      password: z.string().min(6, 'Senha deve ter pelo menos 6 caracteres')
+    }).parse(req.body)
+
+    // Extrair token do header de autorização
+    const authHeader = req.headers.authorization
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ message: 'Token de recuperação não fornecido' })
+    }
+
+    const token = authHeader.replace('Bearer ', '')
+
+    // Verificar o usuário autenticado via token de recuperação
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token)
+
+    if (userError || !user) {
+      return res.status(401).json({ message: 'Token inválido ou expirado' })
+    }
+
+    // Atualizar a senha do usuário no Supabase Auth
+    const { error: updateError } = await supabase.auth.admin.updateUserById(
+      user.id,
+      { password }
+    )
+
+    if (updateError) {
+      console.error('Erro ao atualizar senha:', updateError)
+      return res.status(500).json({ message: 'Erro ao atualizar senha' })
+    }
+
+    // Hash da nova senha para atualizar na tabela users
+    const passwordHash = await bcrypt.hash(password, 10)
+
+    // Atualizar também na tabela users (manter sincronizado)
+    await supabase
+      .from('users')
+      .update({
+        password_hash: passwordHash,
+        password: null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', user.id)
+
+    res.json({
+      message: 'Senha redefinida com sucesso! Você já pode fazer login com sua nova senha.'
+    })
+
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        message: 'Dados inválidos',
+        errors: error.errors
+      })
+    }
+
+    console.error('Erro em reset-password:', error)
+    res.status(500).json({ message: 'Erro interno do servidor' })
   }
 })
 
