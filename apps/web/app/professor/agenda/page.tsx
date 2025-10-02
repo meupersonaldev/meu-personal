@@ -56,6 +56,7 @@ export default function ProfessorAgendaPage() {
   const [loadingBlocks, setLoadingBlocks] = useState(false)
   const [existingBookingInSlot, setExistingBookingInSlot] = useState<Booking | null>(null)
   const [selectedHoursToBlock, setSelectedHoursToBlock] = useState<string[]>([])
+  const [cancelledBookings, setCancelledBookings] = useState<Booking[]>([])
 
   const horariosDisponiveis = [
     '06:00', '07:00', '08:00', '09:00', '10:00', '11:00',
@@ -66,27 +67,7 @@ export default function ProfessorAgendaPage() {
 
   useEffect(() => {
     if (!user?.id) return
-    
-    const loadData = async () => {
-      try {
-        setLoading(true)
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-
-        const bookingsRes = await fetch(`${API_URL}/api/bookings?teacher_id=${user.id}`)
-
-        if (bookingsRes.ok) {
-          const data = await bookingsRes.json()
-          setBookings(data.bookings || [])
-        }
-      } catch (err) {
-        console.error('Erro ao carregar dados:', err)
-        toast.error('Erro ao carregar agenda')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    loadData()
+    fetchData()
   }, [user?.id])
   const fetchSlots = async () => {
     if (!user?.id || !selectedDate || selectedFranchise === 'todas') {
@@ -168,10 +149,43 @@ export default function ProfessorAgendaPage() {
       if (bookingsRes.ok) {
         try {
           const data = await bookingsRes.json()
-          setBookings(data.bookings || [])
+          const allBookings = data.bookings || []
+          const now = new Date()
+          
+          // Marcar como COMPLETED automaticamente se passou o horário
+          const updatedBookings = await Promise.all(allBookings.map(async (b: Booking) => {
+            if ((b.status === 'CONFIRMED' || b.status === 'PENDING') && b.studentId) {
+              const bookingDate = new Date(b.date)
+              const bookingEnd = new Date(bookingDate.getTime() + b.duration * 60000) // Adicionar duração
+              
+              if (bookingEnd < now) {
+                // Aula já passou, marcar como COMPLETED
+                try {
+                  await fetch(`${API_URL}/api/bookings/${b.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: 'COMPLETED' })
+                  })
+                  return { ...b, status: 'COMPLETED' }
+                } catch (err) {
+                  console.error('Erro ao atualizar status:', err)
+                  return b
+                }
+              }
+            }
+            return b
+          }))
+          
+          // Separar ativos e cancelados
+          const activeBookings = updatedBookings.filter((b: Booking) => b.status !== 'CANCELLED')
+          const cancelled = updatedBookings.filter((b: Booking) => b.status === 'CANCELLED')
+          
+          setBookings(activeBookings)
+          setCancelledBookings(cancelled)
         } catch (err) {
           console.error('Erro ao parsear bookings:', err)
           setBookings([])
+          setCancelledBookings([])
         }
       }
     } catch (err) {
@@ -196,12 +210,14 @@ export default function ProfessorAgendaPage() {
   const weekDays = getWeekDays()
 
   const getBookingForSlot = (date: Date, time: string) => {
-    const dateStr = date.toISOString().split('T')[0]
+    // Converter data local para UTC para comparação
+    const dateUTC = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
+    const dateStr = dateUTC.toISOString().split('T')[0]
     
     const found = bookings.find(booking => {
       const bookingDate = new Date(booking.date)
       const bookingDateStr = bookingDate.toISOString().split('T')[0]
-      const bookingTime = bookingDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      const bookingTime = bookingDate.getUTCHours().toString().padStart(2, '0') + ':' + bookingDate.getUTCMinutes().toString().padStart(2, '0')
       
       const matchDate = bookingDateStr === dateStr
       const matchTime = bookingTime === time
@@ -214,12 +230,14 @@ export default function ProfessorAgendaPage() {
   }
 
   const getAllBookingsForSlot = (date: Date, time: string) => {
-    const dateStr = date.toISOString().split('T')[0]
+    // Converter data local para UTC para comparação
+    const dateUTC = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
+    const dateStr = dateUTC.toISOString().split('T')[0]
     
     const filtered = bookings.filter(booking => {
       const bookingDate = new Date(booking.date)
       const bookingDateStr = bookingDate.toISOString().split('T')[0]
-      const bookingTime = bookingDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      const bookingTime = bookingDate.getUTCHours().toString().padStart(2, '0') + ':' + bookingDate.getUTCMinutes().toString().padStart(2, '0')
       
       const matchDate = bookingDateStr === dateStr
       const matchTime = bookingTime === time
@@ -237,33 +255,62 @@ export default function ProfessorAgendaPage() {
     return academy?.name || 'Unidade'
   }
 
-  const handleSlotClick = (date: Date, time: string) => {
-    const booking = getBookingForSlot(date, time)
+  const getCancelledCountForSlot = (date: Date, time: string) => {
+    const dateUTC = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
+    const dateStr = dateUTC.toISOString().split('T')[0]
     
-    if (booking) {
-      setSelectedBooking(booking)
-      setSelectedSlot(null)
-      setExistingBookingInSlot(null)
-    } else {
-      // Verificar se existe agendamento no mesmo horário em OUTRA unidade
-      const dateStr = date.toISOString().split('T')[0]
-      const existingInOtherUnit = bookings.find(b => {
-        const bookingDate = new Date(b.date)
-        const bookingDateStr = bookingDate.toISOString().split('T')[0]
-        const bookingTime = bookingDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-        
-        return bookingDateStr === dateStr && 
-               bookingTime === time && 
-               !b.studentId && // Apenas disponibilidades vazias
-               b.status === 'AVAILABLE'
-      })
+    const filtered = cancelledBookings.filter(booking => {
+      const bookingDate = new Date(booking.date)
+      const bookingDateStr = bookingDate.toISOString().split('T')[0]
+      const bookingTime = bookingDate.getUTCHours().toString().padStart(2, '0') + ':' + bookingDate.getUTCMinutes().toString().padStart(2, '0')
       
+      const matchDate = bookingDateStr === dateStr
+      const matchTime = bookingTime === time
+      const matchFranchise = selectedFranchise === 'todas' || booking.franchiseId === selectedFranchise
+      
+      return matchDate && matchTime && matchFranchise
+    })
+    
+    return filtered.length
+  }
+
+  const handleSlotClick = (date: Date, time: string) => {
+    // Buscar TODOS os bookings nesse slot
+    const allBookingsInSlot = getAllBookingsForSlot(date, time)
+    
+    // Se filtro por unidade específica, priorizar booking dessa unidade COM priorização de status
+    let mainBooking = null
+    if (selectedFranchise !== 'todas') {
+      // Buscar bookings da unidade filtrada e priorizar por status
+      const bookingsInUnit = allBookingsInSlot.filter(b => b.franchiseId === selectedFranchise)
+      mainBooking = bookingsInUnit.find(b => b.status === 'PENDING') ||
+                    bookingsInUnit.find(b => b.status === 'CONFIRMED') ||
+                    bookingsInUnit.find(b => b.status === 'AVAILABLE') ||
+                    bookingsInUnit.find(b => b.status === 'BLOCKED') ||
+                    null
+    }
+    
+    // Se não encontrou ou está em "todas", usar priorização normal
+    if (!mainBooking) {
+      mainBooking = allBookingsInSlot.find(b => b.status === 'PENDING') ||
+                    allBookingsInSlot.find(b => b.status === 'CONFIRMED') ||
+                    allBookingsInSlot.find(b => b.status === 'AVAILABLE') ||
+                    allBookingsInSlot.find(b => b.status === 'BLOCKED')
+    }
+    
+    if (mainBooking) {
+      setSelectedBooking(mainBooking)
+      setSelectedSlot(null)
+      // Armazenar outros bookings (bloqueios) para mostrar no modal
+      setExistingBookingInSlot(allBookingsInSlot.length > 1 ? { otherBookings: allBookingsInSlot.filter(b => b.id !== mainBooking.id) } as any : null)
+    } else {
+      // Slot vazio - modo criação
       setSelectedSlot({
         date: date.toISOString().split('T')[0],
         time
       })
       setSelectedBooking(null)
-      setExistingBookingInSlot(existingInOtherUnit || null)
+      setExistingBookingInSlot(null)
     }
     
     setShowModal(true)
@@ -276,8 +323,7 @@ export default function ProfessorAgendaPage() {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
       
       const [hours, minutes] = selectedSlot.time.split(':')
-      const bookingDate = new Date(selectedSlot.date + 'T00:00:00')
-      bookingDate.setHours(parseInt(hours), parseInt(minutes), 0, 0)
+      const bookingDate = new Date(selectedSlot.date + 'T' + selectedSlot.time + ':00Z')
 
       const response = await fetch(`${API_URL}/api/bookings`, {
         method: 'POST',
@@ -339,8 +385,29 @@ export default function ProfessorAgendaPage() {
       })
 
       if (response.ok) {
-        toast.success('Cancelado com sucesso!')
+        const data = await response.json()
+        
+        // Mensagem de sucesso com informação de reembolso
+        if (data.refund?.refunded) {
+          const recipient = data.refund.recipient === 'professor' ? 'professor' : 'aluno'
+          toast.success(`Cancelado com sucesso! ${data.refund.credits} crédito(s) restituído(s) ao ${recipient}.`)
+        } else {
+          toast.success('Cancelado com sucesso!')
+        }
+        
+        // Recarregar dados (incluindo créditos)
         fetchData()
+        
+        // Recarregar créditos do usuário
+        if (user?.id) {
+          const userRes = await fetch(`${API_URL}/api/users/${user.id}`)
+          if (userRes.ok) {
+            const userData = await userRes.json()
+            // Atualizar o store com os novos créditos
+            useAuthStore.setState({ user: { ...user, credits: userData.credits } })
+          }
+        }
+        
         setShowModal(false)
       }
     } catch {
@@ -352,17 +419,17 @@ export default function ProfessorAgendaPage() {
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
-      // Se filtro está em "todas as unidades", remover de todas
-      if (selectedFranchise === 'todas' && selectedBooking) {
+      // Se filtro está em "todas as unidades" E status é AVAILABLE, remover de todas
+      if (selectedFranchise === 'todas' && selectedBooking && selectedBooking.status === 'AVAILABLE') {
         const bookingDate = new Date(selectedBooking.date)
         const bookingDateStr = bookingDate.toISOString().split('T')[0]
-        const bookingTime = bookingDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+        const bookingTime = bookingDate.getUTCHours().toString().padStart(2, '0') + ':' + bookingDate.getUTCMinutes().toString().padStart(2, '0')
         
         // Buscar todas as disponibilidades no mesmo horário
         const allBookingsInSlot = bookings.filter(b => {
           const bDate = new Date(b.date)
           const bDateStr = bDate.toISOString().split('T')[0]
-          const bTime = bDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+          const bTime = bDate.getUTCHours().toString().padStart(2, '0') + ':' + bDate.getUTCMinutes().toString().padStart(2, '0')
           return bDateStr === bookingDateStr && bTime === bookingTime && b.status === 'AVAILABLE'
         })
 
@@ -380,20 +447,29 @@ export default function ProfessorAgendaPage() {
           toast.error('Erro ao remover disponibilidades')
         }
       } else {
-        // Filtro em unidade específica - remover apenas essa
+        // Remover apenas o booking específico (CANCELLED ou unidade específica)
+        console.log('🗑️ Removendo booking:', bookingId, 'Status:', selectedBooking?.status)
         const response = await fetch(`${API_URL}/api/bookings/${bookingId}`, {
           method: 'DELETE'
         })
 
+        console.log('📡 Resposta DELETE:', response.status, response.ok)
+        
         if (response.ok) {
-          toast.success('Disponibilidade removida!')
+          toast.success(selectedBooking?.status === 'CANCELLED' ? 'Cancelado removido!' : 'Disponibilidade removida!')
         } else {
-          toast.error('Erro ao remover')
+          const errorData = await response.json()
+          console.error('❌ Erro ao remover:', errorData)
+          toast.error('Erro ao remover: ' + (errorData.message || 'Erro desconhecido'))
         }
       }
 
-      fetchData()
       setShowModal(false)
+      setLoading(true)
+      await fetchData()
+      await fetchBlocks()
+      await fetchSlots()
+      setLoading(false)
     } catch {
       toast.error('Erro ao remover')
     }
@@ -489,7 +565,7 @@ export default function ProfessorAgendaPage() {
                     // Verificar se já está bloqueado
                     const isBlocked = blocks.some(b => {
                       const t = new Date(b.date)
-                      const hhmm = t.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
+                      const hhmm = t.getUTCHours().toString().padStart(2, '0') + ':' + t.getUTCMinutes().toString().padStart(2, '0')
                       return hhmm === hora
                     })
                     
@@ -526,7 +602,7 @@ export default function ProfessorAgendaPage() {
                       const available = horariosDisponiveis.filter(hora => {
                         return !blocks.some(b => {
                           const t = new Date(b.date)
-                          const hhmm = t.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
+                          const hhmm = t.getUTCHours().toString().padStart(2, '0') + ':' + t.getUTCMinutes().toString().padStart(2, '0')
                           return hhmm === hora
                         })
                       })
@@ -551,6 +627,7 @@ export default function ProfessorAgendaPage() {
                         // Se "todas", bloquear em cada unidade
                         if (selectedFranchise === 'todas') {
                           let totalCreated = 0
+                          let academiesBlocked = 0
                           for (const academy of teacherAcademies) {
                             const res = await fetch(`${API_URL}/api/teachers/${user?.id}/blocks/custom`, {
                               method: 'POST',
@@ -563,10 +640,14 @@ export default function ProfessorAgendaPage() {
                             })
                             if (res.ok) {
                               const result = await res.json()
-                              totalCreated += result.created?.length || 0
+                              const created = result.created?.length || 0
+                              if (created > 0) {
+                                totalCreated += created
+                                academiesBlocked++
+                              }
                             }
                           }
-                          toast.success(`${totalCreated} horário(s) bloqueado(s) em ${teacherAcademies.length} unidade(s)!`)
+                          toast.success(`${totalCreated} horário(s) bloqueado(s) em ${academiesBlocked} unidade(s)!`)
                           setSelectedHoursToBlock([])
                           await fetchData()
                           await fetchBlocks()
@@ -601,7 +682,10 @@ export default function ProfessorAgendaPage() {
                     }}
                     className="bg-red-600 hover:bg-red-700 text-white"
                   >
-                    Bloquear {selectedHoursToBlock.length} horário(s) {selectedFranchise === 'todas' ? `em ${teacherAcademies.length} unidade(s)` : ''}
+                    {selectedFranchise === 'todas' 
+                      ? `Bloquear ${selectedHoursToBlock.length} horário(s) em todas as unidades`
+                      : `Bloquear ${selectedHoursToBlock.length} horário(s)`
+                    }
                   </Button>
                 </div>
               </div>
@@ -626,7 +710,7 @@ export default function ProfessorAgendaPage() {
                       const groupedByTime: Record<string, any[]> = {}
                       blocks.forEach(b => {
                         const t = new Date(b.date)
-                        const hhmm = t.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
+                        const hhmm = t.getUTCHours().toString().padStart(2, '0') + ':' + t.getUTCMinutes().toString().padStart(2, '0')
                         if (!groupedByTime[hhmm]) groupedByTime[hhmm] = []
                         groupedByTime[hhmm].push(b)
                       })
@@ -672,7 +756,7 @@ export default function ProfessorAgendaPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                     {blocks.map((b) => {
                       const t = new Date(b.date)
-                      const hhmm = t.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
+                      const hhmm = t.getUTCHours().toString().padStart(2, '0') + ':' + t.getUTCMinutes().toString().padStart(2, '0')
                       return (
                         <div key={b.id} className="flex items-center justify-between p-2 border rounded-lg">
                           <div>
@@ -759,6 +843,12 @@ export default function ProfessorAgendaPage() {
                 <div className="w-4 h-4 bg-orange-500 rounded"></div>
                 <span className="text-sm">Bloqueado</span>
               </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                  1
+                </div>
+                <span className="text-sm">Cancelamento(s) no horário</span>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -843,15 +933,32 @@ export default function ProfessorAgendaPage() {
                         }
                         
                         // Filtrar por unidade se não for "todas"
-                        const booking = selectedFranchise === 'todas' 
-                          ? displayBooking 
-                          : allBookingsInSlot.find(b => b.franchiseId === selectedFranchise)
+                        let booking = null
+                        if (selectedFranchise === 'todas') {
+                          booking = displayBooking
+                        } else {
+                          // Priorizar por status quando filtrado por unidade
+                          const bookingsInUnit = allBookingsInSlot.filter(b => b.franchiseId === selectedFranchise)
+                          booking = bookingsInUnit.find(b => b.status === 'PENDING') ||
+                                    bookingsInUnit.find(b => b.status === 'CONFIRMED') ||
+                                    bookingsInUnit.find(b => b.status === 'AVAILABLE') ||
+                                    bookingsInUnit.find(b => b.status === 'BLOCKED') ||
+                                    null
+                        }
                         
                         const blockedInAllAcademies = blockedAcademiesCount === teacherAcademies.length && teacherAcademies.length > 1
                         const availableInMultiple = availableAcademiesCount > 1
                         
+                        const cancelledCount = getCancelledCountForSlot(day, time)
+                        
                         return (
-                          <div key={`${day.toISOString()}-${time}`} className="p-1">
+                          <div key={`${day.toISOString()}-${time}`} className="p-1 relative">
+                            {/* Badge de cancelamentos */}
+                            {cancelledCount > 0 && (
+                              <div className="absolute top-2 right-2 z-10 bg-red-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-md pointer-events-none">
+                                {cancelledCount}
+                              </div>
+                            )}
                             <button
                               onClick={() => handleSlotClick(day, time)}
                               disabled={isPast}
@@ -868,30 +975,49 @@ export default function ProfessorAgendaPage() {
                                   <span className="text-xs font-semibold">
                                     {booking.studentName || getStatusText(booking.status)}
                                   </span>
-                                  {booking.status === 'BLOCKED' && blockedAcademiesCount > 1 && (
-                                    <span className="text-[10px] opacity-90 mt-0.5 truncate w-full text-center">
-                                      🔒 {blockedAcademiesCount} unidade(s)
-                                    </span>
+                                  
+                                  {/* Mostrar unidade quando filtro específico OU quando única unidade */}
+                                  {booking.franchiseId && (
+                                    selectedFranchise !== 'todas' ? (
+                                      // Filtro específico: sempre mostra o nome
+                                      <span className="text-[10px] opacity-90 mt-0.5 truncate w-full text-center">
+                                        📍 {getAcademyName(booking.franchiseId)}
+                                      </span>
+                                    ) : (
+                                      // "Todas as unidades": só mostra se for única
+                                      !(booking.status === 'BLOCKED' && blockedAcademiesCount > 1) && 
+                                      !(booking.status === 'AVAILABLE' && availableAcademiesCount > 1) && (
+                                        <span className="text-[10px] opacity-90 mt-0.5 truncate w-full text-center">
+                                          📍 {getAcademyName(booking.franchiseId)}
+                                        </span>
+                                      )
+                                    )
                                   )}
-                                  {booking.status === 'BLOCKED' && blockedAcademiesCount === 1 && booking.franchiseId && (
-                                    <span className="text-[10px] opacity-90 mt-0.5 truncate w-full text-center">
-                                      📍 {getAcademyName(booking.franchiseId)}
-                                    </span>
-                                  )}
-                                  {booking.status === 'AVAILABLE' && availableInMultiple && (
-                                    <span className="text-[10px] opacity-90 mt-0.5 truncate w-full text-center">
-                                      🔓 {availableAcademiesCount} unidade(s)
-                                    </span>
-                                  )}
-                                  {booking.status === 'AVAILABLE' && !availableInMultiple && booking.franchiseId && (
-                                    <span className="text-[10px] opacity-90 mt-0.5 truncate w-full text-center">
-                                      📍 {getAcademyName(booking.franchiseId)}
-                                    </span>
-                                  )}
-                                  {booking.status !== 'BLOCKED' && booking.status !== 'AVAILABLE' && booking.franchiseId && (
-                                    <span className="text-[10px] opacity-90 mt-0.5 truncate w-full text-center">
-                                      📍 {getAcademyName(booking.franchiseId)}
-                                    </span>
+                                  
+                                  {/* Indicadores apenas quando "Todas as unidades" */}
+                                  {selectedFranchise === 'todas' && (
+                                    <>
+                                      {/* Indicador de bloqueios em outras unidades (quando há reserva/disponibilidade) */}
+                                      {(booking.status === 'PENDING' || booking.status === 'CONFIRMED') && blockedAcademiesCount > 0 && (
+                                        <span className="text-[10px] opacity-75 mt-0.5 truncate w-full text-center">
+                                          🔒 +{blockedAcademiesCount} bloqueada(s)
+                                        </span>
+                                      )}
+                                      
+                                      {/* Indicador quando TUDO está bloqueado */}
+                                      {booking.status === 'BLOCKED' && blockedAcademiesCount > 1 && (
+                                        <span className="text-[10px] opacity-90 mt-0.5 truncate w-full text-center">
+                                          🔒 {blockedAcademiesCount} unidade(s)
+                                        </span>
+                                      )}
+                                      
+                                      {/* Indicador de múltiplas disponibilidades */}
+                                      {booking.status === 'AVAILABLE' && availableAcademiesCount > 1 && (
+                                        <span className="text-[10px] opacity-90 mt-0.5 truncate w-full text-center">
+                                          ✓ {availableAcademiesCount} unidade(s)
+                                        </span>
+                                      )}
+                                    </>
                                   )}
                                 </div>
                               ) : isPast ? (
@@ -940,43 +1066,166 @@ export default function ProfessorAgendaPage() {
                       </div>
                     )}
 
-                    {selectedBooking.franchiseId && (
-                      <div>
-                        <p className="text-sm text-gray-600">
-                          {selectedFranchise === 'todas' && selectedBooking.status === 'AVAILABLE' ? 'Removendo de:' : 'Unidade:'}
+                    {/* Se BLOCKED em múltiplas unidades, mostrar lista de todas */}
+                    {selectedFranchise === 'todas' && selectedBooking.status === 'BLOCKED' && existingBookingInSlot?.otherBookings && existingBookingInSlot.otherBookings.length > 0 ? (
+                      <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                        <p className="text-sm font-medium text-orange-900 mb-2">
+                          🔒 Unidades bloqueadas neste horário:
                         </p>
-                        <p className="font-medium">
-                          {selectedFranchise === 'todas' && selectedBooking.status === 'AVAILABLE' ? (
-                            `🔓 ${(() => {
-                              const bookingDate = new Date(selectedBooking.date)
-                              const bookingDateStr = bookingDate.toISOString().split('T')[0]
-                              const bookingTime = bookingDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-                              return bookings.filter(b => {
-                                const bDate = new Date(b.date)
-                                const bDateStr = bDate.toISOString().split('T')[0]
-                                const bTime = bDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-                                return bDateStr === bookingDateStr && bTime === bookingTime && b.status === 'AVAILABLE'
-                              }).length
-                            })()} unidade(s)`
-                          ) : (
-                            `📍 ${getAcademyName(selectedBooking.franchiseId)}`
-                          )}
-                        </p>
+                        <div className="space-y-1">
+                          {/* Incluir o booking principal na lista */}
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-orange-800">
+                              📍 {getAcademyName(selectedBooking.franchiseId)}
+                            </span>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 px-2 text-xs text-red-600 hover:text-red-700"
+                              onClick={async () => {
+                                try {
+                                  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                                  const res = await fetch(`${API_URL}/api/teachers/${user?.id}/blocks/${selectedBooking.id}`, { method: 'DELETE' })
+                                  if (res.ok) {
+                                    toast.success('Bloqueio removido!')
+                                    await fetchData()
+                                    await fetchBlocks()
+                                    setShowModal(false)
+                                  }
+                                } catch {
+                                  toast.error('Erro ao remover bloqueio')
+                                }
+                              }}
+                            >
+                              Desbloquear
+                            </Button>
+                          </div>
+                          {/* Outras unidades */}
+                          {existingBookingInSlot.otherBookings.map((otherBooking: any) => (
+                            <div key={otherBooking.id} className="flex items-center justify-between text-xs">
+                              <span className="text-orange-800">
+                                📍 {getAcademyName(otherBooking.franchiseId)}
+                              </span>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 px-2 text-xs text-red-600 hover:text-red-700"
+                                onClick={async () => {
+                                  try {
+                                    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                                    const res = await fetch(`${API_URL}/api/teachers/${user?.id}/blocks/${otherBooking.id}`, { method: 'DELETE' })
+                                    if (res.ok) {
+                                      toast.success('Bloqueio removido!')
+                                      await fetchData()
+                                      await fetchBlocks()
+                                      setShowModal(false)
+                                    }
+                                  } catch {
+                                    toast.error('Erro ao remover bloqueio')
+                                  }
+                                }}
+                              >
+                                Desbloquear
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
                       </div>
+                    ) : (
+                      <>
+                        {/* Exibição normal de unidade */}
+                        {selectedBooking.franchiseId && (
+                          <div>
+                            <p className="text-sm text-gray-600">
+                              {selectedFranchise === 'todas' && selectedBooking.status === 'AVAILABLE' ? 'Disponível em:' : 'Unidade:'}
+                            </p>
+                            <p className="font-medium">
+                              {selectedFranchise === 'todas' && selectedBooking.status === 'AVAILABLE' ? (
+                                `📍 ${(() => {
+                                  const bookingDate = new Date(selectedBooking.date)
+                                  const bookingDateStr = bookingDate.toISOString().split('T')[0]
+                                  const bookingTime = bookingDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                                  return bookings.filter(b => {
+                                    const bDate = new Date(b.date)
+                                    const bDateStr = bDate.toISOString().split('T')[0]
+                                    const bTime = bDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                                    return bDateStr === bookingDateStr && bTime === bookingTime && b.status === 'AVAILABLE'
+                                  }).length
+                                })()} unidade(s)`
+                              ) : (
+                                `📍 ${getAcademyName(selectedBooking.franchiseId)}`
+                              )}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Mostrar bloqueios em outras unidades (quando há reserva/disponibilidade) */}
+                        {selectedFranchise === 'todas' && existingBookingInSlot?.otherBookings && existingBookingInSlot.otherBookings.length > 0 && (
+                          <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                            <p className="text-sm font-medium text-orange-900 mb-2">
+                              🔒 Outras unidades neste horário:
+                            </p>
+                            <div className="space-y-1">
+                              {existingBookingInSlot.otherBookings.map((otherBooking: any) => (
+                                <div key={otherBooking.id} className="flex items-center justify-between text-xs">
+                                  <span className="text-orange-800">
+                                    📍 {getAcademyName(otherBooking.franchiseId)} - {getStatusText(otherBooking.status)}
+                                  </span>
+                                  {otherBooking.status === 'BLOCKED' && (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-6 px-2 text-xs text-red-600 hover:text-red-700"
+                                      onClick={async () => {
+                                        try {
+                                          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                                          const res = await fetch(`${API_URL}/api/teachers/${user?.id}/blocks/${otherBooking.id}`, { method: 'DELETE' })
+                                          if (res.ok) {
+                                            toast.success('Bloqueio removido!')
+                                            await fetchData()
+                                            await fetchBlocks()
+                                            setShowModal(false)
+                                          }
+                                        } catch {
+                                          toast.error('Erro ao remover bloqueio')
+                                        }
+                                      }}
+                                    >
+                                      Desbloquear
+                                    </Button>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </>
                     )}
 
                     <div className="flex flex-col space-y-2">
-                      <div className="flex space-x-2">
-                        {selectedBooking.status === 'PENDING' && (
-                          <Button
-                            onClick={() => handleConfirmBooking(selectedBooking.id)}
-                            className="flex-1 bg-green-600"
-                          >
-                            <Check className="h-4 w-4 mr-2" />
-                            Confirmar
-                          </Button>
-                        )}
-                        {selectedBooking.status !== 'CANCELLED' && selectedBooking.status !== 'COMPLETED' && (
+                      {/* Botões para BLOCKED */}
+                      {selectedBooking.status === 'BLOCKED' && (
+                        <Button
+                          onClick={() => handleDeleteBooking(selectedBooking.id)}
+                          variant="destructive"
+                          className="w-full text-white"
+                        >
+                          🔓 Desbloquear
+                        </Button>
+                      )}
+                      
+                      {/* Botões para PENDING/CONFIRMED */}
+                      {(selectedBooking.status === 'PENDING' || selectedBooking.status === 'CONFIRMED') && (
+                        <div className="flex space-x-2">
+                          {selectedBooking.status === 'PENDING' && (
+                            <Button
+                              onClick={() => handleConfirmBooking(selectedBooking.id)}
+                              className="flex-1 bg-green-600"
+                            >
+                              <Check className="h-4 w-4 mr-2" />
+                              Confirmar
+                            </Button>
+                          )}
                           <Button
                             onClick={() => handleCancelBooking(selectedBooking.id)}
                             variant="outline"
@@ -985,16 +1234,17 @@ export default function ProfessorAgendaPage() {
                             <X className="h-4 w-4 mr-2" />
                             Cancelar
                           </Button>
-                        )}
-                      </div>
+                        </div>
+                      )}
                       
-                      {(selectedBooking.status === 'AVAILABLE' || selectedBooking.status === 'CANCELLED') && !selectedBooking.studentId && (
+                      {/* Botão para AVAILABLE */}
+                      {selectedBooking.status === 'AVAILABLE' && (
                         <Button
                           onClick={() => handleDeleteBooking(selectedBooking.id)}
                           variant="destructive"
                           className="w-full text-white"
                         >
-                          🗑️ Remover {selectedBooking.status === 'CANCELLED' ? 'Cancelado' : 'Disponibilidade'}
+                          🗑️ Remover Disponibilidade
                         </Button>
                       )}
                     </div>
@@ -1029,10 +1279,7 @@ export default function ProfessorAgendaPage() {
                               if (!selectedSlot || !user?.id) return
                               try {
                                 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-                                const [hours, minutes] = selectedSlot.time.split(':')
-                                // Criar data em UTC para evitar problemas de timezone
-                                const bookingDate = new Date(selectedSlot.date + 'T00:00:00Z')
-                                bookingDate.setUTCHours(parseInt(hours) + 3, parseInt(minutes), 0, 0) // +3 para compensar UTC-3
+                                const bookingDate = new Date(selectedSlot.date + 'T' + selectedSlot.time + ':00Z')
 
                                 // Primeiro, remover qualquer disponibilidade existente neste horário
                                 const existingBookings = bookings.filter(b => {

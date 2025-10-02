@@ -32,7 +32,8 @@ router.get('/', async (req, res) => {
       .select(`
         *,
         student:users!bookings_student_id_fkey (id, name, email, avatar_url),
-        teacher:users!bookings_teacher_id_fkey (id, name, email, avatar_url)
+        teacher:users!bookings_teacher_id_fkey (id, name, email, avatar_url),
+        franchise:academies!bookings_franchise_id_fkey (id, name, address)
       `)
       .order('date', { ascending: true })
 
@@ -56,12 +57,13 @@ router.get('/', async (req, res) => {
       return res.status(500).json({ message: 'Erro ao buscar agendamentos' })
     }
 
-    // Formatar dados para compatibilidade com o frontend
     const formattedBookings = bookings.map(booking => ({
       id: booking.id,
       studentId: booking.student_id,
       teacherId: booking.teacher_id,
       franchiseId: booking.franchise_id,
+      franchiseName: booking.franchise?.name || '',
+      franchiseAddress: booking.franchise?.address || '',
       teacherName: booking.teacher?.name || '',
       teacherAvatar: booking.teacher?.avatar_url || '',
       studentName: booking.student?.name || '',
@@ -130,17 +132,17 @@ router.get('/:id', async (req, res) => {
 // POST /api/bookings - Criar novo agendamento ou disponibilidade
 router.post('/', async (req, res) => {
   try {
-    console.log('📥 Recebendo requisição POST /api/bookings')
     console.log('Body recebido:', JSON.stringify(req.body, null, 2))
     
     const bookingData = bookingSchema.parse(req.body)
     console.log('✅ Validação passou. Dados parseados:', JSON.stringify(bookingData, null, 2))
 
-    // Se tem student_id, é um agendamento real - verificar créditos
+    // Se tem student_id, é um agendamento real - verificar se aluno existe e créditos do professor
     if (bookingData.student_id) {
+      // Verificar se aluno existe
       const { data: student, error: studentError } = await supabase
         .from('users')
-        .select('credits')
+        .select('id')
         .eq('id', bookingData.student_id)
         .single()
 
@@ -148,8 +150,41 @@ router.post('/', async (req, res) => {
         return res.status(404).json({ message: 'Estudante não encontrado' })
       }
 
-      if (student.credits < (bookingData.credits_cost || 1)) {
-        return res.status(400).json({ message: 'Créditos insuficientes' })
+      // Verificar créditos do PROFESSOR (quem está reservando o espaço)
+      const { data: teacher, error: teacherError } = await supabase
+        .from('users')
+        .select('credits')
+        .eq('id', bookingData.teacher_id)
+        .single()
+
+      if (teacherError || !teacher) {
+        return res.status(404).json({ message: 'Professor não encontrado' })
+      }
+
+      if (teacher.credits < (bookingData.credits_cost || 1)) {
+        return res.status(400).json({ message: 'Créditos insuficientes do professor' })
+      }
+
+      // Verificar se já existe reserva no mesmo horário e unidade
+      const bookingDate = new Date(bookingData.date)
+      const startOfHour = new Date(bookingDate)
+      startOfHour.setMinutes(0, 0, 0)
+      const endOfHour = new Date(bookingDate)
+      endOfHour.setMinutes(59, 59, 999)
+
+      const { data: existingBookings } = await supabase
+        .from('bookings')
+        .select('id, status')
+        .eq('teacher_id', bookingData.teacher_id)
+        .eq('franchise_id', bookingData.franchise_id)
+        .gte('date', startOfHour.toISOString())
+        .lte('date', endOfHour.toISOString())
+        .neq('status', 'CANCELLED')
+
+      if (existingBookings && existingBookings.length > 0) {
+        return res.status(400).json({ 
+          message: 'Você já tem uma reserva neste horário nesta unidade' 
+        })
       }
 
       // Criar agendamento
@@ -164,14 +199,14 @@ router.post('/', async (req, res) => {
         return res.status(500).json({ message: 'Erro ao criar agendamento' })
       }
 
-      // Debitar créditos do estudante
+      // Debitar créditos do PROFESSOR
       const { error: creditError } = await supabase
         .from('users')
         .update({
-          credits: student.credits - (bookingData.credits_cost || 1),
+          credits: teacher.credits - (bookingData.credits_cost || 1),
           updated_at: new Date().toISOString()
         })
-        .eq('id', bookingData.student_id)
+        .eq('id', bookingData.teacher_id)
 
       if (creditError) {
         console.error('Erro ao debitar créditos:', creditError)
@@ -237,7 +272,7 @@ router.post('/', async (req, res) => {
 
       // Se existir disponibilidade na MESMA unidade, deletar antes de criar nova
       const availableBookings = existingBookings?.filter(b => 
-        b.student_id === null && b.franchise_id === bookingData.franchise_id && b.date.getTime() === bookingData.date.getTime()
+        b.student_id === null && b.franchise_id === bookingData.franchise_id && new Date(b.date).getTime() === new Date(bookingData.date).getTime()
       ) || []
       if (availableBookings.length > 0) {
         console.log('🗑️ Removendo disponibilidades antigas na mesma unidade...')
@@ -305,6 +340,13 @@ const updateBookingHandler = async (req: express.Request, res: express.Response)
     const { id } = req.params
     const updateData = updateBookingSchema.parse(req.body)
 
+    // Buscar booking antes de atualizar para verificar mudança de status
+    const { data: oldBooking } = await supabase
+      .from('bookings')
+      .select('status, teacher_id, credits_cost')
+      .eq('id', id)
+      .single()
+
     const { data: updatedBooking, error } = await supabase
       .from('bookings')
       .update({
@@ -324,9 +366,48 @@ const updateBookingHandler = async (req: express.Request, res: express.Response)
       return res.status(404).json({ message: 'Agendamento não encontrado' })
     }
 
+    let refundInfo = null
+    if (updateData.status === 'CANCELLED' && oldBooking && oldBooking.status !== 'CANCELLED' && oldBooking.status !== 'COMPLETED') {
+      try {
+        const creditsCost = oldBooking.credits_cost || 1
+        
+        if (oldBooking.teacher_id && creditsCost > 0) {
+          const { data: teacher, error: creditsError } = await supabase
+            .from('users')
+            .select('credits')
+            .eq('id', oldBooking.teacher_id)
+            .single()
+
+          if (!creditsError && teacher) {
+            const newCredits = teacher.credits + creditsCost
+            
+            const { error: updateError } = await supabase
+              .from('users')
+              .update({
+                credits: newCredits,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', oldBooking.teacher_id)
+            
+            if (!updateError) {
+              refundInfo = {
+                refunded: true,
+                credits: creditsCost,
+                recipient: 'professor',
+                newBalance: newCredits
+              }
+            }
+          }
+        }
+      } catch (refundError) {
+        console.error('Erro no reembolso:', refundError)
+      }
+    }
+
     res.json({
       message: 'Agendamento atualizado com sucesso',
-      booking: updatedBooking
+      booking: updatedBooking,
+      refund: refundInfo
     })
 
   } catch (error) {
@@ -353,16 +434,15 @@ router.delete('/:id', async (req, res) => {
     // Buscar agendamento
     const { data: booking, error: getError } = await supabase
       .from('bookings')
-      .select('student_id, credits_cost, status')
+      .select('student_id, teacher_id, credits_cost, status')
       .eq('id', id)
       .single()
-
     if (getError || !booking) {
       return res.status(404).json({ message: 'Agendamento não encontrado' })
     }
 
-    // Se NÃO tem aluno (disponibilidade vazia ou cancelado sem aluno) → DELETAR
-    if (!booking.student_id) {
+    // Se NÃO tem aluno OU já está CANCELLED → DELETAR
+    if (!booking.student_id || booking.status === 'CANCELLED') {
       const { error: deleteError } = await supabase
         .from('bookings')
         .delete()
@@ -376,7 +456,7 @@ router.delete('/:id', async (req, res) => {
       return res.json({ message: 'Agendamento removido com sucesso' })
     }
 
-    // Se TEM aluno → CANCELAR (manter histórico)
+    // Se TEM aluno E não está cancelado → CANCELAR (manter histórico)
     const { error: updateError } = await supabase
       .from('bookings')
       .update({
@@ -390,22 +470,23 @@ router.delete('/:id', async (req, res) => {
       return res.status(500).json({ message: 'Erro ao cancelar agendamento' })
     }
 
-    // Reembolsar créditos se o agendamento não foi completado
-    if (booking.status !== 'COMPLETED') {
-      const { data: student, error: studentError } = await supabase
+    if (booking.status !== 'COMPLETED' && booking.teacher_id) {
+      const { data: teacher, error: creditsError } = await supabase
         .from('users')
         .select('credits')
-        .eq('id', booking.student_id)
+        .eq('id', booking.teacher_id)
         .single()
 
-      if (!studentError && student) {
+      if (!creditsError && teacher) {
+        const newCredits = teacher.credits + booking.credits_cost
+        
         await supabase
           .from('users')
           .update({
-            credits: student.credits + booking.credits_cost,
+            credits: newCredits,
             updated_at: new Date().toISOString()
           })
-          .eq('id', booking.student_id)
+          .eq('id', booking.teacher_id)
       }
     }
 

@@ -73,10 +73,38 @@ router.post('/:id/blocks/custom', async (req, res) => {
 
     const toBlock: { date: string; duration: number }[] = []
     for (const hhmm of hours) {
-      const [h, m] = hhmm.split(':').map(Number)
-      const d = new Date(`${date}T00:00:00Z`)
-      d.setUTCHours(h + 3, m, 0, 0) // Adiciona 3h para compensar timezone Brasil
+      const d = new Date(`${date}T${hhmm}:00Z`)
+      
+      // Verificar se já existe reserva com aluno neste horário e unidade
+      const startOfHour = new Date(d)
+      startOfHour.setUTCMinutes(0, 0, 0)
+      const endOfHour = new Date(d)
+      endOfHour.setUTCMinutes(59, 59, 999)
+      
+      const { data: existingBookings } = await supabase
+        .from('bookings')
+        .select('id, status, student_id')
+        .eq('teacher_id', id)
+        .eq('franchise_id', academy_id)
+        .gte('date', startOfHour.toISOString())
+        .lte('date', endOfHour.toISOString())
+        .not('student_id', 'is', null)
+        .neq('status', 'CANCELLED')
+      
+      // Se já tem reserva com aluno, pular este horário
+      if (existingBookings && existingBookings.length > 0) {
+        console.log(`⚠️ Pulando ${hhmm} - já existe reserva com aluno`)
+        continue
+      }
+      
       toBlock.push({ date: d.toISOString(), duration: 60 })
+    }
+
+    if (toBlock.length === 0) {
+      return res.status(400).json({ 
+        error: 'Todos os horários selecionados já possuem reservas com alunos',
+        created: []
+      })
     }
 
     const payload = toBlock.map(b => ({
@@ -115,10 +143,8 @@ router.post('/:id/blocks/day', async (req, res) => {
     
     const toBlock: { date: string; duration: number; notes?: string }[] = []
     for (const hhmm of allHours) {
-      // Criar data ajustando para UTC (adicionar 3h para compensar Brasil UTC-3)
-      const [h, m] = hhmm.split(':').map(Number)
-      const d = new Date(`${date}T00:00:00Z`)
-      d.setUTCHours(h + 3, m, 0, 0) // Adiciona 3h para compensar timezone
+      // Criar data em UTC direto, sem compensação
+      const d = new Date(`${date}T${hhmm}:00Z`)
       const duration = 60 // Duração padrão de 60 minutos
       toBlock.push({ date: d.toISOString(), duration, notes })
     }
@@ -698,7 +724,7 @@ router.get('/:id/stats', async (req, res) => {
       // Total de aulas
       supabase
         .from('bookings')
-        .select('id, status, date, credits_cost')
+        .select('id, status, date, credits_cost, student_id')
         .eq('teacher_id', id),
 
       // Transações
@@ -743,6 +769,15 @@ router.get('/:id/stats', async (req, res) => {
       return sum + (rate * (duration / 60))
     }, 0)
 
+    const totalCreditsUsed = bookings
+      .filter(b => {
+        const hasStudent = b.student_id !== null && b.student_id !== undefined
+        const isNotCancelled = b.status !== 'CANCELLED'
+        const isNotBlocked = b.status !== 'BLOCKED' && b.status !== 'AVAILABLE'
+        return hasStudent && isNotCancelled && isNotBlocked
+      })
+      .reduce((sum, b) => sum + (b.credits_cost || 0), 0)
+
     const stats = {
       total_bookings: bookings.length,
       completed_bookings: completedBookings.length,
@@ -750,6 +785,7 @@ router.get('/:id/stats', async (req, res) => {
       cancelled_bookings: bookings.filter(b => b.status === 'CANCELLED').length,
       total_students: new Set(bookings.map(b => b.student_id)).size,
       total_revenue: totalRevenue,
+      total_credits_used: totalCreditsUsed,
       rating: profile?.rating || 0,
       total_reviews: profile?.total_reviews || 0,
       hourly_rate: profile?.hourly_rate || 0,

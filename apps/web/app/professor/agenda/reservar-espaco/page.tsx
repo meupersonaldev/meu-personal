@@ -11,7 +11,9 @@ import {
   CheckCircle,
   AlertCircle,
   Loader2,
-  Users
+  Users,
+  ChevronDown,
+  Edit2
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -29,6 +31,14 @@ interface Booking {
   franchiseId?: string
 }
 
+interface Student {
+  id: string
+  name: string
+  email: string
+  phone?: string
+  user_id?: string
+}
+
 export default function ReservarHorarioPage() {
   const { user } = useAuthStore()
   const [franchises, setFranchises] = useState<Franchise[]>([])
@@ -43,6 +53,12 @@ export default function ReservarHorarioPage() {
   const [observacoes, setObservacoes] = useState('')
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [students, setStudents] = useState<Student[]>([])
+  const [selectedStudent, setSelectedStudent] = useState<string>('')
+  const [showNewStudentForm, setShowNewStudentForm] = useState(false)
+  const [newStudent, setNewStudent] = useState({ name: '', email: '', phone: '' })
+  const [selectedHorario, setSelectedHorario] = useState<string>('')
+  const [expandedStep, setExpandedStep] = useState<number>(1) // Controla qual step está expandido
 
   // Buscar horários livres quando unidade e data forem selecionadas
   useEffect(() => {
@@ -54,11 +70,15 @@ export default function ReservarHorarioPage() {
       try {
         setLoadingSlots(true)
         const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-        const res = await fetch(`${API_URL}/api/academies/${selectedFranchise}/available-slots?date=${selectedData}`)
+        console.log('🔍 Buscando slots para:', { selectedFranchise, selectedData })
+        const res = await fetch(`${API_URL}/api/academies/${selectedFranchise}/available-slots?date=${selectedData}&teacher_id=${user?.id}`)
+        console.log('📡 Resposta:', res.status)
         if (res.ok) {
           const data = await res.json()
+          console.log('📊 Slots recebidos:', data.slots?.length || 0, data)
           setAvailableSlots((data.slots || []) as Slot[])
         } else {
+          console.log('❌ Erro ao buscar slots')
           setAvailableSlots([])
         }
       } catch (e) {
@@ -81,14 +101,10 @@ export default function ReservarHorarioPage() {
 
         // Buscar franquias disponíveis
         const franchisesResponse = await fetch(`${API_URL}/api/franchises`)
-        console.log('Franchises response status:', franchisesResponse.status)
         
         if (franchisesResponse.ok) {
           const data = await franchisesResponse.json()
-          console.log('Franchises data:', data)
           setFranchises(data.franchises || [])
-        } else {
-          console.error('Error fetching franchises:', await franchisesResponse.text())
         }
 
         // Buscar agendamentos existentes do professor
@@ -103,6 +119,13 @@ export default function ReservarHorarioPage() {
         if (prefRes.ok) {
           const pref = await prefRes.json()
           setAcademyIds(pref.academy_ids || [])
+        }
+
+        // Buscar alunos do professor
+        const studentsRes = await fetch(`${API_URL}/api/teachers/${user.id}/students`)
+        if (studentsRes.ok) {
+          const studentsData = await studentsRes.json()
+          setStudents(studentsData.students || [])
         }
       } catch (error) {
         console.error('Erro ao carregar dados:', error)
@@ -125,9 +148,56 @@ export default function ReservarHorarioPage() {
 
   // Verificação local opcional (não usada mais pois backend informa disponibilidade)
 
+  const handleCreateStudent = async () => {
+    if (!newStudent.name || !newStudent.email) {
+      toast.error('Nome e email são obrigatórios')
+      return
+    }
+
+    if (!selectedFranchise) {
+      toast.error('Selecione uma unidade primeiro')
+      return
+    }
+
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      
+      const response = await fetch(`${API_URL}/api/teachers/${user?.id}/students`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newStudent.name,
+          email: newStudent.email,
+          phone: newStudent.phone,
+          academy_id: selectedFranchise
+        })
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        toast.success('Aluno cadastrado com sucesso!')
+        setStudents([...students, data.student])
+        setSelectedStudent(data.student.id)
+        setShowNewStudentForm(false)
+        setNewStudent({ name: '', email: '', phone: '' })
+      } else {
+        toast.error(data.message || 'Erro ao cadastrar aluno')
+      }
+    } catch (error) {
+      console.error('Erro ao cadastrar aluno:', error)
+      toast.error('Erro ao processar cadastro')
+    }
+  }
+
   const handleReservarHorario = async (horario: string) => {
     if (!selectedFranchise || !selectedData) {
       toast.error('Selecione uma unidade e data primeiro')
+      return
+    }
+
+    if (!selectedStudent) {
+      toast.error('Selecione um aluno ou cadastre um novo')
       return
     }
 
@@ -136,10 +206,14 @@ export default function ReservarHorarioPage() {
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
       
-      // Criar data/hora completa a partir do horário (HH:mm)
       const [hours, minutes] = horario.split(':')
-      const bookingDate = new Date(selectedData + 'T00:00:00')
-      bookingDate.setHours(parseInt(hours), parseInt(minutes), 0, 0)
+      const bookingDate = new Date(`${selectedData}T${horario}:00Z`)
+      
+      if (isNaN(bookingDate.getTime())) {
+        toast.error('Data ou horário inválido')
+        setSubmitting(false)
+        return
+      }
 
       const response = await fetch(`${API_URL}/api/bookings`, {
         method: 'POST',
@@ -148,13 +222,13 @@ export default function ReservarHorarioPage() {
         },
         body: JSON.stringify({
           teacher_id: user?.id,
-          student_id: null, // Sem aluno ainda - slot disponível
+          student_id: students.find(s => s.id === selectedStudent)?.user_id || selectedStudent,
           franchise_id: selectedFranchise,
           date: bookingDate.toISOString(),
           duration: (availableSlots.find(s => s.time === horario)?.slot_duration) || 60,
-          credits_cost: 1, // Custo padrão
-          notes: observacoes || `Horário disponível (${horario})`,
-          status: 'AVAILABLE' // Status especial para slots disponíveis
+          credits_cost: 1,
+          notes: observacoes || `Agendamento para ${students.find(s => s.id === selectedStudent)?.name}`,
+          status: 'CONFIRMED'
         })
       })
 
@@ -167,11 +241,13 @@ export default function ReservarHorarioPage() {
         const newBooking = {
           id: data.booking?.id || Date.now().toString(),
           date: bookingDate.toISOString(),
-          status: 'AVAILABLE',
+          status: 'CONFIRMED',
           franchiseId: selectedFranchise
         }
         
         setBookings([...bookings, newBooking])
+        setSelectedStudent('')
+        setObservacoes('')
       } else {
         toast.error(data.message || 'Erro ao reservar horário')
       }
@@ -182,6 +258,16 @@ export default function ReservarHorarioPage() {
       setSubmitting(false)
     }
   }
+
+  // Calcular progresso do wizard (ANTES dos returns condicionais)
+  const progress = useMemo(() => {
+    let step = 0
+    if (selectedFranchise) step = 1
+    if (selectedStudent) step = 2
+    if (selectedData) step = 3
+    if (selectedHorario) step = 4
+    return (step / 4) * 100
+  }, [selectedFranchise, selectedStudent, selectedData, selectedHorario])
 
   if (!user) {
     return null
@@ -199,25 +285,36 @@ export default function ReservarHorarioPage() {
 
   return (
     <ProfessorLayout>
-      <div className="min-h-screen bg-gray-50 p-6">
-        {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Reservar Horário
-          </h1>
-          <p className="text-gray-600">
-            Reserve horários nas unidades para disponibilizar aos alunos
-          </p>
-        </div>
-
-        {/* Info sobre o sistema */}
-        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-start space-x-3">
-          <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5" />
-          <div>
-            <p className="text-sm text-blue-800">
-              <strong>Como funciona:</strong> Você pode reservar horários em qualquer unidade do sistema. 
-              Escolha a franquia, data e horário para disponibilizar aos seus alunos.
-            </p>
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50/30 to-gray-50 p-4 md:p-8">
+        {/* Header Moderno */}
+        <div className="max-w-7xl mx-auto mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h1 className="text-4xl font-bold bg-gradient-to-r from-meu-primary to-blue-600 bg-clip-text text-transparent mb-2">
+                Reservar Horário
+              </h1>
+              <p className="text-gray-600 text-lg">
+                Reserve horários para seus alunos de forma rápida e fácil
+              </p>
+            </div>
+            <div className="hidden md:flex items-center space-x-2 bg-white px-4 py-2 rounded-full shadow-sm">
+              <Users className="h-5 w-5 text-meu-primary" />
+              <span className="text-sm font-medium text-gray-700">{students.length} alunos</span>
+            </div>
+          </div>
+          
+          {/* Barra de Progresso */}
+          <div className="bg-white rounded-full h-2 overflow-hidden shadow-inner">
+            <div 
+              className="h-full bg-gradient-to-r from-meu-primary to-blue-600 transition-all duration-500 ease-out"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <div className="flex justify-between mt-2 text-xs text-gray-500">
+            <span className={selectedFranchise ? 'text-meu-primary font-medium' : ''}>Unidade</span>
+            <span className={selectedStudent ? 'text-meu-primary font-medium' : ''}>Aluno</span>
+            <span className={selectedData ? 'text-meu-primary font-medium' : ''}>Data</span>
+            <span className={selectedHorario ? 'text-meu-primary font-medium' : ''}>Horário</span>
           </div>
         </div>
 
@@ -226,57 +323,231 @@ export default function ReservarHorarioPage() {
           <div className="lg:col-span-2 space-y-6">
             
             {/* Seleção de Unidade */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <MapPin className="h-5 w-5 mr-2 text-meu-primary" />
-                  Escolha a Unidade
+            <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300">
+              <CardHeader 
+                className="bg-gradient-to-r from-meu-primary/10 to-blue-50 cursor-pointer"
+                onClick={() => setExpandedStep(expandedStep === 1 ? 0 : 1)}
+              >
+                <CardTitle className="flex items-center justify-between text-xl">
+                  <div className="flex items-center">
+                    <div className="p-2 bg-meu-primary rounded-lg mr-3">
+                      <MapPin className="h-5 w-5 text-white" />
+                    </div>
+                    <div>
+                      <span className="block">Passo 1: Escolha a Unidade</span>
+                      {selectedFranchise && expandedStep !== 1 ? (
+                        <span className="text-sm font-normal text-meu-primary">
+                          ✓ {franchiseSelecionada?.name}
+                        </span>
+                      ) : (
+                        <span className="text-sm font-normal text-gray-600">Selecione onde deseja reservar</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    {selectedFranchise && expandedStep !== 1 && (
+                      <Edit2 className="h-4 w-4 text-meu-primary" />
+                    )}
+                    <ChevronDown className={`h-5 w-5 text-gray-500 transition-transform ${expandedStep === 1 ? 'rotate-180' : ''}`} />
+                  </div>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              {expandedStep === 1 && (
+                <CardContent className="pt-6">
                 {franchisesFiltradas.length === 0 ? (
-                  <p className="text-gray-500 text-center py-4">
-                    Nenhuma unidade disponível
-                  </p>
+                  <div className="text-center py-12">
+                    <MapPin className="h-16 w-16 mx-auto text-gray-300 mb-4" />
+                    <p className="text-gray-500">Nenhuma unidade disponível</p>
+                  </div>
                 ) : (
-                  franchisesFiltradas.map(franchise => (
-                    <div
-                      key={franchise.id}
-                      className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                        selectedFranchise === franchise.id
-                          ? 'border-meu-primary bg-meu-primary/5'
-                          : 'border-gray-200 hover:border-meu-primary/50'
-                      }`}
-                      onClick={() => {
-                        setSelectedFranchise(franchise.id)
-                        setSelectedData('')
-                      }}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h3 className="font-semibold text-gray-900">{franchise.name}</h3>
-                          <p className="text-sm text-gray-500">{franchise.address}</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {franchisesFiltradas.map(franchise => (
+                      <div
+                        key={franchise.id}
+                        className={`group relative p-5 border-2 rounded-xl cursor-pointer transition-all duration-300 ${
+                          selectedFranchise === franchise.id
+                            ? 'border-meu-primary bg-gradient-to-br from-meu-primary/10 to-blue-50 shadow-md scale-105'
+                            : 'border-gray-200 hover:border-meu-primary/50 hover:shadow-md hover:scale-102'
+                        }`}
+                        onClick={() => {
+                          setSelectedFranchise(franchise.id)
+                          setSelectedData('')
+                          setExpandedStep(2) // Auto-expandir próximo passo
+                        }}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <h3 className="font-bold text-gray-900 text-lg mb-1">{franchise.name}</h3>
+                            <p className="text-sm text-gray-600 flex items-center">
+                              <MapPin className="h-3 w-3 mr-1" />
+                              {franchise.address}
+                            </p>
+                          </div>
+                          {selectedFranchise === franchise.id && (
+                            <div className="flex-shrink-0 ml-3">
+                              <div className="bg-meu-primary rounded-full p-1">
+                                <CheckCircle className="h-5 w-5 text-white" />
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        {selectedFranchise === franchise.id && (
-                          <CheckCircle className="h-5 w-5 text-meu-primary" />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+              )}
+            </Card>
+
+            {/* Seleção de Aluno */}
+            {selectedFranchise && (
+              <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 animate-in slide-in-from-bottom-4">
+                <CardHeader 
+                  className="bg-gradient-to-r from-blue-50 to-meu-primary/10 cursor-pointer"
+                  onClick={() => setExpandedStep(expandedStep === 2 ? 0 : 2)}
+                >
+                  <CardTitle className="flex items-center justify-between text-xl">
+                    <div className="flex items-center">
+                      <div className="p-2 bg-meu-primary rounded-lg mr-3">
+                        <Users className="h-5 w-5 text-white" />
+                      </div>
+                      <div>
+                        <span className="block">Passo 2: Selecionar Aluno</span>
+                        {selectedStudent && expandedStep !== 2 ? (
+                          <span className="text-sm font-normal text-meu-primary">
+                            ✓ {students.find(s => s.id === selectedStudent)?.name}
+                          </span>
+                        ) : (
+                          <span className="text-sm font-normal text-gray-600">Escolha para quem é a reserva</span>
                         )}
                       </div>
                     </div>
-                  ))
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Data e Horários Livres */}
-            {selectedFranchise && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <Calendar className="h-5 w-5 mr-2 text-meu-primary" />
-                    Data e Horários Livres
+                    <div className="flex items-center space-x-2">
+                      {selectedStudent && expandedStep !== 2 && (
+                        <Edit2 className="h-4 w-4 text-meu-primary" />
+                      )}
+                      <ChevronDown className={`h-5 w-5 text-gray-500 transition-transform ${expandedStep === 2 ? 'rotate-180' : ''}`} />
+                    </div>
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                {expandedStep === 2 && (
+                  <CardContent className="space-y-4 pt-6">
+                  {!showNewStudentForm ? (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Escolha o aluno
+                        </label>
+                        <select
+                          value={selectedStudent}
+                          onChange={(e) => {
+                            setSelectedStudent(e.target.value)
+                            if (e.target.value) setExpandedStep(3) // Auto-expandir próximo passo
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+                        >
+                          <option value="">Selecione um aluno...</option>
+                          {students.map((student) => (
+                            <option key={student.id} value={student.id}>
+                              {student.name} - {student.email}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      
+                      <div className="flex items-center justify-center">
+                        <Button
+                          variant="outline"
+                          onClick={() => setShowNewStudentForm(true)}
+                          className="w-full"
+                        >
+                          + Cadastrar Novo Aluno
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Nome do Aluno *
+                          </label>
+                          <input
+                            type="text"
+                            value={newStudent.name}
+                            onChange={(e) => setNewStudent({ ...newStudent, name: e.target.value })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+                            placeholder="Ex: João Silva"
+                          />
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Email *
+                          </label>
+                          <input
+                            type="email"
+                            value={newStudent.email}
+                            onChange={(e) => setNewStudent({ ...newStudent, email: e.target.value })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+                            placeholder="joao@email.com"
+                          />
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Telefone (opcional)
+                          </label>
+                          <input
+                            type="tel"
+                            value={newStudent.phone}
+                            onChange={(e) => setNewStudent({ ...newStudent, phone: e.target.value })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+                            placeholder="(11) 99999-9999"
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="flex space-x-2">
+                        <Button
+                          onClick={handleCreateStudent}
+                          className="flex-1 bg-meu-primary hover:bg-meu-primary/90"
+                        >
+                          Cadastrar Aluno
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setShowNewStudentForm(false)
+                            setNewStudent({ name: '', email: '', phone: '' })
+                          }}
+                          className="flex-1"
+                        >
+                          Cancelar
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </CardContent>
+                )}
+              </Card>
+            )}
+
+            {/* Data e Horários Livres */}
+            {selectedFranchise && selectedStudent && (
+              <Card className="border-0 shadow-lg hover:shadow-xl transition-shadow duration-300 animate-in slide-in-from-bottom-4">
+                <CardHeader className="bg-gradient-to-r from-green-50 to-blue-50">
+                  <CardTitle className="flex items-center text-xl">
+                    <div className="p-2 bg-meu-primary rounded-lg mr-3">
+                      <Calendar className="h-5 w-5 text-white" />
+                    </div>
+                    <div>
+                      <span className="block">Passo 3: Data e Horário</span>
+                      <span className="text-sm font-normal text-gray-600">Escolha quando será a aula</span>
+                    </div>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6 pt-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -308,9 +579,11 @@ export default function ReservarHorarioPage() {
                               variant="outline"
                               size="sm"
                               disabled={!slot.is_free || submitting}
-                              onClick={() => handleReservarHorario(slot.time)}
+                              onClick={() => setSelectedHorario(slot.time)}
                               className={`${
-                                slot.is_free
+                                selectedHorario === slot.time
+                                  ? 'bg-meu-primary text-white border-meu-primary'
+                                  : slot.is_free
                                   ? 'hover:bg-meu-primary hover:text-white hover:border-meu-primary'
                                   : 'bg-red-100 text-red-700 cursor-not-allowed border-red-200'
                               }`}
@@ -376,27 +649,60 @@ export default function ReservarHorarioPage() {
                           </p>
                         </div>
                       )}
+
+                      {selectedStudent && (
+                        <div>
+                          <span className="text-sm text-gray-600">Aluno:</span>
+                          <p className="font-medium text-gray-900">
+                            {students.find(s => s.id === selectedStudent)?.name}
+                          </p>
+                        </div>
+                      )}
+
+                      {selectedHorario && (
+                        <div>
+                          <span className="text-sm text-gray-600">Horário:</span>
+                          <p className="font-medium text-gray-900">{selectedHorario}</p>
+                        </div>
+                      )}
                       
                       <div>
                         <span className="text-sm text-gray-600">Duração:</span>
-                        <p className="font-medium text-gray-900">Conforme configuração da unidade</p>
+                        <p className="font-medium text-gray-900">
+                          {selectedHorario ? `${availableSlots.find(s => s.time === selectedHorario)?.slot_duration || 60} minutos` : 'Conforme configuração da unidade'}
+                        </p>
                       </div>
                     </div>
 
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                      <div className="flex items-start space-x-2">
-                        <AlertCircle className="h-4 w-4 text-blue-600 mt-0.5" />
-                        <div className="text-sm text-blue-800">
-                          <p className="font-medium mb-1">Como funciona?</p>
-                          <p>Clique em um horário livre para reservá-lo. O horário ficará disponível para seus alunos agendarem.</p>
+                    {selectedHorario && selectedStudent && selectedData ? (
+                      <Button
+                        onClick={() => handleReservarHorario(selectedHorario)}
+                        disabled={submitting}
+                        className="w-full bg-meu-primary hover:bg-meu-primary/90"
+                      >
+                        {submitting ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            Confirmando...
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle className="h-4 w-4 mr-2" />
+                            Confirmar Reserva
+                          </>
+                        )}
+                      </Button>
+                    ) : (
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                        <div className="flex items-start space-x-2">
+                          <AlertCircle className="h-4 w-4 text-blue-600 mt-0.5" />
+                          <div className="text-sm text-blue-800">
+                            <p className="font-medium mb-1">Como funciona?</p>
+                            <p>Selecione unidade, aluno, data e horário para confirmar a reserva.</p>
+                            <br></br>
+                            <p>Após isso, será criado um agendamento em "Minha Agenda" por lá, você pode monitorar suas reservas e agendamentos feitos por outros alunos </p>
+                          </div>
                         </div>
-                      </div>
-                    </div>
-
-                    {submitting && (
-                      <div className="flex items-center justify-center space-x-2 text-meu-primary">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        <span className="text-sm">Reservando horário...</span>
                       </div>
                     )}
                   </>

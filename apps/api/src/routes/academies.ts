@@ -82,8 +82,8 @@ router.get('/:id/available-slots', async (req, res) => {
   try {
     console.log('📍 GET /api/academies/:id/available-slots')
     const { id } = req.params
-    const { date } = req.query as { date?: string }
-    console.log('Params:', { id, date })
+    const { date, teacher_id } = req.query as { date?: string; teacher_id?: string }
+    console.log('Params:', { id, date, teacher_id })
 
     if (!date) {
       return res.status(400).json({ error: 'date é obrigatório (YYYY-MM-DD)' })
@@ -104,29 +104,38 @@ router.get('/:id/available-slots', async (req, res) => {
     if (academyError) throw academyError
 
     // Verificar se a academia está aberta neste dia
+    console.log('📅 Schedule da academia:', academy?.schedule)
     let daySchedule = null
-    if (academy?.schedule) {
+    let hasSchedule = false
+    
+    if (academy?.schedule && Array.isArray(academy.schedule) && academy.schedule.length > 0) {
+      hasSchedule = true
       try {
         const schedule = typeof academy.schedule === 'string' 
           ? JSON.parse(academy.schedule) 
           : academy.schedule
+        console.log('📋 Schedule parseado:', schedule)
         daySchedule = schedule.find((s: any) => s.day === String(dow))
+        console.log('🗓️ Schedule do dia', dow, ':', daySchedule)
       } catch (e) {
         console.error('Erro ao parsear schedule:', e)
       }
-    }
-
-    // Se academia fechada neste dia, retornar slots vazios
-    if (!daySchedule || !daySchedule.isOpen) {
-      return res.json({ 
-        slots: [], 
-        message: 'Academia fechada neste dia',
-        isOpen: false 
-      })
+      
+      // Se tem schedule mas está fechado neste dia, retornar vazio
+      if (!daySchedule || !daySchedule.isOpen) {
+        console.log('🚫 Academia fechada neste dia')
+        return res.json({ 
+          slots: [], 
+          message: 'Academia fechada neste dia',
+          isOpen: false 
+        })
+      }
+    } else {
+      console.log('⚠️ Academia não tem schedule configurado, buscando slots diretamente')
     }
 
     // Buscar slots configurados para a academia nesse dia da semana
-    console.log('Buscando slots...')
+    console.log('🔍 Buscando slots para academia:', id, 'dia da semana:', dow, 'data:', date)
     const { data: slots, error: slotsError } = await supabase
       .from('academy_time_slots')
       .select('time, max_capacity, is_available')
@@ -135,17 +144,26 @@ router.get('/:id/available-slots', async (req, res) => {
       .eq('is_available', true)
       .order('time')
 
-    console.log('Slots encontrados:', slots?.length || 0)
+    console.log('📊 Slots encontrados:', slots?.length || 0)
+    if (slots && slots.length > 0) {
+      console.log('⏰ Horários:', slots.map(s => s.time))
+    }
     if (slotsError) {
       console.error('Erro ao buscar slots:', slotsError)
       throw slotsError
     }
 
-    // Filtrar slots dentro do horário de funcionamento
-    const filteredSlots = (slots || []).filter((s: any) => {
-      const slotTime = String(s.time).substring(0, 5) // HH:MM
-      return slotTime >= daySchedule.openingTime && slotTime <= daySchedule.closingTime
-    })
+    // Filtrar slots dentro do horário de funcionamento (se houver schedule)
+    let filteredSlots = slots || []
+    if (hasSchedule && daySchedule) {
+      filteredSlots = (slots || []).filter((s: any) => {
+        const slotTime = String(s.time).substring(0, 5) // HH:MM
+        return slotTime >= daySchedule.openingTime && slotTime <= daySchedule.closingTime
+      })
+      console.log('✂️ Slots filtrados por horário de funcionamento:', filteredSlots.length)
+    } else {
+      console.log('⏭️ Sem schedule, usando todos os slots encontrados')
+    }
 
     // Buscar bookings do dia para essa academia (não cancelados)
     const startISO = new Date(`${date}T00:00:00Z`).toISOString()
@@ -153,21 +171,40 @@ router.get('/:id/available-slots', async (req, res) => {
 
     const { data: bookings, error: bookingsError } = await supabase
       .from('bookings')
-      .select('date, status')
+      .select('id, date, status, teacher_id, student_id')
       .eq('franchise_id', id)
       .gte('date', startISO)
       .lte('date', endISO)
 
     if (bookingsError) throw bookingsError
+    
+    console.log('📋 Reservas encontradas para este dia:', bookings?.length || 0)
+    if (bookings && bookings.length > 0) {
+      bookings.forEach(b => {
+        const t = new Date(b.date)
+        const hhmm = t.toISOString().substring(11, 16)
+        console.log(`  - ${hhmm}: ID=${b.id.substring(0, 8)}..., status=${b.status}, teacher=${b.teacher_id?.substring(0, 8)}...`)
+      })
+    }
 
     // Mapear ocupação por HH:MM (UTC)
+    // Contar: CONFIRMED, PENDING e BLOCKED do próprio professor (se teacher_id fornecido)
     const occ: Record<string, number> = {}
     for (const b of bookings || []) {
-      if (b.status === 'CANCELLED') continue
-      const t = new Date(b.date)
-      const hhmm = t.toISOString().substring(11, 16) // HH:MM
-      occ[hhmm] = (occ[hhmm] || 0) + 1
+      // Contar CONFIRMED e PENDING de qualquer professor
+      if (b.status === 'CONFIRMED' || b.status === 'PENDING') {
+        const t = new Date(b.date)
+        const hhmm = t.toISOString().substring(11, 16)
+        occ[hhmm] = (occ[hhmm] || 0) + 1
+      }
+      // Contar BLOCKED apenas do próprio professor (para não mostrar como disponível)
+      else if (b.status === 'BLOCKED' && teacher_id && b.teacher_id === teacher_id) {
+        const t = new Date(b.date)
+        const hhmm = t.toISOString().substring(11, 16)
+        occ[hhmm] = (occ[hhmm] || 0) + 999 // Marcar como totalmente ocupado
+      }
     }
+    console.log('🔢 Ocupação por horário (CONFIRMED + PENDING + BLOCKED do professor):', occ)
 
     const result = filteredSlots.map((s: any) => {
       // s.time vem como HH:MM:SS
@@ -188,10 +225,10 @@ router.get('/:id/available-slots', async (req, res) => {
     res.json({ 
       slots: result,
       isOpen: true,
-      daySchedule: {
+      daySchedule: daySchedule ? {
         openingTime: daySchedule.openingTime,
         closingTime: daySchedule.closingTime
-      }
+      } : null
     })
   } catch (error: any) {
     console.error('Error fetching available slots:', error)
