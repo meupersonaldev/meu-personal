@@ -1,7 +1,22 @@
 {
   "permissions": {
     "allow": [
-      "Bash(del nul)"
+      "Bash(del nul)",
+      "mcp__supabase__list_migrations",
+      "Bash(if not exist \"uploads\\avatars\" mkdir uploadsavatars)",
+      "Bash(move page.tsx page-old.tsx)",
+      "Bash(move page-new.tsx page.tsx)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "mcp__supabase__apply_migration",
+      "Bash(npm install:*)",
+      "Bash(cat:*)",
+      "mcp__supabase__execute_sql",
+      "mcp__supabase__search_docs",
+      "Bash(del \"C:\\Users\\zaira\\Documents\\GitHub\\meu-personal\\SETUP-ESQUECI-SENHA.md\")",
+      "Bash(del \"C:\\Users\\zaira\\Documents\\GitHub\\meu-personal\\apps\\api\\src\\services\\email.service.ts\")",
+      "Bash(npm run dev:*)",
+      "Bash(if not exist \"C:\\Users\\zaira\\Documents\\GitHub\\meu-personal\\apps\\web\\app\\professor\\configuracoes\" mkdir \"C:\\Users\\zaira\\Documents\\GitHub\\meu-personal\\apps\\web\\app\\professor\\configuracoes\")"
     ],
     "deny": [],
     "ask": []
