@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuthStore } from '@/lib/stores/auth-store'
@@ -26,17 +26,16 @@ export default function ProfessorSidebar() {
   const pathname = usePathname()
   
   // Auto-expandir seções baseado na rota atual
-  const getInitialExpandedSections = () => {
+  const getInitialExpandedSections = useCallback(() => {
     const sections: string[] = []
     if (pathname.startsWith('/professor/agenda')) sections.push('agenda')
     if (pathname.startsWith('/professor/carteira') || pathname.startsWith('/professor/comprar-horas')) {
       sections.push('financeiro')
     }
     return sections
-  }
+  }, [pathname])
   
   const [expandedSections, setExpandedSections] = useState<string[]>(getInitialExpandedSections())
-  const [showComingSoon, setShowComingSoon] = useState(false)
 
   // Atualizar seções expandidas quando a rota mudar
   useEffect(() => {
@@ -46,7 +45,7 @@ export default function ProfessorSidebar() {
       const combined = [...new Set([...prev, ...newSections])]
       return combined
     })
-  }, [pathname])
+  }, [pathname, getInitialExpandedSections])
 
   const toggleSection = (section: string) => {
     setExpandedSections(prev => 
@@ -94,7 +93,7 @@ export default function ProfessorSidebar() {
   ]
 
   return (
-    <div className="w-64 h-screen fixed left-0 top-0 z-50 bg-meu-primary-dark flex flex-col shadow-2xl">
+    <div className="sidebar-desktop w-64 h-screen fixed left-0 top-0 z-50 bg-meu-primary-dark flex flex-col shadow-2xl">
       
       {/* User Profile */}
       <div className="p-4 border-b border-white/20">
@@ -182,37 +181,25 @@ export default function ProfessorSidebar() {
         {/* Check-in */}
         <div className="mt-8 pt-4 border-t border-white/20">
           <div className="space-y-2">
-            <button 
-              onClick={() => setShowComingSoon(true)}
+            <Link 
+              href="/professor/checkin/scan"
               className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-white/90 hover:bg-white/10 hover:text-white transition-all duration-200"
             >
               <QrCode className="h-5 w-5" />
               <span className="font-medium">Check-in</span>
-            </button>
+            </Link>
+            <Link 
+              href="/professor/checkins"
+              className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-white/90 hover:bg-white/10 hover:text-white transition-all duration-200"
+            >
+              <QrCode className="h-5 w-5" />
+              <span className="font-medium">Histórico de Check-ins</span>
+            </Link>
           </div>
         </div>
       </div>
 
-      {/* Modal Em Breve */}
-      {showComingSoon && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]">
-          <div className="bg-white rounded-xl p-8 max-w-md mx-4 text-center">
-            <div className="w-16 h-16 bg-meu-accent rounded-full flex items-center justify-center mx-auto mb-4">
-              <QrCode className="h-8 w-8 text-meu-primary" />
-            </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Em Breve!</h2>
-            <p className="text-gray-600 mb-6">
-              A funcionalidade de Check-in estará disponível em breve.
-            </p>
-            <Button
-              onClick={() => setShowComingSoon(false)}
-              className="w-full bg-meu-primary hover:bg-meu-primary-dark text-white"
-            >
-              Entendi
-            </Button>
-          </div>
-        </div>
-      )}
+      {/* Modal Em Breve removido - Check-in disponível em /professor/checkin */}
 
       {/* Footer do Sidebar */}
       <div className="p-4 border-t border-white/20 space-y-2">

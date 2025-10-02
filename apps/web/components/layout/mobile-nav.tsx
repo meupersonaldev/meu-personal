@@ -23,10 +23,11 @@ export function MobileNav() {
     
     if (user?.role === 'TEACHER') {
       return [
-        { href: '/professor/dashboard', label: 'Dashboard', icon: BarChart3 },
+        { href: '/professor/dashboard', label: 'Dashboard', icon: Home },
         { href: '/professor/agenda', label: 'Agenda', icon: Calendar },
         { href: '/professor/aulas', label: 'Aulas', icon: Clock },
-        { href: '/professor/perfil', label: 'Perfil', icon: User },
+        { href: '/professor/configuracoes', label: 'Config', icon: User },
+        { href: '/professor/carteira', label: 'Carteira', icon: BarChart3 },
       ]
     }
 

@@ -42,11 +42,11 @@ export default function Sidebar() {
               Aulas
             </Link>
             <Link
-              href="/professor/perfil"
+              href="/professor/configuracoes"
               className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary"
             >
               <User className="h-4 w-4" />
-              Perfil
+              Configurações
             </Link>
             <Link
               href="/professor/carteira"

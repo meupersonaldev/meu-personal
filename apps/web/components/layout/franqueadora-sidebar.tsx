@@ -61,7 +61,7 @@ export default function FranqueadoraSidebar() {
   }
 
   return (
-    <div className="w-64 h-screen fixed left-0 top-0 z-50 bg-meu-primary border-r border-meu-primary/20 flex flex-col shadow-lg">
+    <div className="sidebar-desktop w-64 h-screen fixed left-0 top-0 z-50 bg-meu-primary border-r border-meu-primary/20 flex flex-col shadow-lg">
 
       {/* Header do Sidebar */}
       <div className="p-6 border-b border-meu-primary/20">

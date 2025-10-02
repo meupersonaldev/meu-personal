@@ -16,7 +16,7 @@ export default function FranqueadoraLayout({ children }: FranqueadoraLayoutProps
         <FranqueadoraSidebar />
 
         {/* Main Content */}
-        <div className="ml-64">
+        <div className="content-with-sidebar ml-64">
           <main className="min-h-screen bg-gray-50">
             {children}
           </main>

@@ -28,7 +28,7 @@ export default function ProfessorLayout({ children }: ProfessorLayoutProps) {
         <ProfessorSidebar />
         
         {/* Main Content */}
-        <div className="ml-64">
+        <div className="content-with-sidebar ml-64">
           {/* Header */}
           <ProfessorHeader />
           
