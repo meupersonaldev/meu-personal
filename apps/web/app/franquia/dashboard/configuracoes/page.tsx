@@ -15,6 +15,16 @@ type DaySchedule = {
   isOpen: boolean
   openingTime: string
   closingTime: string
+  slotsPerHour?: number
+}
+
+type TimeSlot = {
+  id?: string
+  academy_id: string
+  day_of_week: number
+  time: string
+  is_available: boolean
+  max_capacity: number
 }
 
 type AcademySettings = {
@@ -48,19 +58,21 @@ export default function ConfiguracoesPage() {
     state: '',
     zipCode: '',
     schedule: [
-      { day: '0', dayName: 'Domingo', isOpen: false, openingTime: '06:00', closingTime: '22:00' },
-      { day: '1', dayName: 'Segunda', isOpen: true, openingTime: '06:00', closingTime: '22:00' },
-      { day: '2', dayName: 'Terça', isOpen: true, openingTime: '06:00', closingTime: '22:00' },
-      { day: '3', dayName: 'Quarta', isOpen: true, openingTime: '06:00', closingTime: '22:00' },
-      { day: '4', dayName: 'Quinta', isOpen: true, openingTime: '06:00', closingTime: '22:00' },
-      { day: '5', dayName: 'Sexta', isOpen: true, openingTime: '06:00', closingTime: '22:00' },
-      { day: '6', dayName: 'Sábado', isOpen: false, openingTime: '06:00', closingTime: '22:00' }
+      { day: '0', dayName: 'Domingo', isOpen: false, openingTime: '06:00', closingTime: '22:00', slotsPerHour: 1 },
+      { day: '1', dayName: 'Segunda', isOpen: true, openingTime: '06:00', closingTime: '22:00', slotsPerHour: 1 },
+      { day: '2', dayName: 'Terça', isOpen: true, openingTime: '06:00', closingTime: '22:00', slotsPerHour: 1 },
+      { day: '3', dayName: 'Quarta', isOpen: true, openingTime: '06:00', closingTime: '22:00', slotsPerHour: 1 },
+      { day: '4', dayName: 'Quinta', isOpen: true, openingTime: '06:00', closingTime: '22:00', slotsPerHour: 1 },
+      { day: '5', dayName: 'Sexta', isOpen: true, openingTime: '06:00', closingTime: '22:00', slotsPerHour: 1 },
+      { day: '6', dayName: 'Sábado', isOpen: false, openingTime: '06:00', closingTime: '22:00', slotsPerHour: 1 }
     ],
     checkinTolerance: 30
   })
+  const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([])
 
   useEffect(() => {
     loadSettings()
+    loadTimeSlots()
     if (franquiaUser) {
       setProfileData({
         name: franquiaUser.name || '',
@@ -112,13 +124,13 @@ export default function ConfiguracoesPage() {
         
         // Parse schedule do banco (se existir) ou usa padrão
         const defaultSchedule = [
-          { day: '0', dayName: 'Domingo', isOpen: false, openingTime: '06:00', closingTime: '22:00' },
-          { day: '1', dayName: 'Segunda', isOpen: true, openingTime: '06:00', closingTime: '22:00' },
-          { day: '2', dayName: 'Terça', isOpen: true, openingTime: '06:00', closingTime: '22:00' },
-          { day: '3', dayName: 'Quarta', isOpen: true, openingTime: '06:00', closingTime: '22:00' },
-          { day: '4', dayName: 'Quinta', isOpen: true, openingTime: '06:00', closingTime: '22:00' },
-          { day: '5', dayName: 'Sexta', isOpen: true, openingTime: '06:00', closingTime: '22:00' },
-          { day: '6', dayName: 'Sábado', isOpen: false, openingTime: '06:00', closingTime: '22:00' }
+          { day: '0', dayName: 'Domingo', isOpen: false, openingTime: '06:00', closingTime: '22:00', slotsPerHour: 1 },
+          { day: '1', dayName: 'Segunda', isOpen: true, openingTime: '06:00', closingTime: '22:00', slotsPerHour: 1 },
+          { day: '2', dayName: 'Terça', isOpen: true, openingTime: '06:00', closingTime: '22:00', slotsPerHour: 1 },
+          { day: '3', dayName: 'Quarta', isOpen: true, openingTime: '06:00', closingTime: '22:00', slotsPerHour: 1 },
+          { day: '4', dayName: 'Quinta', isOpen: true, openingTime: '06:00', closingTime: '22:00', slotsPerHour: 1 },
+          { day: '5', dayName: 'Sexta', isOpen: true, openingTime: '06:00', closingTime: '22:00', slotsPerHour: 1 },
+          { day: '6', dayName: 'Sábado', isOpen: false, openingTime: '06:00', closingTime: '22:00', slotsPerHour: 1 }
         ]
         
         let schedule = defaultSchedule
@@ -128,7 +140,10 @@ export default function ConfiguracoesPage() {
               ? JSON.parse(academy.schedule) 
               : academy.schedule
             if (Array.isArray(parsed) && parsed.length > 0) {
-              schedule = parsed
+              schedule = parsed.map(day => ({
+                ...day,
+                slotsPerHour: day.slotsPerHour || 1
+              }))
             }
           } catch (e) {
             console.error('Erro ao parsear schedule:', e)
@@ -149,6 +164,46 @@ export default function ConfiguracoesPage() {
       }
     } catch (error) {
       console.error('Erro ao carregar configurações:', error)
+    }
+  }
+
+  async function loadTimeSlots() {
+    if (!franquiaUser?.academyId) return
+
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/time-slots?academy_id=${franquiaUser.academyId}`, {
+        credentials: 'include'
+      })
+
+      if (response.ok) {
+        const { slots } = await response.json()
+        setTimeSlots(slots || [])
+      }
+    } catch (error) {
+      console.error('Erro ao carregar slots:', error)
+    }
+  }
+
+  async function generateTimeSlots() {
+    if (!franquiaUser?.academyId) return
+
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/time-slots/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          academy_id: franquiaUser.academyId
+        })
+      })
+
+      if (response.ok) {
+        const { slots } = await response.json()
+        setTimeSlots(slots || [])
+        console.log('Slots gerados automaticamente')
+      }
+    } catch (error) {
+      console.error('Erro ao gerar slots:', error)
     }
   }
 
@@ -305,8 +360,11 @@ export default function ConfiguracoesPage() {
       console.log('Resposta:', data)
 
       if (response.ok) {
-        toast.success('Configurações atualizadas com sucesso!')
+        // Gerar slots automaticamente após salvar configurações
+        await generateTimeSlots()
+        toast.success('Configurações e slots atualizados com sucesso!')
         loadSettings() // Recarregar dados
+        loadTimeSlots() // Recarregar slots
       } else {
         toast.error(data.error || 'Erro ao salvar configurações')
         console.error('Erro do servidor:', data)
@@ -728,6 +786,26 @@ export default function ConfiguracoesPage() {
                             }}
                             type="time"
                           />
+                          <div className="flex items-center space-x-2 ml-4">
+                            <span className="text-sm text-gray-600">Capacidade:</span>
+                            <Input 
+                              className="w-16 text-center" 
+                              value={daySchedule.slotsPerHour || 1}
+                              onChange={(e) => {
+                                const val = Number(e.target.value)
+                                if (val >= 1 && val <= 20) {
+                                  const newSchedule = [...settings.schedule]
+                                  newSchedule[index].slotsPerHour = val
+                                  setSettings({...settings, schedule: newSchedule})
+                                }
+                              }}
+                              type="number"
+                              min="1"
+                              max="20"
+                            />
+                            <span className="text-xs text-gray-500">reservas/hora</span>
+                          </div>
+                         
                         </div>
                       ) : (
                         <span className="text-sm text-gray-400 flex-1">Fechado</span>
@@ -736,6 +814,45 @@ export default function ConfiguracoesPage() {
                   ))}
                 </div>
               </div>
+
+              {/* Resumo dos Slots */}
+              {timeSlots.length > 0 && (
+                <div className="bg-blue-50 rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <p className="font-semibold text-blue-900">Slots de Horários disponíveis</p>
+                      <p className="text-sm text-blue-700">Total de {timeSlots.length} slots criados</p>
+                    </div>
+                    <Button
+                      onClick={generateTimeSlots}
+                      variant="outline"
+                      size="sm"
+                      disabled={loading}
+                      className="text-blue-700 border-blue-300 hover:bg-blue-100"
+                    >
+                      Regenerar Slots
+                    </Button>
+                  </div>
+                  
+                  <div className="grid grid-cols-7 gap-2 text-xs">
+                    {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((day, dayIndex) => {
+                      const daySlots = timeSlots.filter(slot => slot.day_of_week === dayIndex)
+                      return (
+                        <div key={day} className="text-center">
+                          <div className="font-medium text-blue-900 mb-1">{day}</div>
+                          <div className={`px-2 py-1 rounded text-xs ${
+                            daySlots.length > 0 
+                              ? 'bg-blue-200 text-blue-800' 
+                              : 'bg-gray-200 text-gray-500'
+                          }`}>
+                            {daySlots.length} slots
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
 
               <div className="bg-yellow-50 rounded-xl p-4">
                 <div className="flex items-start justify-between">

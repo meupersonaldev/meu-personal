@@ -40,19 +40,17 @@ import bookingsRoutes from './routes/bookings'
 import notificationsRoutes from './routes/notifications'
 import plansRoutes from './routes/plans'
 import approvalsRoutes from './routes/approvals'
-import paymentsRoutes from './routes/payments'
 import franchisesRoutes from './routes/franchises'
 import webhooksRoutes from './routes/webhooks'
 import checkoutRoutes from './routes/checkout'
 import checkinsRoutes from './routes/checkins'
 import financialRoutes from './routes/financial'
 import calendarRoutes from './routes/calendar'
+import timeSlotsRoutes from './routes/time-slots'
 import uploadRoutes from './routes/upload'
 
 // Servir arquivos estáticos de uploads
 app.use('/uploads', express.static('uploads'))
-
-app.use('/api/auth', authRoutes)
 app.use('/api/users', usersRoutes)
 app.use('/api/academies', academiesRoutes)
 app.use('/api/teachers', teachersRoutes)
@@ -63,12 +61,13 @@ app.use('/api/bookings', bookingsRoutes)
 app.use('/api/notifications', notificationsRoutes)
 app.use('/api/plans', plansRoutes)
 app.use('/api/approvals', approvalsRoutes)
-app.use('/api/payments', paymentsRoutes)
+// app.use('/api/payments', paymentsRoutes) // TODO: Implementar payments routes
 app.use('/api/franchises', franchisesRoutes)
 app.use('/api/webhooks', webhooksRoutes)
 app.use('/api/checkins', checkinsRoutes)
 app.use('/api/financial', financialRoutes)
 app.use('/api/calendar', calendarRoutes)
+app.use('/api/time-slots', timeSlotsRoutes)
 app.use('/api/checkout', checkoutRoutes)
 app.use('/api', uploadRoutes)
 

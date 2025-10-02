@@ -19,6 +19,7 @@ import {
   ChevronRight
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { utcToLocal, hasPassedLocal, getLocalTimeFromUtc, getLocalDateFromUtc } from '@/lib/timezone-utils'
 
 interface Booking {
   id: string
@@ -152,14 +153,15 @@ export default function ProfessorAgendaPage() {
           const allBookings = data.bookings || []
           const now = new Date()
           
-          // Marcar como COMPLETED automaticamente se passou o horário
+          // Marcar como COMPLETED automaticamente se passou o horário (usando timezone local)
           const updatedBookings = await Promise.all(allBookings.map(async (b: Booking) => {
             if ((b.status === 'CONFIRMED' || b.status === 'PENDING') && b.studentId) {
-              const bookingDate = new Date(b.date)
-              const bookingEnd = new Date(bookingDate.getTime() + b.duration * 60000) // Adicionar duração
+              // Verificar se a aula já passou usando horário local
+              const bookingLocalDate = utcToLocal(b.date)
+              const bookingEnd = new Date(bookingLocalDate.getTime() + b.duration * 60000)
               
               if (bookingEnd < now) {
-                // Aula já passou, marcar como COMPLETED
+                // Aula já passou no horário local, marcar como COMPLETED
                 try {
                   await fetch(`${API_URL}/api/bookings/${b.id}`, {
                     method: 'PUT',
@@ -179,6 +181,7 @@ export default function ProfessorAgendaPage() {
           // Separar ativos e cancelados
           const activeBookings = updatedBookings.filter((b: Booking) => b.status !== 'CANCELLED')
           const cancelled = updatedBookings.filter((b: Booking) => b.status === 'CANCELLED')
+          
           
           setBookings(activeBookings)
           setCancelledBookings(cancelled)
@@ -210,14 +213,14 @@ export default function ProfessorAgendaPage() {
   const weekDays = getWeekDays()
 
   const getBookingForSlot = (date: Date, time: string) => {
-    // Converter data local para UTC para comparação
-    const dateUTC = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
-    const dateStr = dateUTC.toISOString().split('T')[0]
+    // Usar data local para comparação
+    const dateStr = date.toISOString().split('T')[0]
     
     const found = bookings.find(booking => {
-      const bookingDate = new Date(booking.date)
-      const bookingDateStr = bookingDate.toISOString().split('T')[0]
-      const bookingTime = bookingDate.getUTCHours().toString().padStart(2, '0') + ':' + bookingDate.getUTCMinutes().toString().padStart(2, '0')
+      // Converter booking UTC para local para comparação
+      const bookingLocalDate = utcToLocal(booking.date)
+      const bookingDateStr = getLocalDateFromUtc(booking.date)
+      const bookingTime = getLocalTimeFromUtc(booking.date)
       
       const matchDate = bookingDateStr === dateStr
       const matchTime = bookingTime === time
@@ -230,18 +233,16 @@ export default function ProfessorAgendaPage() {
   }
 
   const getAllBookingsForSlot = (date: Date, time: string) => {
-    // Converter data local para UTC para comparação
-    const dateUTC = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
-    const dateStr = dateUTC.toISOString().split('T')[0]
+    // Usar data local para comparação
+    const dateStr = date.toISOString().split('T')[0]
     
     const filtered = bookings.filter(booking => {
-      const bookingDate = new Date(booking.date)
-      const bookingDateStr = bookingDate.toISOString().split('T')[0]
-      const bookingTime = bookingDate.getUTCHours().toString().padStart(2, '0') + ':' + bookingDate.getUTCMinutes().toString().padStart(2, '0')
+      // Converter booking UTC para local para comparação
+      const bookingDateStr = getLocalDateFromUtc(booking.date)
+      const bookingTime = getLocalTimeFromUtc(booking.date)
       
       const matchDate = bookingDateStr === dateStr
       const matchTime = bookingTime === time
-      
       
       return matchDate && matchTime
     })
@@ -256,13 +257,12 @@ export default function ProfessorAgendaPage() {
   }
 
   const getCancelledCountForSlot = (date: Date, time: string) => {
-    const dateUTC = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
-    const dateStr = dateUTC.toISOString().split('T')[0]
+    const dateStr = date.toISOString().split('T')[0]
     
     const filtered = cancelledBookings.filter(booking => {
-      const bookingDate = new Date(booking.date)
-      const bookingDateStr = bookingDate.toISOString().split('T')[0]
-      const bookingTime = bookingDate.getUTCHours().toString().padStart(2, '0') + ':' + bookingDate.getUTCMinutes().toString().padStart(2, '0')
+      // Converter booking UTC para local para comparação
+      const bookingDateStr = getLocalDateFromUtc(booking.date)
+      const bookingTime = getLocalTimeFromUtc(booking.date)
       
       const matchDate = bookingDateStr === dateStr
       const matchTime = bookingTime === time
@@ -285,6 +285,7 @@ export default function ProfessorAgendaPage() {
       const bookingsInUnit = allBookingsInSlot.filter(b => b.franchiseId === selectedFranchise)
       mainBooking = bookingsInUnit.find(b => b.status === 'PENDING') ||
                     bookingsInUnit.find(b => b.status === 'CONFIRMED') ||
+                    bookingsInUnit.find(b => b.status === 'COMPLETED') ||
                     bookingsInUnit.find(b => b.status === 'AVAILABLE') ||
                     bookingsInUnit.find(b => b.status === 'BLOCKED') ||
                     null
@@ -294,6 +295,7 @@ export default function ProfessorAgendaPage() {
     if (!mainBooking) {
       mainBooking = allBookingsInSlot.find(b => b.status === 'PENDING') ||
                     allBookingsInSlot.find(b => b.status === 'CONFIRMED') ||
+                    allBookingsInSlot.find(b => b.status === 'COMPLETED') ||
                     allBookingsInSlot.find(b => b.status === 'AVAILABLE') ||
                     allBookingsInSlot.find(b => b.status === 'BLOCKED')
     }
@@ -919,13 +921,16 @@ export default function ProfessorAgendaPage() {
                         const availableAcademiesCount = allBookingsInSlot.filter(b => b.status === 'AVAILABLE').length
                         const pendingCount = allBookingsInSlot.filter(b => b.status === 'PENDING').length
                         const confirmedCount = allBookingsInSlot.filter(b => b.status === 'CONFIRMED').length
+                        const completedCount = allBookingsInSlot.filter(b => b.status === 'COMPLETED').length
                         
-                        // Determinar qual booking mostrar (prioridade: PENDING > CONFIRMED > AVAILABLE > BLOCKED)
+                        // Determinar qual booking mostrar (prioridade: PENDING > CONFIRMED > COMPLETED > AVAILABLE > BLOCKED)
                         let displayBooking = null
                         if (pendingCount > 0) {
                           displayBooking = allBookingsInSlot.find(b => b.status === 'PENDING')
                         } else if (confirmedCount > 0) {
                           displayBooking = allBookingsInSlot.find(b => b.status === 'CONFIRMED')
+                        } else if (completedCount > 0) {
+                          displayBooking = allBookingsInSlot.find(b => b.status === 'COMPLETED')
                         } else if (availableAcademiesCount > 0) {
                           displayBooking = allBookingsInSlot.find(b => b.status === 'AVAILABLE')
                         } else if (blockedAcademiesCount > 0) {
@@ -941,6 +946,7 @@ export default function ProfessorAgendaPage() {
                           const bookingsInUnit = allBookingsInSlot.filter(b => b.franchiseId === selectedFranchise)
                           booking = bookingsInUnit.find(b => b.status === 'PENDING') ||
                                     bookingsInUnit.find(b => b.status === 'CONFIRMED') ||
+                                    bookingsInUnit.find(b => b.status === 'COMPLETED') ||
                                     bookingsInUnit.find(b => b.status === 'AVAILABLE') ||
                                     bookingsInUnit.find(b => b.status === 'BLOCKED') ||
                                     null
@@ -1202,6 +1208,26 @@ export default function ProfessorAgendaPage() {
                       </>
                     )}
 
+                    {/* Informações adicionais para COMPLETED */}
+                    {selectedBooking.status === 'COMPLETED' && (
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                        <div className="flex items-center space-x-2 mb-2">
+                          <Check className="h-4 w-4 text-gray-600" />
+                          <p className="text-sm font-medium text-gray-900">Aula Concluída</p>
+                        </div>
+                        <p className="text-xs text-gray-600">
+                          Esta aula foi automaticamente marcada como concluída após o horário agendado.
+                        </p>
+                        {selectedBooking.franchiseId && (
+                          <div className="mt-2 pt-2 border-t border-gray-200">
+                            <p className="text-xs text-gray-600">
+                              <strong>Unidade:</strong> {getAcademyName(selectedBooking.franchiseId)}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     <div className="flex flex-col space-y-2">
                       {/* Botões para BLOCKED */}
                       {selectedBooking.status === 'BLOCKED' && (
@@ -1246,6 +1272,15 @@ export default function ProfessorAgendaPage() {
                         >
                           🗑️ Remover Disponibilidade
                         </Button>
+                      )}
+                      
+                      {/* Para COMPLETED, não mostrar botões de ação */}
+                      {selectedBooking.status === 'COMPLETED' && (
+                        <div className="text-center py-2">
+                          <p className="text-sm text-gray-500">
+                            ✅ Aula finalizada - Nenhuma ação necessária
+                          </p>
+                        </div>
                       )}
                     </div>
                   </>

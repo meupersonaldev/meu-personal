@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { useFranquiaStore } from '@/lib/stores/franquia-store'
 import { toast } from 'sonner'
+import { formatLocalTime, getLocalDateFromUtc, getLocalTimeFromUtc } from '@/lib/timezone-utils'
 
 interface Booking {
   id: string
@@ -28,10 +29,18 @@ export default function AgendamentosGestaoPage() {
   const [loading, setLoading] = useState(true)
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
   const [statusFilter, setStatusFilter] = useState<'all' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED'>('all')
+  const [isHydrated, setIsHydrated] = useState(false)
+
+  // Aguardar hidratação do estado
+  useEffect(() => {
+    setIsHydrated(true)
+  }, [])
 
   useEffect(() => {
-    loadData()
-  }, [])
+    if (isHydrated && franquiaUser?.academyId) {
+      loadData()
+    }
+  }, [isHydrated, franquiaUser?.academyId])
 
   const loadData = async () => {
     setLoading(true)
@@ -45,6 +54,7 @@ export default function AgendamentosGestaoPage() {
       setLoading(false)
     }
   }
+
 
   const fetchBookings = async () => {
     if (!franquiaUser?.academyId) {
@@ -133,8 +143,9 @@ export default function AgendamentosGestaoPage() {
   }
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleDateString('pt-BR', {
+    // Usar timezone local correto
+    const localDate = new Date(getLocalDateFromUtc(dateString) + 'T12:00:00')
+    return localDate.toLocaleDateString('pt-BR', {
       day: '2-digit',
       month: 'long',
       year: 'numeric'
@@ -142,11 +153,8 @@ export default function AgendamentosGestaoPage() {
   }
 
   const formatTime = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleTimeString('pt-BR', {
-      hour: '2-digit',
-      minute: '2-digit'
-    })
+    // Usar timezone local correto
+    return getLocalTimeFromUtc(dateString)
   }
 
   const getStatusBadge = (status: string) => {
@@ -206,8 +214,18 @@ export default function AgendamentosGestaoPage() {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+      {/* Loading State */}
+      {!isHydrated || (!franquiaUser?.academyId && loading) ? (
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Carregando dados da academia...</p>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <Card className="p-6">
           <div className="flex items-center space-x-4">
             <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
@@ -387,9 +405,10 @@ export default function AgendamentosGestaoPage() {
                 Sobre a Gestão de Agendamentos
               </h4>
               <div className="text-sm text-blue-700 space-y-1">
-                <p>• Aulas são agendadas diretamente pelos alunos nos horários disponíveis dos professores</p>
+                <p>• Aulas podem ser agendadas diretamente pelos alunos nos horários disponíveis dos professores</p>
+                <p>• Aulas podem ser agendadas diretamente pelo professor nos horários disponíveis da academia</p>
                 <p>• Você pode cancelar aulas confirmadas se necessário</p>
-                <p>• Marque aulas como concluídas após a realização</p>
+                <p>• Marque aulas como concluídas após a realização se necessário</p>
                 <p>• Use os filtros para visualizar agendamentos por status</p>
               </div>
             </div>
@@ -489,6 +508,8 @@ export default function AgendamentosGestaoPage() {
             </div>
           </Card>
         </div>
+      )}
+        </>
       )}
     </div>
   )

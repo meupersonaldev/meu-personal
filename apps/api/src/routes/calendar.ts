@@ -54,23 +54,26 @@ router.get('/events', async (req, res) => {
 
     if (bookingsError) throw bookingsError
 
-    // Transformar em eventos de calendário
+    // Transformar bookings em eventos de calendário
     const events = (bookings || []).map((booking: any) => {
       const startDate = new Date(booking.date)
       const endDate = new Date(startDate.getTime() + (booking.duration || 60) * 60 * 1000)
+      const student = booking.student as any
+      const teacher = booking.teacher as any
+
 
       return {
         id: booking.id,
-        title: `Aula: ${booking.student?.name || 'Aluno'} com ${booking.teacher?.name || 'Professor'}`,
+        title: `Aula: ${student?.name || 'Aluno'} com ${teacher?.name || 'Professor'}`,
         start: startDate.toISOString(),
         end: endDate.toISOString(),
         status: booking.status,
-        studentId: booking.student?.id,
-        studentName: booking.student?.name || 'Aluno não encontrado',
-        studentEmail: booking.student?.email,
-        teacherId: booking.teacher?.id,
-        teacherName: booking.teacher?.name || 'Professor não encontrado',
-        teacherEmail: booking.teacher?.email,
+        studentId: student?.id,
+        studentName: student?.name || 'Aluno não encontrado',
+        studentEmail: student?.email,
+        teacherId: teacher?.id,
+        teacherName: teacher?.name || 'Professor não encontrado',
+        teacherEmail: teacher?.email,
         duration: booking.duration,
         notes: booking.notes,
         color: getEventColor(booking.status)

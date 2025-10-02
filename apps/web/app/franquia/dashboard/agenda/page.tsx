@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { User, GraduationCap, CheckCircle, XCircle, Filter, Eye, X as XIcon, Loader2 } from 'lucide-react'
+import { User, GraduationCap, CheckCircle, XCircle, Filter, Eye, X as XIcon, Loader2, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -10,6 +10,7 @@ import { Calendar, dateFnsLocalizer, View } from 'react-big-calendar'
 import { format, parse, startOfWeek, getDay, startOfMonth, endOfMonth } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { toast } from 'sonner'
+import { utcToLocal } from '@/lib/timezone-utils'
 import 'react-big-calendar/lib/css/react-big-calendar.css'
 import './calendar-custom.css'
 
@@ -51,10 +52,18 @@ export default function AgendaAcademiaPage() {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [loading, setLoading] = useState(true)
+  const [isHydrated, setIsHydrated] = useState(false)
+
+  // Aguardar hidratação do estado
+  useEffect(() => {
+    setIsHydrated(true)
+  }, [])
 
   useEffect(() => {
-    fetchEvents()
-  }, [currentDate, view])
+    if (isHydrated && franquiaUser?.academyId) {
+      fetchEvents()
+    }
+  }, [isHydrated, franquiaUser?.academyId, view, currentDate])
 
   const fetchEvents = async () => {
     if (!franquiaUser?.academyId) return
@@ -86,12 +95,18 @@ export default function AgendaAcademiaPage() {
 
       const data = await response.json()
       
-      // Converter para formato do calendário
-      const calendarEvents = data.events.map((event: any) => ({
-        ...event,
-        start: new Date(event.start),
-        end: new Date(event.end)
-      }))
+      // Converter para formato do calendário (corrigir timezone)
+      const calendarEvents = data.events.map((event: any) => {
+        // Usar função utilitária para conversão de timezone
+        const startLocal = utcToLocal(event.start)
+        const endLocal = utcToLocal(event.end)
+        
+        return {
+          ...event,
+          start: startLocal,
+          end: endLocal
+        }
+      })
 
       setEvents(calendarEvents)
     } catch (error) {
@@ -132,11 +147,14 @@ export default function AgendaAcademiaPage() {
     }
   }
 
-  if (loading) {
+  if (!isHydrated || (!franquiaUser?.academyId && loading)) {
     return (
       <div className="p-6">
         <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
+          <div className="text-center">
+            <Loader2 className="h-8 w-8 animate-spin text-gray-500 mx-auto mb-4" />
+            <p className="text-gray-600">Carregando agenda da academia...</p>
+          </div>
         </div>
       </div>
     )
