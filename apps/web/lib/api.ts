@@ -12,14 +12,35 @@ async function apiRequest(endpoint: string, options: RequestInit = {}) {
     ...options,
   }
 
-  const response = await fetch(url, config)
+  try {
+    const response = await fetch(url, config)
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Erro na requisição' }))
-    throw new Error(error.message || 'Erro na requisição')
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ 
+        message: `Erro na requisição: ${response.status} ${response.statusText}` 
+      }))
+      
+      // Log apenas erros críticos (não 404 ou 500 de recursos não encontrados)
+      if (response.status !== 404 && response.status !== 500) {
+        console.error(`API Error [${response.status}]:`, {
+          url,
+          status: response.status,
+          statusText: response.statusText,
+          error
+        })
+      }
+      
+      throw new Error(error.message || `Erro na requisição: ${response.status}`)
+    }
+
+    return response.json()
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('fetch')) {
+      console.error('Erro de conexão com a API:', url)
+      throw new Error('Não foi possível conectar ao servidor. Verifique se o backend está rodando.')
+    }
+    throw error
   }
-
-  return response.json()
 }
 
 // Auth API

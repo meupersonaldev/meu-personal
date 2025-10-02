@@ -17,6 +17,7 @@ export interface User {
 
 interface AuthState {
   user: User | null
+  token: string | null
   isAuthenticated: boolean
   isLoading: boolean
   login: (email: string, password: string) => Promise<boolean>
@@ -36,13 +37,14 @@ export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
       user: null,
+      token: null,
       isAuthenticated: false,
       isLoading: true,
 
       initialize: async () => {
         try {
           const { data: { session } } = await supabase.auth.getSession()
-          
+
           if (session?.user) {
             // Buscar dados completos do usuário
             const { data: userData } = await supabase
@@ -62,6 +64,7 @@ export const useAuthStore = create<AuthState>()(
                   credits: userData.credits,
                   avatar_url: userData.avatar_url
                 },
+                token: session.access_token,
                 isAuthenticated: true,
                 isLoading: false
               })
@@ -107,6 +110,7 @@ export const useAuthStore = create<AuthState>()(
                 credits: data.user.credits,
                 avatar_url: data.user.avatarUrl
               },
+              token: data.token || null,
               isAuthenticated: true
             })
             return true
@@ -176,8 +180,8 @@ export const useAuthStore = create<AuthState>()(
       logout: async () => {
         try {
           await supabase.auth.signOut()
-          set({ user: null, isAuthenticated: false })
-          
+          set({ user: null, token: null, isAuthenticated: false })
+
           // Redirecionar para landing page
           if (typeof window !== 'undefined') {
             window.location.href = '/'
@@ -221,6 +225,7 @@ export const useAuthStore = create<AuthState>()(
       name: 'auth-storage',
       partialize: (state) => ({
         user: state.user,
+        token: state.token,
         isAuthenticated: state.isAuthenticated
       })
     }
@@ -232,7 +237,7 @@ supabase.auth.onAuthStateChange((event, session) => {
   const { initialize } = useAuthStore.getState()
   
   if (event === 'SIGNED_OUT') {
-    useAuthStore.setState({ user: null, isAuthenticated: false })
+    useAuthStore.setState({ user: null, token: null, isAuthenticated: false })
   } else if (event === 'SIGNED_IN' && session) {
     initialize()
   }
