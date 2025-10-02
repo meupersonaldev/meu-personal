@@ -15,11 +15,20 @@ import {
   Loader2,
   Eye,
   EyeOff,
-  Building2
+  Building2,
+  Star,
+  DollarSign,
+  Award,
+  Plus,
+  Trash2,
+  X
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { teachersAPI } from '@/lib/api'
+import { formatCurrency } from '@/lib/utils'
+import { supabase } from '@/lib/supabase'
 
-type TabType = 'dados' | 'seguranca' | 'preferencias'
+type TabType = 'dados' | 'perfil' | 'seguranca' | 'preferencias'
 
 interface Academy {
   id: string
@@ -28,8 +37,27 @@ interface Academy {
   state: string
 }
 
+// Especialidades disponíveis
+const specialties = [
+  'Emagrecimento',
+  'Hipertrofia',
+  'Condicionamento',
+  'Musculação',
+  'Funcional',
+  'CrossFit',
+  'Pilates',
+  'Reabilitação',
+  'Força',
+  'Powerlifting',
+  'Preparação Atlética',
+  'Yoga',
+  'Dança',
+  'Boxe',
+  'Muay Thai'
+]
+
 export default function ConfiguracoesPage() {
-  const { user, updateUser } = useAuthStore()
+  const { user, updateUser, token } = useAuthStore()
   const [activeTab, setActiveTab] = useState<TabType>('dados')
   const [loading, setLoading] = useState(false)
   const [academies, setAcademies] = useState<Academy[]>([])
@@ -41,8 +69,14 @@ export default function ConfiguracoesPage() {
   const [profileData, setProfileData] = useState({
     name: user?.name || '',
     email: user?.email || '',
-    phone: user?.phone || '',
-    bio: ''
+    phone: user?.phone || ''
+  })
+
+  const [professionalProfile, setProfessionalProfile] = useState({
+    bio: '',
+    specialties: [] as string[],
+    hourly_rate: 0,
+    is_available: true
   })
 
   const [passwordData, setPasswordData] = useState({
@@ -58,8 +92,37 @@ export default function ConfiguracoesPage() {
     if (user?.id) {
       fetchAcademies()
       fetchTeacherPreferences()
+      fetchProfessionalProfile()
     }
   }, [user?.id])
+
+  const fetchProfessionalProfile = async () => {
+    if (!user?.id) {
+      console.warn('User ID não disponível')
+      return
+    }
+
+    try {
+      const data = await teachersAPI.getById(user.id)
+      const profileData = data.teacher_profiles?.[0] || data.teacher_profiles || {}
+
+      setProfessionalProfile({
+        bio: profileData.bio || '',
+        specialties: profileData.specialties || [],
+        hourly_rate: profileData.hourly_rate || 0,
+        is_available: profileData.is_available ?? true
+      })
+    } catch (error) {
+      // Silenciosamente define valores padrão - o perfil pode não existir ainda
+      console.warn('Perfil profissional não encontrado, usando valores padrão')
+      setProfessionalProfile({
+        bio: '',
+        specialties: [],
+        hourly_rate: 0,
+        is_available: true
+      })
+    }
+  }
 
   const fetchAcademies = async () => {
     try {
@@ -79,11 +142,10 @@ export default function ConfiguracoesPage() {
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
       const response = await fetch(`${API_URL}/api/teachers/${user?.id}/preferences`)
-      
+
       if (response.ok) {
         const data = await response.json()
         setSelectedAcademies(data.academy_ids || [])
-        setProfileData(prev => ({ ...prev, bio: data.bio || '' }))
       }
     } catch (error) {
       console.error('Erro ao carregar preferências:', error)
@@ -220,8 +282,7 @@ export default function ConfiguracoesPage() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          academy_ids: selectedAcademies,
-          bio: profileData.bio
+          academy_ids: selectedAcademies
         })
       })
 
@@ -246,10 +307,55 @@ export default function ConfiguracoesPage() {
     )
   }
 
+  const addSpecialty = (specialty: string) => {
+    if (!professionalProfile.specialties.includes(specialty)) {
+      setProfessionalProfile({
+        ...professionalProfile,
+        specialties: [...professionalProfile.specialties, specialty]
+      })
+    }
+  }
+
+  const removeSpecialty = (specialty: string) => {
+    setProfessionalProfile({
+      ...professionalProfile,
+      specialties: professionalProfile.specialties.filter(s => s !== specialty)
+    })
+  }
+
+  const handleProfessionalProfileUpdate = async () => {
+    setLoading(true)
+
+    try {
+      if (!user?.id) throw new Error('Usuário não autenticado')
+
+      // Obter token da sessão do Supabase se não estiver no store
+      let authToken = token
+      if (!authToken) {
+        const { data: { session } } = await supabase.auth.getSession()
+        authToken = session?.access_token || null
+      }
+
+      if (!authToken) {
+        toast.error('Sessão expirada. Faça login novamente.')
+        return
+      }
+
+      await teachersAPI.update(user.id, professionalProfile, authToken)
+      toast.success('Perfil profissional atualizado!')
+    } catch (error) {
+      console.error('Erro:', error)
+      toast.error('Erro ao atualizar perfil profissional')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   if (!user) return null
 
   const tabs = [
     { id: 'dados' as TabType, label: 'Dados Pessoais', icon: User },
+    { id: 'perfil' as TabType, label: 'Perfil Profissional', icon: Award },
     { id: 'seguranca' as TabType, label: 'Segurança', icon: Lock },
     { id: 'preferencias' as TabType, label: 'Preferências', icon: MapPin }
   ]
@@ -339,19 +445,6 @@ export default function ConfiguracoesPage() {
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Bio / Sobre Você
-                    </label>
-                    <textarea
-                      value={profileData.bio}
-                      onChange={(e) => setProfileData({ ...profileData, bio: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-meu-primary focus:border-transparent resize-none"
-                      rows={4}
-                      placeholder="Conte um pouco sobre sua experiência e especialidades..."
-                    />
-                  </div>
-
                   <Button
                     type="submit"
                     disabled={loading}
@@ -432,6 +525,147 @@ export default function ConfiguracoesPage() {
                 </CardContent>
               </Card>
             </div>
+          </div>
+        )}
+
+        {/* Aba Perfil Profissional */}
+        {activeTab === 'perfil' && (
+          <div className="max-w-4xl">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Award className="h-5 w-5 mr-2 text-meu-primary" />
+                  Perfil Profissional
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Bio Profissional */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Sobre Você (Profissional)
+                  </label>
+                  <textarea
+                    value={professionalProfile.bio}
+                    onChange={(e) => setProfessionalProfile({ ...professionalProfile, bio: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-meu-primary focus:border-transparent resize-none"
+                    rows={4}
+                    placeholder="Conte sobre sua experiência, certificações e metodologia de trabalho..."
+                  />
+                </div>
+
+                {/* Especialidades */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Especialidades
+                  </label>
+                  <div className="space-y-3">
+                    {/* Especialidades Selecionadas */}
+                    {professionalProfile.specialties.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {professionalProfile.specialties.map((spec) => (
+                          <Badge
+                            key={spec}
+                            className="bg-meu-primary text-white px-3 py-1 flex items-center space-x-2"
+                          >
+                            <span>{spec}</span>
+                            <button
+                              type="button"
+                              onClick={() => removeSpecialty(spec)}
+                              className="hover:bg-meu-primary-dark rounded-full p-0.5"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Adicionar Especialidade */}
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+                      <p className="text-sm text-gray-600 mb-3">Adicionar especialidade:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {specialties
+                          .filter((spec) => !professionalProfile.specialties.includes(spec))
+                          .map((spec) => (
+                            <button
+                              key={spec}
+                              type="button"
+                              onClick={() => addSpecialty(spec)}
+                              className="px-3 py-1 text-sm border border-gray-300 rounded-full hover:border-meu-primary hover:bg-meu-primary/5 transition-colors"
+                            >
+                              <Plus className="h-3 w-3 inline mr-1" />
+                              {spec}
+                            </button>
+                          ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Valor por Hora */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Valor por Hora
+                  </label>
+                  <div className="relative">
+                    <DollarSign className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+                    <input
+                      type="number"
+                      value={professionalProfile.hourly_rate}
+                      onChange={(e) => setProfessionalProfile({ ...professionalProfile, hourly_rate: Number(e.target.value) })}
+                      className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+                      placeholder="0.00"
+                      min="0"
+                      step="0.01"
+                    />
+                  </div>
+                  {professionalProfile.hourly_rate > 0 && (
+                    <p className="text-sm text-gray-500 mt-1">
+                      {formatCurrency(professionalProfile.hourly_rate)} por hora
+                    </p>
+                  )}
+                </div>
+
+                {/* Disponibilidade */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                  <div>
+                    <h4 className="font-medium text-gray-900">Aceitar Novos Alunos</h4>
+                    <p className="text-sm text-gray-600">Permitir que novos alunos agendem aulas com você</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setProfessionalProfile({ ...professionalProfile, is_available: !professionalProfile.is_available })}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      professionalProfile.is_available ? 'bg-meu-primary' : 'bg-gray-300'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        professionalProfile.is_available ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                <Button
+                  onClick={handleProfessionalProfileUpdate}
+                  disabled={loading}
+                  className="w-full bg-meu-primary hover:bg-meu-primary-dark text-white"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Salvando...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-2" />
+                      Salvar Perfil Profissional
+                    </>
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
           </div>
         )}
 

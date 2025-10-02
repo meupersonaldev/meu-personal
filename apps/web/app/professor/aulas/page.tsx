@@ -26,7 +26,7 @@ interface Booking {
   studentName: string
   date: string
   duration: number
-  status: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED'
+  status: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED' | 'AVAILABLE' | 'BLOCKED'
   notes?: string
   creditsCost: number
   franchiseId?: string
@@ -52,6 +52,16 @@ const statusConfig = {
   CANCELLED: {
     label: 'Cancelada',
     color: 'bg-red-100 text-red-800',
+    icon: XCircle
+  },
+  AVAILABLE: {
+    label: 'Disponível',
+    color: 'bg-gray-100 text-gray-800',
+    icon: Calendar
+  },
+  BLOCKED: {
+    label: 'Bloqueado',
+    color: 'bg-gray-100 text-gray-800',
     icon: XCircle
   }
 }
@@ -174,8 +184,8 @@ export default function ProfessorAulas() {
             </div>
           ) : (
             aulasFiltradas.map((booking) => {
-              const config = statusConfig[booking.status]
-              const StatusIcon = config.icon
+              const config = statusConfig[booking.status] || statusConfig.PENDING
+              const StatusIcon = config?.icon || Clock
               const podeGerarQR = booking.status === 'CONFIRMED'
               
               return (
