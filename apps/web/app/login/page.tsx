@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useAuthStore } from '@/lib/stores/auth-store'
-import { Eye, EyeOff, Loader2, ArrowLeft, CheckCircle, Users, Star, GraduationCap } from 'lucide-react'
+import { Eye, EyeOff, Loader2, ArrowLeft } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -52,33 +52,6 @@ export default function LoginPage() {
     }
   }
 
-  const handleDemoLogin = async (email: string) => {
-    setFormData({ email, password: '123456' })
-    setIsLoading(true)
-
-    try {
-      const success = await login(email, '123456')
-      if (success) {
-        toast.success('Login demo realizado!')
-
-        // Buscar dados do usuário após login
-        const user = useAuthStore.getState().user
-        
-        // Redirecionar baseado no role
-        if (user?.role === 'STUDENT') {
-          router.push('/aluno/inicio')
-        } else if (user?.role === 'TEACHER') {
-          router.push('/professor/dashboard')
-        } else {
-          router.push('/')
-        }
-      }
-    } catch {
-      toast.error('Erro no login demo')
-    } finally {
-      setIsLoading(false)
-    }
-  }
 
   return (
     <div className="h-screen overflow-hidden bg-white flex">
@@ -106,46 +79,13 @@ export default function LoginPage() {
               height={64}
               className="h-16 w-auto object-contain mb-8"
             />
-
             <h1 className="text-5xl font-bold mb-6 leading-tight">
               Bem-vindo de volta ao
               <span className="text-meu-accent block">Meu Personal</span>
             </h1>
-
             <p className="text-xl text-white/80 mb-12 leading-relaxed max-w-md">
               Acesse sua conta e continue sua jornada fitness com os melhores personal trainers.
             </p>
-
-            {/* Features */}
-            <div className="space-y-6">
-              <div className="flex items-center space-x-4">
-                <div className="w-12 h-12 bg-meu-accent/20 rounded-xl flex items-center justify-center">
-                  <CheckCircle className="h-6 w-6 text-meu-accent" />
-                </div>
-                <div>
-                  <div className="font-semibold text-white">500+ Personal Trainers</div>
-                  <div className="text-white/70 text-sm">Profissionais qualificados</div>
-                </div>
-              </div>
-              <div className="flex items-center space-x-4">
-                <div className="w-12 h-12 bg-meu-cyan/20 rounded-xl flex items-center justify-center">
-                  <Users className="h-6 w-6 text-meu-cyan" />
-                </div>
-                <div>
-                  <div className="font-semibold text-white">10.000+ Aulas</div>
-                  <div className="text-white/70 text-sm">Realizadas com sucesso</div>
-                </div>
-              </div>
-              <div className="flex items-center space-x-4">
-                <div className="w-12 h-12 bg-yellow-400/20 rounded-xl flex items-center justify-center">
-                  <Star className="h-6 w-6 text-yellow-400" />
-                </div>
-                <div>
-                  <div className="font-semibold text-white">4.9 Estrelas</div>
-                  <div className="text-white/70 text-sm">Avaliação média</div>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -257,35 +197,6 @@ export default function LoginPage() {
                 )}
               </Button>
               </form>
-
-              {/* Demo Logins */}
-              <div className="mt-10 pt-8 border-t border-gradient-to-r from-transparent via-muted-foreground/20 to-transparent">
-                <div className="text-center mb-6">
-                  <p className="text-sm text-gray-900 font-medium">
-                    Ou experimente com contas demonstração
-                  </p>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <Button
-                    variant="outline"
-                    className="h-12 text-sm border-2 border-meu-primary/20 text-meu-primary hover:bg-gradient-to-r hover:from-meu-primary/5 hover:to-meu-primary/10 hover:border-meu-primary/40 transition-all duration-300 rounded-lg group"
-                    onClick={() => handleDemoLogin('joao@email.com')}
-                    disabled={isLoading}
-                  >
-                    <Users className="h-4 w-4 mr-2 group-hover:scale-110 transition-transform" />
-                    Demo Aluno
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="h-12 text-sm border-2 border-meu-primary/20 text-meu-primary hover:bg-gradient-to-r hover:from-meu-primary/5 hover:to-meu-primary/10 hover:border-meu-primary/40 transition-all duration-300 rounded-lg group"
-                    onClick={() => handleDemoLogin('maria@email.com')}
-                    disabled={isLoading}
-                  >
-                    <GraduationCap className="h-4 w-4 mr-2 group-hover:scale-110 transition-transform" />
-                    Demo Professor
-                  </Button>
-                </div>
-              </div>
 
             {/* Sign up link */}
             <div className="text-center mt-6">

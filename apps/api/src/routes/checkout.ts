@@ -122,7 +122,27 @@ router.post('/student', async (req, res) => {
       .update({ asaas_payment_id: paymentResult.data.id })
       .eq('id', subscription.id)
 
-    // 7. Retornar dados do pagamento
+    // 7. Criar registro na tabela payments
+    await supabase
+      .from('payments')
+      .insert({
+        academy_id,
+        user_id: student_id,
+        asaas_payment_id: paymentResult.data.id,
+        asaas_customer_id: asaasCustomerId,
+        type: 'PLAN_PURCHASE',
+        billing_type: payment_method,
+        status: 'PENDING',
+        amount: plan.price,
+        description: `${plan.name} - ${plan.credits_included} créditos`,
+        due_date: dueDate.toISOString().split('T')[0],
+        invoice_url: paymentResult.data.invoiceUrl,
+        bank_slip_url: paymentResult.data.bankSlipUrl,
+        pix_code: paymentResult.data.payload,
+        external_reference: subscription.id
+      })
+
+    // 8. Retornar dados do pagamento
     res.json({
       subscription_id: subscription.id,
       payment_id: paymentResult.data.id,

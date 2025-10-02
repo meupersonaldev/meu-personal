@@ -261,7 +261,7 @@ export default function AgendaAcademiaPage() {
 
       {/* Modal de Detalhes */}
       {selectedEvent && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 left-0 top-0 right-0 bottom-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
           <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
@@ -343,13 +343,6 @@ export default function AgendaAcademiaPage() {
         </div>
       )}
 
-      {/* Overlay para fechar modal */}
-      {selectedEvent && (
-        <div
-          className="fixed inset-0 z-40"
-          onClick={() => setSelectedEvent(null)}
-        />
-      )}
     </div>
   )
 }

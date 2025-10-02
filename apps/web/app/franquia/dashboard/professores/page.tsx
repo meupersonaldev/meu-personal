@@ -11,16 +11,18 @@ import { Textarea } from '@/components/ui/textarea'
 import {
   Search,
   Plus,
-  Filter,
-  Eye,
-  Edit,
   Trash2,
   Users,
   UserCheck,
   UserX,
   DollarSign,
   Activity,
-  X
+  X,
+  Eye,
+  Mail,
+  Phone,
+  Calendar,
+  MapPin
 } from 'lucide-react'
 import { useFranquiaStore } from '@/lib/stores/franquia-store'
 import { toast } from 'sonner'
@@ -67,13 +69,13 @@ interface Teacher {
 }
 
 export default function ProfessoresPage() {
-  const { teachers, fetchTeachers, setAcademy, addTeacher, updateTeacher, deleteTeacher } = useFranquiaStore()
+  const { teachers, fetchTeachers, addTeacher, updateTeacher, deleteTeacher } = useFranquiaStore()
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
-  const [selectedTeacher, setSelectedTeacher] = useState<any>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
-  const [showEditModal, setShowEditModal] = useState(false)
+  const [showViewModal, setShowViewModal] = useState(false)
+  const [selectedTeacher, setSelectedTeacher] = useState<any>(null)
 
   // Carregar dados ao montar
   useEffect(() => {
@@ -116,24 +118,7 @@ export default function ProfessoresPage() {
       return <Badge variant="destructive">Inativo</Badge>
     }
 
-    if (teacher.status === 'active') {
-    }
-
-    return <Badge variant="outline">Pendente</Badge>
-  }
-
-  const handleEditTeacher = (teacher: any) => {
-    setSelectedTeacher(teacher)
-    setFormData({
-      name: teacher.name,
-      email: teacher.email,
-      phone: teacher.phone || '',
-      bio: '',
-      specialties: teacher.specialties?.join(', ') || '',
-      hourly_rate: '',
-      avatar_url: ''
-    })
-    setShowEditModal(true)
+    return <Badge className="bg-green-100 text-green-800">Ativo</Badge>
   }
 
   const handleDeleteTeacher = async (teacherId: string) => {
@@ -170,7 +155,6 @@ export default function ProfessoresPage() {
         status: 'active' as const,
         rating: 0,
         total_reviews: 0,
-        commission_rate: 0.7,
         created_at: new Date().toISOString()
       }
 
@@ -335,7 +319,6 @@ export default function ProfessoresPage() {
             <div className="space-y-6">
               {filteredTeachers.map((teacher) => {
                 const profile = teacher.teacher_profiles?.[0]
-                const academyTeacher = teacher.academy_teachers?.[0]
 
                 return (
                   <div key={teacher.id} className="flex items-center justify-between p-6 border rounded-lg hover:bg-gray-50 transition-colors shadow-sm">
@@ -381,10 +364,27 @@ export default function ProfessoresPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleEditTeacher(teacher)}
-                        title="Editar professor"
+                        onClick={() => {
+                          setSelectedTeacher(teacher)
+                          setShowViewModal(true)
+                        }}
+                        title="Ver detalhes"
+                        className="text-blue-600 hover:text-blue-700"
                       >
-                        <Edit className="h-4 w-4" />
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          const newStatus = teacher.status === 'active' ? 'inactive' : 'active'
+                          updateTeacher(teacher.id, { status: newStatus })
+                          toast.success(`Professor ${newStatus === 'active' ? 'ativado' : 'desativado'} com sucesso!`)
+                        }}
+                        title={teacher.status === 'active' ? 'Desativar professor' : 'Ativar professor'}
+                        className={teacher.status === 'active' ? 'text-orange-600 hover:text-orange-700' : 'text-green-600 hover:text-green-700'}
+                      >
+                        <Activity className="h-4 w-4" />
                       </Button>
                       <Button
                         variant="ghost"
@@ -406,7 +406,7 @@ export default function ProfessoresPage() {
 
       {/* Modal de Criação */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 left-0 top-0 right-0 bottom-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
           <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold">Novo Professor</h2>
@@ -498,6 +498,197 @@ export default function ProfessoresPage() {
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Visualização */}
+      {showViewModal && selectedTeacher && (
+        <div className="fixed inset-0 left-0 top-0 right-0 bottom-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
+          <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-gray-900">Detalhes do Professor</h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setShowViewModal(false)
+                  setSelectedTeacher(null)
+                }}
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Header com Avatar */}
+              <div className="flex items-center space-x-4 pb-6 border-b">
+                <Avatar className="h-20 w-20">
+                  <AvatarFallback className="bg-meu-cyan text-meu-primary text-2xl font-bold">
+                    {selectedTeacher.name.charAt(0)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1">
+                  <h3 className="text-2xl font-bold text-gray-900">{selectedTeacher.name}</h3>
+                  <div className="flex items-center gap-2 mt-2">
+                    {getStatusBadge(selectedTeacher)}
+                    {selectedTeacher.teacher_profiles?.[0]?.hourly_rate && (
+                      <Badge variant="outline">
+                        <DollarSign className="h-3 w-3 mr-1" />
+                        R$ {selectedTeacher.teacher_profiles[0].hourly_rate}/hora
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Informações de Contato */}
+              <div>
+                <h4 className="text-lg font-semibold text-gray-900 mb-3">Informações de Contato</h4>
+                <div className="space-y-3 bg-gray-50 p-4 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <Mail className="h-5 w-5 text-gray-500" />
+                    <div>
+                      <p className="text-xs text-gray-500">Email</p>
+                      <p className="text-sm font-medium text-gray-900">{selectedTeacher.email}</p>
+                    </div>
+                  </div>
+                  {selectedTeacher.phone && (
+                    <div className="flex items-center gap-3">
+                      <Phone className="h-5 w-5 text-gray-500" />
+                      <div>
+                        <p className="text-xs text-gray-500">Telefone</p>
+                        <p className="text-sm font-medium text-gray-900">{selectedTeacher.phone}</p>
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-3">
+                    <Calendar className="h-5 w-5 text-gray-500" />
+                    <div>
+                      <p className="text-xs text-gray-500">Cadastrado em</p>
+                      <p className="text-sm font-medium text-gray-900">
+                        {new Date(selectedTeacher.created_at).toLocaleDateString('pt-BR')}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Especialidades */}
+              {selectedTeacher.teacher_profiles?.[0]?.specialties && 
+               selectedTeacher.teacher_profiles[0].specialties.length > 0 && (
+                <div>
+                  <h4 className="text-lg font-semibold text-gray-900 mb-3">Especialidades</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedTeacher.teacher_profiles[0].specialties.map((specialty: string, index: number) => (
+                      <Badge key={index} variant="secondary" className="text-sm">
+                        {specialty}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Bio */}
+              {selectedTeacher.teacher_profiles?.[0]?.bio && (
+                <div>
+                  <h4 className="text-lg font-semibold text-gray-900 mb-3">Sobre</h4>
+                  <p className="text-gray-700 bg-gray-50 p-4 rounded-lg">
+                    {selectedTeacher.teacher_profiles[0].bio}
+                  </p>
+                </div>
+              )}
+
+              {/* Academias Vinculadas */}
+              {selectedTeacher.academy_teachers && selectedTeacher.academy_teachers.length > 0 && (
+                <div>
+                  <h4 className="text-lg font-semibold text-gray-900 mb-3">Academias Vinculadas</h4>
+                  <div className="space-y-2">
+                    {selectedTeacher.academy_teachers.map((at: any) => (
+                      <div key={at.id} className="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
+                        <div className="flex items-center gap-2">
+                          <MapPin className="h-4 w-4 text-gray-500" />
+                          <div>
+                            <span className="text-sm font-medium text-gray-900">
+                              {at.academies?.name || 'Academia'}
+                            </span>
+                            {at.academies?.city && (
+                              <p className="text-xs text-gray-500">
+                                {at.academies.city} - {at.academies.state}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <Badge className={at.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
+                          {at.status === 'active' ? 'Ativo' : 'Inativo'}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Planos/Assinaturas */}
+              {selectedTeacher.teacher_subscriptions && selectedTeacher.teacher_subscriptions.length > 0 && (
+                <div>
+                  <h4 className="text-lg font-semibold text-gray-900 mb-3">Planos Ativos</h4>
+                  <div className="space-y-2">
+                    {selectedTeacher.teacher_subscriptions
+                      .filter((sub: any) => sub.status === 'active')
+                      .map((sub: any) => (
+                        <div key={sub.id} className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-semibold text-gray-900">{sub.teacher_plans?.name}</p>
+                              <p className="text-sm text-gray-600 mt-1">
+                                R$ {sub.teacher_plans?.price}/mês
+                              </p>
+                            </div>
+                            <Badge className="bg-blue-100 text-blue-800">Ativo</Badge>
+                          </div>
+                          {sub.teacher_plans?.features && sub.teacher_plans.features.length > 0 && (
+                            <div className="mt-3 pt-3 border-t border-blue-200">
+                              <ul className="text-sm text-gray-700 space-y-1">
+                                {sub.teacher_plans.features.map((feature: string, idx: number) => (
+                                  <li key={idx}>• {feature}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+            </div>
+
+            {/* Footer com ações */}
+            <div className="sticky bottom-0 bg-gray-50 border-t px-6 py-4 flex justify-between items-center">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const newStatus = selectedTeacher.status === 'active' ? 'inactive' : 'active'
+                  updateTeacher(selectedTeacher.id, { status: newStatus })
+                  toast.success(`Professor ${newStatus === 'active' ? 'ativado' : 'desativado'} com sucesso!`)
+                  setShowViewModal(false)
+                  setSelectedTeacher(null)
+                }}
+                className={selectedTeacher.status === 'active' ? 'text-orange-600 hover:text-orange-700' : 'text-green-600 hover:text-green-700'}
+              >
+                <Activity className="h-4 w-4 mr-2" />
+                {selectedTeacher.status === 'active' ? 'Desativar' : 'Ativar'}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowViewModal(false)
+                  setSelectedTeacher(null)
+                }}
+              >
+                Fechar
+              </Button>
+            </div>
           </div>
         </div>
       )}

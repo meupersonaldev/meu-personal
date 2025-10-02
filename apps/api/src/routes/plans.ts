@@ -299,11 +299,11 @@ router.get('/student', async (req, res) => {
 })
 
 // Criar plano para alunos
-// NOTA: Planos de aluno não são criados no Asaas como "planos"
-// Quando o aluno comprar, criamos uma cobrança única (payment) no Asaas
 router.post('/students', async (req, res) => {
   try {
     const { academy_id, name, description, price, credits_included, duration_days, features = [] } = req.body
+
+    console.log('Criando plano de aluno:', { academy_id, name, price, credits_included })
 
     if (!academy_id || !name || !price || !credits_included) {
       return res.status(400).json({
@@ -312,6 +312,8 @@ router.post('/students', async (req, res) => {
     }
 
     // Criar plano no banco de dados
+    // Nota: A cobrança no Asaas será criada quando o aluno comprar o plano
+    console.log('Salvando plano no Supabase...')
     const { data, error } = await supabase
       .from('academy_plans')
       .insert({
@@ -322,18 +324,27 @@ router.post('/students', async (req, res) => {
         credits_included,
         duration_days: duration_days || 30,
         features,
-        // asaas_plan_id não é usado para planos de aluno (cobranças únicas)
-        asaas_plan_id: null
+        is_active: true
       })
       .select()
       .single()
 
-    if (error) throw error
+    if (error) {
+      console.error('Erro ao salvar no Supabase:', error)
+      throw error
+    }
 
-    res.status(201).json(data)
-  } catch (error) {
+    console.log('Plano criado com sucesso:', data.id)
+    res.status(201).json({ 
+      ...data,
+      message: 'Plano criado com sucesso! A cobrança será criada no Asaas quando um aluno comprar.'
+    })
+  } catch (error: any) {
     console.error('Error creating student plan:', error)
-    res.status(500).json({ error: 'Erro interno do servidor' })
+    res.status(500).json({ 
+      error: 'Erro interno do servidor',
+      details: error.message 
+    })
   }
 })
 
@@ -343,6 +354,31 @@ router.put('/students/:id', async (req, res) => {
     const { id } = req.params
     const { name, description, price, credits_included, duration_days, features, is_active } = req.body
 
+    // Buscar plano atual para pegar asaas_plan_id
+    const { data: currentPlan } = await supabase
+      .from('academy_plans')
+      .select('asaas_plan_id')
+      .eq('id', id)
+      .single()
+
+    // Se tem asaas_plan_id, atualizar no Asaas também
+    if (currentPlan?.asaas_plan_id) {
+      const asaasResult = await asaasService.updateSubscriptionPlan(
+        currentPlan.asaas_plan_id,
+        {
+          name: name ? `${name} - Plano Aluno` : undefined,
+          description,
+          value: price
+        }
+      )
+
+      if (!asaasResult.success) {
+        console.error('Erro ao atualizar plano no Asaas:', asaasResult.error)
+        // Continua mesmo se falhar no Asaas (pode avisar o usuário)
+      }
+    }
+
+    // Atualizar no Supabase
     const { data, error } = await supabase
       .from('academy_plans')
       .update({
@@ -373,16 +409,90 @@ router.delete('/students/:id', async (req, res) => {
   try {
     const { id } = req.params
 
+    // Buscar plano para pegar asaas_plan_id
+    const { data: plan } = await supabase
+      .from('academy_plans')
+      .select('asaas_plan_id')
+      .eq('id', id)
+      .single()
+
+    // Se tem asaas_plan_id, deletar do Asaas também
+    if (plan?.asaas_plan_id) {
+      const asaasResult = await asaasService.deleteSubscriptionPlan(plan.asaas_plan_id)
+      
+      if (!asaasResult.success) {
+        console.error('Erro ao deletar plano no Asaas:', asaasResult.error)
+        // Continua mesmo se falhar no Asaas
+      }
+    }
+
+    // Soft delete no Supabase (apenas desativa)
     const { error } = await supabase
       .from('academy_plans')
-      .delete()
+      .update({ is_active: false })
       .eq('id', id)
 
     if (error) throw error
 
-    res.json({ message: 'Plano excluído com sucesso' })
+    res.json({ message: 'Plano desativado com sucesso' })
   } catch (error) {
     console.error('Error deleting student plan:', error)
+    res.status(500).json({ error: 'Erro interno do servidor' })
+  }
+})
+
+// Sincronizar plano existente com Asaas
+router.post('/students/:id/sync-asaas', async (req, res) => {
+  try {
+    const { id } = req.params
+
+    // Buscar plano
+    const { data: plan, error: fetchError } = await supabase
+      .from('academy_plans')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (fetchError) throw fetchError
+
+    // Se já tem asaas_plan_id, não precisa sincronizar
+    if (plan.asaas_plan_id) {
+      return res.json({ 
+        message: 'Plano já está sincronizado',
+        asaas_plan_id: plan.asaas_plan_id
+      })
+    }
+
+    // Criar no Asaas
+    const asaasResult = await asaasService.createSubscriptionPlan({
+      name: `${plan.name} - Plano Aluno`,
+      description: plan.description || `Plano ${plan.name}`,
+      value: plan.price,
+      cycle: 'MONTHLY',
+      billingType: 'UNDEFINED'
+    })
+
+    if (!asaasResult.success) {
+      return res.status(500).json({ 
+        error: 'Erro ao criar plano no Asaas',
+        details: asaasResult.error
+      })
+    }
+
+    // Atualizar com asaas_plan_id
+    const { error: updateError } = await supabase
+      .from('academy_plans')
+      .update({ asaas_plan_id: asaasResult.data.id })
+      .eq('id', id)
+
+    if (updateError) throw updateError
+
+    res.json({ 
+      message: 'Plano sincronizado com sucesso',
+      asaas_plan_id: asaasResult.data.id
+    })
+  } catch (error) {
+    console.error('Error syncing plan with Asaas:', error)
     res.status(500).json({ error: 'Erro interno do servidor' })
   }
 })

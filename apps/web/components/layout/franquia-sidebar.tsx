@@ -121,11 +121,11 @@ export default function FranquiaSidebar() {
         {/* Logo */}
         <div className="mb-4">
           <Logo 
-            size="sm" 
+            size="lg" 
             variant="default" 
             showText={false}
             href="/franquia/dashboard"
-            className="justify-center"
+            className="justify-start"
           />
         </div>
         

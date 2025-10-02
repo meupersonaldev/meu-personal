@@ -99,6 +99,35 @@ router.put('/:id', async (req, res) => {
   }
 })
 
+// PATCH /api/users/:id - Atualizar parcialmente usuário
+router.patch('/:id', async (req, res) => {
+  try {
+    const { id } = req.params
+    const { name, email } = req.body
+
+    const updateData: any = { updated_at: new Date().toISOString() }
+    if (name !== undefined) updateData.name = name
+    if (email !== undefined) updateData.email = email
+
+    const { data, error } = await supabase
+      .from('users')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) throw error
+
+    // Remover senha do retorno
+    const { password, ...userWithoutPassword } = data
+
+    res.json({ user: userWithoutPassword })
+  } catch (error: any) {
+    console.error('Error updating user:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
 // PUT /api/users/:id/password - Alterar senha
 router.put('/:id/password', async (req, res) => {
   try {

@@ -277,6 +277,31 @@ export default function PlanosPage() {
     }
   }
 
+  const syncWithAsaas = async (planId: string, type: 'student' | 'teacher') => {
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const endpoint = type === 'student'
+        ? `${API_URL}/api/plans/students/${planId}/sync-asaas`
+        : `${API_URL}/api/plans/teachers/${planId}/sync-asaas`
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        credentials: 'include'
+      })
+
+      if (!response.ok) throw new Error('Falha ao sincronizar')
+
+      const data = await response.json()
+      toast.success('Plano sincronizado com Asaas!', {
+        description: `ID Asaas: ${data.asaas_plan_id}`
+      })
+      loadPlans()
+    } catch (error) {
+      console.error('Erro ao sincronizar:', error)
+      toast.error('Erro ao sincronizar com Asaas')
+    }
+  }
+
   return (
     <div className="p-6 ml-8">
       {/* Header */}
@@ -515,7 +540,7 @@ export default function PlanosPage() {
 
       {/* Modal de Edição/Criação */}
       {showModal && editingPlan && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 left-0 top-0 right-0 bottom-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
           <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-2xl font-bold text-gray-900">

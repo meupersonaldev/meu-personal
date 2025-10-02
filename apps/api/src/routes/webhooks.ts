@@ -70,6 +70,15 @@ async function handlePaymentConfirmed(webhookData: any, externalRef: string) {
     return
   }
 
+  // 1. Atualizar registro de pagamento
+  await supabase
+    .from('payments')
+    .update({
+      status: 'CONFIRMED',
+      payment_date: new Date().toISOString()
+    })
+    .eq('asaas_payment_id', webhookData.paymentId)
+
   // Verificar se é compra de pacote de professor
   const { data: teacherPurchase } = await supabase
     .from('teacher_subscriptions')

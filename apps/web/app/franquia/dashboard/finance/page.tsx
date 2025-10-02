@@ -1,77 +1,168 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { DollarSign, CreditCard, TrendingUp, Users, Calendar, ArrowUpRight, ArrowDownRight, Filter, Loader2 } from 'lucide-react'
+import { DollarSign, CreditCard, TrendingUp, Users, Calendar, ArrowUpRight, ArrowDownRight, Filter, Loader2, Check, Clock, XCircle, RefreshCw } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { useFranquiaStore } from '@/lib/stores/franquia-store'
 import { toast } from 'sonner'
 
-type FinancialSummary = {
-  totalRevenue: number
-  activeSubscriptions: number
-  totalStudents: number
-  averageTicket: number
-  completedClasses: number
-  monthlyGrowth: number
-  revenueByPlan: Array<{ name: string; revenue: number; count: number }>
-  transactions: Array<{
+type Payment = {
+  id: string
+  user: {
     id: string
-    studentName: string
-    teacherName: string
-    planName: string
-    amount: number
-    date: string
-    status: string
-    type: string
+    name: string
+    email: string
+    role: string
+  }
+  type: string
+  billing_type: string
+  status: string
+  amount: number
+  description: string
+  due_date: string
+  payment_date: string | null
+  invoice_url: string | null
+  pix_code: string | null
+  created_at: string
+}
+
+type PaymentStats = {
+  total_revenue: number
+  pending_revenue: number
+  overdue_revenue: number
+  total_transactions: number
+  by_status: {
+    pending: number
+    confirmed: number
+    received: number
+    overdue: number
+    refunded: number
+  }
+  by_type: {
+    plan_purchase: number
+    booking_payment: number
+    subscription: number
+  }
+  by_billing_type: {
+    pix: number
+    boleto: number
+    credit_card: number
+  }
+  monthly_revenue: Array<{
+    month: string
+    revenue: number
   }>
 }
 
-export default function FinancePage() {
-  const { franquiaUser, teachers, students } = useFranquiaStore()
-  const [periodFilter, setPeriodFilter] = useState<'7d' | '30d' | '90d' | 'all'>('30d')
+export default function FinancePageNew() {
+  const { franquiaUser } = useFranquiaStore()
   const [loading, setLoading] = useState(true)
-  const [summary, setSummary] = useState<FinancialSummary | null>(null)
+  const [payments, setPayments] = useState<Payment[]>([])
+  const [stats, setStats] = useState<PaymentStats | null>(null)
+  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
 
   useEffect(() => {
-    fetchFinancialData()
+    fetchPayments()
+    fetchStats()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [periodFilter])
+  }, [statusFilter, startDate, endDate])
 
-  const fetchFinancialData = async () => {
-    if (!franquiaUser?.academyId) {
-      console.log('No academy ID found')
-      return
-    }
+  const fetchPayments = async () => {
+    if (!franquiaUser?.academyId) return
 
     setLoading(true)
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      const url = `${API_URL}/api/financial/summary?academy_id=${franquiaUser.academyId}&period=${periodFilter}`
-      console.log('Fetching financial data from:', url)
-      
+      let url = `${API_URL}/api/payments/academy/${franquiaUser.academyId}?limit=50`
+
+      if (statusFilter && statusFilter !== 'all') {
+        url += `&status=${statusFilter}`
+      }
+      if (startDate) {
+        url += `&start_date=${startDate}`
+      }
+      if (endDate) {
+        url += `&end_date=${endDate}`
+      }
+
       const response = await fetch(url, { credentials: 'include' })
-      
-      console.log('Response status:', response.status)
-      
+
       if (!response.ok) {
-        const errorText = await response.text()
-        console.error('Error response:', errorText)
-        throw new Error(`Failed to fetch financial data: ${response.status}`)
+        throw new Error('Failed to fetch payments')
       }
 
       const data = await response.json()
-      console.log('Financial data received:', data)
-      setSummary(data)
+      setPayments(data.payments || [])
     } catch (error) {
-      console.error('Error fetching financial data:', error)
-      toast.error('Erro ao carregar dados financeiros. Verifique se o servidor está rodando.')
+      console.error('Error fetching payments:', error)
+      toast.error('Erro ao carregar pagamentos')
     } finally {
       setLoading(false)
     }
   }
 
-  if (loading || !summary) {
+  const fetchStats = async () => {
+    if (!franquiaUser?.academyId) return
+
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      let url = `${API_URL}/api/payments/stats/${franquiaUser.academyId}`
+
+      if (startDate) {
+        url += `?start_date=${startDate}`
+      }
+      if (endDate) {
+        url += `${startDate ? '&' : '?'}end_date=${endDate}`
+      }
+
+      const response = await fetch(url, { credentials: 'include' })
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch stats')
+      }
+
+      const data = await response.json()
+      setStats(data.stats)
+    } catch (error) {
+      console.error('Error fetching stats:', error)
+    }
+  }
+
+  const getStatusBadge = (status: string) => {
+    const config = {
+      PENDING: { label: 'Pendente', className: 'bg-yellow-100 text-yellow-800' },
+      CONFIRMED: { label: 'Confirmado', className: 'bg-blue-100 text-blue-800' },
+      RECEIVED: { label: 'Recebido', className: 'bg-green-100 text-green-800' },
+      OVERDUE: { label: 'Vencido', className: 'bg-red-100 text-red-800' },
+      REFUNDED: { label: 'Estornado', className: 'bg-gray-100 text-gray-800' }
+    }
+    const { label, className } = config[status as keyof typeof config] || config.PENDING
+    return <Badge className={className}>{label}</Badge>
+  }
+
+  const getTypeLabel = (type: string) => {
+    const types: Record<string, string> = {
+      PLAN_PURCHASE: 'Compra de Plano',
+      BOOKING_PAYMENT: 'Pagamento de Aula',
+      SUBSCRIPTION: 'Assinatura'
+    }
+    return types[type] || type
+  }
+
+  const getBillingTypeLabel = (type: string) => {
+    const types: Record<string, string> = {
+      PIX: 'PIX',
+      BOLETO: 'Boleto',
+      CREDIT_CARD: 'Cartão de Crédito'
+    }
+    return types[type] || type
+  }
+
+  if (loading && !stats) {
     return (
       <div className="p-6 ml-8">
         <div className="flex items-center justify-center h-64">
@@ -88,241 +179,258 @@ export default function FinancePage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Financeiro</h1>
-            <p className="text-gray-600">Acompanhe receitas, lucros e métricas financeiras</p>
+            <p className="text-gray-600">Acompanhe pagamentos e receitas via Asaas</p>
           </div>
 
-          {/* Filtro de Período */}
-          <div className="flex items-center space-x-2">
-            <Filter className="h-5 w-5 text-gray-500" />
-            <select
-              value={periodFilter}
-              onChange={(e) => setPeriodFilter(e.target.value as typeof periodFilter)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
-            >
-              <option value="7d">Últimos 7 dias</option>
-              <option value="30d">Últimos 30 dias</option>
-              <option value="90d">Últimos 90 dias</option>
-              <option value="all">Todo período</option>
-            </select>
-          </div>
+          <Button onClick={() => { fetchPayments(); fetchStats() }} variant="outline">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Atualizar
+          </Button>
         </div>
       </div>
 
+      {/* Filtros */}
+      <Card className="p-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+            >
+              <option value="all">Todos</option>
+              <option value="PENDING">Pendente</option>
+              <option value="CONFIRMED">Confirmado</option>
+              <option value="RECEIVED">Recebido</option>
+              <option value="OVERDUE">Vencido</option>
+              <option value="REFUNDED">Estornado</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Data Início</label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Data Fim</label>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+            />
+          </div>
+
+          <div className="flex items-end">
+            <Button
+              onClick={() => {
+                setStatusFilter('all')
+                setStartDate('')
+                setEndDate('')
+              }}
+              variant="outline"
+              className="w-full"
+            >
+              Limpar Filtros
+            </Button>
+          </div>
+        </div>
+      </Card>
+
       {/* Métricas Principais */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
-        <Card className="p-6 hover:shadow-lg transition-shadow">
-          <div className="flex items-center justify-between">
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <DollarSign className="h-6 w-6 text-green-600" />
+      {stats && (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
+          <Card className="p-6 border-t-4 border-t-green-500">
+            <div className="flex items-center justify-between mb-2">
+              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                <DollarSign className="h-6 w-6 text-green-600" />
+              </div>
+              <Check className="h-5 w-5 text-green-600" />
             </div>
-            <div className={`flex items-center text-sm ${summary.monthlyGrowth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {summary.monthlyGrowth >= 0 ? (
-                <ArrowUpRight className="h-4 w-4 mr-1" />
-              ) : (
-                <ArrowDownRight className="h-4 w-4 mr-1" />
-              )}
-              {Math.abs(summary.monthlyGrowth).toFixed(1)}%
-            </div>
-          </div>
-          <div className="mt-4">
-            <div className="text-sm text-gray-600 mb-1">Receita Total</div>
+            <div className="text-sm text-gray-600 mb-1">Receita Recebida</div>
             <div className="text-3xl font-bold text-gray-900">
-              R$ {summary.totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              R$ {stats.total_revenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </div>
             <div className="text-xs text-gray-500 mt-1">
-              Baseado em {summary.activeSubscriptions} assinaturas ativas
+              {stats.by_status.received + stats.by_status.confirmed} pagamento(s)
             </div>
-          </div>
-        </Card>
+          </Card>
 
-        <Card className="p-6 hover:shadow-lg transition-shadow">
-          <div className="flex items-center justify-between">
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Users className="h-6 w-6 text-blue-600" />
+          <Card className="p-6 border-t-4 border-t-yellow-500">
+            <div className="flex items-center justify-between mb-2">
+              <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+                <Clock className="h-6 w-6 text-yellow-600" />
+              </div>
             </div>
-          </div>
-          <div className="mt-4">
-            <div className="text-sm text-gray-600 mb-1">Assinaturas Ativas</div>
+            <div className="text-sm text-gray-600 mb-1">Pendente</div>
             <div className="text-3xl font-bold text-gray-900">
-              {summary.activeSubscriptions}
+              R$ {stats.pending_revenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </div>
             <div className="text-xs text-gray-500 mt-1">
-              {summary.totalStudents} total de alunos
+              {stats.by_status.pending} pagamento(s)
             </div>
-          </div>
-        </Card>
+          </Card>
 
-        <Card className="p-6 hover:shadow-lg transition-shadow">
-          <div className="flex items-center justify-between">
-            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-              <CreditCard className="h-6 w-6 text-purple-600" />
+          <Card className="p-6 border-t-4 border-t-red-500">
+            <div className="flex items-center justify-between mb-2">
+              <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
+                <XCircle className="h-6 w-6 text-red-600" />
+              </div>
             </div>
-          </div>
-          <div className="mt-4">
-            <div className="text-sm text-gray-600 mb-1">Ticket Médio</div>
+            <div className="text-sm text-gray-600 mb-1">Vencidos</div>
             <div className="text-3xl font-bold text-gray-900">
-              R$ {summary.averageTicket.toFixed(2)}
+              R$ {stats.overdue_revenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </div>
             <div className="text-xs text-gray-500 mt-1">
-              Por aluno ativo
+              {stats.by_status.overdue} pagamento(s)
             </div>
-          </div>
-        </Card>
+          </Card>
 
-        <Card className="p-6 hover:shadow-lg transition-shadow">
-          <div className="flex items-center justify-between">
-            <div className="w-12 h-12 bg-amber-100 rounded-lg flex items-center justify-center">
-              <TrendingUp className="h-6 w-6 text-amber-600" />
+          <Card className="p-6 border-t-4 border-t-blue-500">
+            <div className="flex items-center justify-between mb-2">
+              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                <TrendingUp className="h-6 w-6 text-blue-600" />
+              </div>
             </div>
-          </div>
-          <div className="mt-4">
-            <div className="text-sm text-gray-600 mb-1">Aulas Realizadas</div>
+            <div className="text-sm text-gray-600 mb-1">Total de Transações</div>
             <div className="text-3xl font-bold text-gray-900">
-              {summary.completedClasses}
+              {stats.total_transactions}
             </div>
             <div className="text-xs text-gray-500 mt-1">
               No período selecionado
             </div>
-          </div>
-        </Card>
-      </div>
+          </Card>
+        </div>
+      )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
-        {/* Receita por Plano */}
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Receita por Plano</h3>
-          <div className="space-y-4">
-            {summary.revenueByPlan.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <CreditCard className="h-12 w-12 text-gray-400 mx-auto mb-2" />
-                <p>Nenhuma receita registrada</p>
+      {/* Gráficos */}
+      {stats && (
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-8">
+          <Card className="p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Por Tipo</h3>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Compra de Plano</span>
+                <span className="font-semibold">{stats.by_type.plan_purchase}</span>
               </div>
-            ) : (
-              summary.revenueByPlan.map((item, index) => (
-                <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <span className="text-sm font-bold text-blue-600">#{index + 1}</span>
-                    </div>
-                    <div>
-                      <div className="font-medium text-gray-900">{item.name}</div>
-                      <div className="text-sm text-gray-600">{item.count} assinatura(s)</div>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-bold text-gray-900">
-                      R$ {item.revenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </div>
-                    <div className="text-sm text-gray-600">
-                      {summary.totalRevenue > 0 ? ((item.revenue / summary.totalRevenue) * 100).toFixed(1) : '0'}% do total
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </Card>
-
-        {/* Estatísticas Gerais */}
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Estatísticas Gerais</h3>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                  <Users className="h-5 w-5 text-green-600" />
-                </div>
-                <div className="text-gray-900 font-medium">Total de Alunos</div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Pagamento de Aula</span>
+                <span className="font-semibold">{stats.by_type.booking_payment}</span>
               </div>
-              <div className="text-2xl font-bold text-gray-900">{students.length}</div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Assinatura</span>
+                <span className="font-semibold">{stats.by_type.subscription}</span>
+              </div>
             </div>
+          </Card>
 
-            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <Users className="h-5 w-5 text-blue-600" />
-                </div>
-                <div className="text-gray-900 font-medium">Total de Professores</div>
+          <Card className="p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Por Forma de Pagamento</h3>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">PIX</span>
+                <span className="font-semibold">{stats.by_billing_type.pix}</span>
               </div>
-              <div className="text-2xl font-bold text-gray-900">{teachers.length}</div>
-            </div>
-
-            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                  <Calendar className="h-5 w-5 text-purple-600" />
-                </div>
-                <div className="text-gray-900 font-medium">Aulas Concluídas</div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Boleto</span>
+                <span className="font-semibold">{stats.by_billing_type.boleto}</span>
               </div>
-              <div className="text-2xl font-bold text-gray-900">{summary.completedClasses}</div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Cartão de Crédito</span>
+                <span className="font-semibold">{stats.by_billing_type.credit_card}</span>
+              </div>
             </div>
-          </div>
-        </Card>
-      </div>
+          </Card>
 
-      {/* Histórico de Transações */}
+          <Card className="p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Por Status</h3>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Recebido</span>
+                <span className="font-semibold text-green-600">{stats.by_status.received}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Confirmado</span>
+                <span className="font-semibold text-blue-600">{stats.by_status.confirmed}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Pendente</span>
+                <span className="font-semibold text-yellow-600">{stats.by_status.pending}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Vencido</span>
+                <span className="font-semibold text-red-600">{stats.by_status.overdue}</span>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Lista de Pagamentos */}
       <Card className="p-6">
         <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-semibold text-gray-900">Histórico de Transações</h3>
-          <Badge variant="outline" className="text-sm">
-            {summary.transactions.length} transação(ões)
-          </Badge>
+          <h3 className="text-lg font-semibold text-gray-900">Pagamentos Recebidos</h3>
+          <Badge variant="outline">{payments.length} pagamento(s)</Badge>
         </div>
 
-        {summary.transactions.length === 0 ? (
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
+          </div>
+        ) : payments.length === 0 ? (
           <div className="text-center py-12 text-gray-500">
             <DollarSign className="h-12 w-12 text-gray-400 mx-auto mb-2" />
-            <p>Nenhuma transação registrada</p>
+            <p>Nenhum pagamento encontrado</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Aluno
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Plano
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Data
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Valor
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cliente</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Descrição</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Forma</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Valor</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Data</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {summary.transactions.map((transaction) => (
-                  <tr key={transaction.id} className="hover:bg-gray-50">
+                {payments.map((payment) => (
+                  <tr key={payment.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">{transaction.studentName}</div>
+                      <div className="text-sm font-medium text-gray-900">{payment.user.name}</div>
+                      <div className="text-xs text-gray-500">{payment.user.email}</div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-gray-900">{payment.description}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{transaction.planName}</div>
+                      <div className="text-sm text-gray-600">{getTypeLabel(payment.type)}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-600">{getBillingTypeLabel(payment.billing_type)}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-semibold text-gray-900">
+                        R$ {parseFloat(payment.amount.toString()).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-600">
-                        {new Date(transaction.date).toLocaleDateString('pt-BR')}
+                        {new Date(payment.payment_date || payment.created_at).toLocaleDateString('pt-BR')}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">
-                        R$ {transaction.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <Badge className={
-                        transaction.status === 'completed'
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-yellow-100 text-yellow-800'
-                      }>
-                        {transaction.status === 'completed' ? 'Concluído' : 'Pendente'}
-                      </Badge>
+                      {getStatusBadge(payment.status)}
                     </td>
                   </tr>
                 ))}

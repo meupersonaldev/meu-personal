@@ -4,6 +4,7 @@ import FranquiaSidebar from './franquia-sidebar'
 import NotificationsBell from './notifications-bell'
 import { useFranquiaStore } from '@/lib/stores/franquia-store'
 import { User } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 
 interface FranquiaLayoutProps {
   children: React.ReactNode
@@ -11,6 +12,7 @@ interface FranquiaLayoutProps {
 
 export default function FranquiaLayout({ children }: FranquiaLayoutProps) {
   const { franquiaUser } = useFranquiaStore()
+  const router = useRouter()
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -45,17 +47,23 @@ export default function FranquiaLayout({ children }: FranquiaLayoutProps) {
                     {franquiaUser?.email || ''}
                   </div>
                 </div>
-                {franquiaUser?.avatar_url ? (
-                  <img
-                    src={franquiaUser.avatar_url}
-                    alt={franquiaUser.name}
-                    className="w-10 h-10 rounded-full object-cover shadow-md ring-2 ring-meu-cyan/20"
-                  />
-                ) : (
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-meu-primary to-meu-cyan flex items-center justify-center text-white font-medium shadow-md">
-                    {franquiaUser?.name?.charAt(0).toUpperCase() || <User className="h-5 w-5" />}
-                  </div>
-                )}
+                <button
+                  onClick={() => router.push('/franquia/dashboard/configuracoes')}
+                  className="group relative"
+                  title="Ir para Configurações"
+                >
+                  {franquiaUser?.avatar_url ? (
+                    <img
+                      src={franquiaUser.avatar_url}
+                      alt={franquiaUser.name}
+                      className="w-10 h-10 rounded-full object-cover shadow-md ring-2 ring-meu-cyan/20 transition-all group-hover:ring-4 group-hover:ring-meu-cyan/40 cursor-pointer"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-meu-primary to-meu-cyan flex items-center justify-center text-white font-medium shadow-md transition-all group-hover:scale-110 cursor-pointer">
+                      {franquiaUser?.name?.charAt(0).toUpperCase() || <User className="h-5 w-5" />}
+                    </div>
+                  )}
+                </button>
               </div>
             </div>
           </div>

@@ -394,4 +394,182 @@ router.post('/webhook/asaas', async (req, res) => {
   }
 })
 
+/**
+ * GET /api/payments/academy/:academy_id
+ * Listar todos os pagamentos de uma academia (para dashboard de finanças)
+ */
+router.get('/academy/:academy_id', async (req, res) => {
+  try {
+    const { academy_id } = req.params
+    const {
+      status,
+      start_date,
+      end_date,
+      limit = '50',
+      offset = '0'
+    } = req.query
+
+    // Buscar pagamentos da tabela payments
+    let query = supabase
+      .from('payments')
+      .select(`
+        *,
+        user:users(id, name, email, role)
+      `)
+      .eq('academy_id', academy_id)
+      .order('created_at', { ascending: false })
+
+    if (status) {
+      query = query.eq('status', status)
+    }
+
+    if (start_date) {
+      query = query.gte('created_at', start_date)
+    }
+
+    if (end_date) {
+      query = query.lte('created_at', end_date)
+    }
+
+    query = query.range(
+      parseInt(offset as string),
+      parseInt(offset as string) + parseInt(limit as string) - 1
+    )
+
+    const { data: payments, error } = await query
+
+    if (error) throw error
+
+    // Calcular resumo financeiro
+    const { data: allPayments } = await supabase
+      .from('payments')
+      .select('status, amount, type')
+      .eq('academy_id', academy_id)
+
+    const summary = {
+      total_received: allPayments?.filter(p => p.status === 'RECEIVED' || p.status === 'CONFIRMED')
+        .reduce((sum, p) => sum + parseFloat(p.amount as any), 0) || 0,
+      total_pending: allPayments?.filter(p => p.status === 'PENDING')
+        .reduce((sum, p) => sum + parseFloat(p.amount as any), 0) || 0,
+      total_overdue: allPayments?.filter(p => p.status === 'OVERDUE')
+        .reduce((sum, p) => sum + parseFloat(p.amount as any), 0) || 0,
+      total_payments: allPayments?.length || 0,
+      by_type: {
+        plan_purchase: allPayments?.filter(p => p.type === 'PLAN_PURCHASE').length || 0,
+        booking_payment: allPayments?.filter(p => p.type === 'BOOKING_PAYMENT').length || 0,
+        subscription: allPayments?.filter(p => p.type === 'SUBSCRIPTION').length || 0
+      }
+    }
+
+    res.json({
+      payments,
+      summary,
+      pagination: {
+        limit: parseInt(limit as string),
+        offset: parseInt(offset as string)
+      }
+    })
+  } catch (error: any) {
+    console.error('Error fetching academy payments:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+/**
+ * GET /api/payments/stats/:academy_id
+ * Estatísticas de pagamentos para dashboard
+ */
+router.get('/stats/:academy_id', async (req, res) => {
+  try {
+    const { academy_id } = req.params
+    const { start_date, end_date } = req.query
+
+    let query = supabase
+      .from('payments')
+      .select('*')
+      .eq('academy_id', academy_id)
+
+    if (start_date) {
+      query = query.gte('created_at', start_date)
+    }
+
+    if (end_date) {
+      query = query.lte('created_at', end_date)
+    }
+
+    const { data, error } = await query
+
+    if (error) throw error
+
+    // Calcular estatísticas
+    const stats = {
+      total_revenue: data?.filter(p => p.status === 'RECEIVED' || p.status === 'CONFIRMED')
+        .reduce((sum, p) => sum + parseFloat(p.amount as any), 0) || 0,
+      pending_revenue: data?.filter(p => p.status === 'PENDING')
+        .reduce((sum, p) => sum + parseFloat(p.amount as any), 0) || 0,
+      overdue_revenue: data?.filter(p => p.status === 'OVERDUE')
+        .reduce((sum, p) => sum + parseFloat(p.amount as any), 0) || 0,
+      total_transactions: data?.length || 0,
+      by_status: {
+        pending: data?.filter(p => p.status === 'PENDING').length || 0,
+        confirmed: data?.filter(p => p.status === 'CONFIRMED').length || 0,
+        received: data?.filter(p => p.status === 'RECEIVED').length || 0,
+        overdue: data?.filter(p => p.status === 'OVERDUE').length || 0,
+        refunded: data?.filter(p => p.status === 'REFUNDED').length || 0
+      },
+      by_type: {
+        plan_purchase: data?.filter(p => p.type === 'PLAN_PURCHASE').length || 0,
+        booking_payment: data?.filter(p => p.type === 'BOOKING_PAYMENT').length || 0,
+        subscription: data?.filter(p => p.type === 'SUBSCRIPTION').length || 0
+      },
+      by_billing_type: {
+        pix: data?.filter(p => p.billing_type === 'PIX').length || 0,
+        boleto: data?.filter(p => p.billing_type === 'BOLETO').length || 0,
+        credit_card: data?.filter(p => p.billing_type === 'CREDIT_CARD').length || 0
+      },
+      // Receita por mês (últimos 12 meses)
+      monthly_revenue: getMonthlyRevenue(data || [])
+    }
+
+    res.json({ stats })
+  } catch (error: any) {
+    console.error('Error fetching payment stats:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+/**
+ * Helper para calcular receita mensal
+ */
+function getMonthlyRevenue(payments: any[]) {
+  const monthlyData: Record<string, number> = {}
+
+  payments
+    .filter(p => p.status === 'RECEIVED' || p.status === 'CONFIRMED')
+    .forEach(payment => {
+      const date = new Date(payment.payment_date || payment.created_at)
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+
+      if (!monthlyData[monthKey]) {
+        monthlyData[monthKey] = 0
+      }
+
+      monthlyData[monthKey] += parseFloat(payment.amount)
+    })
+
+  // Últimos 12 meses
+  const months = []
+  const now = new Date()
+  for (let i = 11; i >= 0; i--) {
+    const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+    months.push({
+      month: monthKey,
+      revenue: monthlyData[monthKey] || 0
+    })
+  }
+
+  return months
+}
+
 export default router

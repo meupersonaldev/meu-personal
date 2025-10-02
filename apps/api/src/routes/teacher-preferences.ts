@@ -29,6 +29,19 @@ router.put('/:teacherId/preferences', async (req, res) => {
     const { teacherId } = req.params
     const { academy_ids, bio } = req.body
 
+    console.log('Atualizando preferências do professor:', teacherId)
+    console.log('Academias selecionadas:', academy_ids)
+
+    // Buscar preferências antigas para comparar
+    const { data: oldPreferences } = await supabase
+      .from('teacher_preferences')
+      .select('academy_ids')
+      .eq('teacher_id', teacherId)
+      .single()
+
+    const oldAcademyIds = oldPreferences?.academy_ids || []
+    const newAcademyIds = academy_ids || []
+
     // Verificar se já existe
     const { data: existing } = await supabase
       .from('teacher_preferences')
@@ -50,7 +63,6 @@ router.put('/:teacherId/preferences', async (req, res) => {
         .single()
 
       if (error) throw error
-      res.json(data)
     } else {
       // Criar
       const { data, error } = await supabase
@@ -64,8 +76,78 @@ router.put('/:teacherId/preferences', async (req, res) => {
         .single()
 
       if (error) throw error
-      res.json(data)
     }
+
+    // ✅ NOVA LÓGICA: Sincronizar com academy_teachers
+    // Adicionar vínculos para academias novas
+    const academiesToAdd = newAcademyIds.filter((id: string) => !oldAcademyIds.includes(id))
+    
+    for (const academyId of academiesToAdd) {
+      console.log(`Criando vínculo: professor ${teacherId} → academia ${academyId}`)
+      
+      // Verificar se já existe vínculo
+      const { data: existingLink } = await supabase
+        .from('academy_teachers')
+        .select('id, status')
+        .eq('teacher_id', teacherId)
+        .eq('academy_id', academyId)
+        .single()
+
+      if (existingLink) {
+        // Se existe mas está inativo, reativar
+        if (existingLink.status !== 'active') {
+          await supabase
+            .from('academy_teachers')
+            .update({ 
+              status: 'active',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existingLink.id)
+          
+          console.log(`✅ Vínculo reativado: ${existingLink.id}`)
+        }
+      } else {
+        // Criar novo vínculo
+        const { data: newLink, error: linkError } = await supabase
+          .from('academy_teachers')
+          .insert({
+            teacher_id: teacherId,
+            academy_id: academyId,
+            status: 'active',
+            commission_rate: 70.00
+          })
+          .select()
+          .single()
+
+        if (linkError) {
+          console.error('Erro ao criar vínculo:', linkError)
+        } else {
+          console.log(`✅ Novo vínculo criado: ${newLink.id}`)
+        }
+      }
+    }
+
+    // Desativar vínculos de academias removidas
+    const academiesToRemove = oldAcademyIds.filter((id: string) => !newAcademyIds.includes(id))
+    
+    for (const academyId of academiesToRemove) {
+      console.log(`Desativando vínculo: professor ${teacherId} → academia ${academyId}`)
+      
+      await supabase
+        .from('academy_teachers')
+        .update({ 
+          status: 'inactive',
+          updated_at: new Date().toISOString()
+        })
+        .eq('teacher_id', teacherId)
+        .eq('academy_id', academyId)
+    }
+
+    res.json({ 
+      message: 'Preferências atualizadas com sucesso',
+      vinculosAdicionados: academiesToAdd.length,
+      vinculosRemovidos: academiesToRemove.length
+    })
   } catch (error: any) {
     console.error('Error updating preferences:', error)
     res.status(500).json({ error: error.message })

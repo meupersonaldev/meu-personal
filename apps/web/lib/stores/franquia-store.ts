@@ -31,10 +31,9 @@ export interface Teacher {
   email: string
   phone?: string
   specialties: string[]
-  status: 'active' | 'inactive' | 'pending'
+  status: 'active' | 'inactive'
   rating?: number
   total_reviews: number
-  commission_rate: number
   created_at: string
 }
 
@@ -314,7 +313,9 @@ export const useFranquiaStore = create<FranquiaState>()(
               name: user.name,
               email: user.email,
               role: 'FRANCHISE_ADMIN',
-              academyId: academyId
+              academyId: academyId,
+              academyName: academyData.name,
+              avatar_url: user.avatar_url
             },
             academy: academyData,
             isAuthenticated: true,
@@ -405,13 +406,26 @@ export const useFranquiaStore = create<FranquiaState>()(
             return
           }
 
+          // Buscar professores vinculados à academia com status active
           const { data, error } = await supabase
             .from('academy_teachers')
-            .select('*')
+            .select(`
+              *,
+              users:teacher_id (
+                id,
+                name,
+                email,
+                phone,
+                avatar_url,
+                is_active,
+                created_at,
+                role
+              )
+            `)
             .eq('academy_id', academy.id)
+            .eq('status', 'active')
 
-          console.log('Academy teachers data:', data)
-          console.log('Academy teachers error:', error)
+          console.log('Academy teachers query result:', { data, error })
 
           if (error) {
             console.error('Query error:', error)
@@ -426,30 +440,70 @@ export const useFranquiaStore = create<FranquiaState>()(
             return
           }
 
-          // Buscar dados dos usuários separadamente
-          const teacherIds = data.map(item => item.teacher_id)
-          const { data: usersData } = await supabase
-            .from('users')
-            .select('*')
-            .in('id', teacherIds)
+          // Para cada professor, buscar TODOS os vínculos e dados completos
+          const teachersWithFullData = await Promise.all(
+            data
+              .filter(item => item.users)
+              .map(async (item) => {
+                const user = item.users as any
+                const teacherId = user.id
 
-          const teachers: Teacher[] = data.map(item => {
-            const user = usersData?.find(u => u.id === item.teacher_id)
-            return {
-              id: user?.id || item.teacher_id,
-              name: user?.name || 'Professor',
-              email: user?.email || '',
-              phone: user?.phone || '',
-              specialties: [],
-              status: item.status || 'active',
-              rating: 0,
-              total_reviews: 0,
-              commission_rate: item.commission_rate || 0,
-              created_at: item.created_at
-            }
-          })
+                // Buscar todos os vínculos do professor (todas as academias)
+                const { data: allAcademyTeachers } = await supabase
+                  .from('academy_teachers')
+                  .select(`
+                    *,
+                    academies:academy_id (
+                      id,
+                      name,
+                      city,
+                      state
+                    )
+                  `)
+                  .eq('teacher_id', teacherId)
 
-          set({ teachers })
+                console.log(`Professor ${user.name} - Academias vinculadas:`, allAcademyTeachers?.length || 0)
+
+                // Buscar perfil completo
+                const { data: profile } = await supabase
+                  .from('teacher_profiles')
+                  .select('*')
+                  .eq('user_id', teacherId)
+                  .single()
+
+                // Buscar assinaturas
+                const { data: subscriptions } = await supabase
+                  .from('teacher_subscriptions')
+                  .select(`
+                    *,
+                    teacher_plans (
+                      name,
+                      price,
+                      features
+                    )
+                  `)
+                  .eq('teacher_id', teacherId)
+
+                return {
+                  id: user.id,
+                  name: user.name || 'Professor',
+                  email: user.email || '',
+                  phone: user.phone || '',
+                  avatar_url: user.avatar_url,
+                  is_active: user.is_active,
+                  created_at: user.created_at,
+                  specialties: profile?.specialties || [],
+                  status: item.status || 'active',
+                  rating: profile?.rating || 0,
+                  total_reviews: profile?.total_reviews || 0,
+                  teacher_profiles: profile ? [profile] : [],
+                  academy_teachers: allAcademyTeachers || [],
+                  teacher_subscriptions: subscriptions || []
+                }
+              })
+          )
+
+          set({ teachers: teachersWithFullData })
         } catch (error) {
           console.error('Error fetching teachers:', error)
         }
@@ -491,8 +545,7 @@ export const useFranquiaStore = create<FranquiaState>()(
             .insert({
               teacher_id: userData.id,
               academy_id: academy.id,
-              status: teacherData.status,
-              commission_rate: teacherData.commission_rate
+              status: teacherData.status
             })
 
           // Recarregar lista
@@ -529,14 +582,17 @@ export const useFranquiaStore = create<FranquiaState>()(
           }
 
           // Atualizar vínculo com academia
-          if (updates.status || updates.commission_rate) {
-            await supabase
-              .from('academy_teachers')
-              .update({
-                status: updates.status,
-                commission_rate: updates.commission_rate
-              })
-              .eq('teacher_id', id)
+          if (updates.status) {
+            const { academy } = get()
+            if (academy) {
+              await supabase
+                .from('academy_teachers')
+                .update({
+                  status: updates.status
+                })
+                .eq('teacher_id', id)
+                .eq('academy_id', academy.id)
+            }
           }
 
           // Recarregar lista

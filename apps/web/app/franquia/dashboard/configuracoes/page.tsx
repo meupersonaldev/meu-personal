@@ -5,7 +5,7 @@ import { useFranquiaStore } from '@/lib/stores/franquia-store'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Download, Copy, Printer, Building2, QrCode, Settings, Loader2, User, Upload, Camera } from 'lucide-react'
+import { Download, Copy, Printer, Building2, QrCode, Settings, Loader2, User, Upload, Camera, Save } from 'lucide-react'
 import { toast } from 'sonner'
 import QRCodeSVG from 'react-qr-code'
 
@@ -35,6 +35,10 @@ export default function ConfiguracoesPage() {
   const [loading, setLoading] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [profileData, setProfileData] = useState({
+    name: '',
+    email: ''
+  })
   const [settings, setSettings] = useState<AcademySettings>({
     name: '',
     email: '',
@@ -57,8 +61,43 @@ export default function ConfiguracoesPage() {
 
   useEffect(() => {
     loadSettings()
+    if (franquiaUser) {
+      setProfileData({
+        name: franquiaUser.name || '',
+        email: franquiaUser.email || ''
+      })
+
+      // Se academyName não está definido, buscar do banco
+      if (!franquiaUser.academyName && franquiaUser.academyId) {
+        loadAcademyName()
+      }
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [franquiaUser?.academyId])
+
+  async function loadAcademyName() {
+    if (!franquiaUser?.academyId) return
+
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/academies/${franquiaUser.academyId}`, {
+        credentials: 'include'
+      })
+
+      if (response.ok) {
+        const { academy } = await response.json()
+
+        // Atualizar store com o nome da academia
+        if (franquiaUser) {
+          setFranquiaUser({
+            ...franquiaUser,
+            academyName: academy.name
+          })
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao carregar nome da academia:', error)
+    }
+  }
 
   async function loadSettings() {
     if (!franquiaUser?.academyId) return
@@ -160,6 +199,44 @@ export default function ConfiguracoesPage() {
       toast.error('Erro ao fazer upload do avatar')
     } finally {
       setUploadingAvatar(false)
+    }
+  }
+
+  async function saveProfileData() {
+    if (!franquiaUser?.id) return
+
+    setLoading(true)
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/${franquiaUser.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          name: profileData.name,
+          email: profileData.email
+        })
+      })
+
+      if (response.ok) {
+        const { user } = await response.json()
+
+        // Atualizar store
+        setFranquiaUser({
+          ...franquiaUser,
+          name: user.name,
+          email: user.email
+        })
+
+        toast.success('Perfil atualizado com sucesso!')
+      } else {
+        const error = await response.json()
+        toast.error(error.error || 'Erro ao atualizar perfil')
+      }
+    } catch (error) {
+      console.error('Erro ao salvar perfil:', error)
+      toast.error('Erro ao atualizar perfil')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -363,38 +440,61 @@ export default function ConfiguracoesPage() {
               </div>
 
               {/* User Info */}
-              <div className="grid md:grid-cols-2 gap-6 pt-6 border-t">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Nome Completo</label>
-                  <Input
-                    value={franquiaUser?.name || ''}
-                    disabled
-                    className="bg-gray-50"
-                  />
+              <div className="space-y-6 pt-6 border-t">
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Nome Completo</label>
+                    <Input
+                      value={profileData.name}
+                      onChange={(e) => setProfileData({ ...profileData, name: e.target.value })}
+                      placeholder="Seu nome completo"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                    <Input
+                      value={profileData.email}
+                      onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
+                      placeholder="seu@email.com"
+                      type="email"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Academia</label>
+                    <Input
+                      value={franquiaUser?.academyName || 'Carregando...'}
+                      readOnly
+                      className="bg-gray-50 cursor-not-allowed"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Função</label>
+                    <Input
+                      value={franquiaUser?.role === 'FRANCHISE_ADMIN' ? 'Administrador' : franquiaUser?.role || 'Usuário'}
+                      readOnly
+                      className="bg-gray-50 cursor-not-allowed"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-                  <Input
-                    value={franquiaUser?.email || ''}
-                    disabled
-                    className="bg-gray-50"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Academia</label>
-                  <Input
-                    value={franquiaUser?.academyName || 'Carregando...'}
-                    disabled
-                    className="bg-gray-50"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Função</label>
-                  <Input
-                    value="Administrador da Academia"
-                    disabled
-                    className="bg-gray-50"
-                  />
+
+                <div className="pt-4">
+                  <Button
+                    onClick={saveProfileData}
+                    disabled={loading}
+                    className="w-full md:w-auto"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Salvando...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4 mr-2" />
+                        Salvar Alterações
+                      </>
+                    )}
+                  </Button>
                 </div>
               </div>
             </div>

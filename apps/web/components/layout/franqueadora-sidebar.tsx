@@ -68,11 +68,11 @@ export default function FranqueadoraSidebar() {
         {/* Logo */}
         <div className="mb-4">
           <Logo 
-            size="sm" 
+            size="lg" 
             variant="default" 
             showText={false}
             href="/franqueadora/dashboard"
-            className="justify-center"
+            className="justify-start"
           />
         </div>
         
