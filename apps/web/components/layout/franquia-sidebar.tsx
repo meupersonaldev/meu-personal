@@ -130,7 +130,7 @@ export default function FranquiaSidebar() {
         </div>
         
         {/* Perfil da Franquia */}
-        <div className="space-y-1 text-center">
+        <div className="space-y-1 text-center" style={{ marginTop: '0' }}>
           <div className="text-sm text-white">
             Bem-vindo
           </div>

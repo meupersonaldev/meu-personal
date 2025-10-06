@@ -10,13 +10,14 @@ import { toast } from 'sonner'
 import {
   BarChart3,
   Building,
+  Users,
   LogOut,
   ChevronDown,
   ChevronRight
 } from 'lucide-react'
 
 export default function FranqueadoraSidebar() {
-  const { user, logout: franqueadoraLogout } = useFranqueadoraStore()
+  const { user, franqueadora, logout: franqueadoraLogout } = useFranqueadoraStore()
   const pathname = usePathname()
   const router = useRouter()
   const [expandedSections, setExpandedSections] = useState<string[]>(['overview'])
@@ -43,6 +44,13 @@ export default function FranqueadoraSidebar() {
       icon: BarChart3,
       href: '/franqueadora/dashboard',
       isExpanded: expandedSections.includes('overview')
+    },
+    {
+      id: 'users',
+      label: 'Usuários',
+      icon: Users,
+      href: '/franqueadora/dashboard/usuarios',
+      isExpanded: expandedSections.includes('users')
     },
     {
       id: 'franchises',
@@ -77,15 +85,13 @@ export default function FranqueadoraSidebar() {
         </div>
         
         {/* Perfil da Franqueadora */}
-        <div className="space-y-1 text-center">
-          <div className="text-sm text-white">
-            Bem-vindo
-          </div>
+        <div className="space-y-1 text-center" style={{ marginTop: '-79px' }}>
+          <div className="text-sm text-white">Bem-vindo</div>
           <div className="font-semibold text-white text-lg">
-            Admin Meu Personal
+            {user?.name || 'Admin'}
           </div>
           <div className="text-sm text-white">
-            Franqueadora
+            {franqueadora?.name || 'Franqueadora'}
           </div>
         </div>
       </div>
