@@ -147,7 +147,7 @@ export default function FranquiaDetailsPage() {
   }
 
   const formatPercentage = (value: number, total: number) => {
-    if (total === 0) return '0%'
+    if (!value || !total || total === 0 || isNaN(value) || isNaN(total)) return '0.0%'
     return `${((value / total) * 100).toFixed(1)}%`
   }
 
@@ -308,10 +308,10 @@ export default function FranquiaDetailsPage() {
                   <div className="ml-4">
                     <p className="text-sm font-medium text-gray-600">Receita Mensal</p>
                     <p className="text-2xl font-bold text-gray-900">
-                      {formatCurrency(stats.monthlyRevenue)}
+                      {formatCurrency(stats.monthlyRevenue || 0)}
                     </p>
                     <p className="text-sm text-gray-600">
-                      Royalty: {formatCurrency(stats.monthlyRevenue * (franchise.royalty_percentage / 100))}
+                      Royalty: {formatCurrency((stats.monthlyRevenue || 0) * ((franchise.royalty_percentage || 0) / 100))}
                     </p>
                   </div>
                 </div>
@@ -325,7 +325,7 @@ export default function FranquiaDetailsPage() {
                   <div className="ml-4">
                     <p className="text-sm font-medium text-gray-600">Avaliação</p>
                     <p className="text-2xl font-bold text-gray-900">
-                      {stats.averageRating.toFixed(1)}
+                      {(stats.averageRating || 0).toFixed(1)}
                     </p>
                     <p className="text-sm text-gray-600">{stats.totalReviews} avaliações</p>
                   </div>
@@ -420,14 +420,14 @@ export default function FranquiaDetailsPage() {
                 <div className="bg-green-50 p-4 rounded-lg">
                   <p className="text-sm text-green-600 font-medium">Royalty Mensal</p>
                   <p className="text-2xl font-bold text-green-900">
-                    {formatCurrency(stats.monthlyRevenue * (franchise.royalty_percentage / 100))}
+                    {formatCurrency((stats.monthlyRevenue || 0) * ((franchise.royalty_percentage || 0) / 100))}
                   </p>
                   <p className="text-xs text-green-600">{franchise.royalty_percentage}% da receita</p>
                 </div>
                 <div className="bg-purple-50 p-4 rounded-lg">
                   <p className="text-sm text-purple-600 font-medium">Receita Líquida</p>
                   <p className="text-2xl font-bold text-purple-900">
-                    {formatCurrency(stats.monthlyRevenue * (1 - franchise.royalty_percentage / 100))}
+                    {formatCurrency((stats.monthlyRevenue || 0) * (1 - (franchise.royalty_percentage || 0) / 100))}
                   </p>
                   <p className="text-xs text-purple-600">Após royalty</p>
                 </div>
