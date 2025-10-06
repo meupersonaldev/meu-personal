@@ -37,6 +37,8 @@ type AcademySettings = {
   zipCode: string
   schedule: DaySchedule[]
   checkinTolerance: number
+  creditsPerClass: number
+  classDurationMinutes: number
 }
 
 export default function ConfiguracoesPage() {
@@ -66,7 +68,9 @@ export default function ConfiguracoesPage() {
       { day: '5', dayName: 'Sexta', isOpen: true, openingTime: '06:00', closingTime: '22:00', slotsPerHour: 1 },
       { day: '6', dayName: 'Sábado', isOpen: false, openingTime: '06:00', closingTime: '22:00', slotsPerHour: 1 }
     ],
-    checkinTolerance: 30
+    checkinTolerance: 30,
+    creditsPerClass: 1,
+    classDurationMinutes: 60,
   })
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([])
 
@@ -159,7 +163,9 @@ export default function ConfiguracoesPage() {
           state: academy.state || '',
           zipCode: academy.zip_code || '',
           schedule,
-          checkinTolerance: academy.checkin_tolerance || 30
+          checkinTolerance: academy.checkin_tolerance || 30,
+          creditsPerClass: typeof academy.credits_per_class === 'number' ? academy.credits_per_class : 1,
+          classDurationMinutes: typeof academy.class_duration_minutes === 'number' ? academy.class_duration_minutes : 60,
         })
       }
     } catch (error) {
@@ -311,7 +317,8 @@ export default function ConfiguracoesPage() {
           phone: settings.phone,
           city: settings.city,
           state: settings.state,
-          zip_code: settings.zipCode
+          zip_code: settings.zipCode,
+          credits_per_class: Number(settings.creditsPerClass || 1)
         })
       })
 
@@ -344,12 +351,13 @@ export default function ConfiguracoesPage() {
     try {
       const payload = {
         schedule: JSON.stringify(settings.schedule),
-        checkin_tolerance: Number(settings.checkinTolerance)
+        checkin_tolerance: Number(settings.checkinTolerance),
+        class_duration_minutes: Number(settings.classDurationMinutes || 60)
       }
 
       console.log('Salvando configurações:', payload)
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/academies/${franquiaUser.academyId}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/academies/${franquiaUser!.academyId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -497,6 +505,31 @@ export default function ConfiguracoesPage() {
                 </div>
               </div>
 
+              {/* Parâmetros do Sistema */}
+              <div className="grid md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Tolerância de check-in (minutos)</label>
+                  <Input
+                    value={settings.checkinTolerance}
+                    onChange={(e) => setSettings({ ...settings, checkinTolerance: Number(e.target.value) || 0 })}
+                    type="number"
+                    min={0}
+                    max={180}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Duração padrão de aula (minutos)</label>
+                  <Input
+                    value={settings.classDurationMinutes}
+                    onChange={(e) => setSettings({ ...settings, classDurationMinutes: Math.max(15, Number(e.target.value) || 60) })}
+                    type="number"
+                    min={15}
+                    max={240}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Usado para calcular o tempo dos agendamentos e os intervalos dos slots.</p>
+                </div>
+              </div>
+
               {/* User Info */}
               <div className="space-y-6 pt-6 border-t">
                 <div className="grid md:grid-cols-2 gap-6">
@@ -602,6 +635,19 @@ export default function ConfiguracoesPage() {
                     onChange={(e) => setSettings({...settings, phone: e.target.value})}
                     placeholder="(11) 99999-9999"
                   />
+                </div>
+              </div>
+              <div className="grid md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Créditos por aula (60 min)</label>
+                  <Input 
+                    value={settings.creditsPerClass}
+                    onChange={(e) => setSettings({...settings, creditsPerClass: Number(e.target.value) || 1})}
+                    placeholder="1"
+                    type="number"
+                    min={1}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Usado para cobrar o aluno ao confirmar uma aula.</p>
                 </div>
               </div>
               <div className="grid md:grid-cols-3 gap-6">

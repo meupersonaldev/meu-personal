@@ -1,7 +1,8 @@
 import express from 'express'
-import { supabase } from '../lib/supabase'
+import { supabase } from '../config/supabase'
 import { asaasService } from '../services/asaas.service'
-import { createNotification } from './notifications'
+import { paymentIntentService } from '../services/payment-intent.service'
+import { createNotification, createUserNotification } from './notifications'
 
 const router = express.Router()
 
@@ -25,28 +26,38 @@ router.post('/asaas', async (req, res) => {
     console.log('Webhook Asaas recebido:', {
       event: event.event,
       paymentId: event.payment?.id,
+      status: event.payment?.status,
       value: event.payment?.value
     })
 
-    // Processar webhook
-    const webhookData = await asaasService.processWebhook(event)
-
-    // Buscar referência externa (subscription_id ou booking_id)
-    const externalRef = webhookData.externalReference
+    // Validar webhook secret (se configurado)
+    const webhookSecret = process.env.ASAAS_WEBHOOK_SECRET
+    // TODO: Implementar validação de assinatura do Asaas
 
     // Processar diferentes tipos de eventos
     switch (event.event) {
       case 'PAYMENT_CONFIRMED':
       case 'PAYMENT_RECEIVED':
-        await handlePaymentConfirmed(webhookData, externalRef)
+        // Usar o novo PaymentIntentService para processar o pagamento
+        await paymentIntentService.processWebhook(
+          event.payment.id,
+          event.payment.status || 'CONFIRMED'
+        )
         break
 
       case 'PAYMENT_OVERDUE':
-        await handlePaymentOverdue(webhookData, externalRef)
+        await paymentIntentService.processWebhook(
+          event.payment.id,
+          'OVERDUE'
+        )
         break
 
+      case 'PAYMENT_DELETED':
       case 'PAYMENT_REFUNDED':
-        await handlePaymentRefunded(webhookData, externalRef)
+        await paymentIntentService.processWebhook(
+          event.payment.id,
+          'CANCELED'
+        )
         break
 
       default:
@@ -110,7 +121,7 @@ async function handlePaymentConfirmed(webhookData: any, externalRef: string) {
       .single()
 
     if (admin) {
-      await createNotification(
+      await createUserNotification(
         admin.user_id,
         'payment_received',
         'Pagamento Confirmado - Professor',
@@ -122,6 +133,19 @@ async function handlePaymentConfirmed(webhookData: any, externalRef: string) {
         }
       )
     }
+    try {
+      await (require('./notifications')).createUserNotification(
+        admin.user_id,
+        'payment_received',
+        'Pagamento Confirmado - Aluno',
+        'Pagamento confirmado.',
+        {
+          subscription_id: externalRef,
+          payment_id: webhookData.paymentId,
+          amount: webhookData.value
+        }
+      )
+    } catch {}
 
     return
   }

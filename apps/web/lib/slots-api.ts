@@ -3,7 +3,7 @@
  * Sistema de bloqueio automático quando slots atingem capacidade máxima
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
 
 export interface TimeSlot {
   id: string

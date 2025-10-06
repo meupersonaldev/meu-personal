@@ -1,16 +1,5 @@
 import { Router } from 'express'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  }
-)
+import { supabase } from '../config/supabase'
 
 const router = Router()
 
@@ -141,7 +130,7 @@ router.post('/generate', async (req, res) => {
     // Buscar configurações da academia
     const { data: academy, error: academyError } = await supabase
       .from('academies')
-      .select('schedule, opening_time, closing_time')
+      .select('schedule, class_duration_minutes')
       .eq('id', academy_id)
       .single()
 
@@ -159,7 +148,7 @@ router.post('/generate', async (req, res) => {
     }
 
     // Gerar slots para cada dia aberto
-    const slotsToCreate = []
+    const slotsToCreate: Array<{ academy_id: string, day_of_week: number, time: string, is_available: boolean, max_capacity: number }> = []
     
     for (const dayConfig of schedule) {
       if (dayConfig.isOpen) {
@@ -167,20 +156,25 @@ router.post('/generate', async (req, res) => {
         const openTime = dayConfig.openingTime || '06:00'
         const closeTime = dayConfig.closingTime || '22:00'
         const slotsPerHour = dayConfig.slotsPerHour || 1
-        
-        // Gerar slots baseado na quantidade por hora
-        const [openHour] = openTime.split(':').map(Number)
-        const [closeHour] = closeTime.split(':').map(Number)
-        
-        for (let hour = openHour; hour < closeHour; hour++) {
-          const timeSlot = `${String(hour).padStart(2, '0')}:00`
-          
+
+        const [openHour, openMinute] = openTime.split(':').map((v: string) => parseInt(v, 10))
+        const [closeHour, closeMinute] = closeTime.split(':').map((v: string) => parseInt(v, 10))
+
+        const startMinutes = (openHour * 60) + (openMinute || 0)
+        const endMinutes = (closeHour * 60) + (closeMinute || 0)
+        const step = Math.max(15, academy.class_duration_minutes ?? 60)
+
+        for (let m = startMinutes; m + step <= endMinutes; m += step) {
+          const hh = Math.floor(m / 60)
+          const mm = m % 60
+          const timeSlot = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`
+
           slotsToCreate.push({
             academy_id,
             day_of_week: dayOfWeek,
             time: timeSlot,
             is_available: true,
-            max_capacity: slotsPerHour // Aqui é a capacidade máxima por slot!
+            max_capacity: slotsPerHour
           })
         }
       }

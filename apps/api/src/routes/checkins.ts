@@ -1,16 +1,7 @@
 import { Router } from 'express'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  }
-)
+import { z } from 'zod'
+import { supabase } from '../config/supabase'
+import { createNotification, createUserNotification } from './notifications'
 
 const router = Router()
 
@@ -104,6 +95,179 @@ router.get('/stats', async (req, res) => {
   } catch (error: any) {
     console.error('Error fetching checkin stats:', error)
     res.status(500).json({ error: error.message })
+  }
+})
+
+// POST /api/checkins/scan - Check-in via recepção
+router.post('/scan', async (req, res) => {
+  try {
+    const schema = z.object({
+      booking_id: z.string().uuid(),
+      academy_id: z.string().uuid(),
+    })
+
+    const { booking_id, academy_id } = schema.parse(req.body)
+
+    // Buscar booking
+    const { data: booking, error: getError } = await supabase
+      .from('bookings')
+      .select('id, status, date, duration, teacher_id, student_id, franchise_id')
+      .eq('id', booking_id)
+      .single()
+
+    if (getError || !booking) {
+      try {
+        await supabase.from('checkins').insert({
+          academy_id,
+          teacher_id: null,
+          booking_id,
+          status: 'DENIED',
+          reason: 'BOOKING_NOT_FOUND',
+          method: 'RECEPTION',
+          created_at: new Date().toISOString(),
+        })
+      } catch {}
+      try { await createNotification(academy_id, 'checkin', 'Check-in negado', 'Tentativa de check-in sem agendamento.', { booking_id }) } catch {}
+      return res.status(404).json({ allowed: false, message: 'Agendamento não encontrado' })
+    }
+
+    // Validar academia do booking
+    if (booking.franchise_id !== academy_id) {
+      try {
+        await supabase.from('checkins').insert({
+          academy_id,
+          teacher_id: booking.teacher_id,
+          booking_id: booking.id,
+          status: 'DENIED',
+          reason: 'WRONG_ACADEMY',
+          method: 'RECEPTION',
+          created_at: new Date().toISOString(),
+        })
+      } catch {}
+      try { await createNotification(academy_id, 'checkin', 'Check-in negado', 'Agendamento nao pertence a esta unidade.', { booking_id: booking.id }) } catch {}
+      try {
+        if (booking.student_id) {
+          await createUserNotification(
+            booking.student_id,
+            'checkin',
+            'Check-in negado',
+            'Tentativa de check-in em unidade incorreta.',
+            { booking_id: booking.id }
+          )
+        }
+      } catch {}
+      try {
+        if (booking.teacher_id) {
+          await createUserNotification(
+            booking.teacher_id,
+            'checkin',
+            'Check-in negado',
+            'Tentativa de check-in em unidade incorreta.',
+            { booking_id: booking.id }
+          )
+        }
+      } catch {}
+      return res.status(403).json({ allowed: false, message: 'Agendamento não pertence a esta unidade' })
+    }
+
+    if (booking.status === 'CANCELLED') {
+      try {
+        await supabase.from('checkins').insert({
+          academy_id,
+          teacher_id: booking.teacher_id,
+          booking_id: booking.id,
+          status: 'DENIED',
+          reason: 'BOOKING_CANCELLED',
+          method: 'RECEPTION',
+          created_at: new Date().toISOString(),
+        })
+      } catch {}
+      try { await createNotification(academy_id, 'checkin', 'Check-in negado', 'Agendamento cancelado.', { booking_id: booking.id }) } catch {}
+      try {
+        if (booking.student_id) {
+          await createUserNotification(
+            booking.student_id,
+            'checkin',
+            'Check-in negado',
+            'Agendamento cancelado.',
+            { booking_id: booking.id }
+          )
+        }
+      } catch {}
+      try {
+        if (booking.teacher_id) {
+          await createUserNotification(
+            booking.teacher_id,
+            'checkin',
+            'Check-in negado',
+            'Agendamento cancelado.',
+            { booking_id: booking.id }
+          )
+        }
+      } catch {}
+      return res.status(409).json({ allowed: false, message: 'Agendamento cancelado' })
+    }
+
+    // Confirmar se estava PENDING
+    if (booking.status === 'PENDING') {
+      await supabase
+        .from('bookings')
+        .update({ status: 'CONFIRMED', updated_at: new Date().toISOString() })
+        .eq('id', booking.id)
+    }
+
+    // Registrar check-in concedido
+    try {
+      await supabase.from('checkins').insert({
+        academy_id,
+        teacher_id: booking.teacher_id,
+        booking_id: booking.id,
+        status: 'GRANTED',
+        reason: null,
+        method: 'RECEPTION',
+        created_at: new Date().toISOString(),
+      })
+    } catch {}
+    try { await createNotification(academy_id, 'checkin', 'Check-in realizado', 'Entrada registrada na recepcao.', { booking_id: booking.id }) } catch {}
+    try {
+      if (booking.student_id) {
+        await createUserNotification(
+          booking.student_id,
+          'checkin',
+          'Check-in realizado',
+          'Seu check-in foi confirmado.',
+          { booking_id: booking.id }
+        )
+      }
+    } catch {}
+    try {
+      if (booking.teacher_id) {
+        await createUserNotification(
+          booking.teacher_id,
+          'checkin',
+          'Check-in realizado',
+          'Seu aluno realizou check-in.',
+          { booking_id: booking.id }
+        )
+      }
+    } catch {}
+
+    return res.status(200).json({
+      allowed: true,
+      booking: {
+        id: booking.id,
+        start: new Date(booking.date).toISOString(),
+        duration: booking.duration || 60,
+      },
+      message: 'Check-in registrado'
+    })
+
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ allowed: false, message: 'Dados inválidos', errors: error.errors })
+    }
+    console.error('Erro no check-in (recepção):', error)
+    return res.status(500).json({ allowed: false, message: 'Erro interno' })
   }
 })
 

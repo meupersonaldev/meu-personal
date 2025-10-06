@@ -1,5 +1,5 @@
 import express from 'express'
-import { supabase } from '../lib/supabase'
+import { supabase } from '../config/supabase'
 import { createNotification } from './notifications'
 import { asaasService } from '../services/asaas.service'
 

@@ -1,50 +1,76 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
+const PROTECTED_PREFIXES = ['/professor', '/aluno', '/admin', '/franquia'] as const
+const PROFESSOR_AUTH_ROUTES = ['/professor/login', '/professor/cadastro', '/professor/esqueci-senha', '/professor/redefinir-senha'] as const
+const ALUNO_AUTH_ROUTES = ['/aluno/login', '/aluno/cadastro', '/aluno/esqueci-senha', '/aluno/redefinir-senha'] as const
+const AUTH_PREFIXES: readonly string[] = [
+  '/login',
+  '/cadastro',
+  '/esqueci-senha',
+  ...PROFESSOR_AUTH_ROUTES,
+  ...ALUNO_AUTH_ROUTES,
+]
+
 export function middleware(request: NextRequest) {
-  // Rotas que requerem autenticação
-  // Em desenvolvimento liberamos o dashboard para facilitar testes
-  const protectedRoutes = process.env.NODE_ENV === 'production'
-    ? ['/dashboard', '/professor', '/aluno', '/admin']
-    : ['/admin']
-  
-  // Rotas de autenticação (redirecionam se já logado)
-  const authRoutes = ['/login', '/cadastro', '/esqueci-senha']
-  
   const { pathname } = request.nextUrl
-  
-  // Verificar se é uma rota protegida
-  const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route))
-  
-  // Verificar se é uma rota de autenticação
-  const isAuthRoute = authRoutes.some(route => pathname.startsWith(route))
-  
-  // Simular verificação de token (em produção seria JWT)
   const authToken = request.cookies.get('auth-token')?.value
-  
+
+  const isFranqueadoraRoute = pathname.startsWith('/franqueadora')
+  const isFranqueadoraLogin = pathname === '/franqueadora' || pathname === '/franqueadora/'
+  const isFranqueadoraDashboard = isFranqueadoraRoute && !isFranqueadoraLogin
+  const isProfessorAuth = PROFESSOR_AUTH_ROUTES.some((route) => pathname.startsWith(route))
+  const isAlunoAuth = ALUNO_AUTH_ROUTES.some((route) => pathname.startsWith(route))
+
+  const isProtectedRoute =
+    PROTECTED_PREFIXES.some((route) => pathname.startsWith(route)) &&
+    !isFranqueadoraRoute &&
+    !isProfessorAuth &&
+    !isAlunoAuth
+
+  const isAuthRoute =
+    isFranqueadoraLogin ||
+    AUTH_PREFIXES.some((route) => pathname === route || pathname.startsWith(`${route}/`))
+
   if (isProtectedRoute && !authToken) {
-    // Redirecionar para login se não autenticado
-    return NextResponse.redirect(new URL('/login', request.url))
+    let target = '/login'
+
+    if (pathname.startsWith('/professor')) {
+      target = '/professor/login'
+    } else if (pathname.startsWith('/aluno')) {
+      target = '/aluno/login'
+    } else if (isFranqueadoraRoute) {
+      target = '/franqueadora'
+    } else if (pathname.startsWith('/franquia')) {
+      target = '/franquia'
+    }
+
+    if (pathname !== target) {
+      return NextResponse.redirect(new URL(target, request.url))
+    }
   }
-  
+
   if (isAuthRoute && authToken) {
-    // Redirecionar para dashboard se já autenticado
-    return NextResponse.redirect(new URL('/dashboard', request.url))
+    let target = '/'
+
+    if (isFranqueadoraRoute) {
+      target = '/franqueadora/dashboard'
+    } else if (isProfessorAuth) {
+      target = '/professor/dashboard'
+    } else if (isAlunoAuth) {
+      target = '/aluno/inicio'
+    }
+
+    if (pathname !== target) {
+      return NextResponse.redirect(new URL(target, request.url))
+    }
   }
-  
+
   return NextResponse.next()
 }
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - api (API routes)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public (public files)
-     */
     '/((?!api|_next/static|_next/image|favicon.ico|public).*)',
   ],
 }

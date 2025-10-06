@@ -1,5 +1,4 @@
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
 
 // Função helper para fazer requests
 async function apiRequest(endpoint: string, options: RequestInit = {}) {
@@ -10,7 +9,7 @@ async function apiRequest(endpoint: string, options: RequestInit = {}) {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      ...options.headers,
+      ...(options.headers || {}),
     },
   }
 
@@ -18,20 +17,19 @@ async function apiRequest(endpoint: string, options: RequestInit = {}) {
     const response = await fetch(url, config)
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ 
-        message: `Erro na requisição: ${response.status} ${response.statusText}` 
-      }))
-      
-      // Log apenas erros críticos (não 404 ou 500 de recursos não encontrados)
+      const error = await response
+        .json()
+        .catch(() => ({ message: `Erro na requisição: ${response.status} ${response.statusText}` }))
+
       if (response.status !== 404 && response.status !== 500) {
         console.error(`API Error [${response.status}]:`, {
           url,
           status: response.status,
           statusText: response.statusText,
-          error
+          error,
         })
       }
-      
+
       throw new Error(error.message || `Erro na requisição: ${response.status}`)
     }
 
@@ -59,6 +57,7 @@ export const authAPI = {
     email: string
     password: string
     phone?: string
+    cpf?: string
     role?: 'STUDENT' | 'TEACHER'
   }) {
     return apiRequest('/api/auth/register', {
@@ -69,38 +68,44 @@ export const authAPI = {
 
   async me(token: string) {
     return apiRequest('/api/auth/me', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+      headers: { Authorization: `Bearer ${token}` },
     })
   },
 
   async logout() {
-    return apiRequest('/api/auth/logout', {
-      method: 'POST',
-    })
+    return apiRequest('/api/auth/logout', { method: 'POST' })
   },
 }
 
 // Teachers API
 export const teachersAPI = {
-  async getAll() {
-    return apiRequest('/api/teachers')
+  async getAll(params?: { academy_id?: string }) {
+    const query = new URLSearchParams()
+    if (params?.academy_id) query.append('academy_id', params.academy_id)
+    const path = `/api/teachers${query.toString() ? `?${query.toString()}` : ''}`
+    return apiRequest(path)
   },
 
   async getById(id: string) {
     return apiRequest(`/api/teachers/${id}`)
   },
 
-  async update(id: string, data: any, token: string) {
-    return apiRequest(`/api/teachers/${id}`, {
-      method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(data),
-    })
+  async getAcademies(id: string) {
+    return apiRequest(`/api/teachers/${id}/academies`)
   },
+}
+
+// Academies API
+export const academiesAPI = {
+  async getAll() {
+    return apiRequest('/api/academies')
+  },
+
+  async getAvailableSlots(academyId: string, date: string, teacherId?: string) {
+    const query = new URLSearchParams({ date })
+    if (teacherId) query.append('teacher_id', teacherId)
+    return apiRequest(`/api/academies/${academyId}/available-slots?${query.toString()}`)
+  }
 }
 
 // Bookings API
@@ -114,11 +119,9 @@ export const bookingsAPI = {
     if (params?.student_id) queryParams.append('student_id', params.student_id)
     if (params?.teacher_id) queryParams.append('teacher_id', params.teacher_id)
     if (params?.status) queryParams.append('status', params.status)
-
     const endpoint = `/api/bookings${queryParams.toString() ? '?' + queryParams.toString() : ''}`
     return apiRequest(endpoint)
   },
-
   async getById(id: string) {
     return apiRequest(`/api/bookings/${id}`)
   },
@@ -161,10 +164,35 @@ export const bookingsAPI = {
       },
     })
   },
+
+  // Agendamento feito pelo aluno (confirma e debita créditos do aluno)
+  async createStudent(data: {
+    student_id: string
+    teacher_id: string
+    franchise_id: string
+    date: string
+    duration?: number
+    notes?: string
+  }, token?: string) {
+    return apiRequest('/api/bookings/student', {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      body: JSON.stringify(data),
+    })
+  },
+
+  // Cancelamento com política (>= 4h reembolsa aluno se student_credits)
+  async cancelWithPolicy(id: string, token?: string) {
+    return apiRequest(`/api/bookings/${id}/cancel`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    })
+  }
 }
 
 export default {
   auth: authAPI,
   teachers: teachersAPI,
   bookings: bookingsAPI,
+  academies: academiesAPI,
 }

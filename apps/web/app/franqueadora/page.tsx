@@ -61,7 +61,7 @@ export default function FranqueadoraLoginPage() {
               <Logo size="xl" variant="default" showText={false} href={undefined} />
               <Crown className="h-4 w-4 text-meu-accent absolute -top-1 -right-1" />
             </div>
-            <h1 className="text-3xl font-bold text-white mb-2">
+            <h1 className="text-3xl font-bold text-white mb-2" style={{ marginTop: '-123px' }}>
               Painel da Franqueadora
             </h1>
             <p className="text-white/80">

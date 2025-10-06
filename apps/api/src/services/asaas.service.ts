@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from 'axios'
+import { supabase } from '../config/supabase'
 
 const ASAAS_API_URL = process.env.ASAAS_ENV === 'production' 
   ? 'https://api.asaas.com/v3'
@@ -73,13 +74,7 @@ export class AsaasService {
    */
   async getOrCreateCustomer(userId: string, userData: { name: string, email: string, cpfCnpj?: string, phone?: string }) {
     try {
-      // Importar supabase aqui para evitar dependência circular
-      const { createClient } = require('@supabase/supabase-js')
-      const supabase = createClient(
-        process.env.SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!,
-        { auth: { autoRefreshToken: false, persistSession: false } }
-      )
+      // Usar cliente Supabase centralizado
 
       // Verificar se usuário já tem asaas_customer_id
       const { data: user } = await supabase

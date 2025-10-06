@@ -28,6 +28,7 @@ import TeacherModal from '@/components/modals/teacher-modal'
 import StudentModal from '@/components/modals/student-modal'
 import type { Teacher as LegacyTeacher, Student as LegacyStudent } from '@/lib/stores/franquia-store'
 import NotificationsBell from '@/components/layout/notifications-bell'
+import ConfirmDialog from '@/components/ui/confirm-dialog'
 
 // Tipos locais para compatibilidade com os Modais (que usam o store legado)
 type ModalTeacher = {
@@ -96,6 +97,19 @@ export default function FranquiaDashboard() {
     student: ModalStudent | null
     mode: 'add' | 'edit' | 'view'
   }>({ isOpen: false, student: null, mode: 'add' })
+
+  // Confirmation modals state
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    isOpen: boolean
+    type: 'teacher' | 'student' | null
+    id: string | null
+    name: string
+  }>({
+    isOpen: false,
+    type: null,
+    id: null,
+    name: ''
+  })
 
 
   const renderTabContent = () => {
@@ -639,10 +653,12 @@ export default function FranquiaDashboard() {
   }
 
   const handleDeleteTeacher = (teacher: Teacher) => {
-    if (confirm(`Tem certeza que deseja excluir o professor ${teacher.name}?`)) {
-      deleteTeacher(teacher.id)
-      toast.success('Professor excluído com sucesso!')
-    }
+    setDeleteConfirm({
+      isOpen: true,
+      type: 'teacher',
+      id: teacher.id,
+      name: teacher.name
+    })
   }
 
   // Student actions
@@ -659,10 +675,26 @@ export default function FranquiaDashboard() {
   }
 
   const handleDeleteStudent = (student: Student) => {
-    if (confirm(`Tem certeza que deseja excluir o aluno ${student.name}?`)) {
-      deleteStudent(student.id)
+    setDeleteConfirm({
+      isOpen: true,
+      type: 'student',
+      id: student.id,
+      name: student.name
+    })
+  }
+
+  const confirmDelete = () => {
+    if (!deleteConfirm.type || !deleteConfirm.id) return
+
+    if (deleteConfirm.type === 'teacher') {
+      deleteTeacher(deleteConfirm.id)
+      toast.success('Professor excluído com sucesso!')
+    } else if (deleteConfirm.type === 'student') {
+      deleteStudent(deleteConfirm.id)
       toast.success('Aluno excluído com sucesso!')
     }
+
+    setDeleteConfirm({ isOpen: false, type: null, id: null, name: '' })
   }
 
   if (!hydrated) {
@@ -723,6 +755,18 @@ export default function FranquiaDashboard() {
         onClose={closeStudentModal}
         student={studentModal.student as unknown as LegacyStudent}
         mode={studentModal.mode}
+      />
+
+      {/* Modal de Confirmação de Exclusão */}
+      <ConfirmDialog
+        isOpen={deleteConfirm.isOpen}
+        onClose={() => setDeleteConfirm({ isOpen: false, type: null, id: null, name: '' })}
+        onConfirm={confirmDelete}
+        title={`Excluir ${deleteConfirm.type === 'teacher' ? 'Professor' : 'Aluno'}`}
+        description={`Tem certeza que deseja excluir ${deleteConfirm.type === 'teacher' ? 'o professor' : 'o aluno'} "${deleteConfirm.name}"? Esta ação não poderá ser desfeita.`}
+        confirmText="Excluir"
+        cancelText="Cancelar"
+        type="danger"
       />
     </div>
   )

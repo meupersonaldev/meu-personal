@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -55,7 +55,7 @@ export default function AlunoInicioPage() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push('/login')
+      router.push('/aluno/login')
       return
     }
 
@@ -184,7 +184,7 @@ export default function AlunoInicioPage() {
                   <p className="text-3xl font-bold text-gray-900 mb-2">{user?.credits || 0}</p>
                   <Button
                     size="sm"
-                    onClick={() => router.push('/student/plans')}
+                    onClick={() => router.push('/aluno/comprar')}
                     className="bg-green-600 hover:bg-green-700 text-xs"
                   >
                     Comprar Créditos

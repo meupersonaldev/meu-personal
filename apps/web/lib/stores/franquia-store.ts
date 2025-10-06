@@ -250,7 +250,7 @@ export const useFranquiaStore = create<FranquiaState>()(
       login: async (email: string, password: string) => {
         try {
           set({ isLoading: true })
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
 
           // 1. Fazer login via API
           const response = await fetch(`${API_URL}/api/auth/login`, {

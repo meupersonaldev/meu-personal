@@ -27,7 +27,7 @@ export function useTeacherAcademies() {
       try {
         setLoading(true)
         setError(null)
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
 
         // Buscar preferências do professor (academy_ids)
         const prefRes = await fetch(`${API_URL}/api/teachers/${user.id}/preferences`)

@@ -1,20 +1,10 @@
 import { Router } from 'express'
-import { createClient } from '@supabase/supabase-js'
+import { supabase } from '../config/supabase'
 import multer from 'multer'
 import { v4 as uuidv4 } from 'uuid'
 import path from 'path'
 
-// Cliente Supabase com service_role para bypass RLS
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  }
-)
+// Cliente Supabase centralizado importado de ../config/supabase
 
 const router = Router()
 

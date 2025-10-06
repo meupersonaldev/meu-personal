@@ -16,7 +16,21 @@
       "Bash(del \"C:\\Users\\zaira\\Documents\\GitHub\\meu-personal\\SETUP-ESQUECI-SENHA.md\")",
       "Bash(del \"C:\\Users\\zaira\\Documents\\GitHub\\meu-personal\\apps\\api\\src\\services\\email.service.ts\")",
       "Bash(npm run dev:*)",
-      "Bash(if not exist \"C:\\Users\\zaira\\Documents\\GitHub\\meu-personal\\apps\\web\\app\\professor\\configuracoes\" mkdir \"C:\\Users\\zaira\\Documents\\GitHub\\meu-personal\\apps\\web\\app\\professor\\configuracoes\")"
+      "Bash(if not exist \"C:\\Users\\zaira\\Documents\\GitHub\\meu-personal\\apps\\web\\app\\professor\\configuracoes\" mkdir \"C:\\Users\\zaira\\Documents\\GitHub\\meu-personal\\apps\\web\\app\\professor\\configuracoes\")",
+      "mcp__supabase__list_tables",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(curl:*)",
+      "Bash(node:*)",
+      "Bash(find:*)",
+      "Bash(taskkill:*)",
+      "Bash(cmd:*)",
+      "Bash(xargs:*)",
+      "Bash(dos2unix:*)",
+      "Bash(dir \"C:\\Users\\zaira\\Documents\\GitHub\\meu-personal\\apps\\web\\app\\franqueadora\\dashboard\")",
+      "Bash(wmic:*)",
+      "Bash(del:*)",
+      "Bash(tasklist:*)"
     ],
     "deny": [],
     "ask": []

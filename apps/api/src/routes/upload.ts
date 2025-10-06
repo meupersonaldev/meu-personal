@@ -2,25 +2,10 @@ import { Router } from 'express'
 import multer from 'multer'
 import path from 'path'
 import fs from 'fs'
-import { createClient } from '@supabase/supabase-js'
-
-// Verificar variáveis de ambiente
-if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-  console.error('❌ SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set')
-}
-
-const supabase = createClient(
-  process.env.SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || '',
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  }
-)
-
+import { supabase } from '../config/supabase'
 const router = Router()
+
+// Supabase client centralizado (envs validados no config)\r\nconst router = Router()
 
 // Configurar multer para upload
 const storage = multer.diskStorage({
@@ -115,3 +100,4 @@ router.post('/users/:id/avatar', (req, res) => {
 })
 
 export default router
+

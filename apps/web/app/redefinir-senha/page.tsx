@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, Suspense } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { ArrowLeft, Lock, Eye, EyeOff, Loader2, CheckCircle, AlertCircle } from 'lucide-react'
@@ -12,6 +12,12 @@ import { supabase } from '@/lib/supabase'
 
 function ResetPasswordForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const normalizedRole = (searchParams?.get('role') ?? '').toLowerCase()
+  const isTeacher = normalizedRole === 'professor' || normalizedRole === 'teacher'
+  const isStudent = normalizedRole === 'aluno' || normalizedRole === 'student'
+  const loginHref = isTeacher ? '/professor/login' : isStudent ? '/aluno/login' : '/login'
+  const forgotHref = isTeacher ? '/professor/esqueci-senha' : isStudent ? '/aluno/esqueci-senha' : '/esqueci-senha'
 
   const [formData, setFormData] = useState({
     password: '',
@@ -67,7 +73,7 @@ function ResetPasswordForm() {
 
       // Redirecionar para login após 3 segundos
       setTimeout(() => {
-        router.push('/login')
+        router.push(loginHref)
       }, 3000)
     } catch (error: any) {
       console.error('Error:', error)
@@ -120,7 +126,7 @@ function ResetPasswordForm() {
         <div className="w-full max-w-md mx-auto my-auto">
           {/* Back Button */}
           <Link
-            href="/login"
+            href={loginHref}
             className="inline-flex items-center text-gray-600 hover:text-meu-primary transition-colors mb-8 group"
           >
             <ArrowLeft className="h-4 w-4 mr-2 group-hover:-translate-x-1 transition-transform" />
@@ -155,7 +161,7 @@ function ResetPasswordForm() {
               <div className="flex-1">
                 <p className="text-sm text-red-800">{error}</p>
                 <Link
-                  href="/esqueci-senha"
+                  href={forgotHref}
                   className="text-sm text-red-600 hover:text-red-700 font-medium underline mt-2 inline-block"
                 >
                   Solicitar novo link
@@ -172,7 +178,7 @@ function ResetPasswordForm() {
                   Link de recuperação não detectado. Por favor, clique no link enviado para seu email.
                 </p>
                 <Link
-                  href="/esqueci-senha"
+                  href={forgotHref}
                   className="text-sm text-yellow-600 hover:text-yellow-700 font-medium underline mt-2 inline-block"
                 >
                   Solicitar novo link
@@ -266,7 +272,7 @@ function ResetPasswordForm() {
                 </p>
               </div>
 
-              <Link href="/login" className="block">
+              <Link href={loginHref} className="block">
                 <Button className="w-full bg-meu-primary hover:bg-meu-primary-dark">
                   Ir para o login
                 </Button>

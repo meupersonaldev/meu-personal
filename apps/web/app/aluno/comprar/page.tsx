@@ -1,10 +1,11 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect } from 'react'
 import { CreditCard, Barcode, QrCode, Check, Loader2, Gift } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { toast } from 'sonner'
 
 interface Plan {
   id: string
@@ -74,11 +75,11 @@ export default function ComprarCreditosPage() {
         setPaymentData(data.payment)
         setStep('success')
       } else {
-        alert('Erro ao processar pagamento: ' + data.error)
+        toast.error('Erro ao processar pagamento: ' + data.error)
       }
     } catch (error) {
       console.error('Erro:', error)
-      alert('Erro ao processar pagamento')
+      toast.error('Erro ao processar pagamento')
     } finally {
       setLoading(false)
     }
@@ -381,7 +382,7 @@ export default function ComprarCreditosPage() {
               </p>
 
               <Button
-                onClick={() => window.location.href = '/aluno/dashboard'}
+                onClick={() => window.location.href = '/aluno/inicio'}
                 className="bg-blue-600 hover:bg-blue-700"
               >
                 Ir para o Dashboard

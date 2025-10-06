@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
+import { useSearchParams } from 'next/navigation'
 import { ArrowLeft, Mail, Loader2, CheckCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -12,6 +13,17 @@ export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [emailSent, setEmailSent] = useState(false)
+  const searchParams = useSearchParams()
+  const normalizedRole = (searchParams?.get('role') ?? '').toLowerCase()
+  const isTeacher = normalizedRole === 'professor' || normalizedRole === 'teacher'
+  const isStudent = normalizedRole === 'aluno' || normalizedRole === 'student'
+  const loginHref = isTeacher ? '/professor/login' : isStudent ? '/aluno/login' : '/login'
+  const heroHighlight = isTeacher ? 'sua conta de professor' : isStudent ? 'sua conta de aluno' : 'sua conta'
+  const helperSubtitle = isTeacher
+    ? 'Vamos te ajudar a voltar aos seus alunos rapidamente.'
+    : isStudent
+    ? 'Vamos te ajudar a voltar aos seus treinos rapidamente.'
+    : 'Vamos te ajudar a redefinir sua senha em poucos passos.'
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -70,11 +82,11 @@ export default function ForgotPasswordPage() {
               className="h-16 w-auto object-contain mb-8"
             />
             <h1 className="text-5xl font-bold mb-6 leading-tight">
-              Recupere o acesso à
-              <span className="text-meu-accent block">sua conta</span>
+              Recupere o acesso a
+              <span className="text-meu-accent block">{heroHighlight}</span>
             </h1>
             <p className="text-xl text-white/80 mb-12 leading-relaxed max-w-md">
-              Não se preocupe! Vamos te ajudar a redefinir sua senha em poucos passos.
+              Nao se preocupe! {helperSubtitle}
             </p>
           </div>
         </div>
@@ -85,7 +97,7 @@ export default function ForgotPasswordPage() {
         <div className="w-full max-w-md mx-auto my-auto">
           {/* Back Button */}
           <Link
-            href="/login"
+            href={loginHref}
             className="inline-flex items-center text-gray-600 hover:text-meu-primary transition-colors mb-8 group"
           >
             <ArrowLeft className="h-4 w-4 mr-2 group-hover:-translate-x-1 transition-transform" />
@@ -102,7 +114,7 @@ export default function ForgotPasswordPage() {
               className="h-12 w-auto object-contain mx-auto mb-6"
             />
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Esqueci minha senha</h1>
-            <p className="text-gray-600">Recupere o acesso à sua conta</p>
+            <p className="text-gray-600">Recupere o acesso a {heroHighlight}</p>
           </div>
 
           {/* Desktop Header */}
@@ -174,7 +186,7 @@ export default function ForgotPasswordPage() {
                   Tentar outro email
                 </Button>
 
-                <Link href="/login" className="block">
+                <Link href={loginHref} className="block">
                   <Button variant="ghost" className="w-full">
                     Voltar ao login
                   </Button>
@@ -189,7 +201,7 @@ export default function ForgotPasswordPage() {
               <p className="text-sm text-gray-600">
                 Lembrou sua senha?{' '}
                 <Link
-                  href="/login"
+                  href={loginHref}
                   className="text-meu-primary hover:text-meu-primary-dark font-medium transition-colors"
                 >
                   Fazer login

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
+import ConfirmDialog from '@/components/ui/confirm-dialog'
 import { useFranquiaStore } from '@/lib/stores/franquia-store'
 
 interface StudentPlan {
@@ -41,6 +42,17 @@ export default function PlanosPage() {
   const [activeTab, setActiveTab] = useState<'student' | 'teacher'>('student')
   const [editingPlan, setEditingPlan] = useState<any>(null)
   const [showModal, setShowModal] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    isOpen: boolean
+    planId: string | null
+    planName: string
+    planType: 'student' | 'teacher' | null
+  }>({
+    isOpen: false,
+    planId: null,
+    planName: '',
+    planType: null
+  })
 
   // Verificar se academia está carregada
   useEffect(() => {
@@ -212,16 +224,23 @@ export default function PlanosPage() {
     }
   }
 
-  const handleDeletePlan = async (plan: any, type: 'student' | 'teacher') => {
-    if (!confirm(`Tem certeza que deseja excluir o plano "${plan.name}"?`)) {
-      return
-    }
+  const handleDeletePlan = (plan: any, type: 'student' | 'teacher') => {
+    setDeleteConfirm({
+      isOpen: true,
+      planId: plan.id,
+      planName: plan.name,
+      planType: type
+    })
+  }
+
+  const confirmDeletePlan = async () => {
+    if (!deleteConfirm.planId || !deleteConfirm.planType) return
 
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      const endpoint = type === 'student' 
-        ? `${API_URL}/api/plans/students/${plan.id}` 
-        : `${API_URL}/api/plans/teachers/${plan.id}`
+      const endpoint = deleteConfirm.planType === 'student'
+        ? `${API_URL}/api/plans/students/${deleteConfirm.planId}`
+        : `${API_URL}/api/plans/teachers/${deleteConfirm.planId}`
 
       const response = await fetch(endpoint, {
         method: 'DELETE'
@@ -236,6 +255,8 @@ export default function PlanosPage() {
     } catch (error) {
       console.error('Erro ao excluir plano:', error)
       toast.error('Erro ao excluir plano')
+    } finally {
+      setDeleteConfirm({ isOpen: false, planId: null, planName: '', planType: null })
     }
   }
 
@@ -675,6 +696,18 @@ export default function PlanosPage() {
           </Card>
         </div>
       )}
+
+        {/* Modal de Confirmação de Exclusão */}
+        <ConfirmDialog
+          isOpen={deleteConfirm.isOpen}
+          onClose={() => setDeleteConfirm({ isOpen: false, planId: null, planName: '', planType: null })}
+          onConfirm={confirmDeletePlan}
+          title="Excluir Plano"
+          description={`Tem certeza que deseja excluir o plano "${deleteConfirm.planName}"? Esta ação não poderá ser desfeita.`}
+          confirmText="Excluir"
+          cancelText="Cancelar"
+          type="danger"
+        />
     </div>
   )
 }

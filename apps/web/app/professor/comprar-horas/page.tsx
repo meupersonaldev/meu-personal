@@ -5,6 +5,7 @@ import { CreditCard, Barcode, QrCode, Check, Loader2, Clock } from 'lucide-react
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { toast } from 'sonner'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { useTeacherAcademies } from '@/lib/hooks/useTeacherAcademies'
 import ProfessorLayout from '@/components/layout/professor-layout'
@@ -62,11 +63,11 @@ export default function ComprarHorasPage() {
         setPaymentData(data.payment)
         setStep('success')
       } else {
-        alert('Erro ao processar pagamento: ' + data.error)
+        toast.error('Erro ao processar pagamento: ' + data.error)
       }
     } catch (error) {
       console.error('Erro:', error)
-      alert('Erro ao processar pagamento')
+      toast.error('Erro ao processar pagamento')
     } finally {
       setLoading(false)
     }

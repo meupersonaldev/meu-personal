@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/card'
 import { toast } from 'sonner'
 import { ArrowLeft, Building, Save, X } from 'lucide-react'
 import { useFranqueadoraStore } from '@/lib/stores/franqueadora-store'
+import FranqueadoraGuard from '@/components/auth/franqueadora-guard'
 
 interface FranchiseFormData {
   name: string
@@ -85,6 +86,18 @@ export default function AddFranchisePage() {
         return
       }
 
+      // Validações de formato
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(formData.email)) {
+        toast.error('Email da franquia inválido')
+        return
+      }
+
+      if (formData.admin_email && !emailRegex.test(formData.admin_email)) {
+        toast.error('Email do administrador inválido')
+        return
+      }
+
       // Validar campos de admin
       if (!formData.admin_email || !formData.admin_password || !formData.admin_name) {
         toast.error('Preencha email, senha e nome do administrador da franquia')
@@ -96,6 +109,27 @@ export default function AddFranchisePage() {
         return
       }
 
+      if (formData.admin_password.length > 50) {
+        toast.error('A senha deve ter no máximo 50 caracteres')
+        return
+      }
+
+      // Validações de segurança para senha
+      const password = formData.admin_password
+      if (!/(?=.*[a-z])/.test(password)) {
+        toast.error('A senha deve conter pelo menos uma letra minúscula')
+        return
+      }
+      if (!/(?=.*[A-Z])/.test(password)) {
+        toast.error('A senha deve conter pelo menos uma letra maiúscula')
+        return
+      }
+      if (!/(?=.*\d)/.test(password)) {
+        toast.error('A senha deve conter pelo menos um número')
+        return
+      }
+
+      // Validações financeiras
       if (formData.franchise_fee < 0 || formData.royalty_percentage < 0) {
         toast.error('Valores financeiros não podem ser negativos')
         return
@@ -106,10 +140,31 @@ export default function AddFranchisePage() {
         return
       }
 
+      if (formData.franchise_fee > 1000000) {
+        toast.error('Taxa de franquia não pode ser maior que R$ 1.000.000')
+        return
+      }
+
       // Validar se tem franqueadora
       if (!franqueadora) {
         toast.error('Franqueadora não identificada. Faça login novamente.')
         return
+      }
+
+      // Validar se email do admin já existe
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const checkResponse = await fetch(`${API_URL}/api/auth/check-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: formData.admin_email })
+      })
+
+      if (checkResponse.ok) {
+        const { exists } = await checkResponse.json()
+        if (exists) {
+          toast.error('Email do administrador já está em uso')
+          return
+        }
       }
 
       // Criar objeto da franquia
@@ -158,28 +213,28 @@ export default function AddFranchisePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <FranqueadoraGuard requiredPermission="canCreateFranchise">
       <div className="p-6 lg:p-8">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center space-x-4">
-            <Button 
-              variant="ghost" 
-              size="sm"
-              onClick={handleCancel}
-              className="text-gray-600 hover:text-gray-900"
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Voltar
-            </Button>
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Adicionar Nova Franquia</h1>
-              <p className="text-sm text-gray-600">Cadastre uma nova franquia no sistema</p>
+          {/* Header */}
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center space-x-4">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleCancel}
+                className="text-gray-600 hover:text-gray-900"
+              >
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Voltar
+              </Button>
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900">Adicionar Nova Franquia</h1>
+                <p className="text-sm text-gray-600">Cadastre uma nova franquia no sistema</p>
+              </div>
             </div>
           </div>
-        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-8">
+          <form onSubmit={handleSubmit} className="space-y-8">
           {/* Informações Básicas */}
           <Card className="p-6">
             <div className="flex items-center mb-6">
@@ -422,8 +477,8 @@ export default function AddFranchisePage() {
               )}
             </Button>
           </div>
-        </form>
+          </form>
       </div>
-    </div>
+    </FranqueadoraGuard>
   )
 }

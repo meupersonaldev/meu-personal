@@ -54,9 +54,13 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzd
 PORT=3001
 FRONTEND_URL=http://localhost:3000
 SUPABASE_URL=https://fstbhakmmznfdeluyexc.supabase.co
-SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzdGJoYWttbXpuZmRlbHV5ZXhjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkwNzc3OTAsImV4cCI6MjA3NDY1Mzc5MH0.R9MaYf45DejVYpUlxUARE9UO2Qj1_THASVBBhIKOL9Q
+SUPABASE_SERVICE_ROLE_KEY=coloque_sua_service_role_key_aqui
 JWT_SECRET=your-jwt-secret-key
 JWT_EXPIRES_IN=7d
+DEFAULT_CREDITS_PER_CLASS=1
+# Pagamentos (opcional para MVP)
+# ASAAS_BASE_URL=https://sandbox.asaas.com/api/v3
+# ASAAS_API_KEY=
 ```
 
 ## 🎯 Como Executar

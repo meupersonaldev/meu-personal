@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { supabase } from '@/lib/supabase'
+import { useAuthStore } from './auth-store'
 
 export interface Teacher {
   id: string
@@ -17,7 +17,7 @@ export interface Teacher {
     hourly_rate: number
     rating: number | null
     total_reviews: number
-    availability: any
+    availability: Record<string, unknown>
     is_available: boolean
   }>
   academy_teachers: Array<{
@@ -52,6 +52,20 @@ export interface Booking {
     name: string
     email: string
   }
+}
+
+export type ApiBookingResponse = {
+  id: string
+  studentId: string
+  teacherId: string
+  date: string
+  duration: number
+  status: string
+  notes?: string | null
+  creditsCost: number
+  createdAt: string
+  updatedAt: string
+  teacherName?: string
 }
 
 export interface StudentState {
@@ -107,7 +121,8 @@ export const useStudentStore = create<StudentState>((set, get) => ({
       if (state) params.append('state', state)
 
       const queryString = params.toString()
-      const url = `http://localhost:3001/api/teachers${queryString ? `?${queryString}` : ''}`
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+      const url = `${API_URL}/api/teachers${queryString ? `?${queryString}` : ''}`
 
       const response = await fetch(url)
 
@@ -124,7 +139,7 @@ export const useStudentStore = create<StudentState>((set, get) => ({
       if (specialtyFilter) {
         filteredTeachers = teachers.filter((teacher: Teacher) =>
           teacher.teacher_profiles?.[0]?.specialties?.some(
-            s => s.toLowerCase().includes(specialtyFilter.toLowerCase())
+            (s: string) => s.toLowerCase().includes(specialtyFilter.toLowerCase())
           )
         )
       }
@@ -143,21 +158,28 @@ export const useStudentStore = create<StudentState>((set, get) => ({
     set({ loading: true, error: null })
 
     try {
-      const { data, error } = await supabase
-        .from('bookings')
-        .select(`
-          *,
-          teacher:users!bookings_teacher_id_fkey (
-            name,
-            email
-          )
-        `)
-        .eq('student_id', studentId)
-        .order('date', { ascending: false })
-
-      if (error) throw error
-
-      set({ bookings: data || [], loading: false })
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+      const token = useAuthStore.getState().token
+      const url = `${API_URL}/api/bookings?student_id=${encodeURIComponent(studentId)}`
+      const resp = await fetch(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      if (!resp.ok) throw new Error('Erro ao carregar agendamentos')
+      const json = await resp.json()
+      const bookings = (json.bookings || []).map((b: ApiBookingResponse) => ({
+        id: b.id,
+        student_id: b.studentId,
+        teacher_id: b.teacherId,
+        date: b.date,
+        duration: b.duration,
+        status: b.status,
+        notes: b.notes ?? null,
+        credits_cost: b.creditsCost,
+        created_at: b.createdAt,
+        updated_at: b.updatedAt,
+        teacher: b.teacherName ? { name: b.teacherName, email: '' } : undefined,
+      }))
+      set({ bookings, loading: false })
     } catch (error) {
       console.error('Erro ao carregar agendamentos:', error)
       set({
@@ -171,22 +193,35 @@ export const useStudentStore = create<StudentState>((set, get) => ({
     set({ loading: true, error: null })
 
     try {
-      const { data, error } = await supabase
-        .from('bookings')
-        .insert({
-          ...bookingData,
-          status: 'PENDING'
-        })
-        .select()
-        .single()
-
-      if (error) throw error
-
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+      const token = useAuthStore.getState().token
+      const resp = await fetch(`${API_URL}/api/bookings`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(bookingData),
+      })
+      const json = await resp.json()
+      if (!resp.ok) throw new Error(json?.message || 'Erro ao criar agendamento')
+      const b = json.booking || json
+      const mapped = {
+        id: b.id,
+        student_id: b.student_id,
+        teacher_id: b.teacher_id,
+        date: b.date,
+        duration: b.duration,
+        status: b.status,
+        notes: b.notes ?? null,
+        credits_cost: b.credits_cost,
+        created_at: b.created_at,
+        updated_at: b.updated_at,
+      } as Booking
       // Recarregar bookings
       await get().loadBookings(bookingData.student_id)
-
       set({ loading: false })
-      return data
+      return mapped
     } catch (error) {
       console.error('Erro ao criar agendamento:', error)
       set({
@@ -201,13 +236,13 @@ export const useStudentStore = create<StudentState>((set, get) => ({
     set({ loading: true, error: null })
 
     try {
-      const { error } = await supabase
-        .from('bookings')
-        .update({ status: 'CANCELLED' })
-        .eq('id', bookingId)
-
-      if (error) throw error
-
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+      const token = useAuthStore.getState().token
+      const resp = await fetch(`${API_URL}/api/bookings/${bookingId}`, {
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      if (!resp.ok) throw new Error('Erro ao cancelar agendamento')
       // Atualizar lista local
       set(state => ({
         bookings: state.bookings.map(booking =>

@@ -18,6 +18,7 @@ import {
   Calendar
 } from 'lucide-react'
 import { toast } from 'sonner'
+import ConfirmDialog from '@/components/ui/confirm-dialog'
 
 interface Student {
   id: string
@@ -43,6 +44,15 @@ export default function AlunosPage() {
     email: '',
     phone: '',
     notes: ''
+  })
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    isOpen: boolean
+    studentId: string | null
+    studentName: string
+  }>({
+    isOpen: false,
+    studentId: null,
+    studentName: ''
   })
 
   useEffect(() => {
@@ -146,14 +156,22 @@ export default function AlunosPage() {
     }
   }
 
-  const handleDelete = async (studentId: string) => {
-    if (!confirm('Tem certeza que deseja excluir este aluno?')) return
+  const handleDelete = (studentId: string, studentName: string) => {
+    setDeleteConfirm({
+      isOpen: true,
+      studentId,
+      studentName
+    })
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteConfirm.studentId) return
 
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      
+
       const response = await fetch(
-        `${API_URL}/api/teachers/${user?.id}/students/${studentId}`,
+        `${API_URL}/api/teachers/${user?.id}/students/${deleteConfirm.studentId}`,
         { method: 'DELETE' }
       )
 
@@ -166,6 +184,8 @@ export default function AlunosPage() {
     } catch (error) {
       console.error('Erro:', error)
       toast.error('Erro ao processar requisição')
+    } finally {
+      setDeleteConfirm({ isOpen: false, studentId: null, studentName: '' })
     }
   }
 
@@ -329,7 +349,7 @@ export default function AlunosPage() {
                             <Button
                               onClick={(e) => {
                                 e.stopPropagation()
-                                handleDelete(student.id)
+                                handleDelete(student.id, student.name)
                               }}
                               variant="ghost"
                               size="sm"
@@ -534,7 +554,7 @@ export default function AlunosPage() {
                   <Button
                     onClick={() => {
                       setShowDetailModal(false)
-                      handleDelete(selectedStudent.id)
+                      handleDelete(selectedStudent.id, selectedStudent.name)
                     }}
                     variant="outline"
                     className="flex-1 text-red-600 border-red-300 hover:bg-red-50"
@@ -547,6 +567,18 @@ export default function AlunosPage() {
             </Card>
           </div>
         )}
+
+        {/* Modal de Confirmação de Exclusão */}
+        <ConfirmDialog
+          isOpen={deleteConfirm.isOpen}
+          onClose={() => setDeleteConfirm({ isOpen: false, studentId: null, studentName: '' })}
+          onConfirm={confirmDelete}
+          title="Excluir Aluno"
+          description={`Tem certeza que deseja excluir o aluno "${deleteConfirm.studentName}"? Esta ação não poderá ser desfeita.`}
+          confirmText="Excluir"
+          cancelText="Cancelar"
+          type="danger"
+        />
       </div>
     </ProfessorLayout>
   )

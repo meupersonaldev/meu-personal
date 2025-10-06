@@ -1,5 +1,6 @@
 import { Router } from 'express'
-import { supabase } from '../lib/supabase'
+import { supabase } from '../config/supabase'
+import { syncContactAcademies } from '../services/franqueadora-contacts.service'
 
 const router = Router()
 
@@ -98,13 +99,13 @@ router.put('/:teacherId/preferences', async (req, res) => {
         if (existingLink.status !== 'active') {
           await supabase
             .from('academy_teachers')
-            .update({ 
+            .update({
               status: 'active',
               updated_at: new Date().toISOString()
             })
             .eq('id', existingLink.id)
-          
-          console.log(`✅ Vínculo reativado: ${existingLink.id}`)
+
+          console.log(`✅ Vínculo academy_teachers reativado: ${existingLink.id}`)
         }
       } else {
         // Criar novo vínculo
@@ -120,27 +121,112 @@ router.put('/:teacherId/preferences', async (req, res) => {
           .single()
 
         if (linkError) {
-          console.error('Erro ao criar vínculo:', linkError)
+          console.error('Erro ao criar vínculo academy_teachers:', linkError)
         } else {
-          console.log(`✅ Novo vínculo criado: ${newLink.id}`)
+          console.log(`✅ Novo vínculo academy_teachers criado: ${newLink.id}`)
         }
+      }
+
+      // ✅ NOVO: Criar/ativar vínculo em professor_units (nova estrutura)
+      // Buscar unit_id correspondente à academy_id
+      const { data: unit } = await supabase
+        .from('units')
+        .select('id')
+        .eq('academy_legacy_id', academyId)
+        .eq('is_active', true)
+        .single()
+
+      if (unit) {
+        // Verificar se já existe vínculo em professor_units
+        const { data: existingProfessorUnit } = await supabase
+          .from('professor_units')
+          .select('id, active')
+          .eq('professor_id', teacherId)
+          .eq('unit_id', unit.id)
+          .single()
+
+        if (existingProfessorUnit) {
+          // Se existe mas está inativo, reativar
+          if (!existingProfessorUnit.active) {
+            await supabase
+              .from('professor_units')
+              .update({
+                active: true,
+                last_association_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', existingProfessorUnit.id)
+
+            console.log(`✅ Vínculo professor_units reativado: ${existingProfessorUnit.id}`)
+          }
+        } else {
+          // Criar novo vínculo em professor_units
+          const { data: newProfessorUnit, error: professorUnitError } = await supabase
+            .from('professor_units')
+            .insert({
+              professor_id: teacherId,
+              unit_id: unit.id,
+              active: true,
+              commission_rate: 70.00,
+              first_association_at: new Date().toISOString(),
+              last_association_at: new Date().toISOString()
+            })
+            .select()
+            .single()
+
+          if (professorUnitError) {
+            console.error('Erro ao criar vínculo professor_units:', professorUnitError)
+          } else {
+            console.log(`✅ Novo vínculo professor_units criado: ${newProfessorUnit.id}`)
+          }
+        }
+      } else {
+        console.warn(`⚠️ Unit não encontrada para academy_id: ${academyId}`)
       }
     }
 
     // Desativar vínculos de academias removidas
     const academiesToRemove = oldAcademyIds.filter((id: string) => !newAcademyIds.includes(id))
-    
+
     for (const academyId of academiesToRemove) {
       console.log(`Desativando vínculo: professor ${teacherId} → academia ${academyId}`)
-      
+
+      // Desativar vínculo academy_teachers
       await supabase
         .from('academy_teachers')
-        .update({ 
+        .update({
           status: 'inactive',
           updated_at: new Date().toISOString()
         })
         .eq('teacher_id', teacherId)
         .eq('academy_id', academyId)
+
+      // ✅ NOVO: Desativar vínculo professor_units correspondente
+      const { data: unit } = await supabase
+        .from('units')
+        .select('id')
+        .eq('academy_legacy_id', academyId)
+        .eq('is_active', true)
+        .single()
+
+      if (unit) {
+        await supabase
+          .from('professor_units')
+          .update({
+            active: false,
+            updated_at: new Date().toISOString()
+          })
+          .eq('professor_id', teacherId)
+          .eq('unit_id', unit.id)
+
+        console.log(`✅ Vínculo professor_units desativado: professor ${teacherId} → unit ${unit.id}`)
+      }
+    }
+
+    try {
+      await syncContactAcademies(teacherId, newAcademyIds)
+    } catch (syncError) {
+      console.warn('Erro ao sincronizar contato da franqueadora para professor:', syncError)
     }
 
     res.json({ 
@@ -175,3 +261,9 @@ router.get('/:teacherId/hours', async (req, res) => {
 })
 
 export default router
+
+
+
+
+
+

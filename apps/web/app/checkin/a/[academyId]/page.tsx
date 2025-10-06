@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
@@ -41,7 +41,7 @@ export default function CheckinPage() {
 
       if (!authRes.ok) {
         // Redirecionar para login com redirect de volta
-        router.push(`/login?redirect=/checkin/a/${academyId}`)
+        router.push(`/professor/login?redirect=/checkin/a/${academyId}`)
         return
       }
 

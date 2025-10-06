@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { useFranquiaStore } from '@/lib/stores/franquia-store'
 import { toast } from 'sonner'
+import ConfirmDialog from '@/components/ui/confirm-dialog'
 import { formatLocalTime, getLocalDateFromUtc, getLocalTimeFromUtc } from '@/lib/timezone-utils'
 
 interface Booking {
@@ -30,6 +31,13 @@ export default function AgendamentosGestaoPage() {
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
   const [statusFilter, setStatusFilter] = useState<'all' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED'>('all')
   const [isHydrated, setIsHydrated] = useState(false)
+  const [cancelConfirm, setCancelConfirm] = useState<{
+    isOpen: boolean
+    bookingId: string | null
+  }>({
+    isOpen: false,
+    bookingId: null
+  })
 
   // Aguardar hidratação do estado
   useEffect(() => {
@@ -96,15 +104,21 @@ export default function AgendamentosGestaoPage() {
     }
   }
 
-  const handleCancel = async (bookingId: string) => {
-    const confirmation = confirm('Tem certeza que deseja cancelar este agendamento?')
-    if (!confirmation) return
+  const handleCancel = (bookingId: string) => {
+    setCancelConfirm({
+      isOpen: true,
+      bookingId
+    })
+  }
+
+  const confirmCancel = async () => {
+    if (!cancelConfirm.bookingId) return
 
     const reason = prompt('Motivo do cancelamento (opcional):')
 
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      const response = await fetch(`${API_URL}/api/bookings/${bookingId}`, {
+      const response = await fetch(`${API_URL}/api/bookings/${cancelConfirm.bookingId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -120,6 +134,8 @@ export default function AgendamentosGestaoPage() {
     } catch (error) {
       console.error('Error canceling booking:', error)
       toast.error('Erro ao cancelar agendamento')
+    } finally {
+      setCancelConfirm({ isOpen: false, bookingId: null })
     }
   }
 
@@ -509,6 +525,18 @@ export default function AgendamentosGestaoPage() {
           </Card>
         </div>
       )}
+
+        {/* Modal de Confirmação de Cancelamento */}
+        <ConfirmDialog
+          isOpen={cancelConfirm.isOpen}
+          onClose={() => setCancelConfirm({ isOpen: false, bookingId: null })}
+          onConfirm={confirmCancel}
+          title="Cancelar Agendamento"
+          description="Tem certeza que deseja cancelar este agendamento? Esta ação não poderá ser desfeita."
+          confirmText="Cancelar Agendamento"
+          cancelText="Voltar"
+          type="warning"
+        />
         </>
       )}
     </div>

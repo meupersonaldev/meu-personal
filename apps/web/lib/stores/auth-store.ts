@@ -1,7 +1,5 @@
-import { create } from 'zustand'
+﻿import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { supabase } from '@/lib/supabase'
-// import type { User as SupabaseUser } from '@supabase/supabase-js' // Removido - não usado
 
 export type UserRole = 'STUDENT' | 'TEACHER' | 'ADMIN'
 
@@ -28,7 +26,7 @@ interface AuthState {
     phone?: string
     role: UserRole
   }) => Promise<boolean>
-  logout: () => Promise<void>
+  logout: (options?: { redirect?: boolean }) => Promise<void>
   updateUser: (userData: Partial<User>) => Promise<void>
   initialize: () => Promise<void>
 }
@@ -43,34 +41,36 @@ export const useAuthStore = create<AuthState>()(
 
       initialize: async () => {
         try {
-          const { data: { session } } = await supabase.auth.getSession()
-
-          if (session?.user) {
-            // Buscar dados completos do usuário
-            const { data: userData } = await supabase
-              .from('users')
-              .select('*')
-              .eq('id', session.user.id)
-              .single()
-
-            if (userData) {
-              set({
-                user: {
-                  id: userData.id,
-                  name: userData.name,
-                  email: userData.email,
-                  phone: userData.phone,
-                  role: userData.role,
-                  credits: userData.credits,
-                  avatar_url: userData.avatar_url
-                },
-                token: session.access_token,
-                isAuthenticated: true,
-                isLoading: false
-              })
-            }
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          const token = get().token
+          if (!token) {
+            set({ isLoading: false, isAuthenticated: false, user: null })
+            return
+          }
+          const resp = await fetch(`${API_URL}/api/auth/me`, {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+          if (!resp.ok) {
+            set({ isLoading: false, isAuthenticated: false, user: null, token: null })
+            return
+          }
+          const { user } = await resp.json()
+          if (user) {
+            set({
+              user: {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                phone: user.phone,
+                role: user.role,
+                credits: user.credits,
+                avatar_url: user.avatarUrl ?? user.avatar_url,
+              },
+              isAuthenticated: true,
+              isLoading: false,
+            })
           } else {
-            set({ isLoading: false })
+            set({ isLoading: false, isAuthenticated: false })
           }
         } catch (error) {
           console.error('Error initializing auth:', error)
@@ -81,7 +81,7 @@ export const useAuthStore = create<AuthState>()(
       login: async (email: string, password: string) => {
         try {
           // Usar a API do backend para login
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
           
           const response = await fetch(`${API_URL}/api/auth/login`, {
             method: 'POST',
@@ -113,6 +113,13 @@ export const useAuthStore = create<AuthState>()(
               token: data.token || null,
               isAuthenticated: true
             })
+
+            // Setar cookie para o middleware do Next.js
+            if (typeof document !== 'undefined' && data.token) {
+              const maxAge = 7 * 24 * 60 * 60 // 7 dias
+              const secure = typeof window !== 'undefined' && window.location.protocol === 'https:' ? '; Secure' : ''
+              document.cookie = `auth-token=${data.token}; Path=/; Max-Age=${maxAge}; SameSite=Lax${secure}`
+            }
             return true
           }
 
@@ -126,7 +133,7 @@ export const useAuthStore = create<AuthState>()(
       register: async (userData) => {
         try {
           // Usar a API do backend para registro (não depende do Supabase Auth)
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
           
           const response = await fetch(`${API_URL}/api/auth/register`, {
             method: 'POST',
@@ -161,12 +168,16 @@ export const useAuthStore = create<AuthState>()(
                 credits: data.user.credits,
                 avatar_url: data.user.avatarUrl
               },
+              token: data.token || null,
               isAuthenticated: true
             })
 
-            // Fazer login no Supabase Auth para manter sessão (opcional)
-            // Por enquanto vamos pular isso já que o Auth está desabilitado
-            
+            // Setar cookie para o middleware (se backend retornar token)
+            if (typeof document !== 'undefined' && data.token) {
+              const maxAge = 7 * 24 * 60 * 60
+              const secure = typeof window !== 'undefined' && window.location.protocol === 'https:' ? '; Secure' : ''
+              document.cookie = `auth-token=${data.token}; Path=/; Max-Age=${maxAge}; SameSite=Lax${secure}`
+            }
             return true
           }
 
@@ -177,13 +188,22 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      logout: async () => {
+      logout: async (options?: { redirect?: boolean }) => {
         try {
-          await supabase.auth.signOut()
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          // Opcional: avisar backend
+          try { await fetch(`${API_URL}/api/auth/logout`, { method: 'POST' }) } catch {}
           set({ user: null, token: null, isAuthenticated: false })
+          const shouldRedirect = options?.redirect ?? true
+
+          // Remover cookie do middleware
+          if (typeof document !== 'undefined') {
+            const secure = typeof window !== 'undefined' && window.location.protocol === 'https:' ? '; Secure' : ''
+            document.cookie = `auth-token=; Path=/; Max-Age=0; SameSite=Lax${secure}`
+          }
 
           // Redirecionar para landing page
-          if (typeof window !== 'undefined') {
+          if (shouldRedirect && typeof window !== 'undefined') {
             window.location.href = '/'
           }
         } catch (error) {
@@ -193,26 +213,30 @@ export const useAuthStore = create<AuthState>()(
 
       updateUser: async (userData) => {
         const currentUser = get().user
-        if (!currentUser) return
+        const token = get().token
+        if (!currentUser || !token) return
 
         try {
-          const { data, error } = await supabase
-            .from('users')
-            .update(userData)
-            .eq('id', currentUser.id)
-            .select()
-            .single()
-
-          if (error) {
-            console.error('Update user error:', error)
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          const resp = await fetch(`${API_URL}/api/users/${currentUser.id}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(userData)
+          })
+          if (!resp.ok) {
+            console.error('Update user error:', await resp.text())
             return
           }
-
-          if (data) {
+          const { user } = await resp.json()
+          if (user) {
             set({
               user: {
                 ...currentUser,
-                ...data
+                ...user,
+                avatar_url: user.avatarUrl ?? user.avatar_url,
               }
             })
           }
@@ -232,13 +256,4 @@ export const useAuthStore = create<AuthState>()(
   )
 )
 
-// Listener para mudanças de auth
-supabase.auth.onAuthStateChange((event, session) => {
-  const { initialize } = useAuthStore.getState()
-  
-  if (event === 'SIGNED_OUT') {
-    useAuthStore.setState({ user: null, token: null, isAuthenticated: false })
-  } else if (event === 'SIGNED_IN' && session) {
-    initialize()
-  }
-})
+

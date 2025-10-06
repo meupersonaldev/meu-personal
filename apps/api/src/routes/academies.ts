@@ -1,25 +1,15 @@
 import { Router } from 'express'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  }
-)
+import { supabase } from '../config/supabase'
+import { requireAuth, requireRole } from '../middleware/auth'
 
 const router = Router()
 
-// GET /api/academies - Listar todas as academias
-router.get('/', async (req, res) => {
+// GET /api/academies - Listar todas as academias (depreciado, usar /units)
+router.get('/', requireAuth, requireRole(['FRANQUEADORA', 'FRANQUIA']), async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('academies')
-      .select('id, name, city, state')
+      .select('id, name, city, state, credits_per_class, class_duration_minutes')
       .eq('is_active', true)
       .order('name')
 
@@ -32,8 +22,8 @@ router.get('/', async (req, res) => {
   }
 })
 
-// GET /api/academies/:id - Buscar academia específica
-router.get('/:id', async (req, res) => {
+// GET /api/academies/:id - Buscar academia específica (depreciado, usar /units)
+router.get('/:id', requireAuth, requireRole(['FRANQUEADORA', 'FRANQUIA']), async (req, res) => {
   try {
     const { id } = req.params
 
@@ -52,11 +42,23 @@ router.get('/:id', async (req, res) => {
   }
 })
 
-// PUT /api/academies/:id - Atualizar academia
-router.put('/:id', async (req, res) => {
+// PUT /api/academies/:id - Atualizar academia (depreciado, usar /units)
+router.put('/:id', requireAuth, requireRole(['FRANQUEADORA', 'FRANQUIA']), async (req, res) => {
   try {
     const { id } = req.params
     const updateData = req.body
+
+    // Validar ownership: academia precisa pertencer à franqueadora do admin (quando disponível)
+    if (req.franqueadoraAdmin?.franqueadora_id) {
+      const { data: current } = await supabase
+        .from('academies')
+        .select('franqueadora_id')
+        .eq('id', id)
+        .single()
+      if (current && current.franqueadora_id !== req.franqueadoraAdmin.franqueadora_id) {
+        return res.status(403).json({ error: 'Forbidden' })
+      }
+    }
 
     const { data, error } = await supabase
       .from('academies')
@@ -73,6 +75,40 @@ router.put('/:id', async (req, res) => {
     res.json({ academy: data, message: 'Academia atualizada com sucesso' })
   } catch (error: any) {
     console.error('Error updating academy:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// DELETE /api/academies/:id - Remover academia (depreciado, usar /units)
+router.delete('/:id', requireAuth, requireRole(['FRANQUEADORA', 'FRANQUIA']), async (req, res) => {
+  try {
+    const { id } = req.params
+
+    // Validar ownership
+    if (req.franqueadoraAdmin?.franqueadora_id) {
+      const { data: current, error: fetchError } = await supabase
+        .from('academies')
+        .select('franqueadora_id')
+        .eq('id', id)
+        .single()
+      if (fetchError || !current) {
+        return res.status(404).json({ error: 'Academia não encontrada' })
+      }
+      if (current.franqueadora_id !== req.franqueadoraAdmin.franqueadora_id) {
+        return res.status(403).json({ error: 'Forbidden' })
+      }
+    }
+
+    const { error } = await supabase
+      .from('academies')
+      .delete()
+      .eq('id', id)
+
+    if (error) throw error
+
+    return res.status(204).send()
+  } catch (error: any) {
+    console.error('Error deleting academy:', error)
     res.status(500).json({ error: error.message })
   }
 })
@@ -97,7 +133,7 @@ router.get('/:id/available-slots', async (req, res) => {
     // Buscar configurações da academia (horários de funcionamento)
     const { data: academy, error: academyError } = await supabase
       .from('academies')
-      .select('schedule')
+      .select('schedule, credits_per_class, class_duration_minutes')
       .eq('id', id)
       .single()
 
@@ -218,7 +254,8 @@ router.get('/:id/available-slots', async (req, res) => {
         current_occupancy: current,
         remaining,
         is_free: remaining > 0,
-        slot_duration: 60 // Duração padrão de 60 minutos
+        slot_duration: Math.max(15, academy?.class_duration_minutes ?? 60),
+        slot_cost: Math.max(1, academy?.credits_per_class ?? 1)
       }
     })
 

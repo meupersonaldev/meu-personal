@@ -1,10 +1,12 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { MobileNav } from '@/components/layout/mobile-nav'
 import { Loader2 } from 'lucide-react'
+
+const PUBLIC_AUTH_PREFIXES = ['/professor/login', '/professor/cadastro', '/professor/esqueci-senha', '/professor/redefinir-senha'] as const
 
 export default function ProfessorLayout({
   children,
@@ -12,24 +14,31 @@ export default function ProfessorLayout({
   children: React.ReactNode
 }) {
   const router = useRouter()
+  const pathname = usePathname()
+  const isPublicAuthRoute = PUBLIC_AUTH_PREFIXES.some((route) => pathname?.startsWith(route))
   const { user, isAuthenticated } = useAuthStore()
   const [isChecking, setIsChecking] = useState(true)
 
   useEffect(() => {
-    // Simular verificação inicial
+    if (isPublicAuthRoute) {
+      setIsChecking(false)
+      return
+    }
+
+    // Simular verificacao inicial
     const timer = setTimeout(() => {
       setIsChecking(false)
     }, 100)
 
     return () => clearTimeout(timer)
-  }, [])
+  }, [isPublicAuthRoute])
 
   useEffect(() => {
-    // Não redirecionar enquanto está verificando
-    if (isChecking) return
+    // Nao redirecionar enquanto esta verificando ou em uma rota publica
+    if (isPublicAuthRoute || isChecking) return
 
     if (!isAuthenticated || !user) {
-      router.push('/login')
+      router.push('/professor/login')
       return
     }
 
@@ -43,12 +52,16 @@ export default function ProfessorLayout({
           router.push('/admin/dashboard')
           break
         default:
-          router.push('/login')
+          router.push('/professor/login')
       }
     }
-  }, [isAuthenticated, user, router, isChecking])
+  }, [isAuthenticated, user, router, isChecking, isPublicAuthRoute])
 
-  // Mostrar loading enquanto verifica autenticação
+  if (isPublicAuthRoute) {
+    return <>{children}</>
+  }
+
+  // Mostrar loading enquanto verifica autenticacao
   if (isChecking) {
     return (
       <div className="min-h-screen bg-primary flex items-center justify-center">
@@ -60,7 +73,7 @@ export default function ProfessorLayout({
     )
   }
 
-  // Se não está autenticado ou não é professor, mostrar loading
+  // Se nao esta autenticado ou nao e professor, mostrar loading
   // (o useEffect vai redirecionar)
   if (!isAuthenticated || !user || user.role !== 'TEACHER') {
     return (
