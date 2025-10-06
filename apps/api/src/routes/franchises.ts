@@ -1,6 +1,7 @@
 import { Router } from 'express'
-import { supabase } from '../lib/supabase'
+import { supabase } from '../config/supabase'
 import bcrypt from 'bcryptjs'
+import { requireAuth, requireRole } from '../middleware/auth'
 
 const router = Router()
 
@@ -9,7 +10,7 @@ const router = Router()
 // ============================================
 
 // POST /api/franchises/create - Criar franquia com admin
-router.post('/create', async (req, res) => {
+router.post('/create', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN']), async (req, res) => {
   try {
     const { academy, admin } = req.body
 
@@ -94,9 +95,14 @@ router.post('/create', async (req, res) => {
 })
 
 // GET /api/franchises - Listar todas as franquias (academias)
-router.get('/', async (req, res) => {
+router.get('/', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN']), async (req, res) => {
   try {
-    const { franqueadora_id } = req.query
+    let { franqueadora_id } = req.query as { franqueadora_id?: string }
+
+    // Se não vier por query, usar o contexto do admin quando existir
+    if (!franqueadora_id && req.franqueadoraAdmin?.franqueadora_id) {
+      franqueadora_id = req.franqueadoraAdmin.franqueadora_id
+    }
 
     let query = supabase
       .from('academies')
@@ -119,7 +125,10 @@ router.get('/', async (req, res) => {
       address: academy.address,
       city: academy.city,
       state: academy.state,
-      is_active: academy.is_active
+      is_active: academy.is_active,
+      monthly_revenue: academy.monthly_revenue,
+      royalty_percentage: academy.royalty_percentage,
+      created_at: academy.created_at
     }))
 
     res.json({ franchises })
@@ -130,7 +139,7 @@ router.get('/', async (req, res) => {
 })
 
 // GET /api/franchises/:id - Obter detalhes de uma franquia
-router.get('/:id', async (req, res) => {
+router.get('/:id', requireAuth, requireRole(['FRANQUEADORA', 'FRANQUIA']), async (req, res) => {
   try {
     const { id } = req.params
 
@@ -154,7 +163,7 @@ router.get('/:id', async (req, res) => {
 })
 
 // POST /api/franchises - Criar nova franquia
-router.post('/', async (req, res) => {
+router.post('/', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN']), async (req, res) => {
   try {
     const {
       franqueadora_id,
@@ -202,7 +211,7 @@ router.post('/', async (req, res) => {
 })
 
 // PUT /api/franchises/:id - Atualizar franquia
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 'FRANQUIA']), async (req, res) => {
   try {
     const { id } = req.params
     const updates = req.body
@@ -228,7 +237,7 @@ router.put('/:id', async (req, res) => {
 })
 
 // DELETE /api/franchises/:id - Deletar franquia (hard delete)
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN']), async (req, res) => {
   try {
     const { id } = req.params
 

@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import FranqueadoraGuard from '@/components/auth/franqueadora-guard'
+import ConfirmDialog from '@/components/ui/confirm-dialog'
 import { toast } from 'sonner'
 import { 
   ArrowLeft, 
@@ -31,13 +33,20 @@ interface EditingFranchise extends Partial<Academy> {
 
 export default function DadosFranquiasPage() {
   const router = useRouter()
-  const { academies, fetchAcademies, updateAcademy, deleteAcademy, isLoading } = useFranqueadoraStore()
+  const { franqueadora, academies, fetchAcademies, updateAcademy, deleteAcademy, isLoading } = useFranqueadoraStore()
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all')
   const [sortBy, setSortBy] = useState<'name' | 'revenue' | 'royalty' | 'created'>('name')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
   const [editingFranchise, setEditingFranchise] = useState<EditingFranchise | null>(null)
   const [isDeleting, setIsDeleting] = useState<string | null>(null)
+  const [deleteConfirmDialog, setDeleteConfirmDialog] = useState<{
+    isOpen: boolean
+    franchise: Academy | null
+  }>({
+    isOpen: false,
+    franchise: null
+  })
 
   // Hydration fix
   const [hydrated, setHydrated] = useState(false)
@@ -100,16 +109,22 @@ export default function DadosFranquiasPage() {
     setEditingFranchise(null)
   }
 
-  const handleDeleteFranchise = async (franchise: Academy) => {
-    if (!confirm(`Tem certeza que deseja EXCLUIR PERMANENTEMENTE a franquia "${franchise.name}"? Esta ação não pode ser desfeita.`)) {
-      return
-    }
+  const handleDeleteFranchise = (franchise: Academy) => {
+    setDeleteConfirmDialog({
+      isOpen: true,
+      franchise
+    })
+  }
 
-    setIsDeleting(franchise.id)
-    
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmDialog.franchise) return
+
+    setIsDeleting(deleteConfirmDialog.franchise.id)
+    setDeleteConfirmDialog({ isOpen: false, franchise: null })
+
     try {
-      const success = await deleteAcademy(franchise.id)
-      
+      const success = await deleteAcademy(deleteConfirmDialog.franchise.id)
+
       if (success) {
         toast.success('Franquia excluída com sucesso!')
       } else {
@@ -121,6 +136,10 @@ export default function DadosFranquiasPage() {
     } finally {
       setIsDeleting(null)
     }
+  }
+
+  const handleCancelDelete = () => {
+    setDeleteConfirmDialog({ isOpen: false, franchise: null })
   }
 
   const handleToggleStatus = async (franchise: Academy) => {
@@ -238,7 +257,7 @@ export default function DadosFranquiasPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <FranqueadoraGuard requiredPermission="canViewDashboard">
       <div className="p-6 lg:p-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
@@ -642,7 +661,28 @@ export default function DadosFranquiasPage() {
             Mostrando {filteredAndSortedAcademies.length} de {academies.length} franquias
           </div>
         )}
+
+        {/* Modal de Confirmação de Exclusão */}
+        <ConfirmDialog
+          isOpen={deleteConfirmDialog.isOpen}
+          onClose={handleCancelDelete}
+          onConfirm={handleConfirmDelete}
+          title="Excluir Franquia"
+          description={`Tem certeza que deseja EXCLUIR PERMANENTEMENTE a franquia "${deleteConfirmDialog.franchise?.name}"?
+
+Esta ação não pode ser desfeita e irá remover:
+• Todos os dados da franquia
+• Professores e alunos vinculados
+• Agendamentos e histórico
+• Configurações e planos
+
+Esta é uma ação permanente e irreversível.`}
+          confirmText="Sim, Excluir Permanentemente"
+          cancelText="Cancelar"
+          type="danger"
+          loading={isDeleting !== null}
+        />
       </div>
-    </div>
+    </FranqueadoraGuard>
   )
 }

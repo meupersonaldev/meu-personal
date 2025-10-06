@@ -1,13 +1,20 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { supabase } from '@/lib/supabase'
+import { toast } from 'sonner'
+import { useNotificationsStore } from './notifications-store'
+
+// Utilitário para tratamento seguro de valores numéricos
+const safeNumber = (value: any, defaultValue: number = 0): number => {
+  const num = Number(value)
+  return isNaN(num) || !isFinite(num) ? defaultValue : num
+}
 
 // Types
 export interface FranqueadoraUser {
   id: string
   name: string
   email: string
-  role: 'SUPER_ADMIN' | 'ADMIN' | 'ANALYST'
+  role: 'SUPER_ADMIN' | 'ADMIN' | 'ANALYST' | 'FRANCHISE_ADMIN'
 }
 
 export interface Franqueadora {
@@ -66,14 +73,110 @@ export interface FranchiseLead {
   created_at: string
 }
 
+export interface User {
+  id: string
+  name: string
+  email: string
+  phone?: string
+  cpf?: string
+  role: 'TEACHER' | 'STUDENT' | 'ALUNO' | 'PROFESSOR'
+  avatar_url?: string
+  created_at: string
+  updated_at: string
+  last_login_at?: string
+  active: boolean
+  email_verified: boolean
+  phone_verified: boolean
+  franchisor_id?: string
+  franchise_id?: string
+  teacher_profiles?: Array<{
+    id: string
+    specialization?: string
+    bio?: string
+    graduation?: string
+    cref?: string
+    rating?: number
+    total_sessions?: number
+    hourly_rate?: number
+    available_online?: boolean
+    available_in_person?: boolean
+  }>
+  student_profiles?: Array<{
+    id: string
+    goal?: string
+    fitness_level?: string
+    preferences?: string
+    emergency_contact?: string
+    emergency_phone?: string
+    health_conditions?: string
+  }>
+  operational_links?: {
+    professor_units: Array<{
+      unit_id: string
+      units: {
+        name: string
+        city: string
+        state: string
+      }
+    }>
+    student_units: Array<{
+      unit_id: string
+      units: {
+        name: string
+        city: string
+        state: string
+      }
+      total_bookings: number
+      first_booking_date: string
+      last_booking_date: string
+    }>
+  }
+  booking_stats?: {
+    total: number
+    completed: number
+    pending: number
+    cancelled: number
+  }
+  balance_info?: Array<{
+    unit_id: string
+    total_purchased: number
+    total_consumed: number
+    locked_qty: number
+    units: {
+      name: string
+      city: string
+      state: string
+    }
+  }>
+  hours_info?: Array<{
+    unit_id: string
+    total_hours: number
+    available_hours: number
+    locked_hours: number
+    units: {
+      name: string
+      city: string
+      state: string
+    }
+  }>
+}
+
+export interface UsersResponse {
+  data: User[]
+  pagination: {
+    page: number
+    limit: number
+    total: number
+    totalPages: number
+  }
+}
+
 export interface ConsolidatedAnalytics {
   totalFranchises: number
   activeFranchises: number
   totalRevenue: number
   totalRoyalties: number
   averageRevenuePerFranchise: number
-  totalLeads: number
-  conversionRate: number
   monthlyGrowth: number
 }
 
@@ -97,37 +200,43 @@ interface FranqueadoraState {
   user: FranqueadoraUser | null
   franqueadora: Franqueadora | null
   isAuthenticated: boolean
-  
+  token?: string | null
+
   // Data
   academies: Academy[]
   packages: FranchisePackage[]
   leads: FranchiseLead[]
+  users: User[]
   analytics: ConsolidatedAnalytics | null
-  
+
   // Loading
   isLoading: boolean
-  
+
   // Actions
   login: (email: string, password: string) => Promise<boolean>
   logout: () => void
-  
+  fetchFranqueadora: () => Promise<void>
+
   // Academies/Franchises
   fetchAcademies: () => Promise<void>
   addAcademy: (academy: Omit<Academy, 'id'> & { admin_name?: string; admin_email?: string; admin_password?: string }) => Promise<boolean>
   updateAcademy: (id: string, updates: Partial<Academy>) => Promise<boolean>
   deleteAcademy: (id: string) => Promise<boolean>
   fetchAcademyStats: (academyId: string) => Promise<AcademyStats | null>
-  
+
   // Packages
   fetchPackages: () => Promise<void>
   addPackage: (packageData: Omit<FranchisePackage, 'id'>) => Promise<boolean>
   updatePackage: (id: string, updates: Partial<FranchisePackage>) => Promise<boolean>
   deletePackage: (id: string) => Promise<boolean>
-  
+
   // Leads
   fetchLeads: () => Promise<void>
   updateLead: (id: string, updates: Partial<FranchiseLead>) => Promise<boolean>
-  
+
+  // Users
+  fetchUsers: (params?: { page?: number; limit?: number; search?: string; role?: string; status?: string }) => Promise<UsersResponse | null>
+
   // Analytics
   fetchAnalytics: () => Promise<void>
 }
@@ -139,9 +248,11 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
       user: null,
       franqueadora: null,
       isAuthenticated: false,
+      token: null,
       academies: [],
       packages: [],
       leads: [],
+      users: [],
       analytics: null,
       isLoading: false,
 
@@ -149,71 +260,50 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
       login: async (email: string, password: string) => {
         try {
           set({ isLoading: true })
-          
-          // 1) Buscar usuário por email (evita filtro por relacionamento que pode falhar)
-          const { data: userData, error: userError } = await supabase
-            .from('users')
-            .select('*')
-            .eq('email', email)
-            .single()
-
-          if (userError || !userData) {
-            console.error('User not found:', userError)
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const resp = await fetch(`${API_URL}/api/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ email, password })
+          })
+          const data = await resp.json()
+          if (!resp.ok || !data?.token || !data?.user) {
             set({ isLoading: false })
             return false
           }
-
-          // 2) Verificar se é admin da franqueadora via franqueadora_admins por user_id
-          const { data: adminData, error: adminError } = await supabase
-            .from('franqueadora_admins')
-            .select('*')
-            .eq('user_id', userData.id)
-            .single()
-
-          if (adminError || !adminData) {
-            console.error('Admin not found:', adminError)
-            set({ isLoading: false })
-            return false
+          if (typeof document !== 'undefined') {
+            const maxAge = 7 * 24 * 60 * 60
+            const isProd = process.env.NODE_ENV === 'production'
+            const sameSite = isProd ? 'None' : 'Lax'
+            const secure = (isProd || (typeof window !== 'undefined' && window.location.protocol === 'https:')) ? '; Secure' : ''
+            document.cookie = `auth-token=${data.token}; Path=/; Max-Age=${maxAge}; SameSite=${sameSite}${secure}`
           }
-
-          // 3) Obter dados da franqueadora
-          const { data: franqueadoraData, error: franqueadoraError } = await supabase
-            .from('franqueadora')
-            .select('*')
-            .eq('id', adminData.franqueadora_id)
-            .single()
-
-          if (franqueadoraError || !franqueadoraData) {
-            console.warn('Franqueadora not found for admin, proceeding without franqueadora:', franqueadoraError)
-          }
-
-          // Simular verificação de senha
-          if (password !== '123456') {
-            set({ isLoading: false })
-            return false
-          }
-
           set({
+            token: data.token,
             user: {
-              id: userData.id,
-              name: userData.name,
-              email: userData.email,
-              role: adminData.role
+              id: data.user.id,
+              name: data.user.name,
+              email: data.user.email,
+              role: data.user.role
             },
-            franqueadora: franqueadoraData || null,
             isAuthenticated: true,
             isLoading: false
           })
-
-          // Carregar dados iniciais
-          const { fetchAcademies, fetchPackages, fetchLeads, fetchAnalytics } = get()
+          const { fetchFranqueadora, fetchAcademies, fetchPackages, fetchLeads, fetchAnalytics } = get()
           await Promise.all([
+            fetchFranqueadora(),
             fetchAcademies(),
             fetchPackages(),
             fetchLeads(),
             fetchAnalytics()
           ])
 
+          // Inicializar notificações da franqueadora
+          const franqueadoraId = get().franqueadora?.id
+          if (franqueadoraId) {
+            useNotificationsStore.getState().connectFranqueadora(franqueadoraId)
+          }
           return true
         } catch (error) {
           console.error('Login error:', error)
@@ -222,18 +312,50 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
         }
       },
 
+      // Buscar contexto da franqueadora do admin logado via API
+      fetchFranqueadora: async () => {
+        try {
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const token = get().token
+          const resp = await fetch(`${API_URL}/api/franqueadora/me`, {
+            credentials: 'include',
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          })
+          if (!resp.ok) {
+            if ((resp.status === 401 || resp.status === 403) && get().isAuthenticated) {
+              toast.error('Sessão expirada. Faça login novamente.')
+            }
+            return
+          }
+          const json = await resp.json()
+          if (json?.franqueadora) {
+            set({ franqueadora: json.franqueadora })
+
+            // Inicializar notificações da franqueadora
+            useNotificationsStore.getState().connectFranqueadora(json.franqueadora.id)
+          }
+        } catch {}
+      },
+
       logout: () => {
+        // Desconectar notificações
+        useNotificationsStore.getState().disconnectAll()
+
         set({
           user: null,
           franqueadora: null,
           isAuthenticated: false,
+          token: null,
           academies: [],
           packages: [],
           leads: [],
           analytics: null
         })
-        
-        if (typeof window !== 'undefined') {
+        if (typeof document !== 'undefined') {
+          const isProd = process.env.NODE_ENV === 'production'
+          const sameSite = isProd ? 'None' : 'Lax'
+          const secure = (isProd || (typeof window !== 'undefined' && window.location.protocol === 'https:')) ? '; Secure' : ''
+          document.cookie = `auth-token=; Path=/; Max-Age=0; SameSite=${sameSite}${secure}`
           window.location.href = '/'
         }
       },
@@ -241,18 +363,49 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
       // Academies
       fetchAcademies: async () => {
         try {
-          const { franqueadora } = get()
-          if (!franqueadora) return
+          // Evitar chamadas não autenticadas (gera 401 no login)
+          if (!get().isAuthenticated) {
+            return
+          }
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          // Preferir contexto explícito da franqueadora quando disponível
+          let franqueadoraId = get().franqueadora?.id
+          const token = get().token
+          if (!franqueadoraId) {
+            try {
+              const me = await fetch(`${API_URL}/api/franqueadora/me`, {
+                credentials: 'include',
+                headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+              })
+              if (me.ok) {
+                const data = await me.json()
+                franqueadoraId = data?.franqueadora?.id || franqueadoraId
+                if (data?.franqueadora) set({ franqueadora: data.franqueadora })
+              }
+            } catch {}
+          }
+          const url = franqueadoraId
+            ? `${API_URL}/api/franchises?franqueadora_id=${encodeURIComponent(franqueadoraId)}`
+            : `${API_URL}/api/franchises`
+          const resp = await fetch(url, {
+            credentials: 'include',
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          })
+          if (!resp.ok) {
+            if (resp.status === 401 || resp.status === 403) return
+            throw new Error(`Failed to fetch franchises (${resp.status})`)
+          }
+          const json = await resp.json()
 
-          const { data, error } = await supabase
-            .from('academies')
-            .select('*')
-            .eq('franqueadora_id', franqueadora.id)
-            .order('created_at', { ascending: false })
+          // Tratar valores numéricos das academias para evitar NaN
+          const safeAcademies = (json.franchises || []).map((academy: any) => ({
+            ...academy,
+            monthly_revenue: safeNumber(academy.monthly_revenue),
+            royalty_percentage: safeNumber(academy.royalty_percentage),
+            franchise_fee: safeNumber(academy.franchise_fee)
+          }))
 
-          if (error) throw error
-
-          set({ academies: data || [] })
+          set({ academies: safeAcademies })
         } catch (error) {
           console.error('Error fetching academies:', error)
         }
@@ -262,11 +415,14 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
       addAcademy: async (academyData: any) => {
         try {
           const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-
-          // Enviar tudo para a API do backend criar
+          const token = get().token
           const response = await fetch(`${API_URL}/api/franchises/create`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {})
+            },
+            credentials: 'include',
             body: JSON.stringify({
               academy: academyData,
               admin: {
@@ -276,19 +432,16 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
               }
             })
           })
-
           if (!response.ok) {
+            if ((response.status === 401 || response.status === 403) && get().isAuthenticated) {
+              try { const { toast } = await import('sonner'); toast.error('Sem permissão para criar franquia. Faça login novamente.') } catch {}
+              return false
+            }
             const error = await response.json()
             throw new Error(error.message || 'Erro ao criar franquia')
           }
-
           const { academy } = await response.json()
-
-          // A API já cria o franchise_admin, só atualizar lista local
-          set(state => ({
-            academies: [...state.academies, academy]
-          }))
-
+          set(state => ({ academies: [...state.academies, academy] }))
           return true
         } catch (error) {
           console.error('Error adding academy:', error)
@@ -298,13 +451,24 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
 
       updateAcademy: async (id, updates) => {
         try {
-          const { error } = await supabase
-            .from('academies')
-            .update(updates)
-            .eq('id', id)
-
-          if (error) throw error
-
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const token = get().token
+          const resp = await fetch(`${API_URL}/api/franchises/${id}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {})
+            },
+            credentials: 'include',
+            body: JSON.stringify(updates)
+          })
+          if (!resp.ok) {
+            if ((resp.status === 401 || resp.status === 403) && get().isAuthenticated) {
+              try { const { toast } = await import('sonner'); toast.error('Sem permissão para atualizar franquia.') } catch {}
+              return false
+            }
+            throw new Error('Failed to update academy')
+          }
           await get().fetchAcademies()
           return true
         } catch (error) {
@@ -315,18 +479,21 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
 
       deleteAcademy: async (id) => {
         try {
-          const { error } = await supabase
-            .from('academies')
-            .delete()
-            .eq('id', id)
-
-          if (error) throw error
-
-          // Atualizar lista local removendo o item
-          set(state => ({
-            academies: state.academies.filter(academy => academy.id !== id)
-          }))
-
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const token = get().token
+          const resp = await fetch(`${API_URL}/api/franchises/${id}`, {
+            method: 'DELETE',
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+            credentials: 'include'
+          })
+          if (!resp.ok && resp.status !== 204) {
+            if ((resp.status === 401 || resp.status === 403) && get().isAuthenticated) {
+              try { const { toast } = await import('sonner'); toast.error('Sem permissão para deletar franquia.') } catch {}
+              return false
+            }
+            throw new Error('Failed to delete academy')
+          }
+          set(state => ({ academies: state.academies.filter(academy => academy.id !== id) }))
           return true
         } catch (error) {
           console.error('Error deleting academy:', error)
@@ -336,106 +503,21 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
 
       fetchAcademyStats: async (academyId) => {
         try {
-          // Primeiro, buscar IDs dos professores da academia
-          const { data: teacherIds } = await supabase
-            .from('academy_teachers')
-            .select('teacher_id')
-            .eq('academy_id', academyId)
-
-          const teacherIdList = teacherIds?.map(t => t.teacher_id) || []
-
-          // Buscar estatísticas reais do Supabase
-          const [studentsResult, teachersResult, bookingsResult, reviewsResult, plansResult] = await Promise.all([
-            // Total e alunos ativos
-            supabase
-              .from('academy_students')
-              .select('status')
-              .eq('academy_id', academyId),
-            
-            // Total e professores ativos
-            supabase
-              .from('academy_teachers')
-              .select('status')
-              .eq('academy_id', academyId),
-            
-            // Agendamentos (apenas se houver professores)
-            teacherIdList.length > 0 
-              ? supabase
-                  .from('bookings')
-                  .select('status')
-                  .in('teacher_id', teacherIdList)
-              : Promise.resolve({ data: [] }),
-            
-            // Reviews e ratings (apenas se houver professores)
-            teacherIdList.length > 0
-              ? supabase
-                  .from('reviews')
-                  .select('rating')
-                  .in('teacher_id', teacherIdList)
-              : Promise.resolve({ data: [] }),
-            
-            // Planos ativos
-            supabase
-              .from('academy_plans')
-              .select('*')
-              .eq('academy_id', academyId)
-              .eq('is_active', true)
-          ])
-
-          // Processar dados dos alunos
-          const students = studentsResult.data || []
-          const totalStudents = students.length
-          const activeStudents = students.filter(s => s.status === 'active').length
-
-          // Processar dados dos professores
-          const teachers = teachersResult.data || []
-          const totalTeachers = teachers.length
-          const activeTeachers = teachers.filter(t => t.status === 'active').length
-
-          // Processar dados dos agendamentos
-          const bookings = bookingsResult.data || []
-          const totalBookings = bookings.length
-          const completedBookings = bookings.filter(b => b.status === 'COMPLETED').length
-          const cancelledBookings = bookings.filter(b => b.status === 'CANCELLED').length
-
-          // Processar reviews
-          const reviews = reviewsResult.data || []
-          const totalReviews = reviews.length
-          const averageRating = totalReviews > 0 
-            ? reviews.reduce((sum, r) => sum + r.rating, 0) / totalReviews 
-            : 0
-
-          // Planos ativos
-          const plansActive = plansResult.data?.length || 0
-
-          // Buscar receita mensal da academy
-          const { data: academyData } = await supabase
-            .from('academies')
-            .select('monthly_revenue')
-            .eq('id', academyId)
-            .single()
-
-          const monthlyRevenue = academyData?.monthly_revenue || 0
-
-          // Calcular créditos em circulação (simulado por enquanto)
-          const creditsBalance = Math.floor(totalStudents * 10) // Estimativa
-
-          const stats: AcademyStats = {
-            totalStudents,
-            activeStudents,
-            totalTeachers,
-            activeTeachers,
-            totalBookings,
-            completedBookings,
-            cancelledBookings,
-            monthlyRevenue,
-            averageRating,
-            totalReviews,
-            creditsBalance,
-            plansActive
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const token = get().token
+          const resp = await fetch(`${API_URL}/api/franqueadora/academies/${academyId}/stats`, {
+            credentials: 'include',
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          })
+          if (!resp.ok) {
+            if ((resp.status === 401 || resp.status === 403) && get().isAuthenticated) {
+              try { const { toast } = await import('sonner'); toast.error('Sem permissão para ver estatísticas da franquia.') } catch {}
+              return null
+            }
+            throw new Error('Failed to fetch academy stats')
           }
-
-          return stats
+          const response = await resp.json()
+          return response.data as AcademyStats
         } catch (error) {
           console.error('Error fetching academy stats:', error)
           return null
@@ -445,18 +527,21 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
       // Packages
       fetchPackages: async () => {
         try {
-          const { franqueadora } = get()
-          if (!franqueadora) return
-
-          const { data, error } = await supabase
-            .from('franchise_packages')
-            .select('*')
-            .eq('franqueadora_id', franqueadora.id)
-            .order('investment_amount', { ascending: true })
-
-          if (error) throw error
-
-          set({ packages: data || [] })
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const token = get().token
+          const resp = await fetch(`${API_URL}/api/franqueadora/packages`, {
+            credentials: 'include',
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          })
+          if (!resp.ok) {
+            if ((resp.status === 401 || resp.status === 403) && get().isAuthenticated) {
+              try { const { toast } = await import('sonner'); toast.error('Sem permissão para listar pacotes.') } catch {}
+              return
+            }
+            throw new Error('Failed to fetch packages')
+          }
+          const json = await resp.json()
+          set({ packages: json.packages || [] })
         } catch (error) {
           console.error('Error fetching packages:', error)
         }
@@ -464,18 +549,24 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
 
       addPackage: async (packageData) => {
         try {
-          const { franqueadora } = get()
-          if (!franqueadora) return false
-
-          const { error } = await supabase
-            .from('franchise_packages')
-            .insert({
-              ...packageData,
-              franqueadora_id: franqueadora.id
-            })
-
-          if (error) throw error
-
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const token = get().token
+          const resp = await fetch(`${API_URL}/api/franqueadora/packages`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {})
+            },
+            credentials: 'include',
+            body: JSON.stringify(packageData)
+          })
+          if (!resp.ok) {
+            if ((resp.status === 401 || resp.status === 403) && get().isAuthenticated) {
+              try { const { toast } = await import('sonner'); toast.error('Sem permissão para criar pacote.') } catch {}
+              return false
+            }
+            throw new Error('Failed to add package')
+          }
           await get().fetchPackages()
           return true
         } catch (error) {
@@ -486,13 +577,24 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
 
       updatePackage: async (id, updates) => {
         try {
-          const { error } = await supabase
-            .from('franchise_packages')
-            .update(updates)
-            .eq('id', id)
-
-          if (error) throw error
-
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const token = get().token
+          const resp = await fetch(`${API_URL}/api/franqueadora/packages/${id}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {})
+            },
+            credentials: 'include',
+            body: JSON.stringify(updates)
+          })
+          if (!resp.ok) {
+            if ((resp.status === 401 || resp.status === 403) && get().isAuthenticated) {
+              try { const { toast } = await import('sonner'); toast.error('Sem permissão para atualizar pacote.') } catch {}
+              return false
+            }
+            throw new Error('Failed to update package')
+          }
           await get().fetchPackages()
           return true
         } catch (error) {
@@ -503,13 +605,20 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
 
       deletePackage: async (id) => {
         try {
-          const { error } = await supabase
-            .from('franchise_packages')
-            .update({ is_active: false })
-            .eq('id', id)
-
-          if (error) throw error
-
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const token = get().token
+          const resp = await fetch(`${API_URL}/api/franqueadora/packages/${id}`, {
+            method: 'DELETE',
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+            credentials: 'include'
+          })
+          if (!resp.ok && resp.status !== 204) {
+            if ((resp.status === 401 || resp.status === 403) && get().isAuthenticated) {
+              try { const { toast } = await import('sonner'); toast.error('Sem permissão para deletar pacote.') } catch {}
+              return false
+            }
+            throw new Error('Failed to delete package')
+          }
           await get().fetchPackages()
           return true
         } catch (error) {
@@ -521,18 +630,21 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
       // Leads
       fetchLeads: async () => {
         try {
-          const { franqueadora } = get()
-          if (!franqueadora) return
-
-          const { data, error } = await supabase
-            .from('franchise_leads')
-            .select('*')
-            .eq('franqueadora_id', franqueadora.id)
-            .order('created_at', { ascending: false })
-
-          if (error) throw error
-
-          set({ leads: data || [] })
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const token = get().token
+          const resp = await fetch(`${API_URL}/api/franqueadora/leads`, {
+            credentials: 'include',
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          })
+          if (!resp.ok) {
+            if ((resp.status === 401 || resp.status === 403) && get().isAuthenticated) {
+              try { const { toast } = await import('sonner'); toast.error('Sem permissão para listar leads.') } catch {}
+              return
+            }
+            throw new Error('Failed to fetch leads')
+          }
+          const json = await resp.json()
+          set({ leads: json.leads || [] })
         } catch (error) {
           console.error('Error fetching leads:', error)
         }
@@ -540,13 +652,24 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
 
       updateLead: async (id, updates) => {
         try {
-          const { error } = await supabase
-            .from('franchise_leads')
-            .update(updates)
-            .eq('id', id)
-
-          if (error) throw error
-
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const token = get().token
+          const resp = await fetch(`${API_URL}/api/franqueadora/leads/${id}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {})
+            },
+            credentials: 'include',
+            body: JSON.stringify(updates)
+          })
+          if (!resp.ok) {
+            if ((resp.status === 401 || resp.status === 403) && get().isAuthenticated) {
+              try { const { toast } = await import('sonner'); toast.error('Sem permissão para atualizar lead.') } catch {}
+              return false
+            }
+            throw new Error('Failed to update lead')
+          }
           await get().fetchLeads()
           return true
         } catch (error) {
@@ -555,80 +678,107 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
         }
       },
 
+      // Users
+      fetchUsers: async (params = {}) => {
+        try {
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const token = get().token
+
+          const queryParams = new URLSearchParams()
+          let franqueadoraId = get().franqueadora?.id
+
+          if (!franqueadoraId) {
+            try {
+              await get().fetchFranqueadora()
+            } catch (fetchError) {
+              console.error('Failed to ensure franqueadora context before fetching users:', fetchError)
+            }
+            franqueadoraId = get().franqueadora?.id
+          }
+
+          if (franqueadoraId) {
+            queryParams.append('franqueadora_id', franqueadoraId)
+          }
+
+          if (params.page) queryParams.append('page', params.page.toString())
+          if (params.limit) queryParams.append('limit', params.limit.toString())
+          if (params.search) queryParams.append('search', params.search)
+          if (params.role) queryParams.append('role', params.role)
+          if (params.status) queryParams.append('status', params.status)
+
+          if (!franqueadoraId) {
+            throw new Error('Franqueadora context not available for user listing')
+          }
+
+          const response = await fetch(`${API_URL}/api/franqueadora/users?${queryParams}`, {
+            credentials: 'include',
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          })
+
+          if (!response.ok) {
+            if ((response.status === 401 || response.status === 403) && get().isAuthenticated) {
+              try {
+                const { toast } = await import('sonner')
+                toast.error('Sem permissão para visualizar usuários.')
+              } catch {}
+              return null
+            }
+            throw new Error('Failed to fetch users')
+          }
+
+          const data: UsersResponse = await response.json()
+
+          if (params.page === 1) {
+            // Primeira página, substitui todos os usuários
+            set({ users: data.data })
+          } else {
+            // Páginas seguintes, adiciona aos usuários existentes
+            set(state => ({
+              users: [...state.users, ...data.data]
+            }))
+          }
+
+          return data
+        } catch (error) {
+          console.error('Error fetching users:', error)
+          try {
+            const { toast } = await import('sonner')
+            toast.error('Erro ao carregar usuários.')
+          } catch {}
+          return null
+        }
+      },
+
       // Analytics
       fetchAnalytics: async () => {
         try {
-          const { franqueadora } = get()
-          if (!franqueadora) {
-            console.log('fetchAnalytics: No franqueadora found')
-            return
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const token = get().token
+          const resp = await fetch(`${API_URL}/api/financial/summary-franqueadora`, {
+            credentials: 'include',
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          })
+          if (!resp.ok) {
+            if ((resp.status === 401 || resp.status === 403) && get().isAuthenticated) {
+              try { const { toast } = await import('sonner'); toast.error('Sem permissão para visualizar analytics.') } catch {}
+              return
+            }
+            throw new Error('Failed to fetch analytics')
           }
-          
-          console.log('fetchAnalytics: Fetching for franqueadora:', franqueadora.id)
+          const analytics = await resp.json()
 
-          // Buscar dados diretamente do Supabase para garantir dados atualizados
-          const [academiesResult, leadsResult] = await Promise.all([
-            supabase
-              .from('academies')
-              .select('*')
-              .eq('franqueadora_id', franqueadora.id),
-            
-            supabase
-              .from('franchise_leads')
-              .select('*')
-              .eq('franqueadora_id', franqueadora.id)
-          ])
-
-          const academies = academiesResult.data || []
-          const leads = leadsResult.data || []
-          
-          console.log('fetchAnalytics: Found academies:', academies.length)
-          console.log('fetchAnalytics: Found leads:', leads.length)
-          
-          // Calcular analytics consolidados
-          const totalRevenue = academies.reduce((sum, academy) => sum + academy.monthly_revenue, 0)
-          const totalRoyalties = academies.reduce((sum, academy) => 
-            sum + (academy.monthly_revenue * academy.royalty_percentage / 100), 0)
-          
-          const qualifiedLeads = leads.filter(lead => 
-            ['QUALIFIED', 'PROPOSAL_SENT', 'NEGOTIATING', 'CLOSED_WON'].includes(lead.status))
-          const closedWonLeads = leads.filter(lead => lead.status === 'CLOSED_WON')
-          
-          // Calcular crescimento mensal real baseado em franquias criadas
-          const now = new Date()
-          const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-          const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-          
-          const currentMonthFranchises = academies.filter(a => 
-            new Date(a.created_at) >= currentMonth
-          ).length
-          
-          const lastMonthFranchises = academies.filter(a => {
-            const createdDate = new Date(a.created_at)
-            return createdDate >= lastMonth && createdDate < currentMonth
-          }).length
-          
-          // Calcular percentual de crescimento
-          let monthlyGrowth = 0
-          if (lastMonthFranchises > 0) {
-            monthlyGrowth = ((currentMonthFranchises - lastMonthFranchises) / lastMonthFranchises) * 100
-          } else if (currentMonthFranchises > 0) {
-            monthlyGrowth = 100 // 100% se não havia franquias no mês anterior
-          }
-          
-          const analytics: ConsolidatedAnalytics = {
-            totalFranchises: academies.length,
-            activeFranchises: academies.filter(a => a.is_active).length,
-            totalRevenue,
-            totalRoyalties,
-            averageRevenuePerFranchise: academies.length > 0 ? totalRevenue / academies.length : 0,
-            totalLeads: leads.length,
-            conversionRate: qualifiedLeads.length > 0 ? (closedWonLeads.length / qualifiedLeads.length) * 100 : 0,
-            monthlyGrowth: Math.round(monthlyGrowth * 10) / 10 // Arredondar para 1 casa decimal
+          // Tratar valores numéricos para evitar NaN
+          const safeAnalytics = {
+            ...analytics,
+            totalRevenue: safeNumber(analytics.totalRevenue),
+            totalRoyalties: safeNumber(analytics.totalRoyalties),
+            averageRevenuePerFranchise: safeNumber(analytics.averageRevenuePerFranchise),
+            totalFranchises: safeNumber(analytics.totalFranchises),
+            activeFranchises: safeNumber(analytics.activeFranchises),
+            monthlyGrowth: safeNumber(analytics.monthlyGrowth)
           }
 
-          console.log('fetchAnalytics: Final analytics:', analytics)
-          set({ analytics })
+          set({ analytics: safeAnalytics })
         } catch (error) {
           console.error('Error fetching analytics:', error)
         }
@@ -639,7 +789,8 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
       partialize: (state) => ({
         user: state.user,
         franqueadora: state.franqueadora,
-        isAuthenticated: state.isAuthenticated
+        isAuthenticated: state.isAuthenticated,
+        token: state.token || null
       })
     }
   )
