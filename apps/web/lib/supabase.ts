@@ -54,8 +54,6 @@ export type Database = {
           bio: string | null
           specialties: string[]
           hourly_rate: number
-          rating: number | null
-          total_reviews: number
           availability: Record<string, any>
           is_available: boolean
           created_at: string
@@ -67,8 +65,6 @@ export type Database = {
           bio?: string | null
           specialties?: string[]
           hourly_rate?: number
-          rating?: number | null
-          total_reviews?: number
           availability?: any
           is_available?: boolean
           created_at?: string
@@ -80,8 +76,6 @@ export type Database = {
           bio?: string | null
           specialties?: string[]
           hourly_rate?: number
-          rating?: number | null
-          total_reviews?: number
           availability?: Record<string, any>
           is_available?: boolean
           created_at?: string

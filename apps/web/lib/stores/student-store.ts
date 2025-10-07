@@ -15,8 +15,6 @@ export interface Teacher {
     bio: string | null
     specialties: string[]
     hourly_rate: number
-    rating: number | null
-    total_reviews: number
     availability: Record<string, unknown>
     is_available: boolean
   }>

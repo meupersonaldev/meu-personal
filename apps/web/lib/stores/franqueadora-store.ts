@@ -95,7 +95,6 @@ export interface User {
     bio?: string
     graduation?: string
     cref?: string
-    rating?: number
     total_sessions?: number
     hourly_rate?: number
     available_online?: boolean
@@ -189,8 +188,6 @@ export interface AcademyStats {
   completedBookings: number
   cancelledBookings: number
   monthlyRevenue: number
-  averageRating: number
-  totalReviews: number
   creditsBalance: number
   plansActive: number
 }

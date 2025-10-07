@@ -32,8 +32,6 @@ export interface Teacher {
   phone?: string
   specialties: string[]
   status: 'active' | 'inactive'
-  rating?: number
-  total_reviews: number
   created_at: string
 }
 
@@ -494,8 +492,6 @@ export const useFranquiaStore = create<FranquiaState>()(
                   created_at: user.created_at,
                   specialties: profile?.specialties || [],
                   status: item.status || 'active',
-                  rating: profile?.rating || 0,
-                  total_reviews: profile?.total_reviews || 0,
                   teacher_profiles: profile ? [profile] : [],
                   academy_teachers: allAcademyTeachers || [],
                   teacher_subscriptions: subscriptions || []
