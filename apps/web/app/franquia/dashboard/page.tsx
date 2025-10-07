@@ -39,7 +39,6 @@ type ModalTeacher = {
   specialty: string
   status: 'active' | 'inactive' | 'pending'
   studentsCount: number
-  rating: number
   totalClasses: number
   earnings: number
   createdAt: string
@@ -238,14 +237,13 @@ export default function FranquiaDashboard() {
                     <GraduationCap className="h-8 w-8 text-indigo-600" />
                   </div>
                   <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-600">Avaliação Média</p>
+                    <p className="text-sm font-medium text-gray-600">Professores Ativos</p>
                     <p className="text-2xl font-bold text-gray-900">
-                      {teachers.length > 0
-                        ? (teachers.reduce((sum, t) => sum + (t.rating || 0), 0) / teachers.length).toFixed(1)
-                        : '0.0'
-                      }
+                      {teachers.filter(t => t.status === 'active').length}
                     </p>
-                    <p className="text-sm text-indigo-600">⭐ Professores</p>
+                    <p className="text-sm text-indigo-600">
+                      de {teachers.length} no total
+                    </p>
                   </div>
                 </div>
               </Card>
@@ -323,7 +321,6 @@ export default function FranquiaDashboard() {
                         </div>
                         <div className="text-right">
                           <p className="text-sm text-gray-500">Comissão {typeof teacher.commission_rate === 'number' ? teacher.commission_rate : 0}%</p>
-                          <p className="text-sm text-gray-600">⭐ {typeof teacher.rating === 'number' ? teacher.rating : 'N/A'}</p>
                         </div>
                       </div>
                     ))}
@@ -383,10 +380,10 @@ export default function FranquiaDashboard() {
                           {teacher.status === 'active' ? 'Ativo' : teacher.status === 'pending' ? 'Pendente' : 'Inativo'}
                         </Badge>
                         <div className="mt-2 space-y-1 text-sm text-gray-600">
-                          <p>⭐ {typeof teacher.rating === 'number' ? teacher.rating : 'N/A'}</p>
                           {typeof teacher.commission_rate === 'number' && (
                             <p>Comissão {teacher.commission_rate}%</p>
                           )}
+                          <p>Desde {new Date(teacher.created_at).toLocaleDateString('pt-BR')}</p>
                         </div>
                       </div>
                       <div className="flex space-x-2">
@@ -621,7 +618,6 @@ export default function FranquiaDashboard() {
     specialty: Array.isArray(t.specialties) ? (t.specialties[0] || '') : '',
     status: t.status,
     studentsCount: 0,
-    rating: typeof t.rating === 'number' ? t.rating : 0,
     totalClasses: 0,
     earnings: 0,
     createdAt: t.created_at

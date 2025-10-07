@@ -21,7 +21,6 @@ interface Teacher {
   name: string
   avatar_url?: string
   specialties: string[]
-  rating: number
 }
 
 export default function ComprarCreditosPage() {
@@ -206,7 +205,7 @@ export default function ComprarCreditosPage() {
                     <div className="ml-4">
                       <h3 className="font-bold text-gray-900">{teacher.name}</h3>
                       <div className="flex items-center text-sm text-gray-600">
-                        ⭐ {teacher.rating.toFixed(1)}
+                        Disponível para novos alunos
                       </div>
                     </div>
                   </div>

@@ -12,7 +12,6 @@ import { MobileNav } from '@/components/layout/mobile-nav'
 import {
   Search,
   MapPin,
-  Star,
   Calendar,
   DollarSign,
   Filter,
@@ -370,19 +369,13 @@ export default function AlunoInicioPage() {
                               </div>
                             )}
 
-                            <div className="grid grid-cols-2 gap-4 text-sm text-gray-600">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm text-gray-600">
                               {academy && (
                                 <div className="flex items-center space-x-2">
                                   <MapPin className="h-4 w-4 text-meu-primary" />
                                   <span>{academy.city}, {academy.state}</span>
                                 </div>
                               )}
-                              <div className="flex items-center space-x-2">
-                                <Star className="h-4 w-4 text-yellow-500" />
-                                <span className="font-medium">
-                                  {profile?.rating?.toFixed(1) || 'N/A'} ({profile?.total_reviews || 0} avaliações)
-                                </span>
-                              </div>
                               <div className="flex items-center space-x-2">
                                 <DollarSign className="h-4 w-4 text-green-600" />
                                 <span className="font-bold text-gray-900">

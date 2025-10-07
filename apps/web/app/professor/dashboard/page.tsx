@@ -46,8 +46,6 @@ interface Stats {
   total_students: number
   total_revenue: number
   total_credits_used: number
-  rating: number
-  total_reviews: number
   hourly_rate: number
   monthly_earnings: {
     current_month: number

@@ -153,8 +153,6 @@ export default function ProfessoresPage() {
         phone: formData.phone || '',
         specialties: formData.specialties ? formData.specialties.split(',').map(s => s.trim()) : [],
         status: 'active' as const,
-        rating: 0,
-        total_reviews: 0,
         created_at: new Date().toISOString()
       }
 

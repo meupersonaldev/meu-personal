@@ -113,8 +113,8 @@ export default function Home() {
               <div className="text-white/80 font-normal">Aulas Realizadas</div>
             </div>
             <div className="text-center">
-              <div className="text-3xl md:text-4xl font-bold text-meu-accent mb-2">4.9</div>
-              <div className="text-white/80 font-normal">Avaliação Média</div>
+              <div className="text-3xl md:text-4xl font-bold text-meu-accent mb-2">20k+</div>
+              <div className="text-white/80 font-normal">Clientes Atendidos</div>
             </div>
           </div>
         </div>
@@ -207,9 +207,9 @@ export default function Home() {
               <div className="w-12 h-12 bg-meu-cyan/20 rounded-xl flex items-center justify-center mb-6">
                 <Star className="h-6 w-6 text-meu-primary" />
               </div>
-              <h3 className="text-xl font-bold text-meu-primary mb-4">Sistema de Avaliações</h3>
+              <h3 className="text-xl font-bold text-meu-primary mb-4">Perfis Detalhados</h3>
               <p className="text-gray-600">
-                Avalie seus personal trainers e veja avaliações de outros alunos para fazer a melhor escolha
+                Compare formações, especialidades e disponibilidade para escolher o profissional ideal
               </p>
             </div>
 
@@ -249,83 +249,7 @@ export default function Home() {
               </div>
               <h3 className="text-xl font-bold text-meu-primary mb-4">Professores Certificados</h3>
               <p className="text-gray-600">
-                Todos os personal trainers são verificados, certificados e avaliados continuamente
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Depoimentos */}
-      <section className="py-20 bg-white">
-        <div className="container mx-auto px-4 max-w-7xl">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold text-meu-primary mb-6">
-              O que nossos usuários dizem
-            </h2>
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              Histórias reais de transformação e sucesso
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-8">
-            <div className="bg-gray-50 p-8 rounded-2xl">
-              <div className="flex items-center mb-6">
-                <div className="w-12 h-12 bg-meu-accent rounded-full flex items-center justify-center mr-4">
-                  <span className="font-bold text-meu-primary">JS</span>
-                </div>
-                <div>
-                  <h4 className="font-bold text-meu-primary">João Silva</h4>
-                  <p className="text-sm text-gray-600">Aluno há 6 meses</p>
-                </div>
-              </div>
-              <div className="flex mb-4">
-                {[...Array(5)].map((_, i) => (
-                  <Star key={i} className="h-5 w-5 text-yellow-400 fill-current" />
-                ))}
-              </div>
-              <p className="text-gray-700 italic">
-                "Perdi 15kg em 6 meses com acompanhamento personalizado. A plataforma é incrível e os professores são muito qualificados!"
-              </p>
-            </div>
-
-            <div className="bg-gray-50 p-8 rounded-2xl">
-              <div className="flex items-center mb-6">
-                <div className="w-12 h-12 bg-meu-cyan rounded-full flex items-center justify-center mr-4">
-                  <span className="font-bold text-white">MS</span>
-                </div>
-                <div>
-                  <h4 className="font-bold text-meu-primary">Maria Santos</h4>
-                  <p className="text-sm text-gray-600">Personal Trainer</p>
-                </div>
-              </div>
-              <div className="flex mb-4">
-                {[...Array(5)].map((_, i) => (
-                  <Star key={i} className="h-5 w-5 text-yellow-400 fill-current" />
-                ))}
-              </div>
-              <p className="text-gray-700 italic">
-                "Como personal trainer, a plataforma me ajudou a organizar minha agenda e aumentar minha cartela de clientes em 200%!"
-              </p>
-            </div>
-
-            <div className="bg-gray-50 p-8 rounded-2xl">
-              <div className="flex items-center mb-6">
-                <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center mr-4">
-                  <span className="font-bold text-white">AC</span>
-                </div>
-                <div>
-                  <h4 className="font-bold text-meu-primary">Ana Costa</h4>
-                  <p className="text-sm text-gray-600">Aluna há 1 ano</p>
-                </div>
-              </div>
-              <div className="flex mb-4">
-                {[...Array(5)].map((_, i) => (
-                  <Star key={i} className="h-5 w-5 text-yellow-400 fill-current" />
-                ))}
-              </div>
-              <p className="text-gray-700 italic">
-                "Finalmente encontrei uma forma prática de treinar. O sistema de créditos é muito flexível e conveniente!"
+                Todos os personal trainers são verificados, certificados e acompanhados pela nossa equipe
               </p>
             </div>
           </div>
@@ -349,8 +273,8 @@ export default function Home() {
               <div className="text-muted-foreground font-normal">Academias Parceiras</div>
             </div>
             <div>
-              <div className="text-4xl font-bold text-meu-primary mb-2">4.9</div>
-              <div className="text-muted-foreground font-normal">Avaliação Média</div>
+              <div className="text-4xl font-bold text-meu-primary mb-2">20k+</div>
+              <div className="text-muted-foreground font-normal">Clientes Atendidos</div>
             </div>
           </div>
         </div>
