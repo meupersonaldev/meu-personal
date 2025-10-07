@@ -16,7 +16,12 @@ import {
   ChevronRight
 } from 'lucide-react'
 
-export default function FranqueadoraSidebar() {
+interface FranqueadoraSidebarProps {
+  isMobile?: boolean
+  onNavigate?: () => void
+}
+
+export default function FranqueadoraSidebar({ isMobile = false, onNavigate }: FranqueadoraSidebarProps = {}) {
   const { user, franqueadora, logout: franqueadoraLogout } = useFranqueadoraStore()
   const pathname = usePathname()
   const router = useRouter()
@@ -69,7 +74,7 @@ export default function FranqueadoraSidebar() {
   }
 
   return (
-    <div className="sidebar-desktop w-64 h-screen fixed left-0 top-0 z-50 bg-meu-primary border-r border-meu-primary/20 flex flex-col shadow-lg">
+    <div className={`${isMobile ? 'w-full h-full' : 'sidebar-desktop w-64 h-screen fixed left-0 top-0 z-50'} bg-meu-primary border-r border-meu-primary/20 flex flex-col shadow-lg`}>
 
       {/* Header do Sidebar */}
       <div className="p-6 border-b border-meu-primary/20">
@@ -105,6 +110,7 @@ export default function FranqueadoraSidebar() {
               {item.href ? (
                 <Link
                   href={item.href}
+                  onClick={onNavigate}
                   className={`flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${
                     pathname === item.href
                       ? 'bg-white text-meu-primary shadow-md font-semibold'
@@ -138,6 +144,7 @@ export default function FranqueadoraSidebar() {
                     <Link
                       key={subItem.href}
                       href={subItem.href}
+                      onClick={onNavigate}
                       className={`flex items-center space-x-3 px-4 py-2 rounded-lg transition-all duration-200 text-sm ${
                         pathname === subItem.href
                           ? 'bg-white/10 text-white border-l-2 border-meu-accent-cyan font-medium'

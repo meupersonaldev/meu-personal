@@ -18,7 +18,7 @@ import {
   MapPin,
   Phone,
   Mail,
-  Star,
+  CreditCard,
   Activity,
   CalendarCheck,
   AlertCircle,
@@ -45,6 +45,22 @@ export default function FranquiaDetailsPage() {
   const [loadingStats, setLoadingStats] = useState(true)
   const [editingFranchise, setEditingFranchise] = useState<EditingFranchise | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+
+  const successRate = stats && stats.totalBookings > 0
+    ? stats.completedBookings / stats.totalBookings
+    : 0
+  const successRateClass =
+    successRate >= 0.75
+      ? 'bg-green-50 border-green-400'
+      : successRate >= 0.5
+        ? 'bg-yellow-50 border-yellow-400'
+        : 'bg-red-50 border-red-400'
+  const successRateMessage =
+    successRate >= 0.75
+      ? 'Ótimo engajamento dos alunos'
+      : successRate >= 0.5
+        ? 'Engajamento dentro do esperado'
+        : 'Atenção: engajamento baixo'
 
   // Hydration fix
   const [hydrated, setHydrated] = useState(false)
@@ -320,14 +336,14 @@ export default function FranquiaDetailsPage() {
               <Card className="p-6">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
-                    <Star className="h-8 w-8 text-yellow-500" />
+                    <CreditCard className="h-8 w-8 text-meu-primary" />
                   </div>
                   <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-600">Avaliação</p>
+                    <p className="text-sm font-medium text-gray-600">Créditos Disponíveis</p>
                     <p className="text-2xl font-bold text-gray-900">
-                      {(stats.averageRating || 0).toFixed(1)}
+                      {stats.creditsBalance ?? 0}
                     </p>
-                    <p className="text-sm text-gray-600">{stats.totalReviews} avaliações</p>
+                    <p className="text-sm text-gray-600">{stats.plansActive ?? 0} planos ativos</p>
                   </div>
                 </div>
               </Card>
@@ -468,26 +484,18 @@ export default function FranquiaDetailsPage() {
                   </p>
                 </div>
 
-                <div className={`p-4 rounded-lg border-l-4 ${
-                  stats.averageRating >= 4 
-                    ? 'bg-green-50 border-green-400' 
-                    : stats.averageRating >= 3 
-                    ? 'bg-yellow-50 border-yellow-400'
-                    : 'bg-red-50 border-red-400'
-                }`}>
+                <div className={`p-4 rounded-lg border-l-4 ${successRateClass}`}>
                   <div className="flex items-center">
-                    <Star className="h-5 w-5 text-yellow-500 mr-2" />
+                    <TrendingUp className="h-5 w-5 text-meu-primary mr-2" />
                     <span className="font-medium text-gray-800">
-                      Satisfação dos Clientes
+                      Engajamento dos Clientes
                     </span>
                   </div>
                   <p className="text-sm mt-1 text-gray-600">
-                    {stats.averageRating >= 4 
-                      ? 'Excelente avaliação dos alunos' 
-                      : stats.averageRating >= 3 
-                      ? 'Avaliação satisfatória'
-                      : 'Atenção: avaliação baixa'
-                    }
+                    {successRateMessage}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Taxa de comparecimento: {stats ? formatPercentage(stats.completedBookings, stats.totalBookings) : '0%'}
                   </p>
                 </div>
               </div>

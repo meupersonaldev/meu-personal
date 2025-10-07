@@ -71,110 +71,110 @@ export default function FranqueadoraDashboard() {
     switch (activeTab) {
       case 'overview':
         return (
-          <div className="space-y-6">
+          <div className="space-y-3 sm:space-y-4 lg:space-y-6">
             {/* KPIs Principais - Linha 1 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-              <Card className="p-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
+              <Card className="p-4 sm:p-6">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
-                    <Building className="h-8 w-8 text-meu-primary" />
+                    <Building className="h-6 w-6 sm:h-8 sm:w-8 text-meu-primary" />
                   </div>
-                  <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-600">Total Franquias</p>
-                    <p className="text-2xl font-bold text-gray-900">{analytics?.totalFranchises || 0}</p>
-                    <p className="text-sm text-meu-primary">+{Number(analytics?.monthlyGrowth || 0).toFixed(1)}% este mês</p>
+                  <div className="ml-3 sm:ml-4 min-w-0 flex-1">
+                    <p className="text-xs sm:text-sm font-medium text-gray-600">Total Franquias</p>
+                    <p className="text-xl sm:text-2xl font-bold text-gray-900">{analytics?.totalFranchises || 0}</p>
+                    <p className="text-xs sm:text-sm text-meu-primary truncate">+{Number(analytics?.monthlyGrowth || 0).toFixed(1)}% este mês</p>
                   </div>
                 </div>
               </Card>
 
-              <Card className="p-6">
+              <Card className="p-4 sm:p-6">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
-                    <BarChart3 className="h-8 w-8 text-blue-600" />
+                    <BarChart3 className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
                   </div>
-                  <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-600">Franquias Ativas</p>
-                    <p className="text-2xl font-bold text-gray-900">{analytics?.activeFranchises || 0}</p>
-                    <p className="text-sm text-blue-600">
+                  <div className="ml-3 sm:ml-4 min-w-0 flex-1">
+                    <p className="text-xs sm:text-sm font-medium text-gray-600">Franquias Ativas</p>
+                    <p className="text-xl sm:text-2xl font-bold text-gray-900">{analytics?.activeFranchises || 0}</p>
+                    <p className="text-xs sm:text-sm text-blue-600 truncate">
                       {(Number(analytics?.activeFranchises || 0) / Number(analytics?.totalFranchises || 1) * 100).toFixed(0)}% da rede
                     </p>
                   </div>
                 </div>
               </Card>
 
-              <Card className="p-6">
+              <Card className="p-4 sm:p-6">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
-                    <DollarSign className="h-8 w-8 text-green-600" />
+                    <DollarSign className="h-6 w-6 sm:h-8 sm:w-8 text-green-600" />
                   </div>
-                  <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-600">Receita Total</p>
-                    <p className="text-2xl font-bold text-gray-900">
+                  <div className="ml-3 sm:ml-4 min-w-0 flex-1">
+                    <p className="text-xs sm:text-sm font-medium text-gray-600">Receita Total</p>
+                    <p className="text-xl sm:text-2xl font-bold text-gray-900">
                       R$ {(Number(analytics?.totalRevenue || 0) / 1000).toFixed(1)}k
                     </p>
-                    <p className="text-sm text-green-600">
+                    <p className="text-xs sm:text-sm text-green-600 truncate">
                       Média: R$ {(Number(analytics?.averageRevenuePerFranchise || 0) / 1000).toFixed(1)}k
                     </p>
                   </div>
                 </div>
               </Card>
 
-              <Card className="p-6 bg-gradient-to-br from-green-50 to-emerald-50 border-green-200">
+              <Card className="p-4 sm:p-6 bg-gradient-to-br from-green-50 to-emerald-50 border-green-200">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
-                    <DollarSign className="h-8 w-8 text-green-700" />
+                    <DollarSign className="h-6 w-6 sm:h-8 sm:w-8 text-green-700" />
                   </div>
-                  <div className="ml-4">
-                    <p className="text-sm font-medium text-green-700">Royalties Mensais</p>
-                    <p className="text-2xl font-bold text-green-900">
+                  <div className="ml-3 sm:ml-4 min-w-0 flex-1">
+                    <p className="text-xs sm:text-sm font-medium text-green-700">Royalties Mensais</p>
+                    <p className="text-xl sm:text-2xl font-bold text-green-900">
                       R$ {(Number(analytics?.totalRoyalties || 0) / 1000).toFixed(1)}k
                     </p>
-                    <p className="text-sm text-green-600">Receita da franqueadora</p>
+                    <p className="text-xs sm:text-sm text-green-600 truncate">Receita da franqueadora</p>
                   </div>
                 </div>
               </Card>
             </div>
 
             {/* KPIs Secundários - Linha 2 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
-              <Card className="p-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 lg:gap-6">
+              <Card className="p-4 sm:p-6">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
-                    <MapPin className="h-8 w-8 text-cyan-600" />
+                    <MapPin className="h-6 w-6 sm:h-8 sm:w-8 text-cyan-600" />
                   </div>
-                  <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-600">Estados Atendidos</p>
-                    <p className="text-2xl font-bold text-gray-900">
+                  <div className="ml-3 sm:ml-4 min-w-0 flex-1">
+                    <p className="text-xs sm:text-sm font-medium text-gray-600">Estados Atendidos</p>
+                    <p className="text-xl sm:text-2xl font-bold text-gray-900">
                       {new Set(academies.map(a => a.state)).size}
                     </p>
-                    <p className="text-sm text-cyan-600">Cobertura nacional</p>
+                    <p className="text-xs sm:text-sm text-cyan-600 truncate">Cobertura nacional</p>
                   </div>
                 </div>
               </Card>
 
-              <Card className="p-6">
+              <Card className="p-4 sm:p-6">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
-                    <Activity className="h-8 w-8 text-pink-600" />
+                    <Activity className="h-6 w-6 sm:h-8 sm:w-8 text-pink-600" />
                   </div>
-                  <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-600">Royalty Médio</p>
-                    <p className="text-2xl font-bold text-gray-900">
+                  <div className="ml-3 sm:ml-4 min-w-0 flex-1">
+                    <p className="text-xs sm:text-sm font-medium text-gray-600">Royalty Médio</p>
+                    <p className="text-xl sm:text-2xl font-bold text-gray-900">
                       {academies.length > 0
                         ? (academies.reduce((sum, a) => sum + Number(a.royalty_percentage || 0), 0) / academies.length).toFixed(1)
                         : '0'
                       }%
                     </p>
-                    <p className="text-sm text-pink-600">Taxa padrão da rede</p>
+                    <p className="text-xs sm:text-sm text-pink-600 truncate">Taxa padrão da rede</p>
                   </div>
                 </div>
               </Card>
             </div>
 
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-              <Card className="p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Crescimento de Franquias</h3>
-                <p className="text-sm text-gray-500 mb-4">Franquias criadas nos últimos 6 meses</p>
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 sm:gap-4 lg:gap-6">
+              <Card className="p-4 sm:p-6">
+                <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">Crescimento de Franquias</h3>
+                <p className="text-xs sm:text-sm text-gray-500 mb-3 sm:mb-4">Franquias criadas nos últimos 6 meses</p>
                 {(() => {
                   // Calcular dados dos últimos 6 meses
                   const now = new Date()
@@ -212,12 +212,12 @@ export default function FranqueadoraDashboard() {
                   const maxCount = Math.max(...monthsData.map(m => m.count), 1)
                   
                   return (
-                    <div className="h-56">
-                      <div className="flex items-end justify-between h-full space-x-2">
+                    <div className="h-40 sm:h-56">
+                      <div className="flex items-end justify-between h-full space-x-1 sm:space-x-2">
                         {monthsData.map((data, index) => (
                           <div key={index} className="flex-1 flex flex-col items-center justify-end h-full">
-                            <div className="w-full flex flex-col items-center justify-end h-full pb-8">
-                              <span className="text-xs font-semibold text-meu-primary mb-1">
+                            <div className="w-full flex flex-col items-center justify-end h-full pb-6 sm:pb-8">
+                              <span className="text-[10px] sm:text-xs font-semibold text-meu-primary mb-1">
                                 {data.count}
                               </span>
                               <div 
@@ -228,7 +228,7 @@ export default function FranqueadoraDashboard() {
                                 }}
                               />
                             </div>
-                            <span className="text-xs text-gray-600 capitalize mt-2">
+                            <span className="text-[10px] sm:text-xs text-gray-600 capitalize mt-1 sm:mt-2">
                               {data.month}
                             </span>
                           </div>
@@ -239,30 +239,30 @@ export default function FranqueadoraDashboard() {
                 })()}
               </Card>
 
-              <Card className="p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Franquias</h3>
-                <p className="text-sm text-gray-500 mb-4">Ranking das franquias com melhor performance financeira.</p>
-                <div className="space-y-3">
+              <Card className="p-4 sm:p-6">
+                <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">Top Franquias</h3>
+                <p className="text-xs sm:text-sm text-gray-500 mb-3 sm:mb-4">Ranking das franquias com melhor performance financeira.</p>
+                <div className="space-y-2 sm:space-y-3">
                   {academies
                     .sort((a, b) => Number(b.monthly_revenue || 0) - Number(a.monthly_revenue || 0))
                     .slice(0, 5)
                     .map((academy, index) => (
-                      <div key={academy.id} className="flex items-center justify-between">
-                        <div className="flex items-center">
-                          <div className="w-8 h-8 bg-meu-primary rounded-full flex items-center justify-center mr-3">
-                            <span className="text-sm font-medium text-white">#{index + 1}</span>
+                      <div key={academy.id} className="flex items-start sm:items-center justify-between gap-2">
+                        <div className="flex items-start sm:items-center flex-1 min-w-0">
+                          <div className="w-7 h-7 sm:w-8 sm:h-8 bg-meu-primary rounded-full flex items-center justify-center mr-2 sm:mr-3 flex-shrink-0">
+                            <span className="text-xs sm:text-sm font-medium text-white">#{index + 1}</span>
                           </div>
-                          <div>
-                            <p className="font-medium text-gray-900">{academy.name}</p>
-                            <p className="text-sm text-gray-600 flex items-center">
-                              <MapPin className="h-3 w-3 mr-1" />
-                              {academy.city}, {academy.state}
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm sm:text-base font-medium text-gray-900 truncate">{academy.name}</p>
+                            <p className="text-xs sm:text-sm text-gray-600 flex items-center truncate">
+                              <MapPin className="h-3 w-3 mr-1 flex-shrink-0" />
+                              <span className="truncate">{academy.city}, {academy.state}</span>
                             </p>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-sm text-gray-500">Receita R$ {(Number(academy.monthly_revenue || 0) / 1000).toFixed(0)}k/mês</p>
-                          <p className="text-sm text-gray-600">⭐ {Number(academy.royalty_percentage || 0)}% royalty</p>
+                        <div className="text-right flex-shrink-0">
+                          <p className="text-xs sm:text-sm text-gray-500 whitespace-nowrap">R$ {(Number(academy.monthly_revenue || 0) / 1000).toFixed(0)}k/mês</p>
+                          <p className="text-xs sm:text-sm text-gray-600 whitespace-nowrap">⭐ {Number(academy.royalty_percentage || 0)}%</p>
                         </div>
                       </div>
                     ))}
@@ -279,23 +279,30 @@ export default function FranqueadoraDashboard() {
 
   return (
     <FranqueadoraGuard requiredPermission="canViewDashboard">
-      <div className="p-6 lg:p-8">
-          <div className="lg:hidden mb-6">
+      <div className="p-3 sm:p-4 lg:p-8">
+          {/* Header Mobile - Removido pois já temos no layout */}
+          
+          {/* Header Desktop */}
+          <div className="hidden lg:flex lg:items-center lg:justify-between mb-8">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Dashboard — {franqueadora?.name || 'Franqueadora'}</h1>
-              <p className="text-sm text-gray-600">Bem-vindo, {user?.name || 'Admin'}</p>
-            </div>
-          </div>
-
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-6 lg:mb-8">
-            <div className="mb-4 lg:mb-0">
               <p className="text-sm uppercase tracking-wide text-gray-500">Painel</p>
-              <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">Dashboard — {franqueadora?.name || 'Franqueadora'}</h1>
+              <h1 className="text-3xl font-bold text-gray-900">Dashboard — {franqueadora?.name || 'Franqueadora'}</h1>
             </div>
             <FranqueadoraNotificationsDropdown />
           </div>
 
-          <div className="space-y-6">
+          {/* Mobile Title */}
+          <div className="lg:hidden mb-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Visão Geral</h2>
+                <p className="text-sm text-gray-600">Acompanhe o desempenho da rede</p>
+              </div>
+              <FranqueadoraNotificationsDropdown />
+            </div>
+          </div>
+
+          <div className="space-y-3 sm:space-y-4 lg:space-y-6">
             {renderTabContent()}
           </div>
       </div>

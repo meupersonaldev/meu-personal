@@ -16,7 +16,6 @@ import {
   Award,
   Clock,
   DollarSign,
-  Star,
   ChevronDown,
   Eye,
   Download,
@@ -602,15 +601,6 @@ export default function UsuariosPage() {
                               <div>
                                 <label className="block text-sm text-gray-500">CREF</label>
                                 <p className="text-sm font-medium text-gray-900">{profile.cref}</p>
-                              </div>
-                            )}
-                            {profile.rating && (
-                              <div>
-                                <label className="block text-sm text-gray-500">Avaliação</label>
-                                <div className="flex items-center">
-                                  <Star className="h-4 w-4 text-yellow-400 mr-1" />
-                                  <span className="text-sm font-medium text-gray-900">{profile.rating.toFixed(1)}</span>
-                                </div>
                               </div>
                             )}
                             {profile.hourly_rate && (
