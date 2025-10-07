@@ -58,7 +58,6 @@ export default function TeacherModal({ isOpen, onClose, teacher, mode }: Teacher
         const newTeacher = {
           ...formData,
           studentsCount: 0,
-          rating: 0,
           totalClasses: 0,
           earnings: 0
         }
@@ -202,16 +201,22 @@ export default function TeacherModal({ isOpen, onClose, teacher, mode }: Teacher
                   <p className="font-semibold">{teacher.studentsCount}</p>
                 </div>
                 <div>
-                  <p className="text-gray-600">Avaliação</p>
-                  <p className="font-semibold">⭐ {teacher.rating > 0 ? teacher.rating : 'N/A'}</p>
-                </div>
-                <div>
                   <p className="text-gray-600">Aulas</p>
                   <p className="font-semibold">{teacher.totalClasses}</p>
                 </div>
                 <div>
                   <p className="text-gray-600">Ganhos</p>
                   <p className="font-semibold">R$ {teacher.earnings}</p>
+                </div>
+                <div>
+                  <p className="text-gray-600">Status</p>
+                  <p className="font-semibold">
+                    {teacher.status === 'active'
+                      ? 'Ativo'
+                      : teacher.status === 'pending'
+                        ? 'Pendente'
+                        : 'Inativo'}
+                  </p>
                 </div>
               </div>
             </div>
