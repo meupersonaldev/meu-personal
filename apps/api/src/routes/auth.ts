@@ -194,8 +194,6 @@ router.post('/register', auditSensitiveOperation('CREATE', 'users'), async (req,
           bio: '',
           specialties: [],
           hourly_rate: 0,
-          rating: null,
-          total_reviews: 0,
           availability: {},
           is_available: false
         }])
@@ -590,5 +588,4 @@ router.post('/check-email', async (req, res) => {
     return res.json({ exists: false })
   }
 })
-
 

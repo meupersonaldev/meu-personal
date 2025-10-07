@@ -74,7 +74,7 @@ export function auditSensitiveOperation(operation: string, tableName: string) {
       // Apenas logar se a operação foi bem-sucedida
       if (res.statusCode >= 200 && res.statusCode < 300 && req.user) {
         try {
-          const recordId = req.params.id || responseData?.id || responseData?.review?.id || 'unknown';
+          const recordId = req.params.id || responseData?.id || 'unknown';
 
           await auditService.createLog({
             tableName,

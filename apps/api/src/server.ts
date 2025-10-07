@@ -142,7 +142,6 @@ import uploadRoutes from './routes/upload'
 import studentBookingsRoutes from './routes/student-bookings'
 import franqueadoraRoutes from './routes/franqueadora'
 import adminRoutes from './routes/admin'
-import reviewsRoutes from './routes/reviews'
 import packagesRoutes from './routes/packages'
 import { bookingScheduler } from './jobs/booking-scheduler'
 
@@ -169,7 +168,6 @@ app.use('/api/packages', packagesRoutes)
 app.use('/api', uploadRateLimit, uploadRoutes)
 app.use('/api/franqueadora', franqueadoraRoutes)
 app.use('/api/admin', adminRoutes)
-app.use('/api/reviews', reviewsRoutes)
 
 // SEGURANÇA CRÍTICA: Middleware para rotas não encontradas (deve vir antes do errorHandler)
 app.use(notFoundHandler)

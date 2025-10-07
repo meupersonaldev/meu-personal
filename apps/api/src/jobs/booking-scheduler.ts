@@ -1,6 +1,5 @@
 import { supabase } from '../config/supabase';
 import { balanceService } from '../services/balance.service';
-import { reviewService } from '../services/review.service';
 
 /**
  * Scheduler T-4h para processamento automático de locks
@@ -60,15 +59,6 @@ export class BookingScheduler {
     await executeWithRetry(
       () => this.cleanupCanceledBookingLocks(now),
       'limpeza de locks de bookings cancelados'
-    );
-
-    await executeWithRetry(
-      async () => {
-        const reviewResult = await reviewService.processPendingVisibleReviews();
-        processed += reviewResult.processed - 1; // Ajustar contador já que executeWithRetry incrementa
-        console.log(`📝 Reviews processados: ${reviewResult.processed}`);
-      },
-      'processamento de reviews pendentes'
     );
 
     console.log(`✅ Processamento finalizado - ${processed} etapas concluídas, ${errors.length} erros`);

@@ -278,8 +278,6 @@ router.get('/', async (req, res) => {
           bio,
           specialties,
           hourly_rate,
-          rating,
-          total_reviews,
           availability,
           is_available
         ),
@@ -376,8 +374,6 @@ router.get('/:id', async (req, res) => {
           bio,
           specialties,
           hourly_rate,
-          rating,
-          total_reviews,
           availability,
           is_available
         )
@@ -403,8 +399,6 @@ router.get('/:id', async (req, res) => {
           bio: '',
           specialties: [],
           hourly_rate: 0,
-          rating: null,
-          total_reviews: 0,
           availability: {},
           is_available: true
         })
@@ -578,8 +572,6 @@ router.post('/', async (req, res) => {
           bio,
           specialties,
           hourly_rate,
-          rating,
-          total_reviews,
           availability,
           is_available
         ),
@@ -730,10 +722,10 @@ router.get('/:id/stats', async (req, res) => {
         .eq('status', 'active')
         .single(),
 
-      // Perfil e avaliações
+      // Perfil
       supabase
         .from('teacher_profiles')
-        .select('rating, total_reviews, hourly_rate')
+        .select('hourly_rate')
         .eq('user_id', id)
         .single()
     ])
@@ -767,8 +759,6 @@ router.get('/:id/stats', async (req, res) => {
       total_students: new Set(bookings.map(b => b.student_id)).size,
       total_revenue: totalRevenue,
       total_credits_used: totalCreditsUsed,
-      rating: profile?.rating || 0,
-      total_reviews: profile?.total_reviews || 0,
       hourly_rate: profile?.hourly_rate || 0,
       current_subscription: subscription,
       last_booking_date: bookings.length > 0
