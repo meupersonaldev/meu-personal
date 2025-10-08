@@ -12,6 +12,8 @@ services:
       - '5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - meu-personal-network
 
   redis:
     image: redis:7-alpine
@@ -20,7 +22,53 @@ services:
       - '6379:6379'
     volumes:
       - redis_data:/data
+    networks:
+      - meu-personal-network
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: meu-personal-api
+    ports:
+      - '3001:3001'
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://postgres:postgres123@postgres:5432/meu_personal
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=your_jwt_secret_here_change_in_production
+      - FRONTEND_URL=http://localhost:3000
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./apps/api/uploads:/app/uploads
+    restart: unless-stopped
+    networks:
+      - meu-personal-network
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: meu-personal-web
+    ports:
+      - '3000:3000'
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://localhost:3001
+      - NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - meu-personal-network
 
 volumes:
   postgres_data:
   redis_data:
+
+networks:
+  meu-personal-network:
+    driver: bridge

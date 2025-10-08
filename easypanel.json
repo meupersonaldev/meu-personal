@@ -1,0 +1,155 @@
+{
+  "version": "0.7.0",
+  "name": "meu-personal",
+  "services": {
+    "postgres": {
+      "image": "postgres:15-alpine",
+      "environment": {
+        "POSTGRES_DB": "meu_personal",
+        "POSTGRES_USER": "postgres",
+        "POSTGRES_PASSWORD": "{POSTGRES_PASSWORD}"
+      },
+      "ports": ["5432:5432"],
+      "volumes": [
+        {
+          "type": "volume",
+          "source": "postgres_data",
+          "target": "/var/lib/postgresql/data"
+        }
+      ],
+      "restart": "unless-stopped"
+    },
+    "redis": {
+      "image": "redis:7-alpine",
+      "ports": ["6379:6379"],
+      "volumes": [
+        {
+          "type": "volume",
+          "source": "redis_data",
+          "target": "/data"
+        }
+      ],
+      "restart": "unless-stopped"
+    },
+    "api": {
+      "image": "meu-personal-api:latest",
+      "build": {
+        "context": ".",
+        "dockerfile": "apps/api/Dockerfile"
+      },
+      "environment": {
+        "NODE_ENV": "production",
+        "DATABASE_URL": "postgresql://postgres:{POSTGRES_PASSWORD}@postgres:5432/meu_personal",
+        "REDIS_URL": "redis://redis:6379",
+        "JWT_SECRET": "{JWT_SECRET}",
+        "FRONTEND_URL": "{FRONTEND_URL}",
+        "RESEND_API_KEY": "{RESEND_API_KEY}",
+        "RESEND_FROM_EMAIL": "{RESEND_FROM_EMAIL}",
+        "SUPABASE_URL": "{SUPABASE_URL}",
+        "SUPABASE_ANON_KEY": "{SUPABASE_ANON_KEY}",
+        "SUPABASE_SERVICE_KEY": "{SUPABASE_SERVICE_KEY}"
+      },
+      "ports": ["3001:3001"],
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "./apps/api/uploads",
+          "target": "/app/uploads"
+        }
+      ],
+      "restart": "unless-stopped",
+      "healthCheck": {
+        "test": ["CMD", "curl", "-f", "http://localhost:3001/health"],
+        "interval": "30s",
+        "timeout": "10s",
+        "retries": 3
+      }
+    },
+    "web": {
+      "image": "meu-personal-web:latest",
+      "build": {
+        "context": ".",
+        "dockerfile": "apps/web/Dockerfile"
+      },
+      "environment": {
+        "NODE_ENV": "production",
+        "NEXT_PUBLIC_API_URL": "{NEXT_PUBLIC_API_URL}",
+        "NEXT_PUBLIC_SUPABASE_URL": "{SUPABASE_URL}",
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY": "{SUPABASE_ANON_KEY}"
+      },
+      "ports": ["3000:3000"],
+      "restart": "unless-stopped",
+      "healthCheck": {
+        "test": ["CMD", "curl", "-f", "http://localhost:3000"],
+        "interval": "30s",
+        "timeout": "10s",
+        "retries": 3
+      }
+    }
+  },
+  "volumes": {
+    "postgres_data": {},
+    "redis_data": {}
+  },
+  "networks": {
+    "meu-personal-network": {
+      "driver": "bridge"
+    }
+  },
+  "environment": {
+    "POSTGRES_PASSWORD": {
+      "description": "Senha do banco PostgreSQL",
+      "required": true
+    },
+    "JWT_SECRET": {
+      "description": "Secret para autenticação JWT",
+      "required": true
+    },
+    "FRONTEND_URL": {
+      "description": "URL do frontend",
+      "defaultValue": "https://seu-dominio.com",
+      "required": true
+    },
+    "NEXT_PUBLIC_API_URL": {
+      "description": "URL da API (acessível publicamente)",
+      "defaultValue": "https://seu-dominio.com/api",
+      "required": true
+    },
+    "RESEND_API_KEY": {
+      "description": "API Key do Resend para envio de emails",
+      "required": true
+    },
+    "RESEND_FROM_EMAIL": {
+      "description": "Email de remetente para notificações",
+      "defaultValue": "contato@seu-dominio.com",
+      "required": true
+    },
+    "SUPABASE_URL": {
+      "description": "URL do Supabase",
+      "required": true
+    },
+    "SUPABASE_ANON_KEY": {
+      "description": "Chave anônima do Supabase",
+      "required": true
+    },
+    "SUPABASE_SERVICE_KEY": {
+      "description": "Chave de serviço do Supabase",
+      "required": true
+    }
+  },
+  "deploy": {
+    "replicas": 1,
+    "updateStrategy": {
+      "type": "RollingUpdate",
+      "rollingUpdate": {
+        "maxUnavailable": 1,
+        "maxSurge": 1
+      }
+    },
+    "restartPolicy": {
+      "condition": "on-failure",
+      "delay": "5s",
+      "maxAttempts": 3
+    }
+  }
+}

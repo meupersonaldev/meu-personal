@@ -1,0 +1,2 @@
+# Este arquivo garante que o diretório uploads seja versionado no git
+# O conteúdo do diretório será montado como volume no container

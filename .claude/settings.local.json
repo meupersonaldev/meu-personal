@@ -31,7 +31,8 @@
       "Bash(wmic:*)",
       "Bash(del:*)",
       "Bash(tasklist:*)",
-      "WebFetch(domain:www.figma.com)"
+      "WebFetch(domain:www.figma.com)",
+      "Bash(if not exist \"apps\\api\\uploads\" mkdir appsapiuploads)"
     ],
     "deny": [],
     "ask": []
