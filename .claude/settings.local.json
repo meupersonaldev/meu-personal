@@ -30,7 +30,8 @@
       "Bash(dir \"C:\\Users\\zaira\\Documents\\GitHub\\meu-personal\\apps\\web\\app\\franqueadora\\dashboard\")",
       "Bash(wmic:*)",
       "Bash(del:*)",
-      "Bash(tasklist:*)"
+      "Bash(tasklist:*)",
+      "WebFetch(domain:www.figma.com)"
     ],
     "deny": [],
     "ask": []
