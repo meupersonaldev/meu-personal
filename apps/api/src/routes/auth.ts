@@ -2,6 +2,7 @@ import express from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { z } from 'zod'
+import { Resend } from 'resend'
 import { supabase } from '../config/supabase'
 import { ensureFranqueadoraContact } from '../services/franqueadora-contacts.service'
 import { auditAuthEvent, auditSensitiveOperation } from '../middleware/audit'
@@ -27,6 +28,10 @@ const registerSchema = z.object({
 const forgotPasswordSchema = z.object({
   email: z.string().email('Email inválido')
 })
+
+const resendApiKey = process.env.RESEND_API_KEY
+const resendFromEmail = process.env.RESEND_FROM_EMAIL
+const resendClient = resendApiKey ? new Resend(resendApiKey) : null
 
 
 // POST /api/auth/login
@@ -329,10 +334,42 @@ router.post('/forgot-password', async (req, res) => {
         { expiresIn: '1h' } // Token expira em 1 hora
       )
 
-      // TODO: Implementar envio de email com Resend
-      // Por enquanto, apenas logar o token (em produção, enviar email)
-      console.log(`Token de reset para ${email}: ${resetToken}`)
-      
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000'
+      const resetUrl = new URL('/redefinir-senha', frontendUrl)
+      resetUrl.searchParams.set('token', resetToken)
+      const resetLink = resetUrl.toString()
+
+      if (resendClient && resendFromEmail) {
+        try {
+          await resendClient.emails.send({
+            from: resendFromEmail,
+            to: email,
+            subject: 'Redefinição de senha - Meu Personal',
+            html: `
+              <p>Olá ${user.name || ''},</p>
+              <p>Recebemos uma solicitação para redefinir a sua senha na plataforma Meu Personal.</p>
+              <p><a href="${resetLink}" target="_blank" rel="noopener noreferrer">Clique aqui para criar uma nova senha</a>.</p>
+              <p>Se você não solicitou essa alteração, ignore este e-mail.</p>
+              <p>Atenciosamente,<br/>Equipe Meu Personal</p>
+            `,
+            text: [
+              `Olá ${user.name || ''},`,
+              '',
+              'Recebemos uma solicitação para redefinir a sua senha na plataforma Meu Personal.',
+              `Acesse o link a seguir para criar uma nova senha: ${resetLink}`,
+              '',
+              'Se você não solicitou essa alteração, ignore este e-mail.',
+              '',
+              'Equipe Meu Personal'
+            ].join('\n')
+          })
+        } catch (sendError) {
+          console.error('Erro ao enviar email de redefinição de senha via Resend:', sendError)
+        }
+      } else {
+        console.warn('Resend não está configurado. Token de redefinição gerado:', resetToken)
+      }
+
       // Salvar hash do token na tabela users para validação posterior
       const tokenHash = await bcrypt.hash(resetToken, 10)
       await supabase
@@ -588,4 +625,3 @@ router.post('/check-email', async (req, res) => {
     return res.json({ exists: false })
   }
 })
-
