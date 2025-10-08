@@ -67,7 +67,7 @@ const statusConfig = {
 }
 
 export default function ProfessorAulas() {
-  const { user } = useAuthStore()
+  const { user, token } = useAuthStore()
   const [bookings, setBookings] = useState<Booking[]>([])
   const [loading, setLoading] = useState(true)
   const [filtroStatus, setFiltroStatus] = useState<string>('todos')
@@ -77,13 +77,18 @@ export default function ProfessorAulas() {
 
   useEffect(() => {
     const fetchBookings = async () => {
-      if (!user?.id) return
+      if (!user?.id || !token) return
 
       try {
         setLoading(true)
         const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
         
-        const response = await fetch(`${API_URL}/api/bookings?teacher_id=${user.id}`)
+        const response = await fetch(`${API_URL}/api/bookings?teacher_id=${user.id}`, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          },
+          credentials: 'include'
+        })
         
         if (response.ok) {
           const data = await response.json()
@@ -97,7 +102,7 @@ export default function ProfessorAulas() {
     }
 
     fetchBookings()
-  }, [user?.id])
+  }, [user?.id, token])
 
   const aulasFiltradas = bookings.filter(booking => {
     const matchStatus = filtroStatus === 'todos' || booking.status === filtroStatus

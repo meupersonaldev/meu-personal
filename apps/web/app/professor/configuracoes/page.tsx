@@ -39,21 +39,7 @@ interface Academy {
 
 // Especialidades disponíveis
 const specialties = [
-  'Emagrecimento',
-  'Hipertrofia',
-  'Condicionamento',
-  'Musculação',
-  'Funcional',
-  'CrossFit',
-  'Pilates',
-  'Reabilitação',
-  'Força',
-  'Powerlifting',
-  'Preparação Atlética',
-  'Yoga',
-  'Dança',
-  'Boxe',
-  'Muay Thai'
+  'Musculação'
 ]
 
 export default function ConfiguracoesPage() {
@@ -87,6 +73,34 @@ export default function ConfiguracoesPage() {
 
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
+
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+
+  const authorizedFetch = async (path: string, init: RequestInit = {}) => {
+    if (!token) {
+      throw new Error('Sessao expirada. Faca login novamente.')
+    }
+
+    let headers: Record<string, string> = {}
+    if (init.headers instanceof Headers) {
+      headers = Object.fromEntries(init.headers.entries())
+    } else if (Array.isArray(init.headers)) {
+      headers = Object.fromEntries(init.headers)
+    } else if (init.headers) {
+      headers = { ...(init.headers as Record<string, string>) }
+    }
+
+    const endpoint = path.startsWith('/') ? path : `/${path}`
+
+    return fetch(`${API_URL}${endpoint}`, {
+      ...init,
+      headers: {
+        ...headers,
+        Authorization: `Bearer ${token}`,
+      },
+      credentials: 'include',
+    })
+  }
 
   useEffect(() => {
     if (user?.id) {
@@ -125,10 +139,14 @@ export default function ConfiguracoesPage() {
   }
 
   const fetchAcademies = async () => {
+    if (!token) {
+      setAcademies([])
+      return
+    }
+
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      const response = await fetch(`${API_URL}/api/academies`)
-      
+      const response = await authorizedFetch('/api/academies')
+
       if (response.ok) {
         const data = await response.json()
         setAcademies(data.academies || [])
@@ -139,9 +157,10 @@ export default function ConfiguracoesPage() {
   }
 
   const fetchTeacherPreferences = async () => {
+    if (!token || !user?.id) return
+
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      const response = await fetch(`${API_URL}/api/teachers/${user?.id}/preferences`)
+      const response = await authorizedFetch(`/api/teachers/${user.id}/preferences`)
 
       if (response.ok) {
         const data = await response.json()
@@ -151,7 +170,6 @@ export default function ConfiguracoesPage() {
       console.error('Erro ao carregar preferências:', error)
     }
   }
-
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
@@ -170,15 +188,13 @@ export default function ConfiguracoesPage() {
     setLoading(true)
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      
       // Criar FormData
       const formData = new FormData()
       formData.append('avatar', avatarFile)
       formData.append('userId', user.id)
 
       // Enviar para o backend que tem acesso service_role
-      const response = await fetch(`${API_URL}/api/users/${user.id}/avatar`, {
+      const response = await authorizedFetch(`/api/users/${user.id}/avatar`, {
         method: 'POST',
         body: formData
       })
@@ -208,9 +224,7 @@ export default function ConfiguracoesPage() {
     setLoading(true)
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      
-      const response = await fetch(`${API_URL}/api/users/${user?.id}`, {
+      const response = await authorizedFetch(`/api/users/${user?.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(profileData)
@@ -247,9 +261,7 @@ export default function ConfiguracoesPage() {
     setLoading(true)
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      
-      const response = await fetch(`${API_URL}/api/users/${user?.id}/password`, {
+      const response = await authorizedFetch(`/api/users/${user?.id}/password`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -276,9 +288,7 @@ export default function ConfiguracoesPage() {
     setLoading(true)
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      
-      const response = await fetch(`${API_URL}/api/teachers/${user?.id}/preferences`, {
+      const response = await authorizedFetch(`/api/teachers/${user?.id}/preferences`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

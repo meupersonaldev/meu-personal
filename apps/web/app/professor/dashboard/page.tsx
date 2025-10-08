@@ -53,7 +53,7 @@ interface Stats {
 }
 
 export default function ProfessorDashboardPage() {
-  const { user } = useAuthStore()
+  const { user, token } = useAuthStore()
   const [bookings, setBookings] = useState<Booking[]>([])
   const [stats, setStats] = useState<Stats | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -62,20 +62,36 @@ export default function ProfessorDashboardPage() {
   useEffect(() => {
     if (!user?.id) return
 
+    if (!token) {
+      setIsLoading(false)
+      setError('Sessão expirada. Faça login novamente.')
+      return
+    }
+
     const loadData = async () => {
       setIsLoading(true)
       setError(null)
 
       try {
         const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+        const requestInit: RequestInit = {
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+        }
 
         // Buscar agendamentos do professor
         const bookingsResponse = await fetch(
           `${API_URL}/api/bookings?teacher_id=${user.id}`,
-          { headers: { 'Content-Type': 'application/json' } }
+          requestInit
         )
 
         if (!bookingsResponse.ok) {
+          if (bookingsResponse.status === 401) {
+            throw new Error('Unauthorized')
+          }
           const errorData = await bookingsResponse.json().catch(() => ({}))
           console.error('Erro ao buscar agendamentos:', errorData)
           throw new Error(errorData.message || 'Erro ao buscar agendamentos')
@@ -90,23 +106,29 @@ export default function ProfessorDashboardPage() {
         // Buscar estatísticas do professor
         const statsResponse = await fetch(
           `${API_URL}/api/teachers/${user.id}/stats`,
-          { headers: { 'Content-Type': 'application/json' } }
+          requestInit
         )
 
         if (statsResponse.ok) {
           const statsData = await statsResponse.json()
           setStats(statsData)
+        } else if (statsResponse.status === 401) {
+          throw new Error('Unauthorized')
         }
       } catch (err) {
         console.error('Erro ao carregar dados:', err)
-        setError('Erro ao carregar dados do dashboard')
+        if (err instanceof Error && err.message === 'Unauthorized') {
+          setError('Sessão expirada. Faça login novamente.')
+        } else {
+          setError('Erro ao carregar dados do dashboard')
+        }
       } finally {
         setIsLoading(false)
       }
     }
 
     loadData()
-  }, [user?.id])
+  }, [user?.id, token])
 
   if (!user) return null
 
@@ -138,10 +160,13 @@ export default function ProfessorDashboardPage() {
   const handleConfirmBooking = async (bookingId: string) => {
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      
       const response = await fetch(`${API_URL}/api/bookings/${bookingId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        credentials: 'include',
         body: JSON.stringify({ status: 'CONFIRMED' })
       })
 

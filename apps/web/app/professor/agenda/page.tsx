@@ -40,7 +40,7 @@ interface Academy {
 }
 
 export default function ProfessorAgendaPage() {
-  const { user } = useAuthStore()
+  const { user, token } = useAuthStore()
   const { academies: teacherAcademies, loading: loadingAcademies } = useTeacherAcademies()
   const [bookings, setBookings] = useState<Booking[]>([])
   const [selectedFranchise, setSelectedFranchise] = useState<string>('todas')
@@ -66,19 +66,44 @@ export default function ProfessorAgendaPage() {
   ]
   const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+
+  const authFetch = async (url: string, init: RequestInit = {}) => {
+    if (!token) {
+      throw new Error('Sessao expirada. Faca login novamente.')
+    }
+
+    let headers: Record<string, string> = {}
+    if (init.headers instanceof Headers) {
+      headers = Object.fromEntries(init.headers.entries())
+    } else if (Array.isArray(init.headers)) {
+      headers = Object.fromEntries(init.headers)
+    } else if (init.headers) {
+      headers = { ...(init.headers as Record<string, string>) }
+    }
+
+    return fetch(url, {
+      ...init,
+      headers: {
+        ...headers,
+        Authorization: `Bearer ${token}`,
+      },
+      credentials: 'include',
+    })
+  }
+
   useEffect(() => {
-    if (!user?.id) return
+    if (!user?.id || !token) return
     fetchData()
-  }, [user?.id])
+  }, [user?.id, token])
   const fetchSlots = async () => {
-    if (!user?.id || !selectedDate || selectedFranchise === 'todas') {
+    if (!user?.id || !token || !selectedDate || selectedFranchise === 'todas') {
       setAvailableSlots([])
       return
     }
     try {
       setLoadingSlots(true)
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      const res = await fetch(`${API_URL}/api/academies/${selectedFranchise}/available-slots?date=${selectedDate}`)
+      const res = await authFetch(`${API_URL}/api/academies/${selectedFranchise}/available-slots?date=${selectedDate}`)
       if (res.ok) {
         const data = await res.json()
         const mapped: Slot[] = (data.slots || []).map((s: { time: string; is_free: boolean; remaining?: number; max_capacity?: number }) => ({ time: s.time, is_free: s.is_free, remaining: s.remaining, max_capacity: s.max_capacity }))
@@ -94,23 +119,22 @@ export default function ProfessorAgendaPage() {
   // Carrega horários livres quando tiver unidade e data
   useEffect(() => {
     fetchSlots()
-  }, [user?.id, selectedFranchise, selectedDate])
+  }, [user?.id, token, selectedFranchise, selectedDate])
 
   const fetchBlocks = async () => {
-    if (!user?.id || !selectedDate) {
+    if (!user?.id || !token || !selectedDate) {
       setBlocks([])
       return
     }
     try {
       setLoadingBlocks(true)
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      
+
       if (selectedFranchise === 'todas') {
         // Buscar bloqueios de todas as unidades
         const allBlocks: any[] = []
         for (const academy of teacherAcademies) {
           const url = `${API_URL}/api/teachers/${user.id}/blocks?academy_id=${academy.id}&date=${selectedDate}`
-          const res = await fetch(url)
+          const res = await authFetch(url)
           if (res.ok) {
             const data = await res.json()
             allBlocks.push(...(data.blocks || []))
@@ -120,7 +144,7 @@ export default function ProfessorAgendaPage() {
       } else {
         // Buscar bloqueios de uma unidade específica
         const url = `${API_URL}/api/teachers/${user.id}/blocks?academy_id=${selectedFranchise}&date=${selectedDate}`
-        const res = await fetch(url)
+        const res = await authFetch(url)
         if (res.ok) {
           const data = await res.json()
           setBlocks(data.blocks || [])
@@ -136,16 +160,15 @@ export default function ProfessorAgendaPage() {
   // Carrega bloqueios do dia
   useEffect(() => {
     fetchBlocks()
-  }, [user?.id, selectedFranchise, selectedDate])
+  }, [user?.id, token, selectedFranchise, selectedDate])
 
   const fetchData = async () => {
-    if (!user?.id) return
+    if (!user?.id || !token) return
 
     try {
       setLoading(true)
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
-      const bookingsRes = await fetch(`${API_URL}/api/bookings?teacher_id=${user.id}`)
+      const bookingsRes = await authFetch(`${API_URL}/api/bookings?teacher_id=${user.id}`)
 
       if (bookingsRes.ok) {
         try {
@@ -163,7 +186,7 @@ export default function ProfessorAgendaPage() {
               if (bookingEnd < now) {
                 // Aula já passou no horário local, marcar como COMPLETED
                 try {
-                  await fetch(`${API_URL}/api/bookings/${b.id}`, {
+                  await authFetch(`${API_URL}/api/bookings/${b.id}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ status: 'COMPLETED' })
@@ -322,12 +345,10 @@ export default function ProfessorAgendaPage() {
     if (!selectedSlot || !user?.id) return
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      
       const [hours, minutes] = selectedSlot.time.split(':')
       const bookingDate = new Date(selectedSlot.date + 'T' + selectedSlot.time + ':00Z')
 
-      const response = await fetch(`${API_URL}/api/bookings`, {
+      const response = await authFetch(`${API_URL}/api/bookings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -358,9 +379,7 @@ export default function ProfessorAgendaPage() {
 
   const handleConfirmBooking = async (bookingId: string) => {
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-
-      const response = await fetch(`${API_URL}/api/bookings/${bookingId}`, {
+      const response = await authFetch(`${API_URL}/api/bookings/${bookingId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'CONFIRMED' })
@@ -378,9 +397,7 @@ export default function ProfessorAgendaPage() {
 
   const handleCancelBooking = async (bookingId: string) => {
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-
-      const response = await fetch(`${API_URL}/api/bookings/${bookingId}`, {
+      const response = await authFetch(`${API_URL}/api/bookings/${bookingId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'CANCELLED' })
@@ -402,7 +419,7 @@ export default function ProfessorAgendaPage() {
         
         // Recarregar créditos do usuário
         if (user?.id) {
-          const userRes = await fetch(`${API_URL}/api/users/${user.id}`)
+          const userRes = await authFetch(`${API_URL}/api/users/${user.id}`)
           if (userRes.ok) {
             const userData = await userRes.json()
             // Atualizar o store com os novos créditos
@@ -437,7 +454,7 @@ export default function ProfessorAgendaPage() {
 
         let removed = 0
         for (const booking of allBookingsInSlot) {
-          const response = await fetch(`${API_URL}/api/bookings/${booking.id}`, {
+          const response = await authFetch(`${API_URL}/api/bookings/${booking.id}`, {
             method: 'DELETE'
           })
           if (response.ok) removed++
@@ -451,7 +468,7 @@ export default function ProfessorAgendaPage() {
       } else {
         // Remover apenas o booking específico (CANCELLED ou unidade específica)
         console.log('🗑️ Removendo booking:', bookingId, 'Status:', selectedBooking?.status)
-        const response = await fetch(`${API_URL}/api/bookings/${bookingId}`, {
+        const response = await authFetch(`${API_URL}/api/bookings/${bookingId}`, {
           method: 'DELETE'
         })
 
@@ -631,7 +648,7 @@ export default function ProfessorAgendaPage() {
                           let totalCreated = 0
                           let academiesBlocked = 0
                           for (const academy of teacherAcademies) {
-                            const res = await fetch(`${API_URL}/api/teachers/${user?.id}/blocks/custom`, {
+                            const res = await authFetch(`${API_URL}/api/teachers/${user?.id}/blocks/custom`, {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({ 
@@ -656,7 +673,7 @@ export default function ProfessorAgendaPage() {
                           await fetchSlots()
                         } else {
                           // Bloquear apenas na unidade selecionada
-                          const res = await fetch(`${API_URL}/api/teachers/${user?.id}/blocks/custom`, {
+                          const res = await authFetch(`${API_URL}/api/teachers/${user?.id}/blocks/custom`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ 
@@ -734,7 +751,7 @@ export default function ProfessorAgendaPage() {
                                 // Desbloquear todos os bloqueios desse horário
                                 let removed = 0
                                 for (const b of blocksAtTime) {
-                                  const res = await fetch(`${API_URL}/api/teachers/${user?.id}/blocks/${b.id}`, { method: 'DELETE' })
+                                  const res = await authFetch(`${API_URL}/api/teachers/${user?.id}/blocks/${b.id}`, { method: 'DELETE' })
                                   if (res.ok) removed++
                                 }
                                 toast.success(`${removed} bloqueio(s) removido(s)!`)
@@ -771,7 +788,7 @@ export default function ProfessorAgendaPage() {
                             onClick={async () => {
                               try {
                                 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-                                const res = await fetch(`${API_URL}/api/teachers/${user?.id}/blocks/${b.id}`, { method: 'DELETE' })
+                                const res = await authFetch(`${API_URL}/api/teachers/${user?.id}/blocks/${b.id}`, { method: 'DELETE' })
                                 if (res.ok) {
                                   toast.success('Bloqueio removido!')
                                   // Recarregar tudo
@@ -1091,7 +1108,7 @@ export default function ProfessorAgendaPage() {
                               onClick={async () => {
                                 try {
                                   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-                                  const res = await fetch(`${API_URL}/api/teachers/${user?.id}/blocks/${selectedBooking.id}`, { method: 'DELETE' })
+                                  const res = await authFetch(`${API_URL}/api/teachers/${user?.id}/blocks/${selectedBooking.id}`, { method: 'DELETE' })
                                   if (res.ok) {
                                     toast.success('Bloqueio removido!')
                                     await fetchData()
@@ -1119,7 +1136,7 @@ export default function ProfessorAgendaPage() {
                                 onClick={async () => {
                                   try {
                                     const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-                                    const res = await fetch(`${API_URL}/api/teachers/${user?.id}/blocks/${otherBooking.id}`, { method: 'DELETE' })
+                                    const res = await authFetch(`${API_URL}/api/teachers/${user?.id}/blocks/${otherBooking.id}`, { method: 'DELETE' })
                                     if (res.ok) {
                                       toast.success('Bloqueio removido!')
                                       await fetchData()
@@ -1185,7 +1202,7 @@ export default function ProfessorAgendaPage() {
                                       onClick={async () => {
                                         try {
                                           const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-                                          const res = await fetch(`${API_URL}/api/teachers/${user?.id}/blocks/${otherBooking.id}`, { method: 'DELETE' })
+                                          const res = await authFetch(`${API_URL}/api/teachers/${user?.id}/blocks/${otherBooking.id}`, { method: 'DELETE' })
                                           if (res.ok) {
                                             toast.success('Bloqueio removido!')
                                             await fetchData()
@@ -1325,7 +1342,7 @@ export default function ProfessorAgendaPage() {
                                 })
 
                                 for (const booking of existingBookings) {
-                                  await fetch(`${API_URL}/api/bookings/${booking.id}`, { method: 'DELETE' })
+                                  await authFetch(`${API_URL}/api/bookings/${booking.id}`, { method: 'DELETE' })
                                 }
 
                                 let created = 0
@@ -1347,7 +1364,7 @@ export default function ProfessorAgendaPage() {
                                       status: 'AVAILABLE'
                                     }
                                     
-                                    const response = await fetch(`${API_URL}/api/bookings`, {
+                                    const response = await authFetch(`${API_URL}/api/bookings`, {
                                       method: 'POST',
                                       headers: { 'Content-Type': 'application/json' },
                                       body: JSON.stringify(payload)
