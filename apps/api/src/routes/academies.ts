@@ -5,7 +5,7 @@ import { requireAuth, requireRole } from '../middleware/auth'
 const router = Router()
 
 // GET /api/academies - Listar todas as academias (depreciado, usar /units)
-router.get('/', requireAuth, requireRole(['FRANQUEADORA', 'FRANQUIA']), async (req, res) => {
+router.get('/', requireAuth, requireRole(['FRANQUEADORA', 'FRANQUIA', 'TEACHER', 'PROFESSOR']), async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('academies')
@@ -23,7 +23,7 @@ router.get('/', requireAuth, requireRole(['FRANQUEADORA', 'FRANQUIA']), async (r
 })
 
 // GET /api/academies/:id - Buscar academia específica (depreciado, usar /units)
-router.get('/:id', requireAuth, requireRole(['FRANQUEADORA', 'FRANQUIA']), async (req, res) => {
+router.get('/:id', requireAuth, requireRole(['FRANQUEADORA', 'FRANQUIA', 'TEACHER', 'PROFESSOR']), async (req, res) => {
   try {
     const { id } = req.params
 

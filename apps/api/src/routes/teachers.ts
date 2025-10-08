@@ -379,7 +379,7 @@ router.get('/:id', async (req, res) => {
         )
       `)
       .eq('id', id)
-      .eq('role', 'TEACHER')
+      .in('role', ['TEACHER', 'PROFESSOR'])
       .single()
 
     if (error) {
@@ -391,7 +391,13 @@ router.get('/:id', async (req, res) => {
     }
 
     // Se não tem teacher_profile, criar um automaticamente
-    if (!teacher.teacher_profiles || teacher.teacher_profiles.length === 0) {
+    let profiles = Array.isArray(teacher.teacher_profiles)
+      ? teacher.teacher_profiles
+      : teacher.teacher_profiles
+        ? [teacher.teacher_profiles]
+        : []
+
+    if (profiles.length === 0) {
       const { data: newProfile } = await supabase
         .from('teacher_profiles')
         .insert({
@@ -405,10 +411,13 @@ router.get('/:id', async (req, res) => {
         .select()
         .single()
 
-      teacher.teacher_profiles = newProfile ? [newProfile] : []
+      profiles = newProfile ? [newProfile] : []
     }
 
-    res.json(teacher)
+    res.json({
+      ...teacher,
+      teacher_profiles: profiles
+    })
 
   } catch (error) {
     console.error('Erro interno:', error)

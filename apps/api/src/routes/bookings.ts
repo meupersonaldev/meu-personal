@@ -29,11 +29,193 @@ const updateBookingSchema = z.object({
 
 // GET /api/bookings - Listar agendamentos (endpoint canônico)
 router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
-  const { unit_id, status, from, to } = req.query
+  const { unit_id, status, from, to, teacher_id } = req.query
   const user = req.user
 
-  if (!unit_id) {
+  const unitId = Array.isArray(unit_id) ? unit_id[0] : unit_id
+  const teacherId = Array.isArray(teacher_id) ? teacher_id[0] : teacher_id
+
+  const formatBooking = (booking: any) => {
+    const unit = booking.unit || {}
+    const academy = booking.academy || {}
+    const student = booking.student || {}
+    const teacher = booking.teacher || {}
+
+    const franchiseName = unit.name || academy.name || null
+    const franchiseAddressParts = unit.id
+      ? [unit.address, unit.city, unit.state]
+      : [academy.city, academy.state]
+
+    return {
+      id: booking.id,
+      studentId: booking.student_id || undefined,
+      studentName: student.name || undefined,
+      teacherId: booking.teacher_id,
+      teacherName: teacher.name || undefined,
+      franchiseId: booking.unit_id || booking.franchise_id || undefined,
+      franchiseName,
+      franchiseAddress: franchiseAddressParts.filter(Boolean).join(', ') || undefined,
+      date: booking.date,
+      duration: booking.duration ?? 60,
+      status: booking.status || booking.status_canonical || 'PENDING',
+      notes: booking.notes || undefined,
+      creditsCost: booking.credits_cost ?? 0
+    }
+  }
+
+  if (!unitId && !teacherId) {
     return res.status(400).json({ error: 'unit_id é obrigatório' })
+  }
+
+  // Compatibilidade: permitir consultas apenas por teacher_id (legado)
+  if (!unitId && teacherId) {
+    if ((user.role === 'TEACHER' || user.role === 'PROFESSOR') && user.userId !== teacherId) {
+      return res.status(403).json({ error: 'Acesso não autorizado a este professor' })
+    }
+
+    const { data: teacherBookings, error } = await supabase
+      .from('bookings')
+      .select(`
+        id,
+        student_id,
+        teacher_id,
+        unit_id,
+        franchise_id,
+        date,
+        duration,
+        status,
+        status_canonical,
+        notes,
+        credits_cost
+      `)
+      .eq('teacher_id', teacherId)
+      .order('date', { ascending: true })
+
+    if (error) {
+      console.error('Error fetching teacher bookings (legacy):', error)
+      return res.status(500).json({ error: 'Erro ao buscar agendamentos' })
+    }
+
+    let results = teacherBookings || []
+
+    if (status) {
+      results = results.filter((booking: any) => {
+        const currentStatus = booking.status || booking.status_canonical
+        return currentStatus === status
+      })
+    }
+
+    if (from) {
+      const fromDate = new Date(String(from))
+      if (!Number.isNaN(fromDate.getTime())) {
+        results = results.filter((booking: any) => new Date(booking.date) >= fromDate)
+      }
+    }
+
+    if (to) {
+      const toDate = new Date(String(to))
+      if (!Number.isNaN(toDate.getTime())) {
+        results = results.filter((booking: any) => new Date(booking.date) <= toDate)
+      }
+    }
+
+    const studentIds = Array.from(
+      new Set(
+        results
+          .map((booking: any) => booking.student_id)
+          .filter((id: string | null | undefined): id is string => Boolean(id))
+      )
+    )
+
+    const unitIds = Array.from(
+      new Set(
+        results
+          .map((booking: any) => booking.unit_id)
+          .filter((id: string | null | undefined): id is string => Boolean(id))
+      )
+    )
+
+    const franchiseIds = Array.from(
+      new Set(
+        results
+          .map((booking: any) => booking.franchise_id)
+          .filter((id: string | null | undefined): id is string => Boolean(id))
+      )
+    )
+
+    let studentsMap: Record<string, { id: string; name?: string }> = {}
+    let unitsMap: Record<string, { id: string; name?: string; city?: string; state?: string; address?: string | null }> = {}
+    let academiesMap: Record<string, { id: string; name?: string; city?: string; state?: string; address?: string | null }> = {}
+
+    if (studentIds.length > 0) {
+      const { data: studentsData } = await supabase
+        .from('users')
+        .select('id, name')
+        .in('id', studentIds)
+
+      if (studentsData) {
+        studentsMap = studentsData.reduce((acc, curr) => {
+          acc[curr.id] = curr
+          return acc
+        }, {} as typeof studentsMap)
+      }
+    }
+
+    if (unitIds.length > 0) {
+      const { data: unitsData } = await supabase
+        .from('units')
+        .select('id, name, city, state, address')
+        .in('id', unitIds)
+
+      if (unitsData) {
+        unitsMap = unitsData.reduce((acc, curr) => {
+          acc[curr.id] = curr
+          return acc
+        }, {} as typeof unitsMap)
+      }
+    }
+
+    if (franchiseIds.length > 0) {
+      const { data: academiesData } = await supabase
+        .from('academies')
+        .select('id, name, city, state, address')
+        .in('id', franchiseIds)
+
+      if (academiesData) {
+        academiesMap = academiesData.reduce((acc, curr) => {
+          acc[curr.id] = curr
+          return acc
+        }, {} as typeof academiesMap)
+      }
+    }
+
+    const bookings = results.map((booking: any) => {
+      const student = booking.student_id ? studentsMap[booking.student_id] : undefined
+      const unit = booking.unit_id ? unitsMap[booking.unit_id] : undefined
+      const academy = booking.franchise_id ? academiesMap[booking.franchise_id] : undefined
+
+      const franchiseName = unit?.name || academy?.name || null
+      const franchiseAddressParts = unit?.id
+        ? [unit.address, unit.city, unit.state]
+        : [academy?.address, academy?.city, academy?.state]
+
+      return {
+        id: booking.id,
+        studentId: booking.student_id || undefined,
+        studentName: student?.name || undefined,
+        teacherId: booking.teacher_id,
+        franchiseId: booking.unit_id || booking.franchise_id || undefined,
+        franchiseName,
+        franchiseAddress: franchiseAddressParts.filter(Boolean).join(', ') || undefined,
+        date: booking.date,
+        duration: booking.duration ?? 60,
+        status: booking.status || booking.status_canonical || 'PENDING',
+        notes: booking.notes || undefined,
+        creditsCost: booking.credits_cost ?? 0
+      }
+    })
+
+    return res.json({ bookings })
   }
 
   // Verificar se o usuário tem acesso à unidade
@@ -42,7 +224,7 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
       .from('user_units')
       .select('unit_id')
       .eq('user_id', user.userId)
-      .eq('unit_id', unit_id);
+      .eq('unit_id', unitId)
 
     if (!userUnits || userUnits.length === 0) {
       return res.status(403).json({ error: 'Acesso não autorizado a esta unidade' })
@@ -54,24 +236,72 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
       .from('teacher_units')
       .select('unit_id')
       .eq('teacher_id', user.userId)
-      .eq('unit_id', unit_id);
+      .eq('unit_id', unitId)
 
     if (!teacherUnits || teacherUnits.length === 0) {
       return res.status(403).json({ error: 'Acesso não autorizado a esta unidade' })
     }
   }
 
-  const filters: any = {}
-  if (status) filters.status = status
-  if (from) filters.from = from
-  if (to) filters.to = to
+  const { data: unitBookings, error } = await supabase
+    .from('bookings')
+    .select(`
+      id,
+      student_id,
+      teacher_id,
+      unit_id,
+      franchise_id,
+      date,
+      duration,
+      status,
+      status_canonical,
+      notes,
+      credits_cost,
+      student:users!bookings_student_id_fkey (id, name),
+      teacher:users!bookings_teacher_id_fkey (id, name),
+      unit:units!bookings_unit_id_fkey (id, name, city, state, address),
+      academy:academies!bookings_franchise_id_fkey (id, name, city, state, address)
+    `)
+    .or(`unit_id.eq.${unitId},franchise_id.eq.${unitId}`)
+    .order('date', { ascending: true })
 
-  const bookings = await bookingCanonicalService.getBookingsByUser(
-    user.userId,
-    user.role,
-    filters
-  )
+  if (error) {
+    console.error('Error fetching bookings by unit:', error)
+    return res.status(500).json({ error: 'Erro ao buscar agendamentos' })
+  }
 
+  let results = unitBookings || []
+
+  if (user.role === 'TEACHER' || user.role === 'PROFESSOR') {
+    results = results.filter((booking: any) => booking.teacher_id === user.userId)
+  }
+
+  if (user.role === 'STUDENT' || user.role === 'ALUNO') {
+    results = results.filter((booking: any) => booking.student_id === user.userId)
+  }
+
+  if (status) {
+    results = results.filter((booking: any) => {
+      const currentStatus = booking.status || booking.status_canonical
+      return currentStatus === status
+    })
+  }
+
+  if (from) {
+    const fromDate = new Date(String(from))
+    if (!Number.isNaN(fromDate.getTime())) {
+      results = results.filter((booking: any) => new Date(booking.date) >= fromDate)
+    }
+  }
+
+  if (to) {
+    const toDate = new Date(String(to))
+    if (!Number.isNaN(toDate.getTime())) {
+      results = results.filter((booking: any) => new Date(booking.date) <= toDate)
+    }
+  }
+
+  const bookings = results.map(formatBooking)
   res.json({ bookings })
 }))
 
@@ -279,6 +509,3 @@ router.delete('/:id', requireAuth, asyncErrorHandler(async (req, res) => {
 }))
 
 export default router
-
-
-

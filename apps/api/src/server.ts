@@ -122,12 +122,7 @@ app.get('/health', (req, res) => {
 
 // Routes
 import authRoutes from './routes/auth'
-import teachersRoutes from './routes/teachers'
-import teacherStudentsRoutes from './routes/teacher-students'
-import teacherPreferencesRoutes from './routes/teacher-preferences'
 import usersRoutes from './routes/users'
-import academiesRoutes from './routes/academies'
-import studentsRoutes from './routes/students'
 import bookingsRoutes from './routes/bookings'
 import notificationsRoutes from './routes/notifications'
 import approvalsRoutes from './routes/approvals'
@@ -139,10 +134,13 @@ import financialRoutes from './routes/financial'
 import calendarRoutes from './routes/calendar'
 import timeSlotsRoutes from './routes/time-slots'
 import uploadRoutes from './routes/upload'
-import studentBookingsRoutes from './routes/student-bookings'
 import franqueadoraRoutes from './routes/franqueadora'
 import adminRoutes from './routes/admin'
 import packagesRoutes from './routes/packages'
+import teachersRoutes from './routes/teachers'
+import teacherPreferencesRoutes from './routes/teacher-preferences'
+import teacherStudentsRoutes from './routes/teacher-students'
+import academiesRoutes from './routes/academies'
 import { bookingScheduler } from './jobs/booking-scheduler'
 
 // Servir arquivos estáticos de uploads
@@ -150,11 +148,6 @@ app.use('/uploads', express.static('uploads'))
 // SEGURANÇA CRÍTICA: Rate limit específico para auth (mais restritivo)
 app.use('/api/auth', authRateLimit, authRoutes)
 app.use('/api/users', usersRoutes)
-app.use('/api/academies', academiesRoutes)
-app.use('/api/teachers', teachersRoutes)
-app.use('/api/teachers', teacherStudentsRoutes)
-app.use('/api/teachers', teacherPreferencesRoutes)
-app.use('/api/bookings', studentBookingsRoutes)
 app.use('/api/bookings', bookingsRoutes)
 app.use('/api/checkins', checkinsRoutes)
 app.use('/api/financial', financialRoutes)
@@ -164,6 +157,10 @@ app.use('/api/notifications', notificationsRoutes)
 app.use('/api/time-slots', timeSlotsRoutes)
 app.use('/api/checkout', checkoutRoutes)
 app.use('/api/packages', packagesRoutes)
+app.use('/api/academies', academiesRoutes)
+app.use('/api/teachers', teachersRoutes)
+app.use('/api/teachers', teacherPreferencesRoutes)
+app.use('/api/teachers', teacherStudentsRoutes)
 // SEGURANÇA CRÍTICA: Rate limit específico para uploads
 app.use('/api', uploadRateLimit, uploadRoutes)
 app.use('/api/franqueadora', franqueadoraRoutes)
