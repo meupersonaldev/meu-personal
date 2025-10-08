@@ -7,7 +7,6 @@ import { Eye, EyeOff, Loader2, ArrowLeft, Users, BarChart3, CheckCircle } from '
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Logo } from '@/components/ui/logo'
 import { useFranquiaStore } from '@/lib/stores/franquia-store'
 
 export default function FranquiaLoginPage() {
@@ -66,12 +65,9 @@ export default function FranquiaLoginPage() {
             Voltar para Seja Franqueado
           </Link>
 
-          {/* Logo */}
+          {/* Heading */}
           <div className="text-center mb-8">
-            <div className="flex justify-center mb-4">
-              <Logo size="xl" variant="default" showText={false} href={undefined} />
-            </div>
-            <h1 className="text-3xl font-bold text-white mb-2 relative -mt-[90px]">
+            <h1 className="text-3xl font-bold text-white mb-2">
               Painel da Franquia
             </h1>
             <p className="text-white/80">

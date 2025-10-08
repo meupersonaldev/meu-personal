@@ -27,30 +27,19 @@ export function useTeacherAcademies() {
       try {
         setLoading(true)
         setError(null)
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
-        // Buscar preferências do professor (academy_ids)
-        const prefRes = await fetch(`${API_URL}/api/teachers/${user.id}/preferences`)
-        if (!prefRes.ok) {
-          throw new Error('Erro ao buscar preferências')
-        }
-        const pref = await prefRes.json()
-        const academyIds = pref.academy_ids || []
+        const academiesRes = await fetch(
+          `${API_URL}/api/teachers/${user.id}/academies`,
+          { credentials: 'include' }
+        )
 
-        // Buscar todas as academias
-        const academiesRes = await fetch(`${API_URL}/api/academies`)
         if (!academiesRes.ok) {
-          throw new Error('Erro ao buscar academias')
+          throw new Error('Erro ao buscar academias do professor')
         }
+
         const academiesData = await academiesRes.json()
-        const allAcademies = academiesData.academies || []
-
-        // Filtrar apenas as academias configuradas pelo professor
-        const filtered = academyIds.length > 0
-          ? allAcademies.filter((a: Academy) => academyIds.includes(a.id))
-          : allAcademies
-
-        setAcademies(filtered)
+        setAcademies(academiesData.academies || [])
       } catch (err) {
         console.error('Erro ao carregar academias do professor:', err)
         setError(err instanceof Error ? err.message : 'Erro desconhecido')
