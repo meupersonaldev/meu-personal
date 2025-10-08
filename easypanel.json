@@ -2,23 +2,6 @@
   "version": "0.7.0",
   "name": "meu-personal",
   "services": {
-    "postgres": {
-      "image": "postgres:15-alpine",
-      "environment": {
-        "POSTGRES_DB": "meu_personal",
-        "POSTGRES_USER": "postgres",
-        "POSTGRES_PASSWORD": "{POSTGRES_PASSWORD}"
-      },
-      "ports": ["5432:5432"],
-      "volumes": [
-        {
-          "type": "volume",
-          "source": "postgres_data",
-          "target": "/var/lib/postgresql/data"
-        }
-      ],
-      "restart": "unless-stopped"
-    },
     "redis": {
       "image": "redis:7-alpine",
       "ports": ["6379:6379"],
@@ -39,7 +22,7 @@
       },
       "environment": {
         "NODE_ENV": "production",
-        "DATABASE_URL": "postgresql://postgres:{POSTGRES_PASSWORD}@postgres:5432/meu_personal",
+        "DATABASE_URL": "{DATABASE_URL}",
         "REDIS_URL": "redis://redis:6379",
         "JWT_SECRET": "{JWT_SECRET}",
         "FRONTEND_URL": "{FRONTEND_URL}",
@@ -58,6 +41,7 @@
         }
       ],
       "restart": "unless-stopped",
+      "depends_on": ["redis"],
       "healthCheck": {
         "test": ["CMD", "curl", "-f", "http://localhost:3001/health"],
         "interval": "30s",
@@ -79,6 +63,7 @@
       },
       "ports": ["3000:3000"],
       "restart": "unless-stopped",
+      "depends_on": ["api"],
       "healthCheck": {
         "test": ["CMD", "curl", "-f", "http://localhost:3000"],
         "interval": "30s",
@@ -88,7 +73,6 @@
     }
   },
   "volumes": {
-    "postgres_data": {},
     "redis_data": {}
   },
   "networks": {
@@ -97,12 +81,12 @@
     }
   },
   "environment": {
-    "POSTGRES_PASSWORD": {
-      "description": "Senha do banco PostgreSQL",
+    "DATABASE_URL": {
+      "description": "URL de conexão do Supabase (postgresql://...)",
       "required": true
     },
     "JWT_SECRET": {
-      "description": "Secret para autenticação JWT",
+      "description": "Secret para autenticação JWT (use: openssl rand -base64 32)",
       "required": true
     },
     "FRONTEND_URL": {
@@ -125,7 +109,7 @@
       "required": true
     },
     "SUPABASE_URL": {
-      "description": "URL do Supabase",
+      "description": "URL do projeto Supabase (https://...supabase.co)",
       "required": true
     },
     "SUPABASE_ANON_KEY": {
@@ -133,7 +117,7 @@
       "required": true
     },
     "SUPABASE_SERVICE_KEY": {
-      "description": "Chave de serviço do Supabase",
+      "description": "Chave de serviço do Supabase (tem acesso total ao banco)",
       "required": true
     }
   },

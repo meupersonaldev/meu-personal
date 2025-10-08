@@ -1,20 +1,6 @@
 version: '3.8'
 
 services:
-  postgres:
-    image: postgres:15-alpine
-    container_name: meu-personal-db
-    environment:
-      POSTGRES_DB: meu_personal
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres123
-    ports:
-      - '5432:5432'
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - meu-personal-network
-
   redis:
     image: redis:7-alpine
     container_name: meu-personal-redis
@@ -24,6 +10,7 @@ services:
       - redis_data:/data
     networks:
       - meu-personal-network
+    restart: unless-stopped
 
   api:
     build:
@@ -34,12 +21,16 @@ services:
       - '3001:3001'
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=postgresql://postgres:postgres123@postgres:5432/meu_personal
+      - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=your_jwt_secret_here_change_in_production
-      - FRONTEND_URL=http://localhost:3000
+      - JWT_SECRET=${JWT_SECRET}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - RESEND_FROM_EMAIL=${RESEND_FROM_EMAIL}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
     depends_on:
-      - postgres
       - redis
     volumes:
       - ./apps/api/uploads:/app/uploads
@@ -56,9 +47,9 @@ services:
       - '3000:3000'
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=http://localhost:3001
-      - NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-      - NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+      - NEXT_PUBLIC_SUPABASE_URL=${SUPABASE_URL}
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
     depends_on:
       - api
     restart: unless-stopped
@@ -66,7 +57,6 @@ services:
       - meu-personal-network
 
 volumes:
-  postgres_data:
   redis_data:
 
 networks:

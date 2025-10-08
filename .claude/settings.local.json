@@ -32,7 +32,8 @@
       "Bash(del:*)",
       "Bash(tasklist:*)",
       "WebFetch(domain:www.figma.com)",
-      "Bash(if not exist \"apps\\api\\uploads\" mkdir appsapiuploads)"
+      "Bash(if not exist \"apps\\api\\uploads\" mkdir appsapiuploads)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []
