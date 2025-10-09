@@ -86,13 +86,8 @@ export default function Header({ className }: HeaderProps) {
                   Seja Franqueado
                 </Link>
                 <Link href="/login">
-                  <Button variant="ghost" size="sm" className="text-white hover:bg-meu-primary-dark hover:text-white">
-                    Entrar
-                  </Button>
-                </Link>
-                <Link href="/cadastro">
                   <Button size="sm" className="bg-meu-accent text-meu-primary hover:bg-meu-accent/90">
-                    Cadastrar
+                    Comece agora
                   </Button>
                 </Link>
               </div>
