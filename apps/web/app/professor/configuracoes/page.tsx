@@ -372,23 +372,23 @@ export default function ConfiguracoesPage() {
 
   return (
     <ProfessorLayout>
-      <div className="p-6 space-y-6">
+      <div className="px-4 py-6 space-y-6 md:px-6">
         {/* Header */}
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Configurações</h1>
-          <p className="text-gray-600">Gerencie suas informações e preferências</p>
+        <div className="space-y-2">
+          <h1 className="text-2xl font-bold text-gray-900 md:text-3xl">Configurações</h1>
+          <p className="text-sm text-gray-600 md:text-base">Gerencie suas informações e preferências</p>
         </div>
 
         {/* Tabs */}
         <div className="border-b border-gray-200">
-          <nav className="flex space-x-8">
+          <nav className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0 sm:gap-6">
             {tabs.map((tab) => {
               const Icon = tab.icon
               return (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center space-x-2 py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                  className={`flex flex-shrink-0 items-center gap-2 border-b-2 px-1 py-3 text-sm font-medium transition-colors sm:py-4 ${
                     activeTab === tab.id
                       ? 'border-meu-primary text-meu-primary'
                       : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
