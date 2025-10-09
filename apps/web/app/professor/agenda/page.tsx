@@ -540,17 +540,17 @@ export default function ProfessorAgendaPage() {
 
   return (
     <ProfessorLayout>
-      <div className="p-6 space-y-6">
+      <div className="px-4 py-6 space-y-6 md:px-6">
         {/* Controles de Bloqueio */}
         <Card>
           <CardContent className="p-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
-              <div className="flex items-center space-x-3">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:items-end lg:grid-cols-3">
+              <div className="flex items-center gap-3">
                 <MapPin className="h-5 w-5 text-gray-500" />
                 <select
                   value={selectedFranchise}
                   onChange={(e) => setSelectedFranchise(e.target.value)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-meu-primary w-full"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2 focus:ring-2 focus:ring-meu-primary md:w-auto"
                 >
                   <option value="todas">Todas as Unidades</option>
                   {teacherAcademies.map(franchise => (
@@ -560,14 +560,14 @@ export default function ProfessorAgendaPage() {
                   ))}
                 </select>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Data</label>
+              <div className="md:max-w-sm">
+                <label className="mb-1 block text-sm font-medium text-gray-700">Data</label>
                 <input
                   type="date"
                   value={selectedDate}
                   onChange={(e) => setSelectedDate(e.target.value)}
                   min={new Date().toISOString().split('T')[0]}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-transparent focus:ring-2 focus:ring-meu-primary"
                 />
               </div>
             </div>
@@ -579,7 +579,7 @@ export default function ProfessorAgendaPage() {
                   Selecione os horários para bloquear
                   {selectedFranchise === 'todas' ? ' em todas as unidades' : ` na ${teacherAcademies.find(a => a.id === selectedFranchise)?.name}`}:
                 </p>
-                <div className="grid grid-cols-4 md:grid-cols-8 gap-2 mb-3">
+                <div className="grid grid-cols-3 gap-2 mb-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
                   {horariosDisponiveis.map((hora) => {
                     // Verificar se já está bloqueado
                     const isBlocked = blocks.some(b => {
@@ -612,10 +612,11 @@ export default function ProfessorAgendaPage() {
                     )
                   })}
                 </div>
-                <div className="flex items-center space-x-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:space-x-3">
                   <Button
                     size="sm"
                     variant="outline"
+                    className="w-full sm:w-auto"
                     onClick={() => {
                       // Selecionar apenas os não bloqueados
                       const available = horariosDisponiveis.filter(hora => {
@@ -633,6 +634,7 @@ export default function ProfessorAgendaPage() {
                   <Button
                     size="sm"
                     variant="outline"
+                    className="w-full sm:w-auto"
                     onClick={() => setSelectedHoursToBlock([])}
                   >
                     Limpar seleção
@@ -815,18 +817,18 @@ export default function ProfessorAgendaPage() {
           </CardContent>
         </Card>
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Minha Agenda</h1>
+            <h1 className="text-2xl font-bold text-gray-900 md:text-3xl md:mb-2">Minha Agenda</h1>
             <p className="text-gray-600">Gerencie sua disponibilidade e aulas</p>
           </div>
           
-          <div className="flex items-center space-x-3">
+          <div className="flex w-full items-center gap-2 md:w-auto md:justify-end">
             <MapPin className="h-5 w-5 text-gray-500" />
             <select
               value={selectedFranchise}
               onChange={(e) => setSelectedFranchise(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-meu-primary"
+              className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2 focus:ring-2 focus:ring-meu-primary md:w-auto"
             >
               <option value="todas">Todas as Unidades</option>
               {teacherAcademies.map((franchise) => (
@@ -841,32 +843,32 @@ export default function ProfessorAgendaPage() {
         {/* Legenda */}
         <Card>
           <CardContent className="p-4">
-            <div className="flex flex-wrap gap-4">
-              <div className="flex items-center space-x-2">
-                <div className="w-4 h-4 bg-green-500 rounded"></div>
-                <span className="text-sm">Disponível</span>
+            <div className="flex flex-wrap items-center gap-3 text-xs sm:text-sm">
+              <div className="flex items-center gap-2">
+                <div className="h-4 w-4 rounded bg-green-500"></div>
+                <span className="font-medium">Disponível</span>
               </div>
-              <div className="flex items-center space-x-2">
-                <div className="w-4 h-4 bg-yellow-500 rounded"></div>
-                <span className="text-sm">Pendente</span>
+              <div className="flex items-center gap-2">
+                <div className="h-4 w-4 rounded bg-yellow-500"></div>
+                <span className="font-medium">Pendente</span>
               </div>
-              <div className="flex items-center space-x-2">
-                <div className="w-4 h-4 bg-blue-500 rounded"></div>
-                <span className="text-sm">Confirmada</span>
+              <div className="flex items-center gap-2">
+                <div className="h-4 w-4 rounded bg-blue-500"></div>
+                <span className="font-medium">Confirmada</span>
               </div>
-              <div className="flex items-center space-x-2">
-                <div className="w-4 h-4 bg-gray-500 rounded"></div>
-                <span className="text-sm">Concluída</span>
+              <div className="flex items-center gap-2">
+                <div className="h-4 w-4 rounded bg-gray-500"></div>
+                <span className="font-medium">Concluída</span>
               </div>
-              <div className="flex items-center space-x-2">
-                <div className="w-4 h-4 bg-orange-500 rounded"></div>
-                <span className="text-sm">Bloqueado</span>
+              <div className="flex items-center gap-2">
+                <div className="h-4 w-4 rounded bg-orange-500"></div>
+                <span className="font-medium">Bloqueado</span>
               </div>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-2">
                 <div className="w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
                   1
                 </div>
-                <span className="text-sm">Cancelamento(s) no horário</span>
+                <span className="font-medium">Cancelamento(s) no horário</span>
               </div>
             </div>
           </CardContent>
@@ -875,8 +877,8 @@ export default function ProfessorAgendaPage() {
         {/* Navegação da Semana */}
         <Card>
           <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <Button variant="outline" size="sm" onClick={() => navigateWeek('prev')}>
+            <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-between">
+              <Button variant="outline" size="sm" onClick={() => navigateWeek('prev')} className="w-full sm:w-auto">
                 <ChevronLeft className="h-4 w-4" />
               </Button>
               
@@ -890,7 +892,7 @@ export default function ProfessorAgendaPage() {
                 </p>
               </div>
               
-              <Button variant="outline" size="sm" onClick={() => navigateWeek('next')}>
+              <Button variant="outline" size="sm" onClick={() => navigateWeek('next')} className="w-full sm:w-auto">
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
@@ -907,14 +909,16 @@ export default function ProfessorAgendaPage() {
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
-              <div className="min-w-full">
+              <div className="min-w-[720px] md:min-w-full">
                 {/* Cabeçalho dos dias */}
-                <div className="grid grid-cols-8 gap-2 mb-4">
-                  <div className="p-3 text-center font-medium text-gray-500">Horário</div>
+                <div className="grid grid-cols-8 gap-2 md:gap-3 mb-4">
+                  <div className="rounded-lg bg-gray-50 p-2 text-center text-xs font-medium text-gray-500 sm:text-sm">
+                    Horário
+                  </div>
                   {weekDays.map((day) => (
-                    <div key={day.toISOString()} className="p-3 text-center">
-                      <div className="font-medium text-gray-900">{diasSemana[day.getDay()]}</div>
-                      <div className="text-sm text-gray-500">{day.getDate()}</div>
+                    <div key={day.toISOString()} className="rounded-lg bg-gray-50 p-2 text-center">
+                      <div className="text-xs font-medium text-gray-900 sm:text-sm">{diasSemana[day.getDay()]}</div>
+                      <div className="text-xs text-gray-500 sm:text-sm">{day.getDate()}</div>
                     </div>
                   ))}
                 </div>
@@ -922,8 +926,8 @@ export default function ProfessorAgendaPage() {
                 {/* Grade de horários */}
                 <div className="space-y-2">
                   {horariosDisponiveis.map(time => (
-                    <div key={time} className="grid grid-cols-8 gap-2">
-                      <div className="p-3 text-center font-medium text-gray-700 bg-gray-50 rounded-lg">
+                    <div key={time} className="grid grid-cols-8 gap-2 md:gap-3">
+                      <div className="rounded-lg bg-gray-50 p-2 text-center text-xs font-medium text-gray-700 sm:text-sm">
                         {time}
                       </div>
                       {weekDays.map(day => {
@@ -985,7 +989,7 @@ export default function ProfessorAgendaPage() {
                             <button
                               onClick={() => handleSlotClick(day, time)}
                               disabled={isPast}
-                              className={`w-full h-16 rounded-lg text-xs font-medium transition-all ${
+                              className={`h-14 w-full rounded-lg text-[11px] font-medium transition-all sm:text-xs md:h-16 ${
                                 booking
                                   ? `${getStatusColor(booking.status)} text-white hover:opacity-80`
                                   : isPast

@@ -5,8 +5,16 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import ProfessorLayout from '@/components/layout/professor-layout'
 import { toast } from 'sonner'
-import { QrCode, Camera, AlertCircle, Loader2, Link as LinkIcon } from 'lucide-react'
+import {
+  QrCode,
+  Camera,
+  AlertCircle,
+  Loader2,
+  Link as LinkIcon,
+  ArrowLeft
+} from 'lucide-react'
 
 // Tipagem global para o script externo html5-qrcode
 declare global {
@@ -261,68 +269,94 @@ export default function ProfessorCheckinScanPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
-      <Card className="w-full max-w-lg p-6">
-        <div className="text-center mb-4">
-          <QrCode className="h-10 w-10 text-meu-primary mx-auto mb-2" />
-          <h1 className="text-2xl font-bold text-gray-900">Check-in - Ler QR Code</h1>
-          <p className="text-gray-600">Aponte a câmera para o QR Code da portaria</p>
-        </div>
-
-        <div className="rounded-lg overflow-hidden border border-gray-200 bg-black/5">
-          <div id={readerId} className="w-full aspect-video flex items-center justify-center">
-            {loading && (
-              <div className="py-16 text-center text-gray-600">
-                <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
-                Iniciando câmera...
-              </div>
-            )}
-            {!loading && !cameraReady && (
-              <div className="py-10 text-center text-gray-600">
-                <AlertCircle className="h-6 w-6 mx-auto mb-2" />
-                Não foi possível acessar a câmera. Use a entrada manual abaixo.
-                {notSecureContext && (
-                  <div className="text-xs text-amber-700 mt-2">
-                    Dica: Ative HTTPS (ou use localhost) para liberar a câmera neste navegador.
-                  </div>
-                )}
-                <div className="mt-4">
-                  <Button variant="outline" onClick={loadAndStart}>Tentar novamente</Button>
-                </div>
-              </div>
-            )}
-            {/* Vídeo para fallback com BarcodeDetector */}
-            {usingBarcodeDetector && (
-              <video ref={videoRef} className="w-full h-full object-cover" muted playsInline />
-            )}
-          </div>
-        </div>
-
-        <div className="mt-6 space-y-3">
-          <div className="flex items-center gap-2 text-sm text-gray-600">
-            <Camera className="h-4 w-4" />
-            <span>
-              Se a câmera não abrir, verifique as permissões do navegador ou use a entrada manual.
-            </span>
-          </div>
-
-          <form onSubmit={handleManualSubmit} className="flex gap-2">
-            <input
-              type="text"
-              value={manualValue}
-              onChange={(e) => setManualValue(e.target.value)}
-              placeholder="Cole aqui o link /checkin/a/{academyId} ou a URL lida do QR"
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-meu-primary focus:border-transparent"
-            />
-            <Button type="submit" variant="outline">
-              <LinkIcon className="h-4 w-4 mr-2" /> Abrir
+    <ProfessorLayout>
+      <div className="flex min-h-[70vh] items-center justify-center px-4 py-8 md:px-6">
+        <Card className="w-full max-w-xl p-6 md:p-8">
+          <div className="mb-4 flex items-center justify-between">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="-ml-2"
+              onClick={() => router.back()}
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Voltar
             </Button>
-          </form>
-          <div className="text-xs text-gray-500">
-            Entrada manual = cole o endereço que o QR representa. Ex.: <code>/checkin/a/SEU_ACADEMY_ID</code> ou a URL completa contendo esse caminho.
           </div>
-        </div>
-      </Card>
-    </div>
+
+          <div className="mb-4 text-center md:mb-6">
+            <QrCode className="mx-auto mb-2 h-10 w-10 text-meu-primary" />
+            <h1 className="text-2xl font-bold text-gray-900">Check-in - Ler QR Code</h1>
+            <p className="text-gray-600">
+              Aponte a câmera para o QR Code da portaria
+            </p>
+          </div>
+
+          <div className="overflow-hidden rounded-lg border border-gray-200 bg-black/5">
+            <div id={readerId} className="flex aspect-video w-full items-center justify-center">
+              {loading && (
+                <div className="py-16 text-center text-gray-600">
+                  <Loader2 className="mx-auto mb-2 h-8 w-8 animate-spin" />
+                  Iniciando câmera...
+                </div>
+              )}
+              {!loading && !cameraReady && (
+                <div className="py-10 text-center text-gray-600">
+                  <AlertCircle className="mx-auto mb-2 h-6 w-6" />
+                  Não foi possível acessar a câmera. Use a entrada manual abaixo.
+                  {notSecureContext && (
+                    <div className="mt-2 text-xs text-amber-700">
+                      Dica: Ative HTTPS (ou use localhost) para liberar a câmera neste navegador.
+                    </div>
+                  )}
+                  <div className="mt-4">
+                    <Button variant="outline" onClick={loadAndStart}>
+                      Tentar novamente
+                    </Button>
+                  </div>
+                </div>
+              )}
+              {/* Vídeo para fallback com BarcodeDetector */}
+              {usingBarcodeDetector && (
+                <video
+                  ref={videoRef}
+                  className="h-full w-full object-cover"
+                  muted
+                  playsInline
+                />
+              )}
+            </div>
+          </div>
+
+          <div className="mt-6 space-y-3">
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <Camera className="h-4 w-4" />
+              <span>
+                Se a câmera não abrir, verifique as permissões do navegador ou use a entrada
+                manual.
+              </span>
+            </div>
+
+            <form onSubmit={handleManualSubmit} className="flex flex-col gap-3 sm:flex-row">
+              <input
+                type="text"
+                value={manualValue}
+                onChange={(e) => setManualValue(e.target.value)}
+                placeholder="Cole aqui o link /checkin/a/{academyId} ou a URL lida do QR"
+                className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-meu-primary"
+              />
+              <Button type="submit" variant="outline" className="shrink-0">
+                <LinkIcon className="mr-2 h-4 w-4" /> Abrir
+              </Button>
+            </form>
+            <div className="text-xs text-gray-500">
+              Entrada manual = cole o endereço que o QR representa. Ex.:{' '}
+              <code>/checkin/a/SEU_ACADEMY_ID</code> ou a URL completa contendo esse caminho.
+            </div>
+          </div>
+        </Card>
+      </div>
+    </ProfessorLayout>
   )
 }
