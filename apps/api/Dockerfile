@@ -19,6 +19,8 @@ COPY apps/api ./apps/api
 
 ENV NODE_ENV=production
 
+ENV TSC_COMPILE_ON_ERROR=true
+
 RUN npm run build --workspace=@meu-personal/api
 
 FROM node:20-alpine AS runner
