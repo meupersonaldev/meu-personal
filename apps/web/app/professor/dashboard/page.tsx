@@ -201,118 +201,123 @@ export default function ProfessorDashboardPage() {
         </section>
 
         <section>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 md:gap-6">
-            <Card className="border border-gray-200 shadow-sm hover:shadow-lg transition-all">
-              <CardContent className="p-5 md:p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-meu-primary to-meu-primary-dark text-white">
-                    <DollarSign className="h-5 w-5" />
+          <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+            <div className="grid min-w-[620px] grid-cols-1 gap-3 sm:min-w-0 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 md:gap-4">
+              <Card className="border border-gray-200 shadow-sm transition-all hover:shadow-lg">
+                <CardContent className="p-4 md:p-6">
+                  <div className="mb-3 flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-meu-primary to-meu-primary-dark text-white">
+                      <DollarSign className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-gray-500 md:text-sm">
+                        Faturamento Mensal
+                      </p>
+                      <p className="text-lg font-bold text-gray-900 md:text-2xl">
+                        {formatCurrency(stats?.monthly_earnings?.current_month)}
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <p className="text-sm font-medium text-gray-500 mb-1">
-                  Faturamento Mensal
-                </p>
-                <p className="text-2xl md:text-3xl font-bold text-gray-900 mb-1">
-                  {formatCurrency(stats?.monthly_earnings?.current_month)}
-                </p>
-                <p className="text-xs md:text-sm text-gray-500">
-                  Valor por hora: {formatCurrency(stats?.hourly_rate)}
-                </p>
-              </CardContent>
-            </Card>
+                  <p className="text-xs text-gray-500 md:text-sm">
+                    Valor por hora: {formatCurrency(stats?.hourly_rate)}
+                  </p>
+                </CardContent>
+              </Card>
 
-            <Card className="border border-gray-200 shadow-sm hover:shadow-lg transition-all">
-              <CardContent className="p-5 md:p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 text-white">
-                    <Users className="h-5 w-5" />
+              <Card className="border border-gray-200 shadow-sm transition-all hover:shadow-lg">
+                <CardContent className="p-4 md:p-6">
+                  <div className="mb-3 flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 text-white">
+                      <Users className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-gray-500 md:text-sm">
+                        Créditos Utilizados
+                      </p>
+                      <p className="text-lg font-bold text-gray-900 md:text-2xl">
+                        {stats?.total_credits_used ?? 0}
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <p className="text-sm font-medium text-gray-500 mb-1">
-                  Créditos Utilizados
-                </p>
-                <p className="text-2xl md:text-3xl font-bold text-gray-900 mb-1">
-                  {stats?.total_credits_used ?? 0}
-                </p>
-                <p className="text-xs md:text-sm text-gray-500">
-                  Créditos gastos
-                </p>
-              </CardContent>
-            </Card>
+                  <p className="text-xs text-gray-500 md:text-sm">Créditos gastos</p>
+                </CardContent>
+              </Card>
 
-            <Card className="border border-gray-200 shadow-sm hover:shadow-lg transition-all">
-              <CardContent className="p-5 md:p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-meu-accent to-yellow-400 text-meu-primary-dark">
-                    <Activity className="h-5 w-5" />
+              <Card className="border border-gray-200 shadow-sm transition-all hover:shadow-lg">
+                <CardContent className="p-4 md:p-6">
+                  <div className="mb-3 flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-meu-accent to-yellow-400 text-meu-primary-dark">
+                      <Activity className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-gray-500 md:text-sm">
+                        Aulas Concluídas
+                      </p>
+                      <p className="text-lg font-bold text-gray-900 md:text-2xl">
+                        {stats?.completed_bookings ?? 0}
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <p className="text-sm font-medium text-gray-500 mb-1">
-                  Aulas Concluídas
-                </p>
-                <p className="text-2xl md:text-3xl font-bold text-gray-900 mb-1">
-                  {stats?.completed_bookings ?? 0}
-                </p>
-                <p className="text-xs md:text-sm text-gray-500">
-                  Aulas finalizadas
-                </p>
-              </CardContent>
-            </Card>
+                  <p className="text-xs text-gray-500 md:text-sm">Aulas finalizadas</p>
+                </CardContent>
+              </Card>
 
-            <Card className="border border-gray-200 shadow-sm hover:shadow-lg transition-all">
-              <CardContent className="p-5 md:p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 text-white">
-                    <Calendar className="h-5 w-5" />
+              <Card className="border border-gray-200 shadow-sm transition-all hover:shadow-lg">
+                <CardContent className="p-4 md:p-6">
+                  <div className="mb-3 flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 text-white">
+                      <Calendar className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-gray-500 md:text-sm">
+                        Agendamentos Ativos
+                      </p>
+                      <p className="text-lg font-bold text-gray-900 md:text-2xl">
+                        {activeBookingsCount}
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <p className="text-sm font-medium text-gray-500 mb-1">
-                  Agendamentos Ativos
-                </p>
-                <p className="text-2xl md:text-3xl font-bold text-gray-900 mb-1">
-                  {activeBookingsCount}
-                </p>
-                <p className="text-xs md:text-sm text-gray-500">
-                  {confirmedBookings.length} confirmada(s) ·{' '}
-                  {pendingBookings.length} pendente(s)
-                </p>
-              </CardContent>
-            </Card>
+                  <p className="text-xs text-gray-500 md:text-sm">
+                    {confirmedBookings.length} confirmada(s) · {pendingBookings.length} pendente(s)
+                  </p>
+                </CardContent>
+              </Card>
 
-            <Card className="border border-gray-200 shadow-sm hover:shadow-lg transition-all">
-              <CardContent className="p-5 md:p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-red-500 to-red-600 text-white">
-                    <AlertCircle className="h-5 w-5" />
+              <Card className="border border-gray-200 shadow-sm transition-all hover:shadow-lg">
+                <CardContent className="p-4 md:p-6">
+                  <div className="mb-3 flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-red-500 to-red-600 text-white">
+                      <AlertCircle className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-gray-500 md:text-sm">
+                        Cancelamentos
+                      </p>
+                      <p className="text-lg font-bold text-gray-900 md:text-2xl">
+                        {stats?.cancelled_bookings ?? 0}
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <p className="text-sm font-medium text-gray-500 mb-1">
-                  Cancelamentos
-                </p>
-                <p className="text-2xl md:text-3xl font-bold text-gray-900 mb-1">
-                  {stats?.cancelled_bookings ?? 0}
-                </p>
-                <p className="text-xs md:text-sm text-gray-500">
-                  Aulas canceladas
-                </p>
-              </CardContent>
-            </Card>
+                  <p className="text-xs text-gray-500 md:text-sm">Aulas canceladas</p>
+                </CardContent>
+              </Card>
+            </div>
           </div>
         </section>
 
         <section>
-          <Card className="bg-white border border-gray-200 shadow-sm">
-            <CardHeader className="gap-4 md:flex md:flex-row md:items-center md:justify-between">
+          <Card className="border border-gray-200 bg-white shadow-sm">
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <CardTitle className="text-lg md:text-xl font-bold text-gray-900">
+                <CardTitle className="text-lg font-bold text-gray-900 md:text-xl">
                   Próximas Aulas
                 </CardTitle>
                 <p className="text-sm text-gray-500">
                   {bookings.length} aula(s) agendada(s)
                 </p>
               </div>
-              <Link href="/professor/agenda">
-                <Button variant="outline" size="sm" className="gap-2">
+              <Link href="/professor/agenda" className="w-full sm:w-auto">
+                <Button variant="outline" size="sm" className="flex w-full items-center justify-center gap-2 sm:w-auto">
                   Ver agenda completa
                   <ArrowRight className="h-4 w-4" />
                 </Button>
