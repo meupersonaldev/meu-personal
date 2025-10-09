@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/stores/auth-store'
-import { MobileNav } from '@/components/layout/mobile-nav'
 import { Loader2 } from 'lucide-react'
 
 const PUBLIC_AUTH_PREFIXES = ['/professor/login', '/professor/cadastro', '/professor/esqueci-senha', '/professor/redefinir-senha'] as const
@@ -86,15 +85,5 @@ export default function ProfessorLayout({
     )
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Main Content */}
-      <main className="pb-20 md:pb-0">
-        {children}
-      </main>
-      
-      {/* Mobile Navigation */}
-      <MobileNav />
-    </div>
-  )
+  return <>{children}</>
 }

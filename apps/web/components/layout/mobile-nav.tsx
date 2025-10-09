@@ -2,9 +2,13 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, Search, Calendar, User, BarChart3, Clock } from 'lucide-react'
+import { Home, Search, Calendar, User, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/lib/stores/auth-store'
+import {
+  PROFESSOR_NAV_ITEMS,
+  PROFESSOR_QUICK_LINKS
+} from '@/components/layout/professor-navigation'
 
 export function MobileNav() {
   const pathname = usePathname()
@@ -22,12 +26,32 @@ export function MobileNav() {
     }
     
     if (user?.role === 'TEACHER') {
+      const baseItems = PROFESSOR_NAV_ITEMS.flatMap((item) => {
+        if (item.href && (!item.subItems || item.subItems.length === 0)) {
+          return [{ href: item.href, label: item.label, icon: item.icon }]
+        }
+
+        if (item.subItems && item.subItems.length > 0) {
+          return item.subItems.map((subItem) => ({
+            href: subItem.href,
+            label: subItem.label,
+            icon: subItem.icon
+          }))
+        }
+
+        return []
+      })
+
+      const quickLinks = PROFESSOR_QUICK_LINKS.map((quickLink) => ({
+        href: quickLink.href,
+        label: quickLink.label,
+        icon: quickLink.icon
+      }))
+
       return [
-        { href: '/professor/dashboard', label: 'Dashboard', icon: Home },
-        { href: '/professor/agenda', label: 'Agenda', icon: Calendar },
-        { href: '/professor/aulas', label: 'Aulas', icon: Clock },
-        { href: '/professor/configuracoes', label: 'Config', icon: User },
-        { href: '/professor/carteira', label: 'Carteira', icon: BarChart3 },
+        ...baseItems,
+        ...quickLinks,
+        { href: '/professor/configuracoes', label: 'Configurações', icon: Settings }
       ]
     }
 
@@ -42,11 +66,15 @@ export function MobileNav() {
 
   const navItems = getNavItems()
 
+  const justifyClass = navItems.length <= 4 ? 'justify-around' : 'justify-start'
+
   return (
-    <nav className="mobile-tab-bar">
+    <nav className={cn('mobile-tab-bar', justifyClass)}>
       {navItems.map((item) => {
         const Icon = item.icon
-        const isActive = pathname === item.href
+        const isActive =
+          pathname === item.href ||
+          pathname.startsWith(`${item.href}/`)
         
         return (
           <Link
