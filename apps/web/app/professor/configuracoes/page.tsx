@@ -404,18 +404,18 @@ export default function ConfiguracoesPage() {
 
         {/* Tab Content */}
         {activeTab === 'dados' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             {/* Coluna Esquerda - Dados Pessoais */}
-            <div className="lg:col-span-2">
+            <div className="order-2 lg:order-1 lg:col-span-2">
               <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <User className="h-5 w-5 mr-2 text-meu-primary" />
-                  Dados Pessoais
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleProfileUpdate} className="space-y-4">
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <User className="mr-2 h-5 w-5 text-meu-primary" />
+                    Dados Pessoais
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={handleProfileUpdate} className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Nome Completo
@@ -473,32 +473,32 @@ export default function ConfiguracoesPage() {
                     )}
                   </Button>
                 </form>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
             </div>
 
             {/* Coluna Direita - Avatar */}
-            <div>
+            <div className="order-1 max-w-lg lg:order-2">
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center">
-                    <Camera className="h-5 w-5 mr-2 text-meu-primary" />
+                    <Camera className="mr-2 h-5 w-5 text-meu-primary" />
                     Foto de Perfil
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="flex flex-col items-center">
                     <div className="relative">
-                      <div className="w-32 h-32 rounded-full bg-meu-primary flex items-center justify-center text-white text-4xl font-bold overflow-hidden">
+                      <div className="flex h-32 w-32 items-center justify-center overflow-hidden rounded-full bg-meu-primary text-4xl font-bold text-white">
                         {avatarPreview ? (
-                          <img src={avatarPreview} alt="Avatar" className="w-full h-full object-cover" />
+                          <img src={avatarPreview} alt="Avatar" className="h-full w-full object-cover" />
                         ) : user.avatar_url ? (
-                          <img src={user.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+                          <img src={user.avatar_url} alt="Avatar" className="h-full w-full object-cover" />
                         ) : (
                           user.name?.charAt(0).toUpperCase()
                         )}
                       </div>
-                      <label className="absolute bottom-0 right-0 p-2 bg-meu-primary rounded-full cursor-pointer hover:bg-meu-primary-dark transition-colors">
+                      <label className="absolute bottom-0 right-0 cursor-pointer rounded-full bg-meu-primary p-2 transition-colors hover:bg-meu-primary-dark">
                         <Camera className="h-4 w-4 text-white" />
                         <input
                           type="file"
@@ -508,26 +508,26 @@ export default function ConfiguracoesPage() {
                         />
                       </label>
                     </div>
-                    <p className="text-sm text-gray-500 mt-4 text-center">
+                    <p className="mt-4 text-center text-sm text-gray-500">
                       Clique no ícone para alterar sua foto
                     </p>
                   </div>
 
-                  {avatarPreview && (
+                  {avatarFile && (
                     <Button
                       onClick={handleAvatarUpload}
                       disabled={loading}
-                      className="w-full bg-meu-primary hover:bg-meu-primary-dark text-white"
+                      className="w-full bg-meu-primary text-white hover:bg-meu-primary-dark"
                     >
                       {loading ? (
                         <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                           Enviando...
                         </>
                       ) : (
                         <>
-                          <Save className="h-4 w-4 mr-2" />
-                          Salvar Foto
+                          <Save className="mr-2 h-4 w-4" />
+                          Salvar nova foto
                         </>
                       )}
                     </Button>
@@ -540,7 +540,7 @@ export default function ConfiguracoesPage() {
 
         {/* Aba Perfil Profissional */}
         {activeTab === 'perfil' && (
-          <div className="max-w-4xl">
+          <div className="mx-auto max-w-4xl">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
@@ -681,7 +681,7 @@ export default function ConfiguracoesPage() {
 
         {/* Aba Segurança */}
         {activeTab === 'seguranca' && (
-          <div className="max-w-2xl">
+          <div className="mx-auto max-w-2xl">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
@@ -782,7 +782,7 @@ export default function ConfiguracoesPage() {
 
         {/* Aba Preferências */}
         {activeTab === 'preferencias' && (
-          <div className="max-w-4xl">
+          <div className="mx-auto max-w-4xl">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
