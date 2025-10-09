@@ -7,7 +7,8 @@ RUN apk add --no-cache python3 make g++
 COPY package*.json ./
 COPY apps/web/package*.json apps/web/
 
-RUN npm install --legacy-peer-deps --include=dev
+RUN npm install --legacy-peer-deps --include=dev \
+  && npm install --legacy-peer-deps --include=dev --workspace=web
 
 FROM node:20-alpine AS builder
 
