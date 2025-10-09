@@ -2,7 +2,7 @@
 
 
 
-import { useMemo } from "react"
+import { Suspense, useMemo } from "react"
 import { useSearchParams } from "next/navigation"
 
 import { RegisterTemplate } from "@/components/auth/register-template"
@@ -28,7 +28,7 @@ const defaultFeatures = [
   },
 ] as const
 
-export default function CadastroPage() {
+function CadastroPageContent() {
   const searchParams = useSearchParams()
   const roleParam = searchParams?.get("role") ?? ""
 
@@ -66,6 +66,14 @@ export default function CadastroPage() {
         role === "STUDENT" ? "/aluno/inicio" : "/professor/dashboard"
       }
     />
+  )
+}
+
+export default function CadastroPage() {
+  return (
+    <Suspense fallback={<div />}>
+      <CadastroPageContent />
+    </Suspense>
   )
 }
 

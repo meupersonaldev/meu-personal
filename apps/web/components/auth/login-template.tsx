@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, useMemo, useState } from 'react'
+import { FormEvent, Suspense, useMemo, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -41,7 +41,7 @@ interface LoginTemplateProps {
   backgroundImageUrl?: string
 }
 
-export function LoginTemplate({ expectedRole, defaultRedirect, copy, backgroundImageUrl = 'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=2340&q=80' }: LoginTemplateProps) {
+function LoginTemplateContent({ expectedRole, defaultRedirect, copy, backgroundImageUrl = 'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=2340&q=80' }: LoginTemplateProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirectParam = searchParams?.get('redirect') ?? null
@@ -242,5 +242,13 @@ export function LoginTemplate({ expectedRole, defaultRedirect, copy, backgroundI
         </div>
       </div>
     </div>
+  )
+}
+
+export function LoginTemplate(props: LoginTemplateProps) {
+  return (
+    <Suspense fallback={<div />}>
+      <LoginTemplateContent {...props} />
+    </Suspense>
   )
 }
