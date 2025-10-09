@@ -1,14 +1,13 @@
-﻿'use client'
+'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { useStudentStore, Teacher } from '@/lib/stores/student-store'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { MobileNav } from '@/components/layout/mobile-nav'
 import {
   Search,
   MapPin,
@@ -23,12 +22,15 @@ import {
   AlertCircle,
   CreditCard,
   Users,
-  TrendingUp
+  TrendingUp,
+  CalendarPlus,
+  ArrowRight
 } from 'lucide-react'
 import { toast } from 'sonner'
 
 export default function AlunoInicioPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { user, isAuthenticated } = useAuthStore()
   const {
     teachers,
@@ -52,6 +54,9 @@ export default function AlunoInicioPage() {
   const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null)
   const [showBookingModal, setShowBookingModal] = useState(false)
 
+  const teachersSectionRef = useRef<HTMLDivElement | null>(null)
+  const bookingsSectionRef = useRef<HTMLDivElement | null>(null)
+
   useEffect(() => {
     if (!isAuthenticated) {
       router.push('/aluno/login')
@@ -63,12 +68,47 @@ export default function AlunoInicioPage() {
       return
     }
 
-    // Carregar dados iniciais
     loadTeachers()
     if (user?.id) {
       loadBookings(user.id)
     }
-  }, [isAuthenticated, user, router])
+  }, [isAuthenticated, user, loadTeachers, loadBookings, router])
+
+  const activeBookings = useMemo(
+    () => bookings.filter((b) => b.status === 'PENDING' || b.status === 'CONFIRMED'),
+    [bookings]
+  )
+
+  const todayBookings = useMemo(() => {
+    const today = new Date().toDateString()
+    return bookings.filter((b) => new Date(b.date).toDateString() === today)
+  }, [bookings])
+
+  const completedBookingsCount = useMemo(
+    () => bookings.filter((b) => b.status === 'COMPLETED').length,
+    [bookings]
+  )
+
+  const formattedDate = useMemo(
+    () =>
+      new Date().toLocaleDateString('pt-BR', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long'
+      }),
+    []
+  )
+
+  const firstName = useMemo(() => user?.name?.split(' ')[0] ?? 'Aluno', [user?.name])
+
+  useEffect(() => {
+    const section = searchParams.get('section')
+    if (section === 'professores' && teachersSectionRef.current) {
+      teachersSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    } else if (section === 'agendamentos' && bookingsSectionRef.current) {
+      bookingsSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [searchParams, teachers.length, activeBookings.length])
 
   const handleSearch = () => {
     if (searchCity) setCityFilter(searchCity)
@@ -89,7 +129,7 @@ export default function AlunoInicioPage() {
   }
 
   const getStatusBadge = (status: string) => {
-    const styles = {
+    const styles: Record<string, string> = {
       PENDING: 'bg-amber-100 text-amber-700 border-amber-200',
       CONFIRMED: 'bg-green-100 text-green-700 border-green-200',
       COMPLETED: 'bg-blue-100 text-blue-700 border-blue-200',
@@ -107,8 +147,14 @@ export default function AlunoInicioPage() {
 
     return (
       <Badge className={styles[status as keyof typeof styles] || 'bg-gray-100 text-gray-800'}>
-        <Icon className="h-3 w-3 mr-1" />
-        {status === 'PENDING' ? 'Pendente' : status === 'CONFIRMED' ? 'Confirmada' : status === 'COMPLETED' ? 'Concluída' : 'Cancelada'}
+        <Icon className="mr-1 h-3 w-3" />
+        {status === 'PENDING'
+          ? 'Pendente'
+          : status === 'CONFIRMED'
+          ? 'Confirmada'
+          : status === 'COMPLETED'
+          ? 'Concluída'
+          : 'Cancelada'}
       </Badge>
     )
   }
@@ -117,163 +163,194 @@ export default function AlunoInicioPage() {
     return null
   }
 
-  // Loading state
   if (loading && teachers.length === 0) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="flex items-center justify-center h-96">
-          <Loader2 className="h-8 w-8 animate-spin text-meu-primary" />
-        </div>
+      <div className="flex min-h-[50vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-meu-primary" />
       </div>
     )
   }
 
-  // Error state
   if (error && teachers.length === 0) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="flex flex-col items-center justify-center h-96 space-y-4">
-          <AlertCircle className="h-12 w-12 text-red-500" />
-          <p className="text-gray-600">{error}</p>
-          <Button onClick={() => loadTeachers()}>Tentar novamente</Button>
-        </div>
+      <div className="flex min-h-[50vh] flex-col items-center justify-center space-y-4">
+        <AlertCircle className="h-12 w-12 text-red-500" />
+        <p className="text-gray-600">{error}</p>
+        <Button onClick={() => loadTeachers()}>Tentar novamente</Button>
       </div>
     )
   }
 
-  const todayBookings = bookings.filter(b => {
-    const bookingDate = new Date(b.date)
-    const today = new Date()
-    return bookingDate.toDateString() === today.toDateString()
-  })
-
-  const activeBookings = bookings.filter(b =>
-    b.status === 'PENDING' || b.status === 'CONFIRMED'
-  )
+  const quickActions = [
+    {
+      title: 'Comprar créditos',
+      description: 'Garanta saldo para agendar suas aulas quando quiser.',
+      icon: CreditCard,
+      cta: 'Ir para carteira',
+      onClick: () => router.push('/aluno/comprar'),
+      tone: 'bg-green-50 text-green-800 border-green-200'
+    },
+    {
+      title: 'Encontrar professor',
+      description: 'Busque profissionais por cidade, estado ou especialidade.',
+      icon: Users,
+      cta: 'Ver professores',
+      onClick: () => router.push('/aluno/inicio?section=professores'),
+      tone: 'bg-blue-50 text-blue-800 border-blue-200'
+    },
+    {
+      title: 'Agendar aula',
+      description: 'Confira sua agenda e organize os próximos treinos.',
+      icon: CalendarPlus,
+      cta: 'Ver agenda',
+      onClick: () => router.push('/aluno/inicio?section=agendamentos'),
+      tone: 'bg-purple-50 text-purple-800 border-purple-200'
+    }
+  ]
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <main className="pb-20 md:pb-0">
-        <div className="p-6 space-y-8">
+    <>
+      <div className="space-y-6 px-4 py-6 md:px-6 md:space-y-8">
+        <section className="space-y-2">
+          <h1 className="text-2xl font-bold text-gray-900 md:text-4xl">
+            Olá, {firstName} 👋
+          </h1>
+          <p className="text-sm text-gray-600 capitalize md:text-lg">{formattedDate}</p>
+        </section>
 
-          {/* Header */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-4xl font-bold text-gray-900 mb-2">
-                Olá, {user.name?.split(' ')[0]} 👋
-              </h1>
-              <p className="text-gray-600 text-lg">
-                {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
-              </p>
-            </div>
-          </div>
-
-          {/* KPIs */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {/* Créditos */}
-            <Card className="border border-gray-200 shadow-sm hover:shadow-lg transition-all duration-300">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-meu-primary to-meu-primary-dark text-white">
-                    <CreditCard className="h-6 w-6" />
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {quickActions.map((action) => {
+            const Icon = action.icon
+            return (
+              <Card
+                key={action.title}
+                className={}
+              >
+                <CardContent className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
+                  <div className="flex items-start gap-3">
+                    <div className="rounded-xl bg-white/70 p-2 text-meu-primary">
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-semibold">{action.title}</h3>
+                      <p className="text-sm opacity-80">{action.description}</p>
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-500 mb-1">Créditos Disponíveis</p>
-                  <p className="text-3xl font-bold text-gray-900 mb-2">{user?.credits || 0}</p>
                   <Button
                     size="sm"
-                    onClick={() => router.push('/aluno/comprar')}
-                    className="bg-green-600 hover:bg-green-700 text-xs"
+                    className="w-full bg-meu-primary text-white hover:bg-meu-primary-dark md:w-auto"
+                    onClick={action.onClick}
                   >
-                    Comprar Créditos
+                    {action.cta}
+                    <ArrowRight className="ml-2 h-4 w-4" />
                   </Button>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </section>
 
-            {/* Aulas Agendadas */}
-            <Card className="border border-gray-200 shadow-sm hover:shadow-lg transition-all duration-300">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-meu-accent to-yellow-400 text-meu-primary-dark">
-                    <Calendar className="h-6 w-6" />
-                  </div>
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <Card className="border border-gray-200 shadow-sm transition-all hover:shadow-lg">
+            <CardContent className="p-4 md:p-6">
+              <div className="mb-3 flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-meu-primary to-meu-primary-dark text-white">
+                  <CreditCard className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-500 mb-1">Aulas Agendadas</p>
-                  <p className="text-3xl font-bold text-gray-900 mb-2">{activeBookings.length}</p>
-                  <p className="text-sm text-gray-600">
-                    {todayBookings.length} aula(s) hoje
+                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                    Créditos disponíveis
+                  </p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {user?.credits ?? 0}
                   </p>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+              <p className="text-xs text-gray-500">Use créditos para confirmar suas aulas.</p>
+            </CardContent>
+          </Card>
 
-            {/* Total de Aulas */}
-            <Card className="border border-gray-200 shadow-sm hover:shadow-lg transition-all duration-300">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-meu-cyan to-cyan-400 text-white">
-                    <TrendingUp className="h-6 w-6" />
-                  </div>
+          <Card className="border border-gray-200 shadow-sm transition-all hover:shadow-lg">
+            <CardContent className="p-4 md:p-6">
+              <div className="mb-3 flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-meu-accent to-yellow-400 text-meu-primary-dark">
+                  <Calendar className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-500 mb-1">Aulas Realizadas</p>
-                  <p className="text-3xl font-bold text-gray-900 mb-2">
-                    {bookings.filter(b => b.status === 'COMPLETED').length}
+                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                    Aulas agendadas
                   </p>
-                  <p className="text-sm text-gray-600">{bookings.length} no total</p>
+                  <p className="text-2xl font-bold text-gray-900">{activeBookings.length}</p>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+              <p className="text-xs text-gray-500">{todayBookings.length} aula(s) marcada(s) para hoje.</p>
+            </CardContent>
+          </Card>
 
-            {/* Professores Disponíveis */}
-            <Card className="border border-gray-200 shadow-sm hover:shadow-lg transition-all duration-300">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 text-white">
-                    <Users className="h-6 w-6" />
-                  </div>
+          <Card className="border border-gray-200 shadow-sm transition-all hover:shadow-lg">
+            <CardContent className="p-4 md:p-6">
+              <div className="mb-3 flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-meu-cyan to-cyan-400 text-white">
+                  <TrendingUp className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-500 mb-1">Professores Disponíveis</p>
-                  <p className="text-3xl font-bold text-gray-900 mb-2">{teachers.length}</p>
-                  <p className="text-sm text-gray-600">Na sua região</p>
+                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                    Aulas concluídas
+                  </p>
+                  <p className="text-2xl font-bold text-gray-900">{completedBookingsCount}</p>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
+              </div>
+              <p className="text-xs text-gray-500">{bookings.length} aulas agendadas no total.</p>
+            </CardContent>
+          </Card>
 
-          {/* Busca e Filtros */}
-          <Card className="bg-white border border-gray-200 shadow-sm">
+          <Card className="border border-gray-200 shadow-sm transition-all hover:shadow-lg">
+            <CardContent className="p-4 md:p-6">
+              <div className="mb-3 flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 text-white">
+                  <Users className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                    Professores disponíveis
+                  </p>
+                  <p className="text-2xl font-bold text-gray-900">{teachers.length}</p>
+                </div>
+              </div>
+              <p className="text-xs text-gray-500">Profissionais com agenda aberta na sua região.</p>
+            </CardContent>
+          </Card>
+        </section>
+
+        <section ref={teachersSectionRef} className="space-y-6">
+          <Card className="border border-gray-200 bg-white shadow-sm">
             <CardHeader>
               <div className="flex items-center gap-2">
                 <Filter className="h-5 w-5 text-meu-primary" />
-                <CardTitle className="text-xl">Buscar Professores</CardTitle>
+                <CardTitle className="text-lg font-semibold md:text-xl">Buscar professores</CardTitle>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
                 <Input
-                  placeholder="Cidade..."
+                  placeholder="Cidade"
                   value={searchCity}
                   onChange={(e) => setSearchCity(e.target.value)}
                 />
                 <Input
-                  placeholder="Estado (ex: SP)..."
+                  placeholder="Estado (ex: SP)"
                   value={searchState}
                   onChange={(e) => setSearchState(e.target.value.toUpperCase())}
                   maxLength={2}
                 />
                 <Input
-                  placeholder="Especialidade..."
+                  placeholder="Especialidade"
                   value={searchSpecialty}
                   onChange={(e) => setSearchSpecialty(e.target.value)}
                 />
                 <div className="flex gap-2">
-                  <Button onClick={handleSearch} className="flex-1 bg-meu-primary hover:bg-meu-primary-dark">
-                    <Search className="h-4 w-4 mr-2" />
+                  <Button onClick={handleSearch} className="flex-1 bg-meu-primary text-white hover:bg-meu-primary-dark">
+                    <Search className="mr-2 h-4 w-4" />
                     Buscar
                   </Button>
                   <Button variant="outline" onClick={handleClearFilters}>
@@ -293,24 +370,25 @@ export default function AlunoInicioPage() {
             </CardContent>
           </Card>
 
-          {/* Professores Disponíveis */}
-          <Card className="bg-white border border-gray-200 shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between pb-4">
+          <Card className="border border-gray-200 bg-white shadow-sm">
+            <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <div>
-                <CardTitle className="text-xl font-bold text-gray-900 mb-1">
-                  Professores Disponíveis
+                <CardTitle className="text-lg font-semibold text-gray-900 md:text-xl">
+                  Professores disponíveis
                 </CardTitle>
-                <p className="text-sm text-gray-500">{teachers.length} professor(es) encontrado(s)</p>
+                <p className="text-xs text-gray-500 md:text-sm">
+                  {teachers.length} professor(es) encontrado(s)
+                </p>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
               {teachers.length === 0 ? (
-                <div className="text-center py-12">
-                  <User className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                <div className="py-12 text-center">
+                  <User className="mx-auto mb-4 h-12 w-12 text-gray-300" />
                   <p className="text-gray-500">Nenhum professor encontrado</p>
-                  <p className="text-sm text-gray-400 mt-2">Tente ajustar os filtros de busca</p>
+                  <p className="mt-2 text-sm text-gray-400">Tente ajustar os filtros de busca</p>
                   <Button onClick={handleClearFilters} className="mt-4">
-                    Limpar Filtros
+                    Limpar filtros
                   </Button>
                 </div>
               ) : (
@@ -321,46 +399,43 @@ export default function AlunoInicioPage() {
                   return (
                     <div
                       key={teacher.id}
-                      className="p-5 bg-gradient-to-r from-gray-50 to-gray-50/50 rounded-2xl border border-gray-100 hover:shadow-lg hover:border-meu-primary/20 transition-all duration-300"
+                      className="rounded-2xl border border-gray-100 bg-gradient-to-r from-gray-50 to-gray-50/60 p-5 transition-all hover:border-meu-primary/20 hover:shadow-lg"
                     >
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-start space-x-4 flex-1">
+                      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
                           <div className="relative flex-shrink-0">
                             {teacher.avatar_url ? (
                               <img
                                 src={teacher.avatar_url}
                                 alt={teacher.name}
-                                className="w-14 h-14 rounded-2xl object-cover shadow-lg"
+                                className="h-16 w-16 rounded-2xl object-cover shadow-lg"
                               />
                             ) : (
-                              <div className="w-14 h-14 bg-gradient-to-br from-meu-primary to-meu-primary-dark rounded-2xl flex items-center justify-center text-white font-bold text-lg shadow-lg">
+                              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-meu-primary to-meu-primary-dark text-lg font-bold text-white shadow-lg">
                                 {teacher.name?.substring(0, 2).toUpperCase()}
                               </div>
                             )}
                             {profile?.is_available && (
-                              <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full border-2 border-white bg-green-500" />
+                              <span className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full border-2 border-white bg-green-500" />
                             )}
                           </div>
 
-                          <div className="flex-1">
-                            <div className="flex items-center space-x-3 mb-2">
-                              <h4 className="font-bold text-gray-900 text-lg">
+                          <div className="space-y-3">
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                              <h4 className="text-lg font-semibold text-gray-900">
                                 {teacher.name}
                               </h4>
                               {profile?.is_available && (
-                                <Badge className="bg-green-100 text-green-700 border-green-200">
-                                  Disponível
-                                </Badge>
+                                <Badge className="bg-green-100 text-green-700">Disponível</Badge>
                               )}
                             </div>
 
                             {profile?.bio && (
-                              <p className="text-gray-600 mb-3 text-sm">{profile.bio}</p>
+                              <p className="text-sm text-gray-600">{profile.bio}</p>
                             )}
 
-                            {/* Especialidades */}
                             {profile?.specialties && profile.specialties.length > 0 && (
-                              <div className="flex flex-wrap gap-2 mb-3">
+                              <div className="flex flex-wrap gap-2">
                                 {profile.specialties.map((specialty, index) => (
                                   <Badge key={index} variant="secondary" className="text-xs">
                                     {specialty}
@@ -369,17 +444,19 @@ export default function AlunoInicioPage() {
                               </div>
                             )}
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm text-gray-600">
+                            <div className="grid grid-cols-1 gap-3 text-sm text-gray-600 sm:grid-cols-2">
                               {academy && (
-                                <div className="flex items-center space-x-2">
+                                <div className="flex items-center gap-2">
                                   <MapPin className="h-4 w-4 text-meu-primary" />
-                                  <span>{academy.city}, {academy.state}</span>
+                                  <span>
+                                    {academy.city}, {academy.state}
+                                  </span>
                                 </div>
                               )}
-                              <div className="flex items-center space-x-2">
+                              <div className="flex items-center gap-2">
                                 <DollarSign className="h-4 w-4 text-green-600" />
-                                <span className="font-bold text-gray-900">
-                                  R$ {profile?.hourly_rate?.toFixed(2) || '0.00'}/hora
+                                <span className="font-semibold text-gray-900">
+                                  R$ {profile?.hourly_rate?.toFixed(2) || '0,00'}/hora
                                 </span>
                               </div>
                             </div>
@@ -388,9 +465,9 @@ export default function AlunoInicioPage() {
 
                         <Button
                           onClick={() => handleSelectTeacher(teacher)}
-                          className="bg-meu-primary hover:bg-meu-primary-dark text-white"
+                          className="bg-meu-primary text-white hover:bg-meu-primary-dark"
                         >
-                          <Calendar className="h-4 w-4 mr-2" />
+                          <Calendar className="mr-2 h-4 w-4" />
                           Agendar
                         </Button>
                       </div>
@@ -400,58 +477,64 @@ export default function AlunoInicioPage() {
               )}
             </CardContent>
           </Card>
+        </section>
 
-          {/* Próximas Aulas */}
-          <Card className="bg-white border border-gray-200 shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between pb-4">
+        <section ref={bookingsSectionRef} className="space-y-4">
+          <Card className="border border-gray-200 bg-white shadow-sm">
+            <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <CardTitle className="text-xl font-bold text-gray-900 mb-1">
-                  Minhas Próximas Aulas
+                <CardTitle className="text-lg font-semibold text-gray-900 md:text-xl">
+                  Minhas próximas aulas
                 </CardTitle>
-                <p className="text-sm text-gray-500">{todayBookings.length} aula(s) hoje</p>
+                <p className="text-xs text-gray-500 md:text-sm">
+                  {todayBookings.length} aula(s) marcada(s) para hoje
+                </p>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
               {activeBookings.length === 0 ? (
-                <div className="text-center py-12">
-                  <Calendar className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                <div className="py-12 text-center">
+                  <Calendar className="mx-auto mb-4 h-12 w-12 text-gray-300" />
                   <p className="text-gray-500">Nenhuma aula agendada</p>
-                  <p className="text-sm text-gray-400 mt-2">Agende sua primeira aula com um professor</p>
+                  <p className="mt-2 text-sm text-gray-400">
+                    Agende sua primeira aula com um professor
+                  </p>
                 </div>
               ) : (
                 activeBookings.slice(0, 5).map((booking) => (
                   <div
                     key={booking.id}
-                    className="p-5 bg-gradient-to-r from-gray-50 to-gray-50/50 rounded-2xl border border-gray-100 hover:shadow-lg hover:border-meu-primary/20 transition-all duration-300"
+                    className="rounded-2xl border border-gray-100 bg-gradient-to-r from-gray-50 to-gray-50/50 p-5 transition-all hover:border-meu-primary/20 hover:shadow-lg"
                   >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-3 mb-3">
-                          <h4 className="font-bold text-gray-900 text-lg">
+                    <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                      <div className="space-y-3">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                          <h4 className="text-lg font-semibold text-gray-900">
                             {booking.teacher?.name || 'Professor'}
                           </h4>
                           {getStatusBadge(booking.status)}
                         </div>
-                        <div className="grid grid-cols-2 gap-4 text-sm text-gray-600">
-                          <div className="flex items-center space-x-2">
+                        <div className="grid grid-cols-1 gap-3 text-sm text-gray-600 sm:grid-cols-2">
+                          <div className="flex items-center gap-2">
                             <Clock className="h-4 w-4 text-meu-primary" />
                             <span className="font-medium">
-                              {new Date(booking.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                              {new Date(booking.date).toLocaleTimeString('pt-BR', {
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
                             </span>
                           </div>
-                          <div className="flex items-center space-x-2">
+                          <div className="flex items-center gap-2">
                             <Calendar className="h-4 w-4 text-meu-primary" />
-                            <span>
-                              {new Date(booking.date).toLocaleDateString('pt-BR')}
-                            </span>
+                            <span>{new Date(booking.date).toLocaleDateString('pt-BR')}</span>
                           </div>
-                          <div className="flex items-center space-x-2">
+                          <div className="flex items-center gap-2">
                             <TrendingUp className="h-4 w-4 text-meu-primary" />
                             <span>{booking.duration} min</span>
                           </div>
-                          <div className="flex items-center space-x-2">
+                          <div className="flex items-center gap-2">
                             <CreditCard className="h-4 w-4 text-meu-primary" />
-                            <span>{booking.credits_cost} créditos</span>
+                            <span>{booking.credits_cost} crédito(s)</span>
                           </div>
                         </div>
                       </div>
@@ -461,27 +544,24 @@ export default function AlunoInicioPage() {
               )}
             </CardContent>
           </Card>
-        </div>
-      </main>
+        </section>
+      </div>
 
-      {/* Mobile Navigation */}
-      <MobileNav />
-
-      {/* Modal de Agendamento */}
       {showBookingModal && selectedTeacher && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <Card className="max-w-md w-full">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <Card className="w-full max-w-md">
             <CardHeader>
-              <CardTitle>Agendar Aula</CardTitle>
+              <CardTitle>Agendar aula</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <p className="text-sm text-gray-600 mb-1">Professor</p>
+                <p className="text-sm text-gray-600">
+                  Professor
+                </p>
                 <p className="font-semibold text-gray-900">{selectedTeacher.name}</p>
               </div>
               <p className="text-sm text-gray-500">
-                Funcionalidade de agendamento em desenvolvimento.
-                Entre em contato diretamente com o professor.
+                Funcionalidade de agendamento em desenvolvimento. Entre em contato diretamente com o professor.
               </p>
               <div className="flex gap-2">
                 <Button
@@ -498,7 +578,7 @@ export default function AlunoInicioPage() {
                   onClick={() => {
                     toast.info('Funcionalidade em desenvolvimento')
                   }}
-                  className="flex-1 bg-meu-primary hover:bg-meu-primary-dark"
+                  className="flex-1 bg-meu-primary text-white hover:bg-meu-primary-dark"
                 >
                   Confirmar
                 </Button>
@@ -507,6 +587,6 @@ export default function AlunoInicioPage() {
           </Card>
         </div>
       )}
-    </div>
+    </>
   )
 }
