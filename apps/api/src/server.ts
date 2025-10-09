@@ -54,13 +54,11 @@ const allowedOrigins = rawOrigins.split(',').map(o => o.trim()).filter(Boolean)
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Em produção, origin é obrigatório
-    if (isProduction && !origin) {
-      return callback(new Error('Origin header required in production'))
-    }
-    
-    // Permitir requisições sem origin (mobile apps, Postman, etc) apenas em desenvolvimento
-    if (!origin && !isProduction) {
+    // Permitir requisições sem origin (health checks, serviços internos, mobile apps, Postman, etc)
+    if (!origin) {
+      if (isProduction) {
+        console.warn('CORS allowing request sem origem (provável health-check ou serviço interno)')
+      }
       return callback(null, true)
     }
     
