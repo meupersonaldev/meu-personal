@@ -29,11 +29,12 @@ const updateBookingSchema = z.object({
 
 // GET /api/bookings - Listar agendamentos (endpoint canônico)
 router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
-  const { unit_id, status, from, to, teacher_id } = req.query
+  const { unit_id, status, from, to, teacher_id, student_id } = req.query
   const user = req.user
 
   const unitId = Array.isArray(unit_id) ? unit_id[0] : unit_id
   const teacherId = Array.isArray(teacher_id) ? teacher_id[0] : teacher_id
+  const studentId = Array.isArray(student_id) ? student_id[0] : student_id
 
   const formatBooking = (booking: any) => {
     const unit = booking.unit || {}
@@ -63,8 +64,115 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
     }
   }
 
-  if (!unitId && !teacherId) {
+  if (!unitId && !teacherId && !studentId) {
     return res.status(400).json({ error: 'unit_id é obrigatório' })
+  }
+
+  // Compatibilidade: permitir consultas apenas por student_id (legado)
+  if (!unitId && !teacherId && studentId) {
+    if ((user.role === 'STUDENT' || user.role === 'ALUNO') && user.userId !== studentId) {
+      return res.status(403).json({ error: 'Acesso não autorizado a este aluno' })
+    }
+
+    const { data: studentBookings, error } = await supabase
+      .from('bookings')
+      .select(`
+        id,
+        student_id,
+        teacher_id,
+        unit_id,
+        franchise_id,
+        date,
+        duration,
+        status,
+        status_canonical,
+        notes,
+        credits_cost
+      `)
+      .eq('student_id', studentId)
+      .order('date', { ascending: true })
+
+    if (error) {
+      console.error('Error fetching student bookings (legacy):', error)
+      return res.status(500).json({ error: 'Erro ao buscar agendamentos' })
+    }
+
+    let results = studentBookings || []
+
+    if (status) {
+      results = results.filter((booking: any) => {
+        const currentStatus = booking.status || booking.status_canonical
+        return currentStatus === status
+      })
+    }
+
+    if (from) {
+      const fromDate = new Date(String(from))
+      if (!Number.isNaN(fromDate.getTime())) {
+        results = results.filter((booking: any) => new Date(booking.date) >= fromDate)
+      }
+    }
+
+    if (to) {
+      const toDate = new Date(String(to))
+      if (!Number.isNaN(toDate.getTime())) {
+        results = results.filter((booking: any) => new Date(booking.date) <= toDate)
+      }
+    }
+
+    // Buscar informações relacionadas separadamente para simplificar a query
+    const teacherIds = [...new Set(results.map((b: any) => b.teacher_id).filter(Boolean))]
+    const unitIds = [...new Set(results.map((b: any) => b.unit_id).filter(Boolean))]
+    const franchiseIds = [...new Set(results.map((b: any) => b.franchise_id).filter(Boolean))]
+
+    const [teachersData, unitsData, academiesData] = await Promise.all([
+      teacherIds.length > 0 ? supabase.from('users').select('id, name').in('id', teacherIds) : Promise.resolve({ data: [] }),
+      unitIds.length > 0 ? supabase.from('units').select('id, name, city, state, address').in('id', unitIds) : Promise.resolve({ data: [] }),
+      franchiseIds.length > 0 ? supabase.from('academies').select('id, name, city, state, address').in('id', franchiseIds) : Promise.resolve({ data: [] })
+    ])
+
+    const teachersMap = (teachersData.data || []).reduce((acc, teacher) => {
+      acc[teacher.id] = teacher
+      return acc
+    }, {})
+
+    const unitsMap = (unitsData.data || []).reduce((acc, unit) => {
+      acc[unit.id] = unit
+      return acc
+    }, {})
+
+    const academiesMap = (academiesData.data || []).reduce((acc, academy) => {
+      acc[academy.id] = academy
+      return acc
+    }, {})
+
+    const bookings = results.map((booking: any) => {
+      const teacher = teachersMap[booking.teacher_id] || {}
+      const unit = unitsMap[booking.unit_id] || {}
+      const academy = academiesMap[booking.franchise_id] || {}
+
+      const franchiseName = unit.name || academy.name || null
+      const franchiseAddressParts = unit.id
+        ? [unit.address, unit.city, unit.state]
+        : [academy.address, academy.city, academy.state]
+
+      return {
+        id: booking.id,
+        studentId: booking.student_id || undefined,
+        teacherId: booking.teacher_id,
+        teacherName: teacher.name || undefined,
+        franchiseId: booking.unit_id || booking.franchise_id || undefined,
+        franchiseName,
+        franchiseAddress: franchiseAddressParts.filter(Boolean).join(', ') || undefined,
+        date: booking.date,
+        duration: booking.duration ?? 60,
+        status: booking.status || booking.status_canonical || 'PENDING',
+        notes: booking.notes || undefined,
+        creditsCost: booking.credits_cost ?? 0
+      }
+    })
+
+    return res.json({ bookings })
   }
 
   // Compatibilidade: permitir consultas apenas por teacher_id (legado)
