@@ -34,6 +34,24 @@ export declare class AsaasService {
         error: any;
         data?: undefined;
     }>;
+    getOrCreateCustomer(userId: string, userData: {
+        name: string;
+        email: string;
+        cpfCnpj?: string;
+        phone?: string;
+    }): Promise<{
+        success: boolean;
+        data: any;
+        error?: undefined;
+    } | {
+        success: boolean;
+        error: any;
+        data?: undefined;
+    } | {
+        success: boolean;
+        customerId: any;
+        isNew: boolean;
+    }>;
     getCustomer(customerId: string): Promise<{
         success: boolean;
         data: any;
@@ -101,11 +119,20 @@ export declare class AsaasService {
         error: any;
         data?: undefined;
     }>;
+    processWebhook(event: any): Promise<{
+        event: any;
+        paymentId: any;
+        status: any;
+        value: any;
+        customer: any;
+        externalReference: any;
+    }>;
     createSubscriptionPlan(data: {
         name: string;
         description?: string;
         value: number;
-        cycle: 'MONTHLY' | 'QUARTERLY' | 'YEARLY';
+        cycle: 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'SEMIANNUALLY' | 'YEARLY';
+        billingType?: 'BOLETO' | 'CREDIT_CARD' | 'PIX' | 'UNDEFINED';
     }): Promise<{
         success: boolean;
         data: any;
@@ -115,13 +142,25 @@ export declare class AsaasService {
         error: any;
         data?: undefined;
     }>;
-    processWebhook(event: any): Promise<{
-        event: any;
-        paymentId: any;
-        status: any;
-        value: any;
-        customer: any;
-        externalReference: any;
+    updateSubscriptionPlan(planId: string, data: {
+        name?: string;
+        description?: string;
+        value?: number;
+    }): Promise<{
+        success: boolean;
+        data: any;
+        error?: undefined;
+    } | {
+        success: boolean;
+        error: any;
+        data?: undefined;
+    }>;
+    deleteSubscriptionPlan(planId: string): Promise<{
+        success: boolean;
+        error?: undefined;
+    } | {
+        success: boolean;
+        error: any;
     }>;
 }
 export declare const asaasService: AsaasService;

@@ -4,14 +4,20 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
-const supabase_1 = require("../lib/supabase");
+const supabase_1 = require("../config/supabase");
 const notifications_1 = require("./notifications");
+const asaas_service_1 = require("../services/asaas.service");
 const router = express_1.default.Router();
 router.get('/teacher', async (req, res) => {
     try {
+        const { academy_id } = req.query;
+        if (!academy_id) {
+            return res.status(400).json({ error: 'academy_id é obrigatório' });
+        }
         const { data, error } = await supabase_1.supabase
             .from('teacher_plans')
             .select('*')
+            .eq('academy_id', academy_id)
             .eq('is_active', true)
             .order('price', { ascending: true });
         if (error)
@@ -23,17 +29,51 @@ router.get('/teacher', async (req, res) => {
         res.status(500).json({ error: 'Erro interno do servidor' });
     }
 });
+router.get('/teacher/:teacherId/available', async (req, res) => {
+    try {
+        const { teacherId } = req.params;
+        const { data: prefs } = await supabase_1.supabase
+            .from('teacher_preferences')
+            .select('academy_ids')
+            .eq('teacher_id', teacherId)
+            .single();
+        const academyIds = prefs?.academy_ids || [];
+        if (academyIds.length === 0) {
+            const { data, error } = await supabase_1.supabase
+                .from('teacher_plans')
+                .select('*')
+                .eq('is_active', true)
+                .order('price', { ascending: true });
+            if (error)
+                throw error;
+            return res.json({ plans: data || [] });
+        }
+        const { data, error } = await supabase_1.supabase
+            .from('teacher_plans')
+            .select('*')
+            .eq('is_active', true)
+            .order('price', { ascending: true });
+        if (error)
+            throw error;
+        res.json({ plans: data || [], academies: academyIds });
+    }
+    catch (error) {
+        console.error('Error fetching available teacher plans:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    }
+});
 router.post('/teachers', async (req, res) => {
     try {
-        const { name, description, price, hours_included, commission_rate, features = [] } = req.body;
-        if (!name || !price || !commission_rate) {
+        const { academy_id, name, description, price, hours_included, commission_rate, features = [] } = req.body;
+        if (!academy_id || !name || !price || !commission_rate) {
             return res.status(400).json({
-                error: 'name, price e commission_rate são obrigatórios'
+                error: 'academy_id, name, price e commission_rate são obrigatórios'
             });
         }
         const { data, error } = await supabase_1.supabase
             .from('teacher_plans')
             .insert({
+            academy_id,
             name,
             description,
             price,
@@ -181,9 +221,14 @@ router.post('/teachers/subscriptions', async (req, res) => {
 });
 router.get('/student', async (req, res) => {
     try {
+        const { academy_id } = req.query;
+        if (!academy_id) {
+            return res.status(400).json({ error: 'academy_id é obrigatório' });
+        }
         const { data, error } = await supabase_1.supabase
             .from('academy_plans')
             .select('*')
+            .eq('academy_id', academy_id)
             .eq('is_active', true)
             .order('price', { ascending: true });
         if (error)
@@ -198,11 +243,13 @@ router.get('/student', async (req, res) => {
 router.post('/students', async (req, res) => {
     try {
         const { academy_id, name, description, price, credits_included, duration_days, features = [] } = req.body;
+        console.log('Criando plano de aluno:', { academy_id, name, price, credits_included });
         if (!academy_id || !name || !price || !credits_included) {
             return res.status(400).json({
                 error: 'academy_id, name, price e credits_included são obrigatórios'
             });
         }
+        console.log('Salvando plano no Supabase...');
         const { data, error } = await supabase_1.supabase
             .from('academy_plans')
             .insert({
@@ -213,23 +260,47 @@ router.post('/students', async (req, res) => {
             credits_included,
             duration_days: duration_days || 30,
             features,
-            asaas_plan_id: null
+            is_active: true
         })
             .select()
             .single();
-        if (error)
+        if (error) {
+            console.error('Erro ao salvar no Supabase:', error);
             throw error;
-        res.status(201).json(data);
+        }
+        console.log('Plano criado com sucesso:', data.id);
+        res.status(201).json({
+            ...data,
+            message: 'Plano criado com sucesso! A cobrança será criada no Asaas quando um aluno comprar.'
+        });
     }
     catch (error) {
         console.error('Error creating student plan:', error);
-        res.status(500).json({ error: 'Erro interno do servidor' });
+        res.status(500).json({
+            error: 'Erro interno do servidor',
+            details: error.message
+        });
     }
 });
 router.put('/students/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const { name, description, price, credits_included, duration_days, features, is_active } = req.body;
+        const { data: currentPlan } = await supabase_1.supabase
+            .from('academy_plans')
+            .select('asaas_plan_id')
+            .eq('id', id)
+            .single();
+        if (currentPlan?.asaas_plan_id) {
+            const asaasResult = await asaas_service_1.asaasService.updateSubscriptionPlan(currentPlan.asaas_plan_id, {
+                name: name ? `${name} - Plano Aluno` : undefined,
+                description,
+                value: price
+            });
+            if (!asaasResult.success) {
+                console.error('Erro ao atualizar plano no Asaas:', asaasResult.error);
+            }
+        }
         const { data, error } = await supabase_1.supabase
             .from('academy_plans')
             .update({
@@ -257,16 +328,72 @@ router.put('/students/:id', async (req, res) => {
 router.delete('/students/:id', async (req, res) => {
     try {
         const { id } = req.params;
+        const { data: plan } = await supabase_1.supabase
+            .from('academy_plans')
+            .select('asaas_plan_id')
+            .eq('id', id)
+            .single();
+        if (plan?.asaas_plan_id) {
+            const asaasResult = await asaas_service_1.asaasService.deleteSubscriptionPlan(plan.asaas_plan_id);
+            if (!asaasResult.success) {
+                console.error('Erro ao deletar plano no Asaas:', asaasResult.error);
+            }
+        }
         const { error } = await supabase_1.supabase
             .from('academy_plans')
-            .delete()
+            .update({ is_active: false })
             .eq('id', id);
         if (error)
             throw error;
-        res.json({ message: 'Plano excluído com sucesso' });
+        res.json({ message: 'Plano desativado com sucesso' });
     }
     catch (error) {
         console.error('Error deleting student plan:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    }
+});
+router.post('/students/:id/sync-asaas', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { data: plan, error: fetchError } = await supabase_1.supabase
+            .from('academy_plans')
+            .select('*')
+            .eq('id', id)
+            .single();
+        if (fetchError)
+            throw fetchError;
+        if (plan.asaas_plan_id) {
+            return res.json({
+                message: 'Plano já está sincronizado',
+                asaas_plan_id: plan.asaas_plan_id
+            });
+        }
+        const asaasResult = await asaas_service_1.asaasService.createSubscriptionPlan({
+            name: `${plan.name} - Plano Aluno`,
+            description: plan.description || `Plano ${plan.name}`,
+            value: plan.price,
+            cycle: 'MONTHLY',
+            billingType: 'UNDEFINED'
+        });
+        if (!asaasResult.success) {
+            return res.status(500).json({
+                error: 'Erro ao criar plano no Asaas',
+                details: asaasResult.error
+            });
+        }
+        const { error: updateError } = await supabase_1.supabase
+            .from('academy_plans')
+            .update({ asaas_plan_id: asaasResult.data.id })
+            .eq('id', id);
+        if (updateError)
+            throw updateError;
+        res.json({
+            message: 'Plano sincronizado com sucesso',
+            asaas_plan_id: asaasResult.data.id
+        });
+    }
+    catch (error) {
+        console.error('Error syncing plan with Asaas:', error);
         res.status(500).json({ error: 'Erro interno do servidor' });
     }
 });

@@ -435,7 +435,7 @@ router.get('/:id/stats', async (req, res) => {
     // Verificar se aluno existe
     const { data: student } = await supabase
       .from('users')
-      .select('id')
+      .select('id, created_at')
       .eq('id', id)
       .eq('role', 'STUDENT')
       .single()

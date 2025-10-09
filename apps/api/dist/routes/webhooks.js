@@ -4,8 +4,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
-const supabase_1 = require("../lib/supabase");
-const asaas_service_1 = require("../services/asaas.service");
+const supabase_1 = require("../config/supabase");
+const payment_intent_service_1 = require("../services/payment-intent.service");
 const notifications_1 = require("./notifications");
 const router = express_1.default.Router();
 router.post('/asaas', async (req, res) => {
@@ -14,20 +14,21 @@ router.post('/asaas', async (req, res) => {
         console.log('Webhook Asaas recebido:', {
             event: event.event,
             paymentId: event.payment?.id,
+            status: event.payment?.status,
             value: event.payment?.value
         });
-        const webhookData = await asaas_service_1.asaasService.processWebhook(event);
-        const externalRef = webhookData.externalReference;
+        const webhookSecret = process.env.ASAAS_WEBHOOK_SECRET;
         switch (event.event) {
             case 'PAYMENT_CONFIRMED':
             case 'PAYMENT_RECEIVED':
-                await handlePaymentConfirmed(webhookData, externalRef);
+                await payment_intent_service_1.paymentIntentService.processWebhook(event.payment.id, event.payment.status || 'CONFIRMED');
                 break;
             case 'PAYMENT_OVERDUE':
-                await handlePaymentOverdue(webhookData, externalRef);
+                await payment_intent_service_1.paymentIntentService.processWebhook(event.payment.id, 'OVERDUE');
                 break;
+            case 'PAYMENT_DELETED':
             case 'PAYMENT_REFUNDED':
-                await handlePaymentRefunded(webhookData, externalRef);
+                await payment_intent_service_1.paymentIntentService.processWebhook(event.payment.id, 'CANCELED');
                 break;
             default:
                 console.log('Evento não tratado:', event.event);
@@ -44,6 +45,13 @@ async function handlePaymentConfirmed(webhookData, externalRef) {
         console.warn('Pagamento confirmado sem referência externa');
         return;
     }
+    await supabase_1.supabase
+        .from('payments')
+        .update({
+        status: 'CONFIRMED',
+        payment_date: new Date().toISOString()
+    })
+        .eq('asaas_payment_id', webhookData.paymentId);
     const { data: teacherPurchase } = await supabase_1.supabase
         .from('teacher_subscriptions')
         .select('*, teacher:teacher_id(name, email), plan:plan_id(hours_included)')
@@ -63,12 +71,20 @@ async function handlePaymentConfirmed(webhookData, externalRef) {
             .limit(1)
             .single();
         if (admin) {
-            await (0, notifications_1.createNotification)(admin.user_id, 'payment_received', 'Pagamento Confirmado - Professor', `${teacherPurchase.teacher?.name} comprou pacote de ${teacherPurchase.plan?.hours_included || 0} horas. Valor: R$ ${webhookData.value}`, {
+            await (0, notifications_1.createUserNotification)(admin.user_id, 'payment_received', 'Pagamento Confirmado - Professor', `${teacherPurchase.teacher?.name} comprou pacote de ${teacherPurchase.plan?.hours_included || 0} horas. Valor: R$ ${webhookData.value}`, {
                 subscription_id: externalRef,
                 payment_id: webhookData.paymentId,
                 amount: webhookData.value
             });
         }
+        try {
+            await (require('./notifications')).createUserNotification(admin.user_id, 'payment_received', 'Pagamento Confirmado - Aluno', 'Pagamento confirmado.', {
+                subscription_id: externalRef,
+                payment_id: webhookData.paymentId,
+                amount: webhookData.value
+            });
+        }
+        catch { }
         return;
     }
     const { data: studentPurchase } = await supabase_1.supabase

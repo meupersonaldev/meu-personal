@@ -17,6 +17,7 @@ export interface BookingCanonical {
   source: 'ALUNO' | 'PROFESSOR';
   student_id?: string;
   teacher_id: string;
+  professor_id?: string;
   unit_id: string;
   start_at: string;
   end_at: string;
@@ -181,7 +182,7 @@ class BookingCanonicalService {
         .single();
 
       if (fetchError) throw fetchError;
-      if (!booking) throw new Error('Booking não encontrado');
+      if (!booking) throw new Error('Booking nao encontrado');
 
       // 2. Verificar se pode cancelar
       const now = new Date();
@@ -210,6 +211,36 @@ class BookingCanonicalService {
       }
 
       await balanceService.unlockProfessorHours(booking.teacher_id, booking.unit_id, 1, bookingId, 'SYSTEM');
+
+      return updatedBooking;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async confirmBooking(bookingId: string): Promise<BookingCanonical> {
+    try {
+      const { data: booking, error: fetchError } = await supabase
+        .from('bookings')
+        .select('*')
+        .eq('id', bookingId)
+        .single();
+
+      if (fetchError) throw fetchError;
+      if (!booking) throw new Error('Booking nao encontrado');
+
+      const now = new Date();
+      const { data: updatedBooking, error: updateError } = await supabase
+        .from('bookings')
+        .update({
+          status_canonical: 'PAID',
+          updated_at: now.toISOString()
+        })
+        .eq('id', bookingId)
+        .select()
+        .single();
+
+      if (updateError) throw updateError;
 
       return updatedBooking;
     } catch (error) {

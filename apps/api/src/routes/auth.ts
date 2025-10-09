@@ -1,6 +1,7 @@
 import express from 'express'
 import bcrypt from 'bcryptjs'
-import jwt from 'jsonwebtoken'
+import jwt, { type Secret, type SignOptions } from 'jsonwebtoken'
+import type { StringValue } from 'ms'
 import { z } from 'zod'
 import { Resend } from 'resend'
 import { supabase } from '../config/supabase'
@@ -77,6 +78,11 @@ router.post('/login', auditAuthEvent('LOGIN'), async (req, res) => {
     if (!jwtSecret || jwtSecret.length < 32) {
       throw new Error('JWT_SECRET deve ter pelo menos 32 caracteres para segurança')
     }
+    const jwtSecretKey: Secret = jwtSecret
+    const expiresIn: StringValue = (process.env.JWT_EXPIRES_IN || '15m') as StringValue
+    const jwtOptions: SignOptions = {
+      expiresIn
+    }
     
     // Gerar JWT com expiração curta para maior segurança
     const token = jwt.sign(
@@ -86,8 +92,8 @@ router.post('/login', auditAuthEvent('LOGIN'), async (req, res) => {
         role: users.role,
         iat: Math.floor(Date.now() / 1000)
       },
-      jwtSecret,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '15m' } // Access token curto
+      jwtSecretKey,
+      jwtOptions // Access token curto
     )
 
     // Setar cookie HttpOnly para o domínio da API (usado pela API com credentials: include)
@@ -213,6 +219,11 @@ router.post('/register', auditSensitiveOperation('CREATE', 'users'), async (req,
     if (!jwtSecret || jwtSecret.length < 32) {
       throw new Error('JWT_SECRET deve ter pelo menos 32 caracteres para segurança')
     }
+    const jwtSecretKey: Secret = jwtSecret
+    const expiresIn: StringValue = (process.env.JWT_EXPIRES_IN || '15m') as StringValue
+    const jwtOptions: SignOptions = {
+      expiresIn
+    }
     
     // Gerar JWT com expiração curta para maior segurança
     const token = jwt.sign(
@@ -222,8 +233,8 @@ router.post('/register', auditSensitiveOperation('CREATE', 'users'), async (req,
         role: createdUser.role,
         iat: Math.floor(Date.now() / 1000)
       },
-      jwtSecret,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '15m' } // Access token curto
+      jwtSecretKey,
+      jwtOptions // Access token curto
     )
 
     // Retornar dados do usuário

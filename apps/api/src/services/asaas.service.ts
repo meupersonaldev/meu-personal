@@ -267,36 +267,6 @@ export class AsaasService {
   }
 
   /**
-   * Criar plano de assinatura no Asaas (para planos recorrentes de professores)
-   * Note: Asaas chama isso de "subscription plan"
-   */
-  async createSubscriptionPlan(data: {
-    name: string
-    description?: string
-    value: number
-    cycle: 'MONTHLY' | 'QUARTERLY' | 'YEARLY'
-  }) {
-    try {
-      const response = await this.api.post('/subscriptions/plans', {
-        name: data.name,
-        description: data.description || data.name,
-        value: data.value,
-        cycle: data.cycle
-      })
-      return {
-        success: true,
-        data: response.data
-      }
-    } catch (error: any) {
-      console.error('Erro ao criar plano de assinatura Asaas:', error.response?.data || error.message)
-      return {
-        success: false,
-        error: error.response?.data?.errors || error.message
-      }
-    }
-  }
-
-  /**
    * Processar webhook do Asaas
    * Eventos: PAYMENT_CREATED, PAYMENT_CONFIRMED, PAYMENT_RECEIVED, PAYMENT_OVERDUE, etc
    */
@@ -318,18 +288,18 @@ export class AsaasService {
    */
   async createSubscriptionPlan(data: {
     name: string
-    description: string
+    description?: string
     value: number
     cycle: 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'SEMIANNUALLY' | 'YEARLY'
-    billingType: 'BOLETO' | 'CREDIT_CARD' | 'PIX' | 'UNDEFINED'
+    billingType?: 'BOLETO' | 'CREDIT_CARD' | 'PIX' | 'UNDEFINED'
   }) {
     try {
       const response = await this.api.post('/subscriptions/plans', {
         name: data.name,
-        description: data.description,
+        description: data.description || data.name,
         value: data.value,
         cycle: data.cycle,
-        billingType: data.billingType
+        billingType: data.billingType || 'UNDEFINED'
       })
 
       console.log('Plano criado no Asaas:', response.data.id)

@@ -2,7 +2,6 @@ import express from 'express'
 import { z } from 'zod'
 import { supabase } from '../config/supabase'
 import { createNotification, createUserNotification } from './notifications'
-import { createNotification } from './notifications'
 
 const router = express.Router()
 

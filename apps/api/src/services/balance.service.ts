@@ -47,7 +47,7 @@ export interface HourTransaction {
 
 class BalanceService {
   // Student Class Balance Operations
-  async getStudentBalance(studentId: string, unitId: string): Promise<StudentClassBalance | null> {
+  async getStudentBalance(studentId: string, unitId: string): Promise<StudentClassBalance> {
     const { data, error } = await supabase
       .from('student_class_balance')
       .select('*')
@@ -63,7 +63,7 @@ class BalanceService {
       throw error;
     }
 
-    return data;
+    return data as StudentClassBalance;
   }
 
   async createStudentBalance(studentId: string, unitId: string): Promise<StudentClassBalance> {
@@ -265,7 +265,7 @@ class BalanceService {
   }
 
   // Professor Hour Balance Operations
-  async getProfessorBalance(professorId: string, unitId: string): Promise<ProfHourBalance | null> {
+  async getProfessorBalance(professorId: string, unitId: string): Promise<ProfHourBalance> {
     const { data, error } = await supabase
       .from('prof_hour_balance')
       .select('*')
@@ -281,7 +281,7 @@ class BalanceService {
       throw error;
     }
 
-    return data;
+    return data as ProfHourBalance;
   }
 
   async createProfessorBalance(professorId: string, unitId: string): Promise<ProfHourBalance> {
@@ -439,6 +439,36 @@ class BalanceService {
     );
 
     // Update balance
+    const updatedBalance = await this.updateProfessorBalance(professorId, unitId, {
+      locked_hours: balance.locked_hours - hours
+    });
+
+    return { balance: updatedBalance, transaction };
+  }
+
+  async unlockProfessorHours(
+    professorId: string,
+    unitId: string,
+    hours: number,
+    bookingId: string,
+    source: HourTransaction['source'] = 'SYSTEM'
+  ): Promise<{ balance: ProfHourBalance; transaction: HourTransaction }> {
+    const balance = await this.getProfessorBalance(professorId, unitId);
+
+    if (balance.locked_hours < hours) {
+      throw new Error(`Saldo bloqueado insuficiente. Bloqueado: ${balance.locked_hours}, Necessario: ${hours}`);
+    }
+
+    const transaction = await this.createHourTransaction(
+      professorId,
+      unitId,
+      'BONUS_UNLOCK',
+      hours,
+      source,
+      bookingId,
+      { booking_id: bookingId }
+    );
+
     const updatedBalance = await this.updateProfessorBalance(professorId, unitId, {
       locked_hours: balance.locked_hours - hours
     });

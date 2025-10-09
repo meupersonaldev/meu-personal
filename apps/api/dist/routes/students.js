@@ -363,7 +363,7 @@ router.get('/:id/stats', async (req, res) => {
         const { id } = req.params;
         const { data: student } = await supabase_1.supabase
             .from('users')
-            .select('id')
+            .select('id, created_at')
             .eq('id', id)
             .eq('role', 'STUDENT')
             .single();

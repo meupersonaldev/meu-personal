@@ -4,6 +4,21 @@ import { supabase } from '../config/supabase'
 import { requireAuth } from '../middleware/auth'
 import { publish, topicForAcademy, topicForUser, subscribe, topicForFranqueadora } from '../lib/notify'
 
+const notificationTypes = [
+  'new_booking',
+  'booking_cancelled',
+  'checkin',
+  'new_student',
+  'payment_received',
+  'plan_purchased',
+  'teacher_approval_needed',
+  'student_approval_needed',
+  'new_teacher',
+  'booking_created'
+] as const
+
+type NotificationType = typeof notificationTypes[number]
+
 const router = express.Router()
 
 // Listar notificacoes (por academy_id, franqueadora_id ou user_id)
@@ -140,7 +155,7 @@ router.post('/', async (req, res) => {
   try {
     const notificationSchema = z.object({
       academy_id: z.string().uuid(),
-      type: z.enum(['new_booking', 'booking_cancelled', 'checkin', 'new_student', 'payment_received', 'plan_purchased']),
+      type: z.enum(notificationTypes),
       title: z.string().min(1).max(255),
       message: z.string().min(1),
       data: z.record(z.any()).optional()
@@ -197,7 +212,7 @@ router.delete('/:id', async (req, res) => {
 // Funcoes auxiliares (criar e publicar notificacoes)
 export async function createNotification(
   academy_id: string,
-  type: 'new_booking' | 'booking_cancelled' | 'checkin' | 'new_student' | 'payment_received' | 'plan_purchased',
+  type: NotificationType,
   title: string,
   message: string,
   data: any = {}
@@ -233,7 +248,7 @@ export async function createNotification(
 
 export async function createUserNotification(
   user_id: string,
-  type: 'new_booking' | 'booking_cancelled' | 'checkin' | 'new_student' | 'payment_received' | 'plan_purchased',
+  type: NotificationType,
   title: string,
   message: string,
   data: any = {}
@@ -323,4 +338,3 @@ router.get('/stream', requireAuth, async (req, res) => {
 })
 
 export default router
-

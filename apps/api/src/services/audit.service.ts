@@ -4,7 +4,7 @@ export interface AuditLog {
   id: string;
   table_name: string;
   record_id: string;
-  operation: 'CREATE' | 'UPDATE' | 'DELETE' | 'LOGIN' | 'LOGOUT' | 'PAYMENT' | 'BOOKING_CANCEL' | 'BOOKING_CREATE' | 'SENSITIVE_CHANGE';
+  operation: 'CREATE' | 'UPDATE' | 'DELETE' | 'LOGIN' | 'LOGOUT' | 'PAYMENT' | 'BOOKING_CANCEL' | 'BOOKING_CREATE' | 'BOOKING_UPDATE' | 'SENSITIVE_CHANGE';
   actor_id?: string;
   actor_role?: string;
   old_values?: Record<string, any>;
@@ -234,6 +234,34 @@ class AuditService {
       });
     } catch (error) {
       console.error('❌ Erro ao logar evento de booking:', error);
+    }
+  }
+
+  /**
+   * Registra tentativa de acesso negado a um recurso protegido
+   */
+  async logPermissionDenied(
+    req: { ip?: string; method?: string; path?: string; user?: { userId?: string; role?: string } },
+    tableName: string,
+    attemptedOperation: string,
+    recordId?: string
+  ): Promise<void> {
+    try {
+      await this.createLog({
+        tableName,
+        recordId: recordId ?? 'unknown',
+        operation: 'SENSITIVE_CHANGE',
+        actorId: req.user?.userId,
+        actorRole: req.user?.role,
+        metadata: {
+          attemptedOperation,
+          method: req.method,
+          path: req.path
+        },
+        ipAddress: req.ip
+      });
+    } catch (error) {
+      console.error('? Erro ao logar tentativa de acesso negado:', error);
     }
   }
 

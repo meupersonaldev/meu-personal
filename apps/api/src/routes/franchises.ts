@@ -316,39 +316,46 @@ router.get('/:id/stats', async (req, res) => {
   try {
     const { id } = req.params
 
-    // Buscar estatísticas da academia
-    const [studentsResult, teachersResult, bookingsResult, plansResult] = await Promise.all([
-      supabase
-        .from('academy_students')
-        .select('status')
-        .eq('academy_id', id),
+    const { data: studentsData, error: studentsError } = await supabase
+      .from('academy_students')
+      .select('status')
+      .eq('academy_id', id)
 
-      supabase
-        .from('academy_teachers')
-        .select('status')
-        .eq('academy_id', id),
+    if (studentsError) throw studentsError
 
-      supabase
+    const { data: teachersData, error: teachersError } = await supabase
+      .from('academy_teachers')
+      .select('teacher_id, status')
+      .eq('academy_id', id)
+
+    if (teachersError) throw teachersError
+
+    const teacherIds = (teachersData || [])
+      .map(t => t.teacher_id)
+      .filter((value): value is string => Boolean(value))
+
+    let bookings: any[] = []
+    if (teacherIds.length > 0) {
+      const { data: bookingsData, error: bookingsError } = await supabase
         .from('bookings')
         .select('status, teacher_id')
-        .in('teacher_id',
-          supabase
-            .from('academy_teachers')
-            .select('teacher_id')
-            .eq('academy_id', id)
-        ),
+        .in('teacher_id', teacherIds)
 
-      supabase
-        .from('academy_plans')
-        .select('*')
-        .eq('academy_id', id)
-        .eq('is_active', true)
-    ])
+      if (bookingsError) throw bookingsError
+      bookings = bookingsData || []
+    }
 
-    const students = studentsResult.data || []
-    const teachers = teachersResult.data || []
-    const bookings = bookingsResult.data || []
-    const plans = plansResult.data || []
+    const { data: plansData, error: plansError } = await supabase
+      .from('academy_plans')
+      .select('*')
+      .eq('academy_id', id)
+      .eq('is_active', true)
+
+    if (plansError) throw plansError
+
+    const students = studentsData || []
+    const teachers = teachersData || []
+    const plans = plansData || []
 
     const stats = {
       totalStudents: students.length,
