@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { motion } from 'framer-motion'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { useStudentStore, Teacher } from '@/lib/stores/student-store'
@@ -184,150 +185,118 @@ export default function AlunoInicioPage() {
   const quickActions = [
     {
       title: 'Comprar créditos',
-      description: 'Garanta saldo para agendar suas aulas quando quiser.',
+      description: 'Adicione saldo para suas aulas',
       icon: CreditCard,
-      cta: 'Ir para carteira',
       onClick: () => router.push('/aluno/comprar'),
-      tone: 'bg-green-50 text-green-800 border-green-200'
+      bg: 'bg-gradient-to-br from-green-50 to-emerald-50',
+      iconBg: 'bg-green-500',
+      stats: `${user?.credits ?? 0} disponíveis`
     },
     {
-      title: 'Encontrar professor',
-      description: 'Busque profissionais por cidade, estado ou especialidade.',
+      title: 'Ver professores',
+      description: 'Encontre seu professor ideal',
       icon: Users,
-      cta: 'Ver professores',
       onClick: () => router.push('/aluno/inicio?section=professores'),
-      tone: 'bg-blue-50 text-blue-800 border-blue-200'
+      bg: 'bg-gradient-to-br from-blue-50 to-indigo-50',
+      iconBg: 'bg-blue-500',
+      stats: `${teachers.length} disponíveis`
     },
     {
-      title: 'Agendar aula',
-      description: 'Confira sua agenda e organize os próximos treinos.',
+      title: 'Minhas aulas',
+      description: 'Gerencie seus agendamentos',
       icon: CalendarPlus,
-      cta: 'Ver agenda',
       onClick: () => router.push('/aluno/inicio?section=agendamentos'),
-      tone: 'bg-purple-50 text-purple-800 border-purple-200'
+      bg: 'bg-gradient-to-br from-purple-50 to-violet-50',
+      iconBg: 'bg-purple-500',
+      stats: `${activeBookings.length} agendadas`
     }
   ]
 
   return (
     <>
-      <div className="space-y-6 px-4 py-6 md:px-6 md:space-y-8">
-        <section className="space-y-2">
-          <h1 className="text-2xl font-bold text-gray-900 md:text-4xl">
-            Olá, {firstName} 👋
-          </h1>
-          <p className="text-sm text-gray-600 capitalize md:text-lg">{formattedDate}</p>
-        </section>
+      <div className="min-h-screen bg-gradient-to-br from-meu-primary/5 via-white to-meu-accent/5">
+        <div className="container mx-auto px-4 py-8 max-w-7xl">
+          {/* Welcome Section - Simplified */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-center mb-10"
+          >
+            <h1 className="text-3xl md:text-4xl font-bold text-meu-primary mb-2">
+              Olá, {firstName}! 👋
+            </h1>
+            <p className="text-gray-600">{formattedDate}</p>
+          </motion.div>
 
-        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {quickActions.map((action) => {
-            const Icon = action.icon
-            return (
-              <Card
-                key={action.title}
-                className={}
-              >
-                <CardContent className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
-                  <div className="flex items-start gap-3">
-                    <div className="rounded-xl bg-white/70 p-2 text-meu-primary">
-                      <Icon className="h-5 w-5" />
+          {/* Main Actions - Integrated Stats */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12"
+          >
+            {quickActions.map((action, index) => {
+              const Icon = action.icon
+              return (
+                <motion.div
+                  key={action.title}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 + index * 0.1 }}
+                  whileHover={{ scale: 1.02 }}
+                  className="cursor-pointer"
+                  onClick={action.onClick}
+                >
+                  <div className={`${action.bg} rounded-2xl p-8 text-center border border-white/50 shadow-lg hover:shadow-xl transition-all duration-300`}>
+                    <div className={`${action.iconBg} w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 text-white shadow-lg`}>
+                      <Icon className="h-8 w-8" />
                     </div>
-                    <div>
-                      <h3 className="text-base font-semibold">{action.title}</h3>
-                      <p className="text-sm opacity-80">{action.description}</p>
-                    </div>
+                    <h3 className="text-xl font-semibold text-gray-800 mb-2">{action.title}</h3>
+                    <p className="text-gray-600 text-sm mb-4">{action.description}</p>
+                    <div className="text-2xl font-bold text-meu-primary">{action.stats}</div>
                   </div>
-                  <Button
-                    size="sm"
-                    className="w-full bg-meu-primary text-white hover:bg-meu-primary-dark md:w-auto"
-                    onClick={action.onClick}
-                  >
-                    {action.cta}
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Button>
-                </CardContent>
-              </Card>
-            )
-          })}
-        </section>
+                </motion.div>
+              )
+            })}
+          </motion.div>
 
-        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <Card className="border border-gray-200 shadow-sm transition-all hover:shadow-lg">
-            <CardContent className="p-4 md:p-6">
-              <div className="mb-3 flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-meu-primary to-meu-primary-dark text-white">
-                  <CreditCard className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                    Créditos disponíveis
-                  </p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {user?.credits ?? 0}
-                  </p>
-                </div>
+          {/* Quick Summary Bar */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="bg-white rounded-2xl p-6 shadow-lg mb-8 border border-gray-100"
+          >
+            <div className="flex flex-col md:flex-row justify-around items-center gap-4">
+              <div className="text-center">
+                <div className="text-sm text-gray-500 mb-1">Aulas hoje</div>
+                <div className="text-2xl font-bold text-meu-accent">{todayBookings.length}</div>
               </div>
-              <p className="text-xs text-gray-500">Use créditos para confirmar suas aulas.</p>
-            </CardContent>
-          </Card>
-
-          <Card className="border border-gray-200 shadow-sm transition-all hover:shadow-lg">
-            <CardContent className="p-4 md:p-6">
-              <div className="mb-3 flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-meu-accent to-yellow-400 text-meu-primary-dark">
-                  <Calendar className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                    Aulas agendadas
-                  </p>
-                  <p className="text-2xl font-bold text-gray-900">{activeBookings.length}</p>
-                </div>
+              <div className="hidden md:block w-px h-12 bg-gray-200"></div>
+              <div className="text-center">
+                <div className="text-sm text-gray-500 mb-1">Concluídas</div>
+                <div className="text-2xl font-bold text-green-600">{completedBookingsCount}</div>
               </div>
-              <p className="text-xs text-gray-500">{todayBookings.length} aula(s) marcada(s) para hoje.</p>
-            </CardContent>
-          </Card>
-
-          <Card className="border border-gray-200 shadow-sm transition-all hover:shadow-lg">
-            <CardContent className="p-4 md:p-6">
-              <div className="mb-3 flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-meu-cyan to-cyan-400 text-white">
-                  <TrendingUp className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                    Aulas concluídas
-                  </p>
-                  <p className="text-2xl font-bold text-gray-900">{completedBookingsCount}</p>
-                </div>
+              <div className="hidden md:block w-px h-12 bg-gray-200"></div>
+              <div className="text-center">
+                <div className="text-sm text-gray-500 mb-1">Status atual</div>
+                <div className="text-lg font-semibold text-meu-primary">Pronto para treinar</div>
               </div>
-              <p className="text-xs text-gray-500">{bookings.length} aulas agendadas no total.</p>
-            </CardContent>
-          </Card>
+            </div>
+          </motion.div>
 
-          <Card className="border border-gray-200 shadow-sm transition-all hover:shadow-lg">
-            <CardContent className="p-4 md:p-6">
-              <div className="mb-3 flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 text-white">
-                  <Users className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                    Professores disponíveis
-                  </p>
-                  <p className="text-2xl font-bold text-gray-900">{teachers.length}</p>
-                </div>
-              </div>
-              <p className="text-xs text-gray-500">Profissionais com agenda aberta na sua região.</p>
-            </CardContent>
-          </Card>
-        </section>
-
-        <section ref={teachersSectionRef} className="space-y-6">
+        {/* Teachers Section - Simplified */}
+        <motion.section
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+          ref={teachersSectionRef} className="space-y-6"
+        >
           <Card className="border border-gray-200 bg-white shadow-sm">
             <CardHeader>
               <div className="flex items-center gap-2">
-                <Filter className="h-5 w-5 text-meu-primary" />
-                <CardTitle className="text-lg font-semibold md:text-xl">Buscar professores</CardTitle>
+                <Users className="h-5 w-5 text-meu-primary" />
+                <CardTitle className="text-lg font-semibold">Encontrar professores</CardTitle>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -371,180 +340,153 @@ export default function AlunoInicioPage() {
           </Card>
 
           <Card className="border border-gray-200 bg-white shadow-sm">
-            <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-              <div>
-                <CardTitle className="text-lg font-semibold text-gray-900 md:text-xl">
-                  Professores disponíveis
-                </CardTitle>
-                <p className="text-xs text-gray-500 md:text-sm">
-                  {teachers.length} professor(es) encontrado(s)
-                </p>
-              </div>
+            <CardHeader>
+              <CardTitle className="text-lg font-semibold text-gray-900">
+                {teachers.length} professor(es) encontrado(s)
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               {teachers.length === 0 ? (
                 <div className="py-12 text-center">
                   <User className="mx-auto mb-4 h-12 w-12 text-gray-300" />
                   <p className="text-gray-500">Nenhum professor encontrado</p>
-                  <p className="mt-2 text-sm text-gray-400">Tente ajustar os filtros de busca</p>
                   <Button onClick={handleClearFilters} className="mt-4">
                     Limpar filtros
                   </Button>
                 </div>
               ) : (
-                teachers.map((teacher) => {
-                  const profile = teacher.teacher_profiles?.[0]
-                  const academy = teacher.academy_teachers?.[0]?.academies
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {teachers.slice(0, 6).map((teacher) => {
+                    const profile = teacher.teacher_profiles?.[0]
+                    const academy = teacher.academy_teachers?.[0]?.academies
 
-                  return (
-                    <div
-                      key={teacher.id}
-                      className="rounded-2xl border border-gray-100 bg-gradient-to-r from-gray-50 to-gray-50/60 p-5 transition-all hover:border-meu-primary/20 hover:shadow-lg"
-                    >
-                      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
+                    return (
+                      <div
+                        key={teacher.id}
+                        className="rounded-xl border border-gray-100 bg-gradient-to-r from-gray-50 to-gray-50/60 p-4 transition-all hover:border-meu-primary/20 hover:shadow-md"
+                      >
+                        <div className="flex items-start gap-3">
                           <div className="relative flex-shrink-0">
                             {teacher.avatar_url ? (
                               <img
                                 src={teacher.avatar_url}
                                 alt={teacher.name}
-                                className="h-16 w-16 rounded-2xl object-cover shadow-lg"
+                                className="h-12 w-12 rounded-xl object-cover"
                               />
                             ) : (
-                              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-meu-primary to-meu-primary-dark text-lg font-bold text-white shadow-lg">
+                              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-meu-primary to-meu-primary-dark text-sm font-bold text-white">
                                 {teacher.name?.substring(0, 2).toUpperCase()}
                               </div>
                             )}
                             {profile?.is_available && (
-                              <span className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full border-2 border-white bg-green-500" />
+                              <span className="absolute -bottom-1 -right-1 h-3 w-3 rounded-full border-2 border-white bg-green-500" />
                             )}
                           </div>
 
-                          <div className="space-y-3">
-                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-                              <h4 className="text-lg font-semibold text-gray-900">
-                                {teacher.name}
-                              </h4>
+                          <div className="flex-1 space-y-2">
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-semibold text-gray-900">{teacher.name}</h4>
                               {profile?.is_available && (
-                                <Badge className="bg-green-100 text-green-700">Disponível</Badge>
+                                <Badge className="bg-green-100 text-green-700 text-xs">Disponível</Badge>
                               )}
                             </div>
 
-                            {profile?.bio && (
-                              <p className="text-sm text-gray-600">{profile.bio}</p>
-                            )}
-
-                            {profile?.specialties && profile.specialties.length > 0 && (
-                              <div className="flex flex-wrap gap-2">
-                                {profile.specialties.map((specialty, index) => (
-                                  <Badge key={index} variant="secondary" className="text-xs">
-                                    {specialty}
-                                  </Badge>
-                                ))}
-                              </div>
-                            )}
-
-                            <div className="grid grid-cols-1 gap-3 text-sm text-gray-600 sm:grid-cols-2">
+                            <div className="text-sm text-gray-600">
                               {academy && (
-                                <div className="flex items-center gap-2">
-                                  <MapPin className="h-4 w-4 text-meu-primary" />
-                                  <span>
-                                    {academy.city}, {academy.state}
-                                  </span>
+                                <div className="flex items-center gap-1">
+                                  <MapPin className="h-3 w-3 text-meu-primary" />
+                                  <span>{academy.city}, {academy.state}</span>
                                 </div>
                               )}
-                              <div className="flex items-center gap-2">
-                                <DollarSign className="h-4 w-4 text-green-600" />
-                                <span className="font-semibold text-gray-900">
-                                  R$ {profile?.hourly_rate?.toFixed(2) || '0,00'}/hora
-                                </span>
+                              <div className="flex items-center gap-1 mt-1">
+                                <DollarSign className="h-3 w-3 text-green-600" />
+                                <span>R$ {profile?.hourly_rate?.toFixed(2) || '0,00'}/hora</span>
                               </div>
                             </div>
+
+                            <Button
+                              size="sm"
+                              onClick={() => handleSelectTeacher(teacher)}
+                              className="bg-meu-primary text-white hover:bg-meu-primary-dark w-full"
+                            >
+                              <Calendar className="mr-1 h-3 w-3" />
+                              Agendar
+                            </Button>
                           </div>
                         </div>
-
-                        <Button
-                          onClick={() => handleSelectTeacher(teacher)}
-                          className="bg-meu-primary text-white hover:bg-meu-primary-dark"
-                        >
-                          <Calendar className="mr-2 h-4 w-4" />
-                          Agendar
-                        </Button>
                       </div>
-                    </div>
-                  )
-                })
+                    )
+                  })}
+                </div>
               )}
             </CardContent>
           </Card>
-        </section>
+        </motion.section>
 
-        <section ref={bookingsSectionRef} className="space-y-4">
+        {/* Bookings Section - Simplified */}
+        <motion.section
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5 }}
+          ref={bookingsSectionRef} className="space-y-4"
+        >
           <Card className="border border-gray-200 bg-white shadow-sm">
-            <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <CardTitle className="text-lg font-semibold text-gray-900 md:text-xl">
-                  Minhas próximas aulas
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Calendar className="h-5 w-5 text-meu-primary" />
+                <CardTitle className="text-lg font-semibold">
+                  Minhas aulas ({activeBookings.length})
                 </CardTitle>
-                <p className="text-xs text-gray-500 md:text-sm">
-                  {todayBookings.length} aula(s) marcada(s) para hoje
-                </p>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
               {activeBookings.length === 0 ? (
-                <div className="py-12 text-center">
-                  <Calendar className="mx-auto mb-4 h-12 w-12 text-gray-300" />
+                <div className="py-8 text-center">
+                  <Calendar className="mx-auto mb-3 h-8 w-8 text-gray-300" />
                   <p className="text-gray-500">Nenhuma aula agendada</p>
-                  <p className="mt-2 text-sm text-gray-400">
-                    Agende sua primeira aula com um professor
-                  </p>
+                  <Button onClick={() => router.push('/aluno/inicio?section=professores')} className="mt-3">
+                    Encontrar professor
+                  </Button>
                 </div>
               ) : (
-                activeBookings.slice(0, 5).map((booking) => (
-                  <div
-                    key={booking.id}
-                    className="rounded-2xl border border-gray-100 bg-gradient-to-r from-gray-50 to-gray-50/50 p-5 transition-all hover:border-meu-primary/20 hover:shadow-lg"
-                  >
-                    <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                      <div className="space-y-3">
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-                          <h4 className="text-lg font-semibold text-gray-900">
-                            {booking.teacher?.name || 'Professor'}
-                          </h4>
-                          {getStatusBadge(booking.status)}
-                        </div>
-                        <div className="grid grid-cols-1 gap-3 text-sm text-gray-600 sm:grid-cols-2">
-                          <div className="flex items-center gap-2">
-                            <Clock className="h-4 w-4 text-meu-primary" />
-                            <span className="font-medium">
-                              {new Date(booking.date).toLocaleTimeString('pt-BR', {
+                <div className="space-y-3">
+                  {activeBookings.slice(0, 3).map((booking) => (
+                    <div
+                      key={booking.id}
+                      className="rounded-lg border border-gray-100 bg-gray-50 p-4 transition-all hover:border-meu-primary/20 hover:shadow-md"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 rounded-full bg-meu-primary/10 flex items-center justify-center">
+                            <User className="h-5 w-5 text-meu-primary" />
+                          </div>
+                          <div>
+                            <h4 className="font-semibold text-gray-900">{booking.teacher?.name || 'Professor'}</h4>
+                            <div className="flex items-center gap-2 text-sm text-gray-600">
+                              <Clock className="h-3 w-3" />
+                              {new Date(booking.date).toLocaleString('pt-BR', {
+                                day: '2-digit',
+                                month: '2-digit',
                                 hour: '2-digit',
                                 minute: '2-digit'
                               })}
-                            </span>
+                              <span className="text-gray-400">•</span>
+                              <span>{booking.duration} min</span>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4 text-meu-primary" />
-                            <span>{new Date(booking.date).toLocaleDateString('pt-BR')}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <TrendingUp className="h-4 w-4 text-meu-primary" />
-                            <span>{booking.duration} min</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <CreditCard className="h-4 w-4 text-meu-primary" />
-                            <span>{booking.credits_cost} crédito(s)</span>
-                          </div>
+                        </div>
+                        <div className="text-right">
+                          {getStatusBadge(booking.status)}
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  ))}
+                </div>
               )}
             </CardContent>
           </Card>
-        </section>
+        </motion.section>
+        </div>
       </div>
 
       {showBookingModal && selectedTeacher && (
