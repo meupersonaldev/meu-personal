@@ -19,7 +19,7 @@ COPY apps/api ./apps/api
 
 ENV NODE_ENV=production
 
-RUN npm run build --workspace=api
+RUN npm run build --workspace=@meu-personal/api
 
 FROM node:20-alpine AS runner
 
