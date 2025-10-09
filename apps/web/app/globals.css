@@ -328,12 +328,12 @@
 
   /* Mobile Navigation Styles */
   .mobile-tab-bar {
-    @apply fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 flex items-center justify-around py-2 px-4;
+    @apply fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 flex items-center justify-start gap-1 overflow-x-auto py-2 px-4;
     @apply lg:hidden; /* Hide on desktop */
   }
 
   .mobile-tab-item {
-    @apply flex flex-col items-center justify-center p-2 text-gray-500 transition-colors duration-200;
+    @apply flex flex-col items-center justify-center p-2 text-gray-500 transition-colors duration-200 flex-shrink-0;
     @apply hover:text-meu-primary;
     min-width: 60px;
   }
@@ -384,4 +384,3 @@
     animation-delay: 0.5s;
   }
 }
-
