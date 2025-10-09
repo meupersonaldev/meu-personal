@@ -1,53 +1,44 @@
-FROM node:18-alpine AS base
+FROM node:20-alpine AS deps
 
-# Diretório de trabalho
 WORKDIR /app
 
-# Copiar arquivos de package
-COPY apps/web/package*.json ./
+RUN apk add --no-cache python3 make g++
+
 COPY package*.json ./
+COPY apps/web/package*.json apps/web/
 
-# Instalar todas as dependências (incluindo dev dependencies para build)
-RUN npm ci
+RUN npm install --legacy-peer-deps
 
-# Copiar código fonte
-COPY apps/web/src ./src
-COPY apps/web/public ./public
-COPY apps/web/next.config.ts ./
-COPY apps/web/tailwind.config.ts ./
-COPY apps/web/tsconfig.json ./
-COPY apps/web/postcss.config.mjs ./
+FROM node:20-alpine AS builder
 
-# Build da aplicação
-RUN npm run build
-
-# Imagem de produção
-FROM node:18-alpine AS production
-
-# Instalar dependências de produção
 WORKDIR /app
-COPY apps/web/package*.json ./
+
+COPY --from=deps /app/node_modules ./node_modules
 COPY package*.json ./
-RUN npm ci --only=production && npm cache clean --force
+COPY apps/web ./apps/web
 
-# Copiar build e arquivos necessários
-COPY --from=base /app/.next/standalone ./
-COPY --from=base /app/.next/static ./.next/static
-COPY --from=base /app/public ./public
+ENV NODE_ENV=production
 
-# Criar usuário não-root
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001
+RUN npm run build --workspace=web
 
-# Trocar para usuário não-root
-USER nodejs
+FROM node:20-alpine AS runner
 
-# Expor porta
-EXPOSE 3000
+WORKDIR /app
 
-# Variáveis de ambiente
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# Comando de start
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
+
+COPY --from=builder /app/apps/web/.next/standalone ./
+COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
+COPY --from=builder /app/apps/web/public ./apps/web/public
+
+USER nodejs
+
+WORKDIR /app/apps/web
+
+EXPOSE 3000
+
 CMD ["node", "server.js"]

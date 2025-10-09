@@ -1,49 +1,51 @@
-FROM node:18-alpine AS base
+FROM node:20-alpine AS deps
 
-# Instalar dependências de build
-RUN apk add --no-cache python3 make g++
-
-# Diretório de trabalho
 WORKDIR /app
 
-# Copiar arquivos de package
-COPY apps/api/package*.json ./
+RUN apk add --no-cache python3 make g++
+
 COPY package*.json ./
+COPY apps/api/package*.json apps/api/
 
-# Instalar dependências
-RUN npm ci --only=production && npm cache clean --force
+RUN npm install --legacy-peer-deps
 
-# Copiar código fonte
-COPY apps/api/src ./src
-COPY apps/api/tsconfig.json ./
+FROM node:20-alpine AS builder
 
-# Build da aplicação
-RUN npm run build
+WORKDIR /app
 
-# Imagem de produção
-FROM node:18-alpine AS production
+COPY --from=deps /app/node_modules ./node_modules
+COPY package*.json ./
+COPY apps/api ./apps/api
 
-# Criar usuário não-root
+ENV NODE_ENV=production
+
+RUN npm run build --workspace=api
+
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
 
-WORKDIR /app
+COPY package*.json ./
+COPY apps/api/package*.json ./apps/api/
+COPY --from=deps /app/node_modules ./node_modules
 
-# Copiar dependências e build
-COPY --from=base /app/node_modules ./node_modules
-COPY --from=base /app/dist ./dist
+RUN npm prune --omit=dev && npm cache clean --force
 
-# Criar diretório de uploads
-RUN mkdir -p uploads && chown -R nodejs:nodejs uploads
+COPY --from=builder /app/apps/api/dist ./apps/api/dist
+COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
+COPY --from=builder /app/apps/api/uploads ./apps/api/uploads
 
-# Trocar para usuário não-root
-USER nodejs
+RUN chown -R nodejs:nodejs apps/api/uploads
 
-# Expor porta
+WORKDIR /app/apps/api
+
 EXPOSE 3001
 
-# Variáveis de ambiente
-ENV NODE_ENV=production
+USER nodejs
 
-# Comando de start
 CMD ["node", "dist/server.js"]
