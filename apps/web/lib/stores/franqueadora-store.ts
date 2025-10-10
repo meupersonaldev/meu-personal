@@ -170,6 +170,48 @@ export interface UsersResponse {
   }
 }
 
+export interface StudentCreditPackage {
+  id: string
+  franqueadora_id: string
+  title: string
+  classes_qty: number
+  price_cents: number
+  status: string
+  metadata_json: Record<string, any>
+  created_at: string
+  updated_at: string
+}
+
+export interface HourCreditPackage {
+  id: string
+  franqueadora_id: string
+  title: string
+  hours_qty: number
+  price_cents: number
+  status: string
+  metadata_json: Record<string, any>
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateStudentPackageInput {
+  title: string
+  classesQty: number
+  priceCents: number
+  status?: 'active' | 'inactive'
+  description?: string
+  metadata?: Record<string, any>
+}
+
+export interface CreateHourPackageInput {
+  title: string
+  hoursQty: number
+  priceCents: number
+  status?: 'active' | 'inactive'
+  description?: string
+  metadata?: Record<string, any>
+}
+
 export interface ConsolidatedAnalytics {
   totalFranchises: number
   activeFranchises: number
@@ -202,17 +244,21 @@ interface FranqueadoraState {
   // Data
   academies: Academy[]
   packages: FranchisePackage[]
+  studentPackages: StudentCreditPackage[]
+  hourPackages: HourCreditPackage[]
   leads: FranchiseLead[]
   users: User[]
   analytics: ConsolidatedAnalytics | null
 
   // Loading
   isLoading: boolean
+  isPackagesLoading: boolean
 
   // Actions
   login: (email: string, password: string) => Promise<boolean>
   logout: () => void
   fetchFranqueadora: () => Promise<void>
+  ensureFranqueadoraId: () => Promise<string | null>
 
   // Academies/Franchises
   fetchAcademies: () => Promise<void>
@@ -226,6 +272,14 @@ interface FranqueadoraState {
   addPackage: (packageData: Omit<FranchisePackage, 'id'>) => Promise<boolean>
   updatePackage: (id: string, updates: Partial<FranchisePackage>) => Promise<boolean>
   deletePackage: (id: string) => Promise<boolean>
+  fetchStudentPackages: () => Promise<void>
+  fetchHourPackages: () => Promise<void>
+  createStudentPackage: (payload: CreateStudentPackageInput) => Promise<boolean>
+  updateStudentPackage: (id: string, payload: CreateStudentPackageInput) => Promise<boolean>
+  deleteStudentPackage: (id: string) => Promise<boolean>
+  createHourPackage: (payload: CreateHourPackageInput) => Promise<boolean>
+  updateHourPackage: (id: string, payload: CreateHourPackageInput) => Promise<boolean>
+  deleteHourPackage: (id: string) => Promise<boolean>
 
   // Leads
   fetchLeads: () => Promise<void>
@@ -248,10 +302,26 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
       token: null,
       academies: [],
       packages: [],
+      studentPackages: [],
+      hourPackages: [],
       leads: [],
       users: [],
       analytics: null,
       isLoading: false,
+      isPackagesLoading: false,
+
+      // Helpers
+      async ensureFranqueadoraId() {
+        let franqueadoraId = get().franqueadora?.id || null
+        if (franqueadoraId) return franqueadoraId
+
+        try {
+          await get().fetchFranqueadora()
+        } catch {}
+
+        franqueadoraId = get().franqueadora?.id || null
+        return franqueadoraId
+      },
 
       // Auth
       login: async (email: string, password: string) => {
@@ -303,14 +373,13 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           }
           return true
         } catch (error) {
-          console.error('Login error:', error)
           set({ isLoading: false })
           return false
         }
       },
 
       // Buscar contexto da franqueadora do admin logado via API
-      fetchFranqueadora: async () => {
+       fetchFranqueadora: async () => {
         try {
           const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           const token = get().token
@@ -404,7 +473,6 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
 
           set({ academies: safeAcademies })
         } catch (error) {
-          console.error('Error fetching academies:', error)
         }
       },
 
@@ -441,7 +509,6 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           set(state => ({ academies: [...state.academies, academy] }))
           return true
         } catch (error) {
-          console.error('Error adding academy:', error)
           return false
         }
       },
@@ -469,7 +536,6 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           await get().fetchAcademies()
           return true
         } catch (error) {
-          console.error('Error updating academy:', error)
           return false
         }
       },
@@ -493,7 +559,6 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           set(state => ({ academies: state.academies.filter(academy => academy.id !== id) }))
           return true
         } catch (error) {
-          console.error('Error deleting academy:', error)
           return false
         }
       },
@@ -516,7 +581,6 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           const response = await resp.json()
           return response.data as AcademyStats
         } catch (error) {
-          console.error('Error fetching academy stats:', error)
           return null
         }
       },
@@ -540,7 +604,6 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           const json = await resp.json()
           set({ packages: json.packages || [] })
         } catch (error) {
-          console.error('Error fetching packages:', error)
         }
       },
 
@@ -567,7 +630,6 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           await get().fetchPackages()
           return true
         } catch (error) {
-          console.error('Error adding package:', error)
           return false
         }
       },
@@ -595,7 +657,6 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           await get().fetchPackages()
           return true
         } catch (error) {
-          console.error('Error updating package:', error)
           return false
         }
       },
@@ -619,7 +680,186 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           await get().fetchPackages()
           return true
         } catch (error) {
-          console.error('Error deleting package:', error)
+          return false
+        }
+      },
+
+      fetchStudentPackages: async () => {
+        try {
+          if (!get().isAuthenticated) return
+          set({ isPackagesLoading: true })
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const token = get().token
+          const franqueadoraId = await get().ensureFranqueadoraId()
+
+          if (!franqueadoraId) {
+            set({ studentPackages: [] })
+            return
+          }
+
+          const resp = await fetch(`${API_URL}/api/packages/student/manage?franqueadora_id=${encodeURIComponent(franqueadoraId)}`, {
+            credentials: 'include',
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined
+          })
+
+          if (!resp.ok) {
+            if ((resp.status === 401 || resp.status === 403) && get().isAuthenticated) {
+              try {
+                const { toast } = await import('sonner')
+                toast.error('Sem permissao para listar pacotes de aluno.')
+              } catch {}
+            }
+            return
+          }
+
+          const json = await resp.json()
+          set({ studentPackages: json.packages || [] })
+        } catch (error) {
+        } finally {
+          set({ isPackagesLoading: false })
+        }
+      },
+
+      fetchHourPackages: async () => {
+        try {
+          if (!get().isAuthenticated) return
+          set({ isPackagesLoading: true })
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const token = get().token
+          const franqueadoraId = await get().ensureFranqueadoraId()
+
+          if (!franqueadoraId) {
+            set({ hourPackages: [] })
+            return
+          }
+
+          const resp = await fetch(`${API_URL}/api/packages/professor/manage?franqueadora_id=${encodeURIComponent(franqueadoraId)}`, {
+            credentials: 'include',
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined
+          })
+
+          if (!resp.ok) {
+            if ((resp.status === 401 || resp.status === 403) && get().isAuthenticated) {
+              try {
+                const { toast } = await import('sonner')
+                toast.error('Sem permissao para listar pacotes de professor.')
+              } catch {}
+            }
+            return
+          }
+
+          const json = await resp.json()
+          set({ hourPackages: json.packages || [] })
+        } catch (error) {
+        } finally {
+          set({ isPackagesLoading: false })
+        }
+      },
+
+      createStudentPackage: async (payload) => {
+        try {
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const token = get().token
+          const franqueadoraId = await get().ensureFranqueadoraId()
+
+          if (!franqueadoraId) {
+            const { toast } = await import('sonner')
+            toast.error('Contexto da franqueadora não disponível.')
+            return false
+          }
+
+          const resp = await fetch(`${API_URL}/api/packages/student/manage`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {})
+            },
+            credentials: 'include',
+            body: JSON.stringify({
+              franqueadora_id: franqueadoraId,
+              title: payload.title,
+              classes_qty: payload.classesQty,
+              price_cents: payload.priceCents,
+              status: payload.status ?? 'active',
+              description: payload.description,
+              metadata: payload.metadata
+            })
+          })
+
+          if (!resp.ok) {
+            const errorBody = await resp.json().catch(() => ({}))
+            try {
+              const { toast } = await import('sonner')
+              toast.error(errorBody?.error || 'Erro ao criar pacote de aluno.')
+            } catch {}
+            return false
+          }
+
+          await get().fetchStudentPackages()
+          try {
+            const { toast } = await import('sonner')
+            toast.success('Pacote de aluno criado com sucesso.')
+          } catch {}
+          return true
+        } catch (error) {
+          try {
+            const { toast } = await import('sonner')
+            toast.error('Erro inesperado ao criar pacote de aluno.')
+          } catch {}
+          return false
+        }
+      },
+
+      createHourPackage: async (payload) => {
+        try {
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const token = get().token
+          const franqueadoraId = await get().ensureFranqueadoraId()
+
+          if (!franqueadoraId) {
+            const { toast } = await import('sonner')
+            toast.error('Contexto da franqueadora não disponível.')
+            return false
+          }
+
+          const resp = await fetch(`${API_URL}/api/packages/professor/manage`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {})
+            },
+            credentials: 'include',
+            body: JSON.stringify({
+              franqueadora_id: franqueadoraId,
+              title: payload.title,
+              hours_qty: payload.hoursQty,
+              price_cents: payload.priceCents,
+              status: payload.status ?? 'active',
+              description: payload.description,
+              metadata: payload.metadata
+            })
+          })
+
+          if (!resp.ok) {
+            const errorBody = await resp.json().catch(() => ({}))
+            try {
+              const { toast } = await import('sonner')
+              toast.error(errorBody?.error || 'Erro ao criar pacote de professor.')
+            } catch {}
+            return false
+          }
+
+          await get().fetchHourPackages()
+          try {
+            const { toast } = await import('sonner')
+            toast.success('Pacote de professor criado com sucesso.')
+          } catch {}
+          return true
+        } catch (error) {
+          try {
+            const { toast } = await import('sonner')
+            toast.error('Erro inesperado ao criar pacote de professor.')
+          } catch {}
           return false
         }
       },
@@ -643,7 +883,6 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           const json = await resp.json()
           set({ leads: json.leads || [] })
         } catch (error) {
-          console.error('Error fetching leads:', error)
         }
       },
 
@@ -670,7 +909,6 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           await get().fetchLeads()
           return true
         } catch (error) {
-          console.error('Error updating lead:', error)
           return false
         }
       },
@@ -688,7 +926,6 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             try {
               await get().fetchFranqueadora()
             } catch (fetchError) {
-              console.error('Failed to ensure franqueadora context before fetching users:', fetchError)
             }
             franqueadoraId = get().franqueadora?.id
           }
@@ -737,7 +974,6 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
 
           return data
         } catch (error) {
-          console.error('Error fetching users:', error)
           try {
             const { toast } = await import('sonner')
             toast.error('Erro ao carregar usuários.')
@@ -777,7 +1013,170 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
 
           set({ analytics: safeAnalytics })
         } catch (error) {
-          console.error('Error fetching analytics:', error)
+        }
+      },
+
+      // Novas funções de CRUD para pacotes de aluno
+      updateStudentPackage: async (id, payload) => {
+        try {
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const token = get().token
+
+          const resp = await fetch(`${API_URL}/api/packages/student/manage/${id}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {})
+            },
+            credentials: 'include',
+            body: JSON.stringify({
+              title: payload.title,
+              classes_qty: payload.classesQty,
+              price_cents: payload.priceCents,
+              status: payload.status,
+              description: payload.description,
+              metadata: payload.metadata
+            })
+          })
+
+          if (!resp.ok) {
+            const errorBody = await resp.json().catch(() => ({}))
+            try {
+              const { toast } = await import('sonner')
+              toast.error(errorBody?.error || 'Erro ao atualizar pacote de aluno.')
+            } catch {}
+            return false
+          }
+
+          await get().fetchStudentPackages()
+          try {
+            const { toast } = await import('sonner')
+            toast.success('Pacote de aluno atualizado com sucesso.')
+          } catch {}
+          return true
+        } catch (error) {
+          try {
+            const { toast } = await import('sonner')
+            toast.error('Erro inesperado ao atualizar pacote de aluno.')
+          } catch {}
+          return false
+        }
+      },
+
+      deleteStudentPackage: async (id) => {
+        try {
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const token = get().token
+
+          const resp = await fetch(`${API_URL}/api/packages/student/manage/${id}`, {
+            method: 'DELETE',
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+            credentials: 'include'
+          })
+
+          if (!resp.ok && resp.status !== 204) {
+            const errorBody = await resp.json().catch(() => ({}))
+            try {
+              const { toast } = await import('sonner')
+              toast.error(errorBody?.error || 'Erro ao excluir pacote de aluno.')
+            } catch {}
+            return false
+          }
+
+          await get().fetchStudentPackages()
+          try {
+            const { toast } = await import('sonner')
+            toast.success('Pacote de aluno excluído com sucesso.')
+          } catch {}
+          return true
+        } catch (error) {
+          try {
+            const { toast } = await import('sonner')
+            toast.error('Erro inesperado ao excluir pacote de aluno.')
+          } catch {}
+          return false
+        }
+      },
+
+      // Novas funções de CRUD para pacotes de professor
+      updateHourPackage: async (id, payload) => {
+        try {
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const token = get().token
+
+          const resp = await fetch(`${API_URL}/api/packages/professor/manage/${id}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {})
+            },
+            credentials: 'include',
+            body: JSON.stringify({
+              title: payload.title,
+              hours_qty: payload.hoursQty,
+              price_cents: payload.priceCents,
+              status: payload.status,
+              description: payload.description,
+              metadata: payload.metadata
+            })
+          })
+
+          if (!resp.ok) {
+            const errorBody = await resp.json().catch(() => ({}))
+            try {
+              const { toast } = await import('sonner')
+              toast.error(errorBody?.error || 'Erro ao atualizar pacote de professor.')
+            } catch {}
+            return false
+          }
+
+          await get().fetchHourPackages()
+          try {
+            const { toast } = await import('sonner')
+            toast.success('Pacote de professor atualizado com sucesso.')
+          } catch {}
+          return true
+        } catch (error) {
+          try {
+            const { toast } = await import('sonner')
+            toast.error('Erro inesperado ao atualizar pacote de professor.')
+          } catch {}
+          return false
+        }
+      },
+
+      deleteHourPackage: async (id) => {
+        try {
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const token = get().token
+
+          const resp = await fetch(`${API_URL}/api/packages/professor/manage/${id}`, {
+            method: 'DELETE',
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+            credentials: 'include'
+          })
+
+          if (!resp.ok && resp.status !== 204) {
+            const errorBody = await resp.json().catch(() => ({}))
+            try {
+              const { toast } = await import('sonner')
+              toast.error(errorBody?.error || 'Erro ao excluir pacote de professor.')
+            } catch {}
+            return false
+          }
+
+          await get().fetchHourPackages()
+          try {
+            const { toast } = await import('sonner')
+            toast.success('Pacote de professor excluído com sucesso.')
+          } catch {}
+          return true
+        } catch (error) {
+          try {
+            const { toast } = await import('sonner')
+            toast.error('Erro inesperado ao excluir pacote de professor.')
+          } catch {}
+          return false
         }
       }
     }),
