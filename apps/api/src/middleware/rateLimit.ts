@@ -16,7 +16,7 @@ export const rateLimitConfig = {
   // Login - mais restritivo
   auth: {
     windowMs: 15 * 60 * 1000, // 15 minutos
-    maxRequests: 50, // máximo 50 tentativas (aumentado de 5)
+    maxRequests: 50, // máximo 50 tentativas
     message: 'Muitas tentativas de login. Tente novamente em 15 minutos.'
   },
   // API geral - menos restritivo
@@ -35,52 +35,8 @@ export const rateLimitConfig = {
 
 export const createRateLimit = (config: typeof rateLimitConfig.auth) => {
   return (req: Request, res: Response, next: NextFunction) => {
-    const ip = getClientIP(req)
-    const now = Date.now()
-    
-    // Limpar entradas expiradas
-    cleanupExpiredEntries(now)
-    
-    // Verificar se IP existe no store
-    if (!store[ip]) {
-      store[ip] = {
-        count: 1,
-        resetTime: now + config.windowMs
-      }
-      return next()
-    }
-    
-    // Verificar se janela de tempo expirou
-    if (now > store[ip].resetTime) {
-      store[ip] = {
-        count: 1,
-        resetTime: now + config.windowMs
-      }
-      return next()
-    }
-    
-    // Incrementar contador
-    store[ip].count++
-    
-    // Verificar se excedeu limite
-    if (store[ip].count > config.maxRequests) {
-      const resetTimeInSeconds = Math.ceil((store[ip].resetTime - now) / 1000)
-      
-      return res.status(429).json({
-        message: config.message,
-        retryAfter: resetTimeInSeconds,
-        error: 'RATE_LIMIT_EXCEEDED'
-      })
-    }
-    
-    // Adicionar headers de rate limit
-    res.set({
-      'X-RateLimit-Limit': config.maxRequests.toString(),
-      'X-RateLimit-Remaining': Math.max(0, config.maxRequests - store[ip].count).toString(),
-      'X-RateLimit-Reset': new Date(store[ip].resetTime).toISOString()
-    })
-    
-    next()
+    // RATE LIMIT DESABILITADO TEMPORARIAMENTE
+    return next()
   }
 }
 
@@ -143,52 +99,8 @@ export const createBlacklist = (blockedIPs: string[]) => {
 
 // Rate limit baseado em usuário (para endpoints autenticados)
 export const createUserRateLimit = (config: typeof rateLimitConfig.api) => {
-  const userStore: RateLimitStore = {}
-  
   return (req: Request & { user?: any }, res: Response, next: NextFunction) => {
-    // Se não há usuário, usar IP
-    const identifier = req.user?.userId || getClientIP(req)
-    const now = Date.now()
-    
-    // Limpar entradas expiradas
-    for (const id in userStore) {
-      if (now > userStore[id].resetTime) {
-        delete userStore[id]
-      }
-    }
-    
-    // Verificar se usuário existe no store
-    if (!userStore[identifier]) {
-      userStore[identifier] = {
-        count: 1,
-        resetTime: now + config.windowMs
-      }
-      return next()
-    }
-    
-    // Verificar se janela de tempo expirou
-    if (now > userStore[identifier].resetTime) {
-      userStore[identifier] = {
-        count: 1,
-        resetTime: now + config.windowMs
-      }
-      return next()
-    }
-    
-    // Incrementar contador
-    userStore[identifier].count++
-    
-    // Verificar se excedeu limite
-    if (userStore[identifier].count > config.maxRequests) {
-      const resetTimeInSeconds = Math.ceil((userStore[identifier].resetTime - now) / 1000)
-      
-      return res.status(429).json({
-        message: config.message,
-        retryAfter: resetTimeInSeconds,
-        error: 'USER_RATE_LIMIT_EXCEEDED'
-      })
-    }
-    
-    next()
+    // RATE LIMIT DESABILITADO TEMPORARIAMENTE
+    return next()
   }
 }
