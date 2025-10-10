@@ -112,7 +112,6 @@ export default function ConfiguracoesPage() {
 
   const fetchProfessionalProfile = async () => {
     if (!user?.id) {
-      console.warn('User ID não disponível')
       return
     }
 
@@ -128,7 +127,6 @@ export default function ConfiguracoesPage() {
       })
     } catch (error) {
       // Silenciosamente define valores padrão - o perfil pode não existir ainda
-      console.warn('Perfil profissional não encontrado, usando valores padrão')
       setProfessionalProfile({
         bio: '',
         specialties: [],
@@ -152,7 +150,6 @@ export default function ConfiguracoesPage() {
         setAcademies(data.academies || [])
       }
     } catch (error) {
-      console.error('Erro ao carregar academias:', error)
     }
   }
 
@@ -167,7 +164,6 @@ export default function ConfiguracoesPage() {
         setSelectedAcademies(data.academy_ids || [])
       }
     } catch (error) {
-      console.error('Erro ao carregar preferências:', error)
     }
   }
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -212,7 +208,6 @@ export default function ConfiguracoesPage() {
       setAvatarFile(null)
       setAvatarPreview(data.avatar_url)
     } catch (error: any) {
-      console.error('Erro:', error)
       toast.error(error.message || 'Erro ao fazer upload da foto')
     } finally {
       setLoading(false)
@@ -238,7 +233,6 @@ export default function ConfiguracoesPage() {
         toast.error('Erro ao atualizar perfil')
       }
     } catch (error) {
-      console.error('Erro:', error)
       toast.error('Erro ao processar requisição')
     } finally {
       setLoading(false)
@@ -277,7 +271,6 @@ export default function ConfiguracoesPage() {
         toast.error('Senha atual incorreta')
       }
     } catch (error) {
-      console.error('Erro:', error)
       toast.error('Erro ao processar requisição')
     } finally {
       setLoading(false)
@@ -302,7 +295,6 @@ export default function ConfiguracoesPage() {
         toast.error('Erro ao atualizar preferências')
       }
     } catch (error) {
-      console.error('Erro:', error)
       toast.error('Erro ao processar requisição')
     } finally {
       setLoading(false)
@@ -354,7 +346,6 @@ export default function ConfiguracoesPage() {
       await teachersAPI.update(user.id, professionalProfile, authToken)
       toast.success('Perfil profissional atualizado!')
     } catch (error) {
-      console.error('Erro:', error)
       toast.error('Erro ao atualizar perfil profissional')
     } finally {
       setLoading(false)

@@ -227,15 +227,22 @@ const createTeacherSchema = zod_1.z.object({
 });
 router.get('/', async (req, res) => {
     try {
-        const { academy_id, city, state } = req.query;
+        const { academy_id, city, state, unit_id } = req.query;
         let query = supabase_1.supabase
             .from('users')
             .select(`
-        *,
+        id,
+        name,
+        email,
+        phone,
+        avatar_url,
+        created_at,
+        is_active,
+        role,
         teacher_profiles (
           id,
           bio,
-          specialties,
+          specialization,
           hourly_rate,
           availability,
           is_available
@@ -244,28 +251,7 @@ router.get('/', async (req, res) => {
           id,
           academy_id,
           status,
-          commission_rate,
-          academies (
-            id,
-            name,
-            city,
-            state,
-            address,
-            phone,
-            email
-          )
-        ),
-        teacher_subscriptions (
-          id,
-          status,
-          start_date,
-          end_date,
-          teacher_plans (
-            name,
-            price,
-            commission_rate,
-            features
-          )
+          commission_rate
         )
       `)
             .eq('role', 'TEACHER')
@@ -275,17 +261,56 @@ router.get('/', async (req, res) => {
         if (academy_id) {
             query = query.eq('academy_teachers.academy_id', academy_id);
         }
+        if (unit_id) {
+            query = query.eq('academy_teachers.academy_id', unit_id);
+        }
         const { data: teachers, error } = await query;
         if (error) {
             console.error('Erro ao buscar professores:', error);
             return res.status(500).json({ error: 'Erro interno do servidor' });
         }
-        let filteredTeachers = teachers || [];
+        if (!teachers || teachers.length === 0) {
+            return res.json([]);
+        }
+        const academyIds = [...new Set(teachers.map((t) => t.academy_teachers?.academy_id).filter(Boolean))];
+        let academiesMap = {};
+        if (academyIds.length > 0) {
+            const { data: academies } = await supabase_1.supabase
+                .from('academies')
+                .select('id, name, city, state, address, phone, email')
+                .in('id', academyIds);
+            if (academies) {
+                academiesMap = academies.reduce((acc, academy) => {
+                    acc[academy.id] = academy;
+                    return acc;
+                }, {});
+            }
+        }
+        const normalizedTeachers = teachers.map((teacher) => {
+            const profilesArray = Array.isArray(teacher.teacher_profiles)
+                ? teacher.teacher_profiles
+                : teacher.teacher_profiles
+                    ? [teacher.teacher_profiles]
+                    : [];
+            const normalizedProfiles = profilesArray.map((profile) => ({
+                ...profile,
+                specialties: profile.specialties ?? profile.specialization ?? []
+            }));
+            const academyInfo = teacher.academy_teachers?.academy_id
+                ? academiesMap[teacher.academy_teachers.academy_id]
+                : null;
+            return {
+                ...teacher,
+                teacher_profiles: normalizedProfiles,
+                academy: academyInfo
+            };
+        });
+        let filteredTeachers = normalizedTeachers;
         if (city) {
-            filteredTeachers = filteredTeachers.filter(teacher => teacher.academy_teachers?.some((at) => at.academies?.city?.toLowerCase().includes(city.toLowerCase())));
+            filteredTeachers = filteredTeachers.filter(teacher => teacher.academy?.city?.toLowerCase().includes(city.toLowerCase()));
         }
         if (state) {
-            filteredTeachers = filteredTeachers.filter(teacher => teacher.academy_teachers?.some((at) => at.academies?.state?.toLowerCase() === state.toLowerCase()));
+            filteredTeachers = filteredTeachers.filter(teacher => teacher.academy?.state?.toLowerCase() === state.toLowerCase());
         }
         filteredTeachers = filteredTeachers.filter(teacher => teacher.teacher_profiles?.[0]?.is_available === true);
         res.json(filteredTeachers);
@@ -308,7 +333,7 @@ router.get('/:id', async (req, res) => {
         teacher_profiles (
           id,
           bio,
-          specialties,
+          specialties: specialization,
           hourly_rate,
           availability,
           is_available
@@ -324,25 +349,31 @@ router.get('/:id', async (req, res) => {
             console.error('Erro ao buscar professor:', error);
             return res.status(500).json({ error: 'Erro interno do servidor' });
         }
-        let profiles = Array.isArray(teacher.teacher_profiles)
+        const profilesArray = Array.isArray(teacher.teacher_profiles)
             ? teacher.teacher_profiles
             : teacher.teacher_profiles
                 ? [teacher.teacher_profiles]
                 : [];
+        let profiles = profilesArray.map((profile) => ({
+            ...profile,
+            specialties: profile.specialties ?? profile.specialization ?? []
+        }));
         if (profiles.length === 0) {
             const { data: newProfile } = await supabase_1.supabase
                 .from('teacher_profiles')
                 .insert({
                 user_id: id,
                 bio: '',
-                specialties: [],
+                specialization: [],
                 hourly_rate: 0,
                 availability: {},
                 is_available: true
             })
                 .select()
                 .single();
-            profiles = newProfile ? [newProfile] : [];
+            profiles = newProfile
+                ? [{ ...newProfile, specialties: newProfile.specialization ?? [] }]
+                : [];
         }
         res.json({
             ...teacher,
@@ -371,12 +402,17 @@ router.put('/:id', async (req, res) => {
         if (teacherError || !teacher) {
             return res.status(404).json({ message: 'Professor não encontrado' });
         }
+        const { specialties, ...rest } = updateData;
+        const profileUpdate = {
+            ...rest,
+            updated_at: new Date().toISOString()
+        };
+        if (specialties !== undefined) {
+            profileUpdate.specialization = specialties;
+        }
         const { data: updatedProfile, error: updateError } = await supabase_1.supabase
             .from('teacher_profiles')
-            .update({
-            ...updateData,
-            updated_at: new Date().toISOString()
-        })
+            .update(profileUpdate)
             .eq('user_id', id)
             .select()
             .single();
@@ -435,7 +471,7 @@ router.post('/', async (req, res) => {
             .insert({
             user_id: user.id,
             bio: bio || '',
-            specialties: specialties || [],
+            specialization: specialties || [],
             hourly_rate: hourly_rate || 0,
             availability: availability || {},
             is_available: true

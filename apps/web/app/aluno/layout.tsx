@@ -13,6 +13,10 @@ const PUBLIC_AUTH_PREFIXES = [
   '/aluno/redefinir-senha'
 ] as const
 
+const REDIRECT_ROUTES: Record<string, string> = {
+  '/aluno/inicio': '/aluno/dashboard'
+}
+
 export default function AlunoLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -28,12 +32,18 @@ export default function AlunoLayout({ children }: { children: React.ReactNode })
       return
     }
 
+    // Redirecionar rotas antigas
+    if (pathname && REDIRECT_ROUTES[pathname]) {
+      router.push(REDIRECT_ROUTES[pathname])
+      return
+    }
+
     const timer = setTimeout(() => {
       setIsChecking(false)
     }, 100)
 
     return () => clearTimeout(timer)
-  }, [isPublicAuthRoute])
+  }, [isPublicAuthRoute, pathname, router])
 
   useEffect(() => {
     if (isPublicAuthRoute || isChecking) return

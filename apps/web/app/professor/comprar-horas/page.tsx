@@ -9,6 +9,7 @@ import { toast } from 'sonner'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { useTeacherAcademies } from '@/lib/hooks/useTeacherAcademies'
 import ProfessorLayout from '@/components/layout/professor-layout'
+import { API_BASE_URL } from '@/lib/api'
 
 interface HoursPackage {
   id: string
@@ -33,11 +34,30 @@ export default function ComprarHorasPage() {
   // Carregar pacotes de horas disponíveis para o professor
   useEffect(() => {
     if (!user?.id) return
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-    fetch(`${API_URL}/api/plans/teacher/${user.id}/available`)
-      .then(res => res.json())
-      .then(data => setPackages(data.plans || []))
-      .catch(err => console.error('Erro ao carregar pacotes:', err))
+    fetch(`${API_BASE_URL}/api/packages/professor`, {
+      headers: { Authorization: `Bearer ${useAuthStore.getState().token}` },
+    })
+      .then(res => {
+        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+        return res.json()
+      })
+      .then(data => {
+        const pkgs = data?.packages || []
+        const mapped = pkgs.map((p: any) => ({
+          id: p.id,
+          name: p.title ?? 'Pacote',
+          description: p.metadata_json?.description ?? '',
+          price: (p.price_cents ?? 0) / 100,
+          hours_included: p.hours_qty ?? 0,
+          validity_days: p.metadata_json?.validity_days ?? 90,
+          features: Array.isArray(p.metadata_json?.features) ? p.metadata_json.features : [],
+        }))
+        setPackages(mapped)
+      })
+      .catch(() => {
+        toast.error('Erro ao carregar pacotes de horas')
+        setPackages([])
+      })
   }, [user?.id])
 
   const handlePurchase = async () => {
@@ -46,27 +66,29 @@ export default function ComprarHorasPage() {
     setLoading(true)
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      const response = await fetch(`${API_URL}/api/payments/teacher/purchase-hours`, {
+      const response = await fetch(`${API_BASE_URL}/api/packages/professor/checkout`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${useAuthStore.getState().token}`,
+        },
         body: JSON.stringify({
-          teacher_id: user.id,
-          hours_package_id: selectedPackage.id,
-          payment_method: paymentMethod
+          package_id: selectedPackage.id,
+          payment_method: paymentMethod,
         })
       })
 
-      const data = await response.json()
+      const data = await response.json().catch(() => ({}))
 
       if (response.ok) {
-        setPaymentData(data.payment)
+        const checkoutUrl = data?.payment_intent?.checkout_url
+        if (checkoutUrl) window.open(checkoutUrl, '_blank')
+        setPaymentData(data.payment_intent)
         setStep('success')
       } else {
-        toast.error('Erro ao processar pagamento: ' + data.error)
+        toast.error('Erro ao processar pagamento: ' + (data?.error || data?.message || ''))
       }
     } catch (error) {
-      console.error('Erro:', error)
       toast.error('Erro ao processar pagamento')
     } finally {
       setLoading(false)

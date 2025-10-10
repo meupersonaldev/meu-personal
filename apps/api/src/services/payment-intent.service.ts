@@ -12,6 +12,7 @@ export interface PaymentIntent {
   checkout_url?: string;
   payload_json: Record<string, any>;
   actor_user_id: string;
+  franqueadora_id: string;
   unit_id?: string;
   created_at: string;
   updated_at: string;
@@ -20,6 +21,7 @@ export interface PaymentIntent {
 export interface CreatePaymentIntentParams {
   type: 'STUDENT_PACKAGE' | 'PROF_HOURS';
   actorUserId: string;
+  franqueadoraId: string;
   unitId?: string;
   amountCents: number;
   metadata?: Record<string, any>;
@@ -33,11 +35,12 @@ class PaymentIntentService {
       .insert({
         type: params.type,
         provider: 'ASAAS',
-        provider_id: '', // Será preenchido após criação no Asaas
+        provider_id: '', // Sera preenchido apos criacao no Asaas
         amount_cents: params.amountCents,
         status: 'PENDING',
         payload_json: params.metadata || {},
         actor_user_id: params.actorUserId,
+        franqueadora_id: params.franqueadoraId,
         unit_id: params.unitId
       })
       .select()
@@ -98,7 +101,9 @@ class PaymentIntentService {
         payload_json: {
           ...params.metadata,
           asaas_payment_id: paymentResult.data.id,
-          billing_type: 'PIX'
+          billing_type: 'PIX',
+          franqueadora_id: params.franqueadoraId,
+          unit_id: params.unitId || null
         }
       })
       .eq('id', intent.id)
@@ -154,13 +159,16 @@ class PaymentIntentService {
       // Creditar aulas para aluno
       await balanceService.purchaseStudentClasses(
         intent.actor_user_id,
-        intent.unit_id!,
+        intent.franqueadora_id,
         metadata.classes_qty,
-        'ALUNO',
         {
-          payment_intent_id: intent.id,
-          provider_id: intent.provider_id,
-          package_title: metadata.package_title
+          unitId: intent.unit_id || null,
+          source: 'ALUNO',
+          metaJson: {
+            payment_intent_id: intent.id,
+            provider_id: intent.provider_id,
+            package_title: metadata.package_title
+          }
         }
       );
 
@@ -171,13 +179,16 @@ class PaymentIntentService {
       // Creditar horas para professor
       await balanceService.purchaseProfessorHours(
         intent.actor_user_id,
-        intent.unit_id!,
+        intent.franqueadora_id,
         metadata.hours_qty,
-        'PROFESSOR',
         {
-          payment_intent_id: intent.id,
-          provider_id: intent.provider_id,
-          package_title: metadata.package_title
+          unitId: intent.unit_id || null,
+          source: 'PROFESSOR',
+          metaJson: {
+            payment_intent_id: intent.id,
+            provider_id: intent.provider_id,
+            package_title: metadata.package_title
+          }
         }
       );
 

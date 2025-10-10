@@ -42,7 +42,6 @@ export default function HistoricoCheckinsPage() {
       await fetchTeachers()
       await fetchCheckins()
     } catch (error) {
-      console.error('Error loading data:', error)
       toast.error('Erro ao carregar dados')
     } finally {
       setLoading(false)
@@ -75,7 +74,6 @@ export default function HistoricoCheckinsPage() {
 
       setCheckins(enrichedCheckins)
     } catch (error) {
-      console.error('Error fetching checkins:', error)
       setCheckins([])
     }
   }

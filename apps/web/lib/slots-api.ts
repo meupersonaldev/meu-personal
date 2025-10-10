@@ -64,7 +64,6 @@ export async function checkSlotAvailability(
     const data = await response.json()
     return data.available
   } catch (error) {
-    console.error('Erro ao verificar disponibilidade:', error)
     return false
   }
 }
@@ -99,7 +98,6 @@ export async function bookTimeSlot(
     const data = await response.json()
     return data.success
   } catch (error) {
-    console.error('Erro ao reservar slot:', error)
     throw error
   }
 }
@@ -130,7 +128,6 @@ export async function releaseTimeSlot(
     const data = await response.json()
     return data.success
   } catch (error) {
-    console.error('Erro ao liberar slot:', error)
     return false
   }
 }
@@ -154,7 +151,6 @@ export async function getAvailableSlots(
     const data = await response.json()
     return data.slots || []
   } catch (error) {
-    console.error('Erro ao buscar slots disponíveis:', error)
     return []
   }
 }
@@ -178,7 +174,6 @@ export async function checkAllAcademiesHaveSlots(
     const data = await response.json()
     return data.academies || []
   } catch (error) {
-    console.error('Erro ao verificar academias:', error)
     return []
   }
 }
@@ -217,7 +212,6 @@ export async function getAcademySlotStats(
     const data = await response.json()
     return data.stats
   } catch (error) {
-    console.error('Erro ao buscar estatísticas:', error)
     return {
       total: 0,
       available: 0,
@@ -252,7 +246,6 @@ export async function getAllAcademySlots(
     const data = await response.json()
     return data.slots || []
   } catch (error) {
-    console.error('Erro ao buscar slots:', error)
     return []
   }
 }
@@ -288,7 +281,6 @@ export async function createAcademySlots(
 
     return true
   } catch (error) {
-    console.error('Erro ao criar slots:', error)
     return false
   }
 }
@@ -321,7 +313,6 @@ export async function updateSlot(
 
     return true
   } catch (error) {
-    console.error('Erro ao atualizar slot:', error)
     return false
   }
 }

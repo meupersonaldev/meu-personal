@@ -141,7 +141,7 @@ class BookingCanonicalService {
             if (fetchError)
                 throw fetchError;
             if (!booking)
-                throw new Error('Booking não encontrado');
+                throw new Error('Booking nao encontrado');
             const now = new Date();
             const { data: updatedBooking, error: updateError } = await supabase_1.supabase
                 .from('bookings')

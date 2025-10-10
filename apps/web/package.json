@@ -6,7 +6,7 @@
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint . --ext .js,.jsx,.ts,.tsx"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -46,9 +46,7 @@
     "@tanstack/react-query-devtools": "^5.89.0",
     "@types/node": "^20",
     "@types/qrcode": "^1.5.5",
-    "@types/react": "^18.3.24",
     "@types/react-big-calendar": "^1.16.3",
-    "@types/react-dom": "^18.3.7",
     "autoprefixer": "^10.4.21",
     "eslint": "^9",
     "eslint-config-next": "15.5.3",

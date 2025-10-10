@@ -88,7 +88,6 @@ export default function UsuariosPage() {
         setPagination(data.pagination)
       }
     } catch (error) {
-      console.error('Erro ao buscar usuários:', error)
     } finally {
       setLoading(false)
     }

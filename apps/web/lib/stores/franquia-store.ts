@@ -259,7 +259,6 @@ export const useFranquiaStore = create<FranquiaState>()(
 
           if (!response.ok) {
             const error = await response.json()
-            console.error('Login error:', error)
             set({ isLoading: false })
             return false
           }
@@ -268,7 +267,6 @@ export const useFranquiaStore = create<FranquiaState>()(
 
           // Verificar se é FRANCHISE_ADMIN
           if (user.role !== 'FRANCHISE_ADMIN') {
-            console.error('User is not a franchise admin')
             set({ isLoading: false })
             return false
           }
@@ -284,7 +282,6 @@ export const useFranquiaStore = create<FranquiaState>()(
             .single()
 
           if (adminError || !franchiseAdminData) {
-            console.error('Admin not found:', adminError)
             set({ isLoading: false })
             return false
           }
@@ -299,7 +296,6 @@ export const useFranquiaStore = create<FranquiaState>()(
             .single()
 
           if (academyError || !academyData) {
-            console.error('Academy not found:', academyError)
             set({ isLoading: false })
             return false
           }
@@ -346,14 +342,11 @@ export const useFranquiaStore = create<FranquiaState>()(
               // Não buscar approval_requests - apenas para agendamentos
             ])
           } catch (error) {
-            console.warn('Some initial data failed to load:', error)
             // Não falhar o login por causa disso
           }
 
-          console.log('Login successful, returning true')
           return true
         } catch (error) {
-          console.error('Login error:', error)
           set({ isLoading: false })
           return false
         }
@@ -398,9 +391,7 @@ export const useFranquiaStore = create<FranquiaState>()(
       fetchTeachers: async () => {
         try {
           const { academy } = get()
-          console.log('Fetching teachers for academy:', academy)
           if (!academy) {
-            console.log('No academy set!')
             return
           }
 
@@ -423,17 +414,14 @@ export const useFranquiaStore = create<FranquiaState>()(
             .eq('academy_id', academy.id)
             .eq('status', 'active')
 
-          console.log('Academy teachers query result:', { data, error })
 
           if (error) {
-            console.error('Query error:', error)
             set({ teachers: [] })
             return
           }
 
           // Se não há dados, definir array vazio
           if (!data || data.length === 0) {
-            console.log('No teachers found for academy')
             set({ teachers: [] })
             return
           }
@@ -460,7 +448,6 @@ export const useFranquiaStore = create<FranquiaState>()(
                   `)
                   .eq('teacher_id', teacherId)
 
-                console.log(`Professor ${user.name} - Academias vinculadas:`, allAcademyTeachers?.length || 0)
 
                 // Buscar perfil completo
                 const { data: profile } = await supabase
@@ -501,7 +488,6 @@ export const useFranquiaStore = create<FranquiaState>()(
 
           set({ teachers: teachersWithFullData })
         } catch (error) {
-          console.error('Error fetching teachers:', error)
         }
       },
 
@@ -548,7 +534,6 @@ export const useFranquiaStore = create<FranquiaState>()(
           await get().fetchTeachers()
           return true
         } catch (error) {
-          console.error('Error adding teacher:', error)
           return false
         }
       },
@@ -595,7 +580,6 @@ export const useFranquiaStore = create<FranquiaState>()(
           await get().fetchTeachers()
           return true
         } catch (error) {
-          console.error('Error updating teacher:', error)
           return false
         }
       },
@@ -628,7 +612,6 @@ export const useFranquiaStore = create<FranquiaState>()(
           await get().fetchTeachers()
           return true
         } catch (error) {
-          console.error('Error deleting teacher:', error)
           return false
         }
       },
@@ -664,7 +647,6 @@ export const useFranquiaStore = create<FranquiaState>()(
 
           set({ students })
         } catch (error) {
-          console.error('Error fetching students:', error)
         }
       },
 
@@ -702,7 +684,6 @@ export const useFranquiaStore = create<FranquiaState>()(
           await get().fetchStudents()
           return true
         } catch (error) {
-          console.error('Error adding student:', error)
           return false
         }
       },
@@ -738,7 +719,6 @@ export const useFranquiaStore = create<FranquiaState>()(
           await get().fetchStudents()
           return true
         } catch (error) {
-          console.error('Error updating student:', error)
           return false
         }
       },
@@ -765,7 +745,6 @@ export const useFranquiaStore = create<FranquiaState>()(
           await get().fetchStudents()
           return true
         } catch (error) {
-          console.error('Error deleting student:', error)
           return false
         }
       },
@@ -800,7 +779,6 @@ export const useFranquiaStore = create<FranquiaState>()(
 
           set({ plans })
         } catch (error) {
-          console.error('Error fetching plans:', error)
           set({ plans: [] })
         }
       },
@@ -821,7 +799,6 @@ export const useFranquiaStore = create<FranquiaState>()(
           await get().fetchPlans()
           return true
         } catch (error) {
-          console.error('Error adding plan:', error)
           return false
         }
       },
@@ -837,7 +814,6 @@ export const useFranquiaStore = create<FranquiaState>()(
           await get().fetchPlans()
           return true
         } catch (error) {
-          console.error('Error updating plan:', error)
           return false
         }
       },
@@ -853,7 +829,6 @@ export const useFranquiaStore = create<FranquiaState>()(
           await get().fetchPlans()
           return true
         } catch (error) {
-          console.error('Error deleting plan:', error)
           return false
         }
       },
@@ -903,7 +878,6 @@ export const useFranquiaStore = create<FranquiaState>()(
 
           set({ analytics })
         } catch (error) {
-          console.error('Error fetching analytics:', error)
         }
       },
 
@@ -967,7 +941,6 @@ export const useFranquiaStore = create<FranquiaState>()(
 
           set({ classes })
         } catch (error) {
-          console.error('Error fetching classes:', error)
           set({ classes: [] })
         }
       },
@@ -985,7 +958,6 @@ export const useFranquiaStore = create<FranquiaState>()(
           await get().fetchClasses()
           return true
         } catch (error) {
-          console.error('Error updating class:', error)
           return false
         }
       },
@@ -1003,7 +975,6 @@ export const useFranquiaStore = create<FranquiaState>()(
           await get().fetchClasses()
           return true
         } catch (error) {
-          console.error('Error deleting class:', error)
           return false
         }
       },
@@ -1034,7 +1005,6 @@ export const useFranquiaStore = create<FranquiaState>()(
 
           set({ timeSlots })
         } catch (error) {
-          console.error('Error fetching time slots:', error)
           set({ timeSlots: [] })
         }
       },
@@ -1056,7 +1026,6 @@ export const useFranquiaStore = create<FranquiaState>()(
           await get().fetchTimeSlots()
           return true
         } catch (error) {
-          console.error('Error toggling time slot availability:', error)
           return false
         }
       },
@@ -1083,7 +1052,6 @@ export const useFranquiaStore = create<FranquiaState>()(
             unreadNotifications: unreadCount
           })
         } catch (error) {
-          console.error('Error fetching notifications:', error)
           set({ notifications: [], unreadNotifications: 0 })
         }
       },
@@ -1101,7 +1069,6 @@ export const useFranquiaStore = create<FranquiaState>()(
           await get().fetchNotifications()
           return true
         } catch (error) {
-          console.error('Error marking notification as read:', error)
           return false
         }
       },
@@ -1123,7 +1090,6 @@ export const useFranquiaStore = create<FranquiaState>()(
           await get().fetchNotifications()
           return true
         } catch (error) {
-          console.error('Error marking all notifications as read:', error)
           return false
         }
       },
@@ -1141,7 +1107,6 @@ export const useFranquiaStore = create<FranquiaState>()(
 
           set({ teacherPlans: data || [] })
         } catch (error) {
-          console.error('Error fetching teacher plans:', error)
           set({ teacherPlans: [] })
         }
       },
@@ -1158,7 +1123,6 @@ export const useFranquiaStore = create<FranquiaState>()(
           await get().fetchTeacherPlans()
           return true
         } catch (error) {
-          console.error('Error creating teacher plan:', error)
           return false
         }
       },
@@ -1180,7 +1144,6 @@ export const useFranquiaStore = create<FranquiaState>()(
 
           set({ studentPlans: data || [] })
         } catch (error) {
-          console.error('Error fetching student plans:', error)
           set({ studentPlans: [] })
         }
       },
@@ -1200,7 +1163,6 @@ export const useFranquiaStore = create<FranquiaState>()(
           await get().fetchStudentPlans()
           return true
         } catch (error) {
-          console.error('Error creating student plan:', error)
           return false
         }
       },
@@ -1253,7 +1215,6 @@ export const useFranquiaStore = create<FranquiaState>()(
           await get().fetchNotifications()
           return true
         } catch (error) {
-          console.error('Error approving request:', error)
           return false
         }
       },
@@ -1276,7 +1237,6 @@ export const useFranquiaStore = create<FranquiaState>()(
           await get().fetchApprovalRequests()
           return true
         } catch (error) {
-          console.error('Error rejecting request:', error)
           return false
         }
       }

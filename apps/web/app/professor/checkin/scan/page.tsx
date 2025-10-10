@@ -7,14 +7,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import ProfessorLayout from '@/components/layout/professor-layout'
 import { toast } from 'sonner'
-import {
-  QrCode,
-  Camera,
-  AlertCircle,
-  Loader2,
-  Link as LinkIcon,
-  ArrowLeft
-} from 'lucide-react'
+import { QrCode, Camera, AlertCircle, Loader2, ArrowLeft } from 'lucide-react'
 
 // Tipagem global para o script externo html5-qrcode
 declare global {
@@ -32,7 +25,7 @@ export default function ProfessorCheckinScanPage() {
   const rafRef = useRef<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [cameraReady, setCameraReady] = useState(false)
-  const [manualValue, setManualValue] = useState('')
+  // entrada manual removida
   const [usingBarcodeDetector, setUsingBarcodeDetector] = useState(false)
   const [notSecureContext, setNotSecureContext] = useState(false)
 
@@ -66,12 +59,11 @@ export default function ProfessorCheckinScanPage() {
         )
         setCameraReady(true)
       } else {
-        toast.error('Não foi possível carregar o leitor de QR. Use a entrada manual abaixo.')
+        toast.error('Não foi possível carregar o leitor de QR. Verifique as permissões do navegador e tente novamente.')
       }
     } catch (err) {
-      console.warn('Falha ao iniciar o scanner:', err)
       const success = await startBarcodeDetector()
-      if (!success) toast.error('Não foi possível acessar a câmera. Use a entrada manual abaixo.')
+      if (!success) toast.error('Não foi possível acessar a câmera. Verifique as permissões do navegador.')
     } finally {
       setLoading(false)
     }
@@ -80,7 +72,7 @@ export default function ProfessorCheckinScanPage() {
 
   useEffect(() => {
     let cleanup: (() => void) | undefined
-    loadAndStart().then(ret => {
+    loadAndStart().then((ret) => {
       if (typeof ret === 'function') cleanup = ret
     })
     return () => {
@@ -176,7 +168,23 @@ export default function ProfessorCheckinScanPage() {
       const BarcodeDetector = (window as any).BarcodeDetector
       const detector = new BarcodeDetector({ formats: ['qr_code'] })
 
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } } })
+      // Tentar câmera traseira; fallback frontal
+      let stream: MediaStream | null = null
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          }
+        })
+      } catch {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: 'user' }
+          }
+        })
+      }
       mediaStreamRef.current = stream
       setUsingBarcodeDetector(true)
 
@@ -204,7 +212,6 @@ export default function ProfessorCheckinScanPage() {
       rafRef.current = requestAnimationFrame(loop)
       return true
     } catch (err) {
-      console.warn('BarcodeDetector fallback indisponível:', err)
       return false
     }
   }
@@ -245,27 +252,7 @@ export default function ProfessorCheckinScanPage() {
       return
     }
 
-    toast.error('QR inválido. Informe o link manualmente abaixo.')
-  }
-
-  function handleManualSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    const v = manualValue.trim()
-    if (!v) return
-    if (v.startsWith('/checkin/a/')) {
-      router.replace(v)
-      return
-    }
-    try {
-      const url = new URL(v)
-      if (url.pathname.startsWith('/checkin/a/')) {
-        router.replace(url.pathname)
-        return
-      }
-    } catch {
-      // not a full URL
-    }
-    toast.error('Valor inválido. Informe um link /checkin/a/{academyId} ou URL contendo esse caminho.')
+    toast.error('QR inválido.')
   }
 
   return (
@@ -292,7 +279,6 @@ export default function ProfessorCheckinScanPage() {
               Aponte a câmera para o QR Code da portaria
             </p>
           </div>
-
           <div className="overflow-hidden rounded-lg border border-gray-200 bg-black/5">
             <div id={readerId} className="flex aspect-video w-full items-center justify-center">
               {loading && (
@@ -304,17 +290,17 @@ export default function ProfessorCheckinScanPage() {
               {!loading && !cameraReady && (
                 <div className="py-10 text-center text-gray-600">
                   <AlertCircle className="mx-auto mb-2 h-6 w-6" />
-                  Não foi possível acessar a câmera. Use a entrada manual abaixo.
+                  Não foi possível acessar a câmera ou a permissão não foi concedida.
+                  <div className="mt-3">
+                    <Button onClick={loadAndStart} className="bg-meu-primary text-white hover:bg-meu-primary-dark">
+                      <Camera className="mr-2 h-4 w-4" /> Abrir câmera
+                    </Button>
+                  </div>
                   {notSecureContext && (
                     <div className="mt-2 text-xs text-amber-700">
                       Dica: Ative HTTPS (ou use localhost) para liberar a câmera neste navegador.
                     </div>
                   )}
-                  <div className="mt-4">
-                    <Button variant="outline" onClick={loadAndStart}>
-                      Tentar novamente
-                    </Button>
-                  </div>
                 </div>
               )}
               {/* Vídeo para fallback com BarcodeDetector */}
@@ -329,31 +315,8 @@ export default function ProfessorCheckinScanPage() {
             </div>
           </div>
 
-          <div className="mt-6 space-y-3">
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <Camera className="h-4 w-4" />
-              <span>
-                Se a câmera não abrir, verifique as permissões do navegador ou use a entrada
-                manual.
-              </span>
-            </div>
-
-            <form onSubmit={handleManualSubmit} className="flex flex-col gap-3 sm:flex-row">
-              <input
-                type="text"
-                value={manualValue}
-                onChange={(e) => setManualValue(e.target.value)}
-                placeholder="Cole aqui o link /checkin/a/{academyId} ou a URL lida do QR"
-                className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-meu-primary"
-              />
-              <Button type="submit" variant="outline" className="shrink-0">
-                <LinkIcon className="mr-2 h-4 w-4" /> Abrir
-              </Button>
-            </form>
-            <div className="text-xs text-gray-500">
-              Entrada manual = cole o endereço que o QR representa. Ex.:{' '}
-              <code>/checkin/a/SEU_ACADEMY_ID</code> ou a URL completa contendo esse caminho.
-            </div>
+          <div className="mt-6 text-center text-sm text-gray-600">
+            Se a câmera não abrir, verifique as permissões do navegador e tente novamente.
           </div>
         </Card>
       </div>

@@ -1,4 +1,4 @@
-﻿import { create } from 'zustand'
+import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
 export type UserRole = 'STUDENT' | 'TEACHER' | 'ADMIN'
@@ -9,7 +9,6 @@ export interface User {
   email: string
   phone?: string
   role: UserRole
-  credits: number
   avatar_url?: string
 }
 
@@ -24,6 +23,7 @@ interface AuthState {
     email: string
     password: string
     phone?: string
+    cpf: string
     role: UserRole
   }) => Promise<boolean>
   logout: (options?: { redirect?: boolean }) => Promise<void>
@@ -41,7 +41,7 @@ export const useAuthStore = create<AuthState>()(
 
       initialize: async () => {
         try {
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           const token = get().token
           if (!token) {
             set({ isLoading: false, isAuthenticated: false, user: null })
@@ -63,7 +63,6 @@ export const useAuthStore = create<AuthState>()(
                 email: user.email,
                 phone: user.phone,
                 role: user.role,
-                credits: user.credits,
                 avatar_url: user.avatarUrl ?? user.avatar_url,
               },
               isAuthenticated: true,
@@ -72,8 +71,7 @@ export const useAuthStore = create<AuthState>()(
           } else {
             set({ isLoading: false, isAuthenticated: false })
           }
-        } catch (error) {
-          console.error('Error initializing auth:', error)
+        } catch {
           set({ isLoading: false })
         }
       },
@@ -81,7 +79,7 @@ export const useAuthStore = create<AuthState>()(
       login: async (email: string, password: string) => {
         try {
           // Usar a API do backend para login
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           
           const response = await fetch(`${API_URL}/api/auth/login`, {
             method: 'POST',
@@ -94,7 +92,6 @@ export const useAuthStore = create<AuthState>()(
           const data = await response.json()
 
           if (!response.ok) {
-            console.error('Login error:', data.message)
             return false
           }
 
@@ -107,7 +104,6 @@ export const useAuthStore = create<AuthState>()(
                 email: data.user.email,
                 phone: data.user.phone,
                 role: data.user.role,
-                credits: data.user.credits,
                 avatar_url: data.user.avatarUrl
               },
               token: data.token || null,
@@ -124,8 +120,7 @@ export const useAuthStore = create<AuthState>()(
           }
 
           return false
-        } catch (error) {
-          console.error('Login error:', error)
+        } catch {
           return false
         }
       },
@@ -133,7 +128,7 @@ export const useAuthStore = create<AuthState>()(
       register: async (userData) => {
         try {
           // Usar a API do backend para registro (não depende do Supabase Auth)
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           
           const response = await fetch(`${API_URL}/api/auth/register`, {
             method: 'POST',
@@ -145,6 +140,7 @@ export const useAuthStore = create<AuthState>()(
               email: userData.email,
               password: userData.password,
               phone: userData.phone,
+              cpf: userData.cpf,
               role: userData.role
             })
           })
@@ -165,7 +161,6 @@ export const useAuthStore = create<AuthState>()(
                 email: data.user.email,
                 phone: data.user.phone,
                 role: data.user.role,
-                credits: data.user.credits,
                 avatar_url: data.user.avatarUrl
               },
               token: data.token || null,
@@ -183,14 +178,13 @@ export const useAuthStore = create<AuthState>()(
 
           return false
         } catch (error) {
-          console.error('Registration error:', error instanceof Error ? error.message : error)
           throw error // Re-throw para capturar no componente
         }
       },
 
       logout: async (options?: { redirect?: boolean }) => {
         try {
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           // Opcional: avisar backend
           try { await fetch(`${API_URL}/api/auth/logout`, { method: 'POST' }) } catch {}
           set({ user: null, token: null, isAuthenticated: false })
@@ -206,8 +200,7 @@ export const useAuthStore = create<AuthState>()(
           if (shouldRedirect && typeof window !== 'undefined') {
             window.location.href = '/'
           }
-        } catch (error) {
-          console.error('Logout error:', error)
+        } catch {
         }
       },
 
@@ -217,7 +210,7 @@ export const useAuthStore = create<AuthState>()(
         if (!currentUser || !token) return
 
         try {
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           const resp = await fetch(`${API_URL}/api/users/${currentUser.id}`, {
             method: 'PUT',
             headers: {
@@ -227,7 +220,6 @@ export const useAuthStore = create<AuthState>()(
             body: JSON.stringify(userData)
           })
           if (!resp.ok) {
-            console.error('Update user error:', await resp.text())
             return
           }
           const { user } = await resp.json()
@@ -241,7 +233,6 @@ export const useAuthStore = create<AuthState>()(
             })
           }
         } catch (error) {
-          console.error('Update user error:', error)
         }
       }
     }),

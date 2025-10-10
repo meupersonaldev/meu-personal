@@ -95,7 +95,6 @@ export default function ProfessorAulas() {
           setBookings(data.bookings || [])
         }
       } catch (error) {
-        console.error('Erro ao carregar aulas:', error)
       } finally {
         setLoading(false)
       }

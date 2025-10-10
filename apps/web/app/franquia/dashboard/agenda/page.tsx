@@ -110,7 +110,6 @@ export default function AgendaAcademiaPage() {
 
       setEvents(calendarEvents)
     } catch (error) {
-      console.error('Error fetching events:', error)
       toast.error('Erro ao carregar eventos')
     } finally {
       setLoading(false)

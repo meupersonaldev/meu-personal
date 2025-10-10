@@ -56,7 +56,6 @@ export function useProfessorHeaderData(): ProfessorHeaderData {
         setNotifications([])
       }
     } catch (error) {
-      console.error('Erro ao carregar dados do cabeçalho do professor:', error)
     } finally {
       setIsLoading(false)
     }
@@ -82,7 +81,6 @@ export function useProfessorHeaderData(): ProfessorHeaderData {
           )
         }
       } catch (error) {
-        console.error('Erro ao marcar notificação como lida:', error)
       }
     },
     [user?.id]

@@ -1,4 +1,4 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
 // Função helper para fazer requests
 async function apiRequest(endpoint: string, options: RequestInit = {}) {
@@ -15,28 +15,16 @@ async function apiRequest(endpoint: string, options: RequestInit = {}) {
 
   try {
     const response = await fetch(url, config)
-
     if (!response.ok) {
       const error = await response
         .json()
         .catch(() => ({ message: `Erro na requisição: ${response.status} ${response.statusText}` }))
-
-      if (response.status !== 404 && response.status !== 500) {
-        console.error(`API Error [${response.status}]:`, {
-          url,
-          status: response.status,
-          statusText: response.statusText,
-          error,
-        })
-      }
-
       throw new Error(error.message || `Erro na requisição: ${response.status}`)
     }
 
     return response.json()
   } catch (error) {
     if (error instanceof Error && error.message.includes('fetch')) {
-      console.error('Erro de conexão com a API:', url)
       throw new Error('Não foi possível conectar ao servidor. Verifique se o backend está rodando.')
     }
     throw error

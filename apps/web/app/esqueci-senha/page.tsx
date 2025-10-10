@@ -49,7 +49,6 @@ function ForgotPasswordContent() {
         toast.error(data.message || 'Erro ao enviar email')
       }
     } catch (error) {
-      console.error('Error:', error)
       toast.error('Erro ao processar solicitação. Tente novamente.')
     } finally {
       setIsLoading(false)

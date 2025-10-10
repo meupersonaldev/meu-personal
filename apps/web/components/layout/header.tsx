@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Logo } from '@/components/ui/logo'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { cn } from '@/lib/utils'
+import { useStudentHeaderData } from '@/lib/hooks/useStudentHeaderData'
 
 interface HeaderProps {
   className?: string
@@ -15,6 +16,7 @@ interface HeaderProps {
 
 export default function Header({ className }: HeaderProps) {
   const { user, isAuthenticated, logout } = useAuthStore()
+  const { availableCredits } = useStudentHeaderData()
 
   const getInitials = (name: string) => {
     return name
@@ -30,25 +32,22 @@ export default function Header({ className }: HeaderProps) {
       case 'STUDENT': return 'Aluno'
       case 'TEACHER': return 'Professor'
       case 'ADMIN': return 'Admin'
-      default: return 'Usuário'
+      default: return 'Usuario'
     }
   }
 
   return (
     <header className={cn(
-      "bg-meu-primary text-white sticky top-0 z-40 border-b border-meu-primary-dark",
+      'bg-meu-primary text-white sticky top-0 z-40 border-b border-meu-primary-dark',
       className
     )}>
       <div className="container mx-auto px-4 max-w-7xl">
         <div className="flex items-center justify-between h-24">
-          {/* Logo */}
           <Logo size="md" variant="default" showText={false} />
 
-          {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-6">
             {isAuthenticated ? (
               <>
-                {/* User Info */}
                 <div className="flex items-center space-x-3">
                   <Avatar className="h-8 w-8">
                     <AvatarImage src={user?.avatar} />
@@ -62,14 +61,12 @@ export default function Header({ className }: HeaderProps) {
                   </div>
                 </div>
 
-                {/* Credits for students */}
                 {user?.role === 'STUDENT' && (
                   <Badge variant="secondary" className="bg-meu-primary-dark text-meu-accent border-0">
-                    {user.credits} créditos
+                    {availableCredits} creditos
                   </Badge>
                 )}
 
-                {/* Logout Button */}
                 <Button
                   variant="default"
                   size="sm"
@@ -94,7 +91,6 @@ export default function Header({ className }: HeaderProps) {
             )}
           </nav>
 
-          {/* Mobile Menu - simplified for now */}
           <div className="md:hidden">
             {isAuthenticated && (
               <Avatar className="h-8 w-8">

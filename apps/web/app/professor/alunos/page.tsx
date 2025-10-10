@@ -76,7 +76,6 @@ export default function AlunosPage() {
         setStudents(data.students || [])
       }
     } catch (error) {
-      console.error('Erro ao carregar alunos:', error)
       toast.error('Erro ao carregar alunos')
     } finally {
       setLoading(false)
@@ -94,7 +93,6 @@ export default function AlunosPage() {
         setTeacherBio(data.bio || '')
       }
     } catch (err) {
-      console.error('Erro ao carregar bio do professor:', err)
     }
   }
 
@@ -151,7 +149,6 @@ export default function AlunosPage() {
         toast.error('Erro ao salvar aluno')
       }
     } catch (error) {
-      console.error('Erro:', error)
       toast.error('Erro ao processar requisição')
     }
   }
@@ -182,7 +179,6 @@ export default function AlunosPage() {
         toast.error('Erro ao excluir aluno')
       }
     } catch (error) {
-      console.error('Erro:', error)
       toast.error('Erro ao processar requisição')
     } finally {
       setDeleteConfirm({ isOpen: false, studentId: null, studentName: '' })

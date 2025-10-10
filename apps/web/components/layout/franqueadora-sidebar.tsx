@@ -13,7 +13,10 @@ import {
   Users,
   LogOut,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  Package,
+  GraduationCap,
+  Briefcase
 } from 'lucide-react'
 
 interface FranqueadoraSidebarProps {
@@ -26,6 +29,7 @@ export default function FranqueadoraSidebar({ isMobile = false, onNavigate }: Fr
   const pathname = usePathname()
   const router = useRouter()
   const [expandedSections, setExpandedSections] = useState<string[]>(['overview'])
+  const isPackagesActive = pathname?.startsWith('/franqueadora/pacotes')
 
   const toggleSection = (section: string) => {
     setExpandedSections(prev =>
@@ -65,6 +69,16 @@ export default function FranqueadoraSidebar({ isMobile = false, onNavigate }: Fr
       subItems: [
         { label: 'Adicionar Franquia', href: '/franqueadora/dashboard/add-franchise', icon: Building },
         { label: 'Dados das Franquias', href: '/franqueadora/dashboard/dados-franquias', icon: BarChart3 }
+      ]
+    },
+    {
+      id: 'packages',
+      label: 'Pacotes',
+      icon: Package,
+      isExpanded: expandedSections.includes('packages') || Boolean(isPackagesActive),
+      subItems: [
+        { label: 'Pacotes aluno', href: '/franqueadora/pacotes/aluno', icon: GraduationCap },
+        { label: 'Pacotes professor', href: '/franqueadora/pacotes/professor', icon: Briefcase }
       ]
     }
   ]

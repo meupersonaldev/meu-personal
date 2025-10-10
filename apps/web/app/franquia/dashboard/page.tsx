@@ -709,7 +709,6 @@ export default function FranquiaDashboard() {
   }
 
   if (!franquiaUser) {
-    console.error('No franquia user found in store')
     return null
   }
 

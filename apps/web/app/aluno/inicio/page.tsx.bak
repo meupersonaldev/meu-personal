@@ -1,0 +1,889 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import {
+  Calendar,
+  Wallet,
+  CheckCircle,
+  Users,
+  ArrowRight,
+  Loader2,
+  Building2,
+  CreditCard,
+  AlertCircle,
+  ShoppingCart,
+  Star,
+  ChevronRight,
+  Package
+} from 'lucide-react'
+import StudentLayout from '@/components/layout/student-layout'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { useAuthStore } from '@/lib/stores/auth-store'
+import { useStudentStore } from '@/lib/stores/student-store'
+import { useStudentUnitsStore, StudentUnit, Unit } from '@/lib/stores/student-units-store'
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+
+interface PackageType {
+  id: string
+  title: string
+  classes_qty: number
+  price_cents: number
+  status: string
+  unit_id: string
+}
+
+interface BalanceType {
+  total_purchased: number
+  total_consumed: number
+  locked_qty: number
+}
+
+const currencyFormatter = new Intl.NumberFormat('pt-BR', {
+  style: 'currency',
+  currency: 'BRL'
+})
+
+const dateFormatter = new Intl.DateTimeFormat('pt-BR', {
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long'
+})
+
+const shortDateFormatter = new Intl.DateTimeFormat('pt-BR', {
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric'
+})
+
+export default function StudentDashboardPage() {
+  const router = useRouter()
+  const { user, isAuthenticated, token } = useAuthStore()
+  const {
+    teachers,
+    loading: isStudentDataLoading,
+    loadTeachers
+  } = useStudentStore()
+  const {
+    units,
+    activeUnit,
+    availableUnits,
+    isLoading: isUnitsLoading,
+    fetchUnits,
+    fetchAvailableUnits,
+    activateUnit
+  } = useStudentUnitsStore()
+
+  const [packages, setPackages] = useState<PackageType[]>([])
+  const [packagesLoading, setPackagesLoading] = useState(false)
+  const [balance, setBalance] = useState<BalanceType | null>(null)
+  const [balanceLoading, setBalanceLoading] = useState(false)
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push('/aluno/login')
+    }
+  }, [isAuthenticated, router])
+
+  useEffect(() => {
+    if (!isAuthenticated || !token) return
+    fetchUnits()
+    fetchAvailableUnits()
+  }, [isAuthenticated, token, fetchUnits, fetchAvailableUnits])
+
+  useEffect(() => {
+    if (!user?.id) return
+    loadBookings(user.id)
+  }, [user?.id, loadBookings])
+
+  useEffect(() => {
+    if (!activeUnit) return
+    loadTeachers()
+    fetchPackagesForUnit(activeUnit.unit_id)
+    fetchBalanceForUnit(activeUnit.unit_id)
+  }, [activeUnit?.unit_id, loadTeachers])
+
+  const fetchPackagesForUnit = async (unitId: string) => {
+    if (!user?.id) return
+    setPackagesLoading(true)
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/packages/student?unit_id=${unitId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      if (!response.ok) throw new Error('Erro ao buscar pacotes')
+      const data = await response.json()
+      setPackages(data.packages || [])
+    } catch (error) {
+      console.error('Erro ao buscar pacotes:', error)
+      setPackages([])
+    } finally {
+      setPackagesLoading(false)
+    }
+  }
+
+  const fetchBalanceForUnit = async (unitId: string) => {
+    if (!user?.id) return
+    setBalanceLoading(true)
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/student/balance?unit_id=${unitId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      if (!response.ok) throw new Error('Erro ao buscar saldo')
+      const data = await response.json()
+      setBalance(data.balance || null)
+    } catch (error) {
+      console.error('Erro ao buscar saldo:', error)
+      setBalance(null)
+    } finally {
+      setBalanceLoading(false)
+    }
+  }
+
+  const selectedUnit: StudentUnit | null = activeUnit || units.find((u) => u.is_active) || null
+  
+  const availableCredits = balance 
+    ? balance.total_purchased - balance.total_consumed - balance.locked_qty 
+    : 0
+
+  const handleActivateUnit = async (unit: StudentUnit | Unit) => {
+    if ('unit_id' in unit) {
+      await activateUnit(unit.unit_id)
+    } else {
+      await activateUnit(unit.id)
+    }
+  }
+
+  const firstName = user?.name?.split(' ')[0] || 'Aluno'
+
+  
+  const renderCheckinSummary = () => {
+    if (checkinsLoading) {
+      return (
+        <div className="flex items-center justify-center py-6">
+          <Loader2 className="h-5 w-5 animate-spin text-meu-primary" />
+        </div>
+      )
+    }
+
+    if (checkins.length === 0) {
+      return (
+        <div className="flex flex-col items-start gap-3">
+          <p className="text-sm text-gray-600">
+            Você ainda não realizou check-ins. Gere o QR code da unidade para registrar sua entrada.
+          </p>
+          <Button
+            variant="outline"
+            disabled={!selectedUnit}
+            onClick={() => {
+              if (selectedUnit) {
+                router.push(`/checkin/a/${selectedUnit.unit_id}`)
+              }
+            }}
+          >
+            <Ticket className="mr-2 h-4 w-4" />
+            {selectedUnit ? 'Gerar check-in' : 'Escolha uma unidade'}
+          </Button>
+        </div>
+      )
+    }
+
+    const [lastCheckin] = checkins
+    const statusLabel =
+      lastCheckin.status === 'GRANTED'
+        ? 'Acesso liberado'
+        : lastCheckin.status === 'DENIED'
+          ? 'Acesso negado'
+          : 'Em análise'
+    const statusClasses =
+      lastCheckin.status === 'GRANTED'
+        ? 'bg-green-100 text-green-700 border-green-200'
+        : lastCheckin.status === 'DENIED'
+          ? 'bg-red-100 text-red-700 border-red-200'
+          : 'bg-amber-100 text-amber-700 border-amber-200'
+
+    return (
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-gray-500">Último check-in</p>
+            <p className="text-base font-semibold text-gray-900">
+              {shortDateFormatter.format(new Date(lastCheckin.created_at))}
+            </p>
+          </div>
+          <Badge className={statusClasses}>{statusLabel}</Badge>
+        </div>
+        <div className="flex flex-col gap-1 text-sm text-gray-600">
+          <div className="flex items-center gap-2">
+            <MapPin className="h-4 w-4 text-meu-primary" />
+            <span>{lastCheckin.unit_name || 'Unidade não informada'}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-meu-primary" />
+            <span>
+              {new Date(lastCheckin.created_at).toLocaleTimeString('pt-BR', {
+                hour: '2-digit',
+                minute: '2-digit'
+              })}
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => router.push('/aluno/checkins')}
+            className="flex-1"
+          >
+            <History className="mr-2 h-4 w-4" />
+            Ver histórico
+          </Button>
+          <Button
+            className="flex-1 bg-meu-primary text-white hover:bg-meu-primary-dark"
+            disabled={!selectedUnit}
+            onClick={() => {
+              if (selectedUnit) {
+                router.push(`/checkin/a/${selectedUnit.unit_id}`)
+              }
+            }}
+          >
+            <Ticket className="mr-2 h-4 w-4" />
+            Novo check-in
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  const renderPlanCard = (plan: StudentPlan) => (
+    <Card
+      key={plan.id}
+      className="border border-gray-100 shadow-sm hover:shadow-lg transition-shadow"
+    >
+      <CardContent className="p-5 flex flex-col gap-4">
+        <div>
+          <h4 className="text-lg font-semibold text-gray-900">{plan.name}</h4>
+          {plan.description && (
+            <p className="text-sm text-gray-600 mt-1">{plan.description}</p>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge className="bg-meu-primary/10 text-meu-primary border-meu-primary/30">
+            {plan.credits_included} créditos
+          </Badge>
+          <Badge variant="outline" className="text-gray-600 border-gray-200">
+            {currencyFormatter.format(plan.price)}
+          </Badge>
+        </div>
+        <Button
+          asChild
+          className="w-full bg-meu-primary text-white hover:bg-meu-primary-dark"
+        >
+          <Link href={`/aluno/comprar?planId=${plan.id}`}>Comprar plano</Link>
+        </Button>
+      </CardContent>
+    </Card>
+  )
+
+  const renderBookingRow = (booking: Booking) => {
+    const bookingDate = new Date(booking.date)
+    return (
+      <div
+        key={booking.id}
+        className="flex flex-col gap-3 rounded-lg border border-gray-100 bg-white p-4 md:flex-row md:items-center md:justify-between hover:border-meu-primary/30 transition-colors"
+      >
+        <div className="flex items-start gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-meu-primary/10 text-meu-primary font-semibold">
+            {booking.teacher?.name?.slice(0, 2).toUpperCase() || 'PR'}
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">
+              {shortDateFormatter.format(bookingDate)} •{' '}
+              {bookingDate.toLocaleTimeString('pt-BR', {
+                hour: '2-digit',
+                minute: '2-digit'
+              })}
+            </p>
+            <p className="text-base font-semibold text-gray-900">
+              {booking.teacher?.name || 'Professor'}
+            </p>
+            <div className="flex flex-wrap gap-3 text-sm text-gray-600 mt-2">
+              <span className="flex items-center gap-1">
+                <Clock className="h-3.5 w-3.5 text-meu-primary" />
+                {booking.duration} min
+              </span>
+              <span className="flex items-center gap-1">
+                <CreditCard className="h-3.5 w-3.5 text-meu-primary" />
+                {booking.credits_cost} créditos
+              </span>
+              {booking.notes && (
+                <span className="flex items-center gap-1">
+                  <AlertCircle className="h-3.5 w-3.5 text-amber-500" />
+                  {booking.notes}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+        <Badge
+          className={
+            booking.status === 'COMPLETED'
+              ? 'bg-green-100 text-green-700 border-green-200'
+              : booking.status === 'CONFIRMED'
+                ? 'bg-blue-100 text-blue-700 border-blue-200'
+                : booking.status === 'PENDING'
+                  ? 'bg-amber-100 text-amber-700 border-amber-200'
+                  : 'bg-gray-100 text-gray-600 border-gray-200'
+          }
+        >
+          {booking.status === 'COMPLETED'
+            ? 'Concluída'
+            : booking.status === 'CONFIRMED'
+              ? 'Confirmada'
+              : booking.status === 'PENDING'
+                ? 'Pendente'
+                : 'Cancelada'}
+        </Badge>
+      </div>
+    )
+  }
+
+  if (!user || !isAuthenticated) {
+    return null
+  }
+
+  return (
+    <StudentLayout>
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 pb-8 pt-6 sm:px-6 lg:px-8">
+        {/* Header */}
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-sm text-gray-500">Olá, {firstName}! 👋</p>
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
+              Seu painel de treinos
+            </h1>
+            <p className="text-sm text-gray-500 capitalize">{formattedToday}</p>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Button
+              asChild
+              variant="outline"
+              className="w-full sm:w-auto border-gray-300 text-gray-700"
+            >
+              <Link href="/aluno/comprar">
+                <CreditCard className="mr-2 h-4 w-4" />
+                Comprar créditos
+              </Link>
+            </Button>
+            <Button
+              variant="default"
+              className="w-full sm:w-auto bg-meu-primary text-white hover:bg-meu-primary-dark"
+              onClick={() => router.push('/aluno/agendamentos')}
+            >
+              <Calendar className="mr-2 h-4 w-4" />
+              Minhas aulas
+            </Button>
+          </div>
+        </div>
+
+        {/* Quick Stats */}
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <Card className="border border-gray-100 shadow-sm">
+            <CardContent className="p-5 flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-500">Créditos disponíveis</p>
+                  <p className="text-2xl font-bold text-gray-900">{formattedCredits}</p>
+                </div>
+                <Wallet className="h-10 w-10 text-meu-primary" />
+              </div>
+              <Button
+                asChild
+                variant="outline"
+                className="border-meu-primary/30 text-meu-primary hover:bg-meu-primary/10"
+              >
+                <Link href="/aluno/comprar">
+                  <ArrowRight className="mr-2 h-4 w-4" />
+                  Comprar créditos
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card className="border border-gray-100 shadow-sm">
+            <CardContent className="p-5 flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-500">Próxima aula</p>
+                  {upcomingBooking ? (
+                    <>
+                      <p className="text-lg font-semibold text-gray-900">
+                        {upcomingBooking.teacher?.name || 'Professor'}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        {shortDateFormatter.format(new Date(upcomingBooking.date))} •{' '}
+                        {new Date(upcomingBooking.date).toLocaleTimeString('pt-BR', {
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-lg font-semibold text-gray-900">
+                      Nenhuma aula agendada
+                    </p>
+                  )}
+                </div>
+                <Calendar className="h-10 w-10 text-meu-primary" />
+              </div>
+              <Button
+                variant="outline"
+                className="border-gray-200 text-gray-700 hover:bg-gray-100"
+                onClick={() => router.push('/aluno/agendamentos')}
+              >
+                Gerenciar agenda
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card className="border border-gray-100 shadow-sm">
+            <CardContent className="p-5 flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-500">Aulas concluídas</p>
+                  <p className="text-2xl font-bold text-gray-900">{completedCount}</p>
+                </div>
+                <CheckCircle className="h-10 w-10 text-green-500" />
+              </div>
+              <p className="text-sm text-gray-600">
+                Tempo total treinado:{' '}
+                <span className="font-semibold text-gray-900">
+                  {Math.floor(totalMinutesTrained / 60)}h {totalMinutesTrained % 60}min
+                </span>
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border border-gray-100 shadow-sm">
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <p className="text-sm text-gray-500">Último check-in</p>
+                  <p className="text-lg font-semibold text-gray-900">
+                    {checkins.length > 0
+                      ? shortDateFormatter.format(new Date(checkins[0].created_at))
+                      : 'Ainda não realizado'}
+                  </p>
+                </div>
+                <Ticket className="h-10 w-10 text-meu-primary" />
+              </div>
+              <Button
+                variant="outline"
+                className="w-full border-gray-200 text-gray-700 hover:bg-gray-100"
+                disabled={!selectedUnit}
+                onClick={() => selectedUnit && router.push(`/checkin/a/${selectedUnit.unit_id}`)}
+              >
+                {selectedUnit ? 'Gerar check-in agora' : 'Selecione uma unidade'}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Main Content with Tabs */}
+        <Tabs defaultValue="dashboard" className="w-full">
+          <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:grid-cols-4">
+            <TabsTrigger value="dashboard" className="flex items-center gap-2">
+              <LayoutDashboard className="h-4 w-4" />
+              <span className="hidden sm:inline">Visão Geral</span>
+            </TabsTrigger>
+            <TabsTrigger value="teachers" className="flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              <span className="hidden sm:inline">Professores</span>
+            </TabsTrigger>
+            <TabsTrigger value="plans" className="flex items-center gap-2">
+              <Target className="h-4 w-4" />
+              <span className="hidden sm:inline">Planos</span>
+            </TabsTrigger>
+            <TabsTrigger value="history" className="flex items-center gap-2">
+              <History className="h-4 w-4" />
+              <span className="hidden sm:inline">Histórico</span>
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="dashboard" className="space-y-6">
+            <div className="grid gap-6 lg:grid-cols-2">
+              {/* Unit Selection */}
+              <Card className="border border-gray-100 shadow-sm">
+                <CardHeader className="flex flex-col gap-2 border-b border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="flex items-center gap-2 text-lg font-semibold text-gray-900">
+                      <Building2 className="h-5 w-5 text-meu-primary" />
+                      Escolha uma unidade
+                    </CardTitle>
+                    {selectedUnit && (
+                      <Badge className="bg-meu-primary/10 text-meu-primary border-meu-primary/30">
+                        {selectedUnit.unit.name}
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-sm text-gray-500">
+                    Selecione onde deseja treinar hoje e veja os serviços disponíveis.
+                  </p>
+                </CardHeader>
+                <CardContent className="p-5 flex flex-col gap-4">
+                  <UnitSelector compact />
+
+                  {isUnitsLoading ? (
+                    <div className="flex items-center justify-center py-6">
+                      <Loader2 className="h-5 w-5 animate-spin text-meu-primary" />
+                    </div>
+                  ) : units.length === 0 ? (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 flex gap-3">
+                      <AlertCircle className="h-5 w-5 text-amber-600" />
+                      <div>
+                        <p className="font-semibold text-amber-900">Nenhuma unidade vinculada ainda</p>
+                        <p className="text-sm text-amber-800">
+                          Procure uma academia próxima e solicite sua vinculação.
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {units.slice(0, 3).map((unit) => (
+                        <div
+                          key={unit.id}
+                          className="flex flex-col gap-2 rounded-lg border border-gray-100 bg-gray-50/60 p-4 md:flex-row md:items-center md:justify-between hover:border-meu-primary/30 transition-colors"
+                        >
+                          <div>
+                            <p className="text-sm font-semibold text-gray-900">
+                              {unit.unit.name}
+                            </p>
+                            <p className="text-xs text-gray-600">
+                              {unit.unit.city}, {unit.unit.state}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {unit.is_active && (
+                              <Badge className="bg-green-100 text-green-700 border-green-200">
+                                Selecionada
+                              </Badge>
+                            )}
+                            <Button
+                              size="sm"
+                              variant={unit.is_active ? 'outline' : 'default'}
+                              className={
+                                unit.is_active
+                                  ? 'border-gray-200'
+                                  : 'bg-meu-primary text-white hover:bg-meu-primary-dark'
+                              }
+                              onClick={() => handleActivateUnit(unit)}
+                              disabled={unit.is_active}
+                            >
+                              {unit.is_active ? 'Ativa' : 'Ativar unidade'}
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {availableUnits.length > 0 && (
+                    <div className="text-center">
+                      <Button
+                        variant="outline"
+                        className="w-full border-dashed border-gray-300 text-gray-600 hover:bg-gray-50"
+                        onClick={() => router.push('/aluno/unidades')}
+                      >
+                        Ver unidades disponíveis ({availableUnits.length})
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Recent Check-ins */}
+              <Card className="border border-gray-100 shadow-sm">
+                <CardHeader className="border-b border-gray-100">
+                  <CardTitle className="flex items-center gap-2 text-lg font-semibold text-gray-900">
+                    <Ticket className="h-5 w-5 text-meu-primary" />
+                    Check-ins recentes
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-5">
+                  {renderCheckinSummary()}
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="teachers" className="space-y-6">
+            <Card className="border border-gray-100 shadow-sm">
+              <CardHeader className="border-b border-gray-100">
+                <CardTitle className="flex items-center gap-2 text-lg font-semibold text-gray-900">
+                  <Users className="h-5 w-5 text-meu-primary" />
+                  Professores disponíveis
+                  {selectedUnit && (
+                    <Badge variant="outline" className="ml-2">
+                      {selectedUnit.unit.name}
+                    </Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-5 flex flex-col gap-4">
+                {!selectedUnit ? (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 flex gap-3">
+                    <AlertCircle className="h-5 w-5 text-amber-600" />
+                    <div>
+                      <p className="font-semibold text-amber-900">Selecione uma unidade</p>
+                      <p className="text-sm text-amber-800">
+                        Escolha uma unidade para ver os professores disponíveis.
+                      </p>
+                    </div>
+                  </div>
+                ) : isStudentDataLoading ? (
+                  <div className="flex items-center justify-center py-6">
+                    <Loader2 className="h-5 w-5 animate-spin text-meu-primary" />
+                  </div>
+                ) : teachers.length === 0 ? (
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
+                    Nenhum professor disponível nesta unidade ainda.
+                  </div>
+                ) : (
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {teachers.map((teacher) => (
+                      <Card key={teacher.id} className="border border-gray-100 shadow-sm hover:shadow-lg transition-shadow">
+                        <CardContent className="p-4 flex flex-col gap-3">
+                          <div className="flex items-start gap-3">
+                            <Avatar className="h-12 w-12 border border-gray-200">
+                              {teacher.avatar_url && <AvatarImage src={teacher.avatar_url} alt={teacher.name} />}
+                              <AvatarFallback className="bg-meu-primary text-white font-semibold">
+                                {teacher.name.slice(0, 2).toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1">
+                              <h4 className="text-base font-semibold text-gray-900">{teacher.name}</h4>
+                              {teacher.teacher_profiles?.[0]?.is_available && (
+                                <Badge className="bg-green-100 text-green-700 border-green-200 text-xs">
+                                  Disponível
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="text-sm text-gray-600">
+                            {teacher.teacher_profiles?.[0]?.specialties?.slice(0, 2).join(' • ')}
+                          </div>
+
+                          <div className="flex flex-wrap gap-1">
+                            <Badge variant="outline" className="text-xs">
+                              {teacher.teacher_profiles?.[0]?.hourly_rate
+                                ? `${currencyFormatter.format(teacher.teacher_profiles[0].hourly_rate)}/aula`
+                                : 'Valor sob consulta'}
+                            </Badge>
+                          </div>
+
+                          <Button
+                            className="w-full bg-meu-primary text-white hover:bg-meu-primary-dark text-sm"
+                            onClick={() => {
+                              setSelectedTeacher(teacher)
+                              setShowBookingModal(true)
+                            }}
+                          >
+                            Agendar aula
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="plans" className="space-y-6">
+            <Card className="border border-gray-100 shadow-sm">
+              <CardHeader className="border-b border-gray-100">
+                <CardTitle className="flex items-center gap-2 text-lg font-semibold text-gray-900">
+                  <Target className="h-5 w-5 text-meu-primary" />
+                  Planos da unidade
+                  {selectedUnit && (
+                    <Badge variant="outline" className="ml-2">
+                      {selectedUnit.unit.name}
+                    </Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-5 flex flex-col gap-4">
+                {!selectedUnit ? (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 flex gap-3">
+                    <AlertCircle className="h-5 w-5 text-amber-600" />
+                    <div>
+                      <p className="font-semibold text-amber-900">Selecione uma unidade</p>
+                      <p className="text-sm text-amber-800">
+                        Escolha uma unidade para visualizar os planos disponíveis.
+                      </p>
+                    </div>
+                  </div>
+                ) : plansLoading ? (
+                  <div className="flex items-center justify-center py-6">
+                    <Loader2 className="h-5 w-5 animate-spin text-meu-primary" />
+                  </div>
+                ) : plansError ? (
+                  <div className="rounded-lg border border-red-200 bg-red-50 p-4 flex gap-3">
+                    <AlertCircle className="h-5 w-5 text-red-600" />
+                    <div>
+                      <p className="font-semibold text-red-900">Não foi possível carregar os planos</p>
+                      <p className="text-sm text-red-800">{plansError}</p>
+                    </div>
+                  </div>
+                ) : plans.length === 0 ? (
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
+                    A unidade ainda não possui planos cadastrados. Fale com a recepção para saber mais.
+                  </div>
+                ) : (
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {plans.map((plan) => renderPlanCard(plan))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="history" className="space-y-6">
+            <div className="grid gap-6 lg:grid-cols-2">
+              <Card className="border border-gray-100 shadow-sm">
+                <CardHeader className="border-b border-gray-100">
+                  <CardTitle className="flex items-center gap-2 text-lg font-semibold text-gray-900">
+                    <History className="h-5 w-5 text-meu-primary" />
+                    Histórico de aulas
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-5 flex flex-col gap-4">
+                  {studentDataError && (
+                    <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                      {studentDataError}
+                    </div>
+                  )}
+
+                  {!studentDataError && recentBookings.length === 0 && (
+                    <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
+                      Seu histórico aparecerá aqui assim que você realizar suas primeiras aulas.
+                    </div>
+                  )}
+
+                  {!studentDataError && recentBookings.length > 0 && (
+                    <div className="flex flex-col gap-3">
+                      {recentBookings.map((booking) => renderBookingRow(booking))}
+                    </div>
+                  )}
+
+                  <Button
+                    asChild
+                    variant="outline"
+                    className="border-gray-200 text-gray-700 hover:bg-gray-100"
+                  >
+                    <Link href="/aluno/historico">
+                      <History className="mr-2 h-4 w-4" />
+                      Ver histórico completo
+                    </Link>
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card className="border border-gray-100 shadow-sm">
+                <CardHeader className="border-b border-gray-100">
+                  <CardTitle className="flex items-center gap-2 text-lg font-semibold text-gray-900">
+                    <TrendingUp className="h-5 w-5 text-meu-primary" />
+                    Estatísticas
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-5 space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-meu-primary">{completedCount}</p>
+                      <p className="text-sm text-gray-600">Aulas concluídas</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-green-600">
+                        {Math.floor(totalMinutesTrained / 60)}h {totalMinutesTrained % 60}min
+                      </p>
+                      <p className="text-sm text-gray-600">Tempo total</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Check-ins realizados</span>
+                      <span className="font-semibold">{checkins.length}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Unidades vinculadas</span>
+                      <span className="font-semibold">{units.length}</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+        </Tabs>
+      </div>
+
+      {showBookingModal && selectedTeacher && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <Card className="w-full max-w-md">
+            <CardHeader>
+              <CardTitle>Agendar aula com {selectedTeacher.name}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Estamos finalizando a integração do agendamento direto pelo painel. Enquanto isso,
+                você pode entrar em contato com o professor para combinar o melhor horário.
+              </p>
+              <div className="flex flex-col gap-2 rounded-lg border border-gray-100 bg-gray-50 p-3 text-sm text-gray-700">
+                {selectedTeacher.email && (
+                  <span>
+                    <strong>Email:</strong> {selectedTeacher.email}
+                  </span>
+                )}
+                {selectedTeacher.phone && (
+                  <span>
+                    <strong>Telefone:</strong> {selectedTeacher.phone}
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-col gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowBookingModal(false)
+                    setSelectedTeacher(null)
+                  }}
+                >
+                  Fechar
+                </Button>
+                <Button
+                  className="bg-meu-primary text-white hover:bg-meu-primary-dark"
+                  onClick={() => {
+                    setShowBookingModal(false)
+                    setSelectedTeacher(null)
+                  }}
+                >
+                  Tudo certo
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+    </StudentLayout>
+  )
+}

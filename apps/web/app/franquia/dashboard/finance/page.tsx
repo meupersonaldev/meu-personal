@@ -98,7 +98,6 @@ export default function FinancePageNew() {
       const data = await response.json()
       setPayments(data.payments || [])
     } catch (error) {
-      console.error('Error fetching payments:', error)
       toast.error('Erro ao carregar pagamentos')
     } finally {
       setLoading(false)
@@ -128,7 +127,6 @@ export default function FinancePageNew() {
       const data = await response.json()
       setStats(data.stats)
     } catch (error) {
-      console.error('Error fetching stats:', error)
     }
   }
 

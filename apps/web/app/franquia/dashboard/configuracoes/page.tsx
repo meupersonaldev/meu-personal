@@ -111,7 +111,6 @@ export default function ConfiguracoesPage() {
         }
       }
     } catch (error) {
-      console.error('Erro ao carregar nome da academia:', error)
     }
   }
 
@@ -150,7 +149,6 @@ export default function ConfiguracoesPage() {
               }))
             }
           } catch (e) {
-            console.error('Erro ao parsear schedule:', e)
           }
         }
         
@@ -169,7 +167,6 @@ export default function ConfiguracoesPage() {
         })
       }
     } catch (error) {
-      console.error('Erro ao carregar configurações:', error)
     }
   }
 
@@ -186,7 +183,6 @@ export default function ConfiguracoesPage() {
         setTimeSlots(slots || [])
       }
     } catch (error) {
-      console.error('Erro ao carregar slots:', error)
     }
   }
 
@@ -206,10 +202,8 @@ export default function ConfiguracoesPage() {
       if (response.ok) {
         const { slots } = await response.json()
         setTimeSlots(slots || [])
-        console.log('Slots gerados automaticamente')
       }
     } catch (error) {
-      console.error('Erro ao gerar slots:', error)
     }
   }
 
@@ -256,7 +250,6 @@ export default function ConfiguracoesPage() {
         toast.error('Erro ao fazer upload do avatar')
       }
     } catch (error) {
-      console.error('Erro ao fazer upload:', error)
       toast.error('Erro ao fazer upload do avatar')
     } finally {
       setUploadingAvatar(false)
@@ -294,7 +287,6 @@ export default function ConfiguracoesPage() {
         toast.error(error.error || 'Erro ao atualizar perfil')
       }
     } catch (error) {
-      console.error('Erro ao salvar perfil:', error)
       toast.error('Erro ao atualizar perfil')
     } finally {
       setLoading(false)
@@ -328,7 +320,6 @@ export default function ConfiguracoesPage() {
         toast.error('Erro ao salvar informações')
       }
     } catch (error) {
-      console.error('Erro ao salvar:', error)
       toast.error('Erro ao salvar informações')
     } finally {
       setLoading(false)
@@ -355,7 +346,6 @@ export default function ConfiguracoesPage() {
         class_duration_minutes: Number(settings.classDurationMinutes || 60)
       }
 
-      console.log('Salvando configurações:', payload)
 
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/academies/${franquiaUser!.academyId}`, {
         method: 'PUT',
@@ -365,7 +355,6 @@ export default function ConfiguracoesPage() {
       })
 
       const data = await response.json()
-      console.log('Resposta:', data)
 
       if (response.ok) {
         // Gerar slots automaticamente após salvar configurações
@@ -375,10 +364,8 @@ export default function ConfiguracoesPage() {
         loadTimeSlots() // Recarregar slots
       } else {
         toast.error(data.error || 'Erro ao salvar configurações')
-        console.error('Erro do servidor:', data)
       }
     } catch (error) {
-      console.error('Erro ao salvar:', error)
       toast.error('Erro ao salvar configurações')
     } finally {
       setLoading(false)

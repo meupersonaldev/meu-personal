@@ -32,7 +32,6 @@ export default function TestSupabase() {
     } catch (error: any) {
       setStatus('error')
       setMessage(`❌ Erro: ${error.message}`)
-      console.error('Supabase test error:', error)
     }
   }
 
@@ -58,7 +57,6 @@ export default function TestSupabase() {
     } catch (error: any) {
       setStatus('error')
       setMessage(`❌ Erro: ${error.message}`)
-      console.error('Data test error:', error)
     }
   }
 
@@ -83,7 +81,6 @@ export default function TestSupabase() {
     } catch (error: any) {
       setStatus('error')
       setMessage(`❌ Login Real Error: ${error.message}`)
-      console.error('Real auth test error:', error)
     }
   }
 

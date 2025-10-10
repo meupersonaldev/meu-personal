@@ -329,9 +329,9 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
   // Verificar se o usuário tem acesso à unidade
   if (user.role === 'STUDENT' || user.role === 'ALUNO') {
     const { data: userUnits } = await supabase
-      .from('user_units')
+      .from('student_units')
       .select('unit_id')
-      .eq('user_id', user.userId)
+      .eq('student_id', user.userId)
       .eq('unit_id', unitId)
 
     if (!userUnits || userUnits.length === 0) {
@@ -367,7 +367,7 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
       credits_cost,
       student:users!bookings_student_id_fkey (id, name),
       teacher:users!bookings_teacher_id_fkey (id, name),
-      unit:units!bookings_unit_id_fkey (id, name, city, state, address),
+      unit:units!bookings_unit_id_fk (id, name, city, state, address),
       academy:academies!bookings_franchise_id_fkey (id, name, city, state, address)
     `)
     .or(`unit_id.eq.${unitId},franchise_id.eq.${unitId}`)

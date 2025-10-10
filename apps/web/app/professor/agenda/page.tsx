@@ -193,7 +193,6 @@ export default function ProfessorAgendaPage() {
                   })
                   return { ...b, status: 'COMPLETED' }
                 } catch (err) {
-                  console.error('Erro ao atualizar status:', err)
                   return b
                 }
               }
@@ -209,13 +208,11 @@ export default function ProfessorAgendaPage() {
           setBookings(activeBookings)
           setCancelledBookings(cancelled)
         } catch (err) {
-          console.error('Erro ao parsear bookings:', err)
           setBookings([])
           setCancelledBookings([])
         }
       }
     } catch (err) {
-      console.error('Erro ao carregar dados:', err)
       toast.error('Erro ao carregar agenda')
     } finally {
       setLoading(false)
@@ -372,7 +369,6 @@ export default function ProfessorAgendaPage() {
         toast.error(errorData.message || 'Erro ao criar disponibilidade')
       }
     } catch (error) {
-      console.error('Erro:', error)
       toast.error('Erro ao processar requisição')
     }
   }
@@ -467,18 +463,15 @@ export default function ProfessorAgendaPage() {
         }
       } else {
         // Remover apenas o booking específico (CANCELLED ou unidade específica)
-        console.log('🗑️ Removendo booking:', bookingId, 'Status:', selectedBooking?.status)
         const response = await authFetch(`${API_URL}/api/bookings/${bookingId}`, {
           method: 'DELETE'
         })
 
-        console.log('📡 Resposta DELETE:', response.status, response.ok)
         
         if (response.ok) {
           toast.success(selectedBooking?.status === 'CANCELLED' ? 'Cancelado removido!' : 'Disponibilidade removida!')
         } else {
           const errorData = await response.json()
-          console.error('❌ Erro ao remover:', errorData)
           toast.error('Erro ao remover: ' + (errorData.message || 'Erro desconhecido'))
         }
       }
@@ -1394,7 +1387,6 @@ export default function ProfessorAgendaPage() {
                                 await fetchData()
                                 setShowModal(false)
                               } catch (error) {
-                                console.error('Erro geral:', error)
                                 toast.error('Erro ao processar requisição')
                               }
                             }}

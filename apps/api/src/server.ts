@@ -139,6 +139,7 @@ import teachersRoutes from './routes/teachers'
 import teacherPreferencesRoutes from './routes/teacher-preferences'
 import teacherStudentsRoutes from './routes/teacher-students'
 import academiesRoutes from './routes/academies'
+import studentUnitsRoutes from './routes/student-units'
 import { bookingScheduler } from './jobs/booking-scheduler'
 
 // Servir arquivos estáticos de uploads
@@ -159,6 +160,7 @@ app.use('/api/academies', academiesRoutes)
 app.use('/api/teachers', teachersRoutes)
 app.use('/api/teachers', teacherPreferencesRoutes)
 app.use('/api/teachers', teacherStudentsRoutes)
+app.use('/api/student-units', studentUnitsRoutes)
 // SEGURANÇA CRÍTICA: Rate limit específico para uploads
 app.use('/api', uploadRateLimit, uploadRoutes)
 app.use('/api/franqueadora', franqueadoraRoutes)

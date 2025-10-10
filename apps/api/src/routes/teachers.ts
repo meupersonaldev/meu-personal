@@ -267,7 +267,7 @@ const createTeacherSchema = z.object({
 // GET /api/teachers - Listar todos os professores
 router.get('/', async (req, res) => {
   try {
-    const { academy_id, city, state } = req.query
+    const { academy_id, city, state, unit_id } = req.query
 
     let query = supabase
       .from('users')
@@ -302,6 +302,11 @@ router.get('/', async (req, res) => {
 
     if (academy_id) {
       query = query.eq('academy_teachers.academy_id', academy_id)
+    }
+
+    // If unit_id is provided, filter by teachers available in that unit
+    if (unit_id) {
+      query = query.eq('academy_teachers.academy_id', unit_id)
     }
 
     const { data: teachers, error } = await query

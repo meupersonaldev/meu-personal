@@ -174,7 +174,6 @@ export default function ProfessoresPage() {
         toast.error('Erro ao criar professor')
       }
     } catch (error) {
-      console.error('Erro ao criar professor:', error)
       toast.error('Erro ao criar professor')
     } finally {
       setCreateLoading(false)

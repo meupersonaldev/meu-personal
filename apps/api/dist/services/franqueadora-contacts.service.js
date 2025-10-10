@@ -5,6 +5,18 @@ exports.ensureFranqueadoraContact = ensureFranqueadoraContact;
 exports.addAcademyToContact = addAcademyToContact;
 exports.syncContactAcademies = syncContactAcademies;
 const supabase_1 = require("../config/supabase");
+function isMissingContactsTable(error) {
+    if (!error)
+        return false;
+    if (typeof error === 'string') {
+        return error.includes('franqueadora_contacts');
+    }
+    if (error instanceof Error) {
+        return error.message.includes('franqueadora_contacts');
+    }
+    const message = error?.message;
+    return typeof message === 'string' && message.includes('franqueadora_contacts');
+}
 let cachedDefaultFranqueadoraId;
 function normalizeRole(role) {
     return role.toUpperCase();
@@ -47,13 +59,28 @@ async function ensureFranqueadoraContact(params) {
     if (!['STUDENT', 'TEACHER'].includes(targetRole)) {
         return;
     }
-    const { data: existing, error: fetchError } = await supabase_1.supabase
-        .from('franqueadora_contacts')
-        .select('id, franqueadora_id')
-        .eq('user_id', userId)
-        .limit(1);
-    if (fetchError) {
-        throw new Error(`Erro ao verificar contato da franqueadora: ${fetchError.message}`);
+    let existing = null;
+    try {
+        const response = await supabase_1.supabase
+            .from('franqueadora_contacts')
+            .select('id, franqueadora_id')
+            .eq('user_id', userId)
+            .limit(1);
+        if (response.error) {
+            if (isMissingContactsTable(response.error)) {
+                console.warn('Tabela franqueadora_contacts ausente. Ignorando sincronização de contatos.');
+                return;
+            }
+            throw new Error(`Erro ao verificar contato da franqueadora: ${response.error.message}`);
+        }
+        existing = response.data;
+    }
+    catch (error) {
+        if (isMissingContactsTable(error)) {
+            console.warn('Tabela franqueadora_contacts ausente. Ignorando sincronização de contatos.');
+            return;
+        }
+        throw error;
     }
     const now = new Date().toISOString();
     const franqueadoraId = await fetchDefaultFranqueadoraId();
@@ -66,12 +93,25 @@ async function ensureFranqueadoraContact(params) {
         if (!existing[0].franqueadora_id && franqueadoraId) {
             updatePayload.franqueadora_id = franqueadoraId;
         }
-        const { error: updateError } = await supabase_1.supabase
-            .from('franqueadora_contacts')
-            .update(updatePayload)
-            .eq('id', existing[0].id);
-        if (updateError) {
-            throw new Error(`Erro ao atualizar contato da franqueadora: ${updateError.message}`);
+        try {
+            const { error: updateError } = await supabase_1.supabase
+                .from('franqueadora_contacts')
+                .update(updatePayload)
+                .eq('id', existing[0].id);
+            if (updateError) {
+                if (isMissingContactsTable(updateError)) {
+                    console.warn('Tabela franqueadora_contacts ausente. Ignorando atualização de contato.');
+                    return;
+                }
+                throw new Error(`Erro ao atualizar contato da franqueadora: ${updateError.message}`);
+            }
+        }
+        catch (error) {
+            if (isMissingContactsTable(error)) {
+                console.warn('Tabela franqueadora_contacts ausente. Ignorando atualização de contato.');
+                return;
+            }
+            throw error;
         }
         return;
     }
@@ -87,11 +127,24 @@ async function ensureFranqueadoraContact(params) {
     if (franqueadoraId) {
         insertPayload.franqueadora_id = franqueadoraId;
     }
-    const { error: insertError } = await supabase_1.supabase
-        .from('franqueadora_contacts')
-        .insert(insertPayload);
-    if (insertError) {
-        throw new Error(`Erro ao criar contato da franqueadora: ${insertError.message}`);
+    try {
+        const { error: insertError } = await supabase_1.supabase
+            .from('franqueadora_contacts')
+            .insert(insertPayload);
+        if (insertError) {
+            if (isMissingContactsTable(insertError)) {
+                console.warn('Tabela franqueadora_contacts ausente. Ignorando criação de contato.');
+                return;
+            }
+            throw new Error(`Erro ao criar contato da franqueadora: ${insertError.message}`);
+        }
+    }
+    catch (error) {
+        if (isMissingContactsTable(error)) {
+            console.warn('Tabela franqueadora_contacts ausente. Ignorando criação de contato.');
+            return;
+        }
+        throw error;
     }
 }
 async function addAcademyToContact(userId, academyId) {

@@ -85,7 +85,6 @@ export default function FranquiaDetailsPage() {
         toast.error('Erro ao carregar dados da franquia')
       }
     } catch (error) {
-      console.error('Erro ao buscar estatísticas:', error)
       toast.error('Erro ao carregar dados da franquia')
     } finally {
       setLoadingStats(false)
@@ -144,7 +143,6 @@ export default function FranquiaDetailsPage() {
         toast.error('Erro ao atualizar franquia')
       }
     } catch (error) {
-      console.error('Erro ao salvar:', error)
       toast.error('Erro ao atualizar franquia')
     } finally {
       setIsSaving(false)

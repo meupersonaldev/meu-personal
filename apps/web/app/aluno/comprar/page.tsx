@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useState, useEffect } from 'react'
 import { CreditCard, Barcode, QrCode, Check, Loader2, Gift } from 'lucide-react'
@@ -6,6 +6,9 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
+import { useAuthStore } from '@/lib/stores/auth-store'
+import { useStudentUnitsStore } from '@/lib/stores/student-units-store'
+import { API_BASE_URL } from '@/lib/api'
 
 interface Plan {
   id: string
@@ -24,6 +27,16 @@ interface Teacher {
 }
 
 export default function ComprarCreditosPage() {
+  const { token } = useAuthStore()
+  const {
+    activeUnit,
+    fetchUnits,
+    fetchActiveUnit
+  } = useStudentUnitsStore((state) => ({
+    activeUnit: state.activeUnit,
+    fetchUnits: state.fetchUnits,
+    fetchActiveUnit: state.fetchActiveUnit
+  }))
   const [plans, setPlans] = useState<Plan[]>([])
   const [teachers, setTeachers] = useState<Teacher[]>([])
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null)
@@ -33,23 +46,72 @@ export default function ComprarCreditosPage() {
   const [paymentData, setPaymentData] = useState<any>(null)
   const [step, setStep] = useState<'select-plan' | 'select-teacher' | 'payment' | 'success'>('select-plan')
 
+  // Garantir contexto de unidade ativa
+  useEffect(() => {
+    fetchUnits().catch(() => undefined)
+    fetchActiveUnit().catch(() => undefined)
+  }, [fetchUnits, fetchActiveUnit])
+
   // Carregar planos
   useEffect(() => {
-    fetch('/api/plans/student')
-      .then(res => res.json())
-      .then(data => setPlans(data.plans || []))
+    if (!token) return
+
+    const params = new URLSearchParams()
+    if (activeUnit?.unit_id) {
+      params.append('unit_id', activeUnit.unit_id)
+    }
+
+    const url = params.size > 0
+      ? `${API_BASE_URL}/api/packages/student?${params.toString()}`
+      : `${API_BASE_URL}/api/packages/student`
+
+    fetch(url, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(res => {
+        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+        return res.json()
+      })
+      .then(data => {
+        const pkgs = data?.packages || []
+        const mapped = pkgs.map((p: any) => ({
+          id: p.id,
+          name: p.title ?? 'Plano',
+          description: p.metadata_json?.description ?? '',
+          price: (p.price_cents ?? 0) / 100,
+          credits_included: p.classes_qty ?? 0,
+          features: Array.isArray(p.metadata_json?.features) ? p.metadata_json.features : [],
+        }))
+        setPlans(mapped)
+        setSelectedPlan(prev => {
+          if (!mapped.length) return null
+          if (!prev) return mapped[0]
+          const exists = mapped.find(plan => plan.id === prev.id)
+          return exists || mapped[0]
+        })
+      })
       .catch(err => console.error('Erro ao carregar planos:', err))
-  }, [])
+  }, [token, activeUnit?.unit_id])
 
   // Carregar professores
   useEffect(() => {
     if (step === 'select-teacher') {
-      fetch('/api/teachers?available=true')
-        .then(res => res.json())
+      const params = new URLSearchParams({ available: 'true' })
+      if (activeUnit?.unit_id) {
+        params.append('unit_id', activeUnit.unit_id)
+      }
+
+      fetch(`${API_BASE_URL}/api/teachers?${params.toString()}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        })
+        .then(res => {
+          if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+          return res.json()
+        })
         .then(data => setTeachers(data.teachers || []))
         .catch(err => console.error('Erro ao carregar professores:', err))
     }
-  }, [step])
+  }, [step, token, activeUnit?.unit_id])
 
   const handlePurchase = async () => {
     if (!selectedPlan || !selectedTeacher) return
@@ -57,27 +119,32 @@ export default function ComprarCreditosPage() {
     setLoading(true)
 
     try {
-      const response = await fetch('/api/payments/student/purchase-package', {
+      const response = await fetch(`${API_BASE_URL}/api/packages/student/checkout`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
-          student_id: 'USER_ID_AQUI', // TODO: Pegar do contexto de autenticação
           package_id: selectedPlan.id,
-          teacher_id: selectedTeacher.id,
-          payment_method: paymentMethod
-        })
+          unit_id: activeUnit?.unit_id,
+          payment_method: paymentMethod,
+        }),
       })
 
-      const data = await response.json()
+      const data = await response.json().catch(() => ({}))
 
       if (response.ok) {
-        setPaymentData(data.payment)
+        const checkoutUrl = data?.payment_intent?.checkout_url
+        if (checkoutUrl) {
+          window.open(checkoutUrl, '_blank')
+        }
+        setPaymentData(data.payment_intent)
         setStep('success')
       } else {
-        toast.error('Erro ao processar pagamento: ' + data.error)
+        toast.error('Erro ao processar pagamento: ' + (data?.error || data?.message || ''))
       }
     } catch (error) {
-      console.error('Erro:', error)
       toast.error('Erro ao processar pagamento')
     } finally {
       setLoading(false)
@@ -125,7 +192,16 @@ export default function ComprarCreditosPage() {
 
         {/* Step 1: Selecionar Plano */}
         {step === 'select-plan' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <>
+            {plans.length === 0 ? (
+              <Card className="p-8 text-center bg-white">
+                <h2 className="text-xl font-semibold text-gray-900 mb-2">Nenhum pacote disponível</h2>
+                <p className="text-sm text-gray-600">
+                  No momento não há pacotes liberados pela franqueadora. Volte mais tarde ou fale com o suporte.
+                </p>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {plans.map((plan) => (
               <Card
                 key={plan.id}
@@ -161,7 +237,9 @@ export default function ComprarCreditosPage() {
                 )}
               </Card>
             ))}
-          </div>
+              </div>
+            )}
+          </>
         )}
 
         {step === 'select-plan' && selectedPlan && (

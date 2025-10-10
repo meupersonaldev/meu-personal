@@ -8,6 +8,8 @@ import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import ConfirmDialog from '@/components/ui/confirm-dialog'
 import { useFranquiaStore } from '@/lib/stores/franquia-store'
+import { useAuthStore } from '@/lib/stores/auth-store'
+import { API_BASE_URL } from '@/lib/api'
 
 interface StudentPlan {
   id: string
@@ -36,6 +38,7 @@ interface TeacherPlan {
 
 export default function PlanosPage() {
   const { academy } = useFranquiaStore()
+  const { token } = useAuthStore()
   const [studentPlans, setStudentPlans] = useState<StudentPlan[]>([])
   const [teacherPlans, setTeacherPlans] = useState<TeacherPlan[]>([])
   const [loading, setLoading] = useState(true)
@@ -56,9 +59,7 @@ export default function PlanosPage() {
 
   // Verificar se academia está carregada
   useEffect(() => {
-    console.log('Academia no store:', academy)
     if (!academy) {
-      console.warn('Academia não carregada! Faça login novamente.')
     }
   }, [academy])
 
@@ -72,33 +73,50 @@ export default function PlanosPage() {
   const loadPlans = async () => {
     setLoading(true)
     try {
-      console.log('Carregando planos...')
-
-      if (!academy?.id) {
-        console.warn('Academia não carregada ainda')
+      if (!academy?.id || !token) {
         setLoading(false)
         return
       }
 
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const headers = { Authorization: `Bearer ${token}` }
       const [studentRes, teacherRes] = await Promise.all([
-        fetch(`${API_URL}/api/plans/student?academy_id=${academy.id}`),
-        fetch(`${API_URL}/api/plans/teacher?academy_id=${academy.id}`)
+        fetch(`${API_BASE_URL}/api/packages/student/manage`, { headers }),
+        fetch(`${API_BASE_URL}/api/packages/professor/manage`, { headers })
       ])
 
-      console.log('Student response:', studentRes.status)
-      console.log('Teacher response:', teacherRes.status)
+      const isJson = (res: Response) => String(res.headers.get('content-type') || '').includes('application/json')
 
-      const studentData = await studentRes.json()
-      const teacherData = await teacherRes.json()
+      const studentData = studentRes.ok && isJson(studentRes) ? await studentRes.json() : { packages: [] }
+      const teacherData = teacherRes.ok && isJson(teacherRes) ? await teacherRes.json() : { packages: [] }
 
-      console.log('Student plans:', studentData)
-      console.log('Teacher plans:', teacherData)
+      const mappedStudent: StudentPlan[] = (studentData.packages || []).map((p: any) => ({
+        id: p.id,
+        name: p.title ?? 'Plano',
+        description: p.metadata_json?.description ?? '',
+        price: (p.price_cents ?? 0) / 100,
+        credits_included: p.classes_qty ?? 0,
+        validity_days: p.metadata_json?.validity_days ?? 30,
+        features: Array.isArray(p.metadata_json?.features) ? p.metadata_json.features : [],
+        is_active: p.status === 'active',
+        asaas_plan_id: p.metadata_json?.asaas_plan_id,
+      }))
 
-      setStudentPlans(studentData.plans || [])
-      setTeacherPlans(teacherData.plans || [])
+      const mappedTeacher: TeacherPlan[] = (teacherData.packages || []).map((p: any) => ({
+        id: p.id,
+        name: p.title ?? 'Pacote',
+        description: p.metadata_json?.description ?? '',
+        price: (p.price_cents ?? 0) / 100,
+        hours_included: p.hours_qty ?? 0,
+        validity_days: p.metadata_json?.validity_days ?? 90,
+        commission_rate: p.metadata_json?.commission_rate ?? 0,
+        features: Array.isArray(p.metadata_json?.features) ? p.metadata_json.features : [],
+        is_active: p.status === 'active',
+        asaas_plan_id: p.metadata_json?.asaas_plan_id,
+      }))
+
+      setStudentPlans(mappedStudent)
+      setTeacherPlans(mappedTeacher)
     } catch (error) {
-      console.error('Erro ao carregar planos:', error)
       toast.error('Erro ao carregar planos', {
         description: 'Verifique se o backend está rodando em http://localhost:3001'
       })
@@ -158,7 +176,6 @@ export default function PlanosPage() {
       // Obter academy_id do store Zustand
       const academy_id = academy?.id
 
-      console.log('Debug academy_id:', { academy_id, academy })
 
       if (!academy_id) {
         toast.error('Erro: academia não identificada. Faça login novamente.')
@@ -174,7 +191,6 @@ export default function PlanosPage() {
         })
       }
 
-      console.log('Salvando plano:', { method, url, planData: finalPlanData })
 
       const response = await fetch(url, {
         method,
@@ -183,7 +199,6 @@ export default function PlanosPage() {
       })
 
       const result = await response.json()
-      console.log('Resposta:', result)
 
       if (response.ok) {
         await loadPlans()
@@ -196,7 +211,6 @@ export default function PlanosPage() {
         })
       }
     } catch (error) {
-      console.error('Erro ao salvar plano:', error)
       toast.error('Erro ao salvar plano', {
         description: String(error)
       })
@@ -220,7 +234,6 @@ export default function PlanosPage() {
         await loadPlans()
       }
     } catch (error) {
-      console.error('Erro ao atualizar plano:', error)
     }
   }
 
@@ -253,7 +266,6 @@ export default function PlanosPage() {
         toast.error('Erro ao excluir plano')
       }
     } catch (error) {
-      console.error('Erro ao excluir plano:', error)
       toast.error('Erro ao excluir plano')
     } finally {
       setDeleteConfirm({ isOpen: false, planId: null, planName: '', planType: null })
@@ -318,7 +330,6 @@ export default function PlanosPage() {
       })
       loadPlans()
     } catch (error) {
-      console.error('Erro ao sincronizar:', error)
       toast.error('Erro ao sincronizar com Asaas')
     }
   }

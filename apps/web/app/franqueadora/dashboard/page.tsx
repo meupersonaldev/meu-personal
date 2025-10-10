@@ -63,7 +63,6 @@ export default function FranqueadoraDashboard() {
   }
 
   if (!user) {
-    console.error('No user found in store')
     return null
   }
 
@@ -269,6 +268,7 @@ export default function FranqueadoraDashboard() {
                 </div>
               </Card>
             </div>
+
           </div>
         )
       default:

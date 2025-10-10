@@ -41,7 +41,6 @@ export function useTeacherAcademies() {
         const academiesData = await academiesRes.json()
         setAcademies(academiesData.academies || [])
       } catch (err) {
-        console.error('Erro ao carregar academias do professor:', err)
         setError(err instanceof Error ? err.message : 'Erro desconhecido')
         setAcademies([])
       } finally {

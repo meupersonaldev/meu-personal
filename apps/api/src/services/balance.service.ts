@@ -1,77 +1,107 @@
 import { supabase } from '../config/supabase';
 
+export interface BalanceScope {
+  franqueadoraId: string;
+  unitId?: string | null;
+}
+
 export interface StudentClassBalance {
   id: string;
   student_id: string;
-  unit_id: string;
+  franqueadora_id: string;
   total_purchased: number;
   total_consumed: number;
   locked_qty: number;
   updated_at: string;
+  unit_id?: string | null;
 }
 
 export interface StudentClassTransaction {
   id: string;
   student_id: string;
-  unit_id: string;
+  franqueadora_id: string;
+  unit_id?: string | null;
   type: 'PURCHASE' | 'CONSUME' | 'LOCK' | 'UNLOCK' | 'REFUND' | 'REVOKE';
   source: 'ALUNO' | 'PROFESSOR' | 'SYSTEM';
   qty: number;
   booking_id?: string;
   meta_json: Record<string, any>;
   created_at: string;
-  unlock_at?: string;
+  unlock_at?: string | null;
 }
 
 export interface ProfHourBalance {
   id: string;
   professor_id: string;
-  unit_id: string;
+  franqueadora_id: string;
   available_hours: number;
   locked_hours: number;
   updated_at: string;
+  unit_id?: string | null;
 }
 
 export interface HourTransaction {
   id: string;
   professor_id: string;
-  unit_id: string;
+  franqueadora_id: string;
+  unit_id?: string | null;
   type: 'PURCHASE' | 'CONSUME' | 'BONUS_LOCK' | 'BONUS_UNLOCK' | 'REFUND' | 'REVOKE';
   source: 'ALUNO' | 'PROFESSOR' | 'SYSTEM';
   hours: number;
   booking_id?: string;
   meta_json: Record<string, any>;
   created_at: string;
-  unlock_at?: string;
+  unlock_at?: string | null;
+}
+
+interface StudentTransactionOptions {
+  unitId?: string | null;
+  source?: StudentClassTransaction['source'];
+  bookingId?: string;
+  metaJson?: Record<string, any>;
+  unlockAt?: string;
+}
+
+interface ProfessorTransactionOptions {
+  unitId?: string | null;
+  source?: HourTransaction['source'];
+  bookingId?: string;
+  metaJson?: Record<string, any>;
+  unlockAt?: string;
 }
 
 class BalanceService {
-  // Student Class Balance Operations
-  async getStudentBalance(studentId: string, unitId: string): Promise<StudentClassBalance> {
+  // ---------------------------------------------------------------------------
+  // Student helpers
+  private async ensureStudentBalance(studentId: string, franqueadoraId: string): Promise<StudentClassBalance> {
     const { data, error } = await supabase
       .from('student_class_balance')
       .select('*')
       .eq('student_id', studentId)
-      .eq('unit_id', unitId)
+      .eq('franqueadora_id', franqueadoraId)
       .single();
 
-    if (error) {
-      if (error.code === 'PGRST116') {
-        // No balance found, create one
-        return await this.createStudentBalance(studentId, unitId);
-      }
+    if (!error && data) {
+      return data as StudentClassBalance;
+    }
+
+    if (error && error.code !== 'PGRST116') {
       throw error;
     }
 
-    return data as StudentClassBalance;
+    return this.createStudentBalance(studentId, franqueadoraId);
   }
 
-  async createStudentBalance(studentId: string, unitId: string): Promise<StudentClassBalance> {
+  async getStudentBalance(studentId: string, franqueadoraId: string): Promise<StudentClassBalance> {
+    return this.ensureStudentBalance(studentId, franqueadoraId);
+  }
+
+  async createStudentBalance(studentId: string, franqueadoraId: string): Promise<StudentClassBalance> {
     const { data, error } = await supabase
       .from('student_class_balance')
       .insert({
         student_id: studentId,
-        unit_id: unitId,
+        franqueadora_id: franqueadoraId,
         total_purchased: 0,
         total_consumed: 0,
         locked_qty: 0
@@ -80,78 +110,81 @@ class BalanceService {
       .single();
 
     if (error) throw error;
-    return data;
+    return data as StudentClassBalance;
   }
 
   async updateStudentBalance(
     studentId: string,
-    unitId: string,
+    franqueadoraId: string,
     updates: Partial<Pick<StudentClassBalance, 'total_purchased' | 'total_consumed' | 'locked_qty'>>
   ): Promise<StudentClassBalance> {
     const { data, error } = await supabase
       .from('student_class_balance')
       .update(updates)
       .eq('student_id', studentId)
-      .eq('unit_id', unitId)
+      .eq('franqueadora_id', franqueadoraId)
       .select()
       .single();
 
     if (error) throw error;
-    return data;
+    return data as StudentClassBalance;
   }
 
   async createStudentTransaction(
     studentId: string,
-    unitId: string,
+    franqueadoraId: string,
     type: StudentClassTransaction['type'],
     qty: number,
-    source: StudentClassTransaction['source'] = 'SYSTEM',
-    bookingId?: string,
-    metaJson: Record<string, any> = {},
-    unlockAt?: string
+    options: StudentTransactionOptions = {}
   ): Promise<StudentClassTransaction> {
+    const {
+      unitId = null,
+      source = 'SYSTEM',
+      bookingId,
+      metaJson = {},
+      unlockAt
+    } = options;
+
     const { data, error } = await supabase
       .from('student_class_tx')
       .insert({
         student_id: studentId,
+        franqueadora_id: franqueadoraId,
         unit_id: unitId,
         type,
         source,
         qty,
         booking_id: bookingId,
         meta_json: metaJson,
-        unlock_at: unlockAt
+        unlock_at: unlockAt ?? null
       })
       .select()
       .single();
 
     if (error) throw error;
-    return data;
+    return data as StudentClassTransaction;
   }
 
   async purchaseStudentClasses(
     studentId: string,
-    unitId: string,
+    franqueadoraId: string,
     qty: number,
-    source: StudentClassTransaction['source'] = 'ALUNO',
-    metaJson: Record<string, any> = {}
+    options: StudentTransactionOptions = {}
   ): Promise<{ balance: StudentClassBalance; transaction: StudentClassTransaction }> {
-    // Get current balance
-    const balance = await this.getStudentBalance(studentId, unitId);
-    
-    // Create transaction
+    const balance = await this.ensureStudentBalance(studentId, franqueadoraId);
+
     const transaction = await this.createStudentTransaction(
       studentId,
-      unitId,
+      franqueadoraId,
       'PURCHASE',
       qty,
-      source,
-      undefined,
-      metaJson
+      {
+        ...options,
+        source: options.source ?? 'ALUNO'
+      }
     );
 
-    // Update balance
-    const updatedBalance = await this.updateStudentBalance(studentId, unitId, {
+    const updatedBalance = await this.updateStudentBalance(studentId, franqueadoraId, {
       total_purchased: balance.total_purchased + qty
     });
 
@@ -160,35 +193,37 @@ class BalanceService {
 
   async lockStudentClasses(
     studentId: string,
-    unitId: string,
+    franqueadoraId: string,
     qty: number,
     bookingId: string,
     unlockAt: string,
-    source: StudentClassTransaction['source'] = 'ALUNO'
+    options: StudentTransactionOptions = {}
   ): Promise<{ balance: StudentClassBalance; transaction: StudentClassTransaction }> {
-    // Get current balance
-    const balance = await this.getStudentBalance(studentId, unitId);
-    
-    // Check if enough available classes
-    const availableClasses = balance.total_purchased - balance.total_consumed - balance.locked_qty;
-    if (availableClasses < qty) {
-      throw new Error(`Saldo insuficiente. Disponível: ${availableClasses}, Necessário: ${qty}`);
+    const balance = await this.ensureStudentBalance(studentId, franqueadoraId);
+    const available = balance.total_purchased - balance.total_consumed - balance.locked_qty;
+
+    if (available < qty) {
+      throw new Error(`Saldo insuficiente. Disponivel: ${available}, Necessario: ${qty}`);
     }
 
-    // Create transaction
     const transaction = await this.createStudentTransaction(
       studentId,
-      unitId,
+      franqueadoraId,
       'LOCK',
       qty,
-      source,
-      bookingId,
-      { booking_id: bookingId },
-      unlockAt
+      {
+        ...options,
+        source: options.source ?? 'ALUNO',
+        bookingId,
+        unlockAt,
+        metaJson: {
+          ...options.metaJson,
+          booking_id: bookingId
+        }
+      }
     );
 
-    // Update balance
-    const updatedBalance = await this.updateStudentBalance(studentId, unitId, {
+    const updatedBalance = await this.updateStudentBalance(studentId, franqueadoraId, {
       locked_qty: balance.locked_qty + qty
     });
 
@@ -197,32 +232,33 @@ class BalanceService {
 
   async unlockStudentClasses(
     studentId: string,
-    unitId: string,
+    franqueadoraId: string,
     qty: number,
     bookingId: string,
-    source: StudentClassTransaction['source'] = 'SYSTEM'
+    options: StudentTransactionOptions = {}
   ): Promise<{ balance: StudentClassBalance; transaction: StudentClassTransaction }> {
-    // Get current balance
-    const balance = await this.getStudentBalance(studentId, unitId);
-    
-    // Check if enough locked classes
+    const balance = await this.ensureStudentBalance(studentId, franqueadoraId);
+
     if (balance.locked_qty < qty) {
-      throw new Error(`Saldo bloqueado insuficiente. Bloqueado: ${balance.locked_qty}, Necessário: ${qty}`);
+      throw new Error(`Saldo bloqueado insuficiente. Bloqueado: ${balance.locked_qty}, Necessario: ${qty}`);
     }
 
-    // Create transaction
     const transaction = await this.createStudentTransaction(
       studentId,
-      unitId,
+      franqueadoraId,
       'UNLOCK',
       qty,
-      source,
-      bookingId,
-      { booking_id: bookingId }
+      {
+        ...options,
+        bookingId,
+        metaJson: {
+          ...options.metaJson,
+          booking_id: bookingId
+        }
+      }
     );
 
-    // Update balance
-    const updatedBalance = await this.updateStudentBalance(studentId, unitId, {
+    const updatedBalance = await this.updateStudentBalance(studentId, franqueadoraId, {
       locked_qty: balance.locked_qty - qty
     });
 
@@ -231,65 +267,69 @@ class BalanceService {
 
   async consumeStudentClasses(
     studentId: string,
-    unitId: string,
+    franqueadoraId: string,
     qty: number,
     bookingId: string,
-    source: StudentClassTransaction['source'] = 'PROFESSOR'
+    options: StudentTransactionOptions = {}
   ): Promise<{ balance: StudentClassBalance; transaction: StudentClassTransaction }> {
-    // Get current balance
-    const balance = await this.getStudentBalance(studentId, unitId);
-    
-    // Check if enough locked classes to consume
-    if (balance.locked_qty < qty) {
-      throw new Error(`Saldo bloqueado insuficiente para consumo. Bloqueado: ${balance.locked_qty}, Necessário: ${qty}`);
-    }
+    const balance = await this.ensureStudentBalance(studentId, franqueadoraId);
 
-    // Create transaction
+    const lockedToConsume = Math.min(balance.locked_qty, qty);
     const transaction = await this.createStudentTransaction(
       studentId,
-      unitId,
+      franqueadoraId,
       'CONSUME',
       qty,
-      source,
-      bookingId,
-      { booking_id: bookingId }
+      {
+        ...options,
+        source: options.source ?? 'PROFESSOR',
+        bookingId,
+        metaJson: {
+          ...options.metaJson,
+          booking_id: bookingId
+        }
+      }
     );
 
-    // Update balance
-    const updatedBalance = await this.updateStudentBalance(studentId, unitId, {
+    const updatedBalance = await this.updateStudentBalance(studentId, franqueadoraId, {
       total_consumed: balance.total_consumed + qty,
-      locked_qty: balance.locked_qty - qty
+      locked_qty: balance.locked_qty - lockedToConsume
     });
 
     return { balance: updatedBalance, transaction };
   }
 
-  // Professor Hour Balance Operations
-  async getProfessorBalance(professorId: string, unitId: string): Promise<ProfHourBalance> {
+  // ---------------------------------------------------------------------------
+  // Professor helpers
+  private async ensureProfessorBalance(professorId: string, franqueadoraId: string): Promise<ProfHourBalance> {
     const { data, error } = await supabase
       .from('prof_hour_balance')
       .select('*')
       .eq('professor_id', professorId)
-      .eq('unit_id', unitId)
+      .eq('franqueadora_id', franqueadoraId)
       .single();
 
-    if (error) {
-      if (error.code === 'PGRST116') {
-        // No balance found, create one
-        return await this.createProfessorBalance(professorId, unitId);
-      }
+    if (!error && data) {
+      return data as ProfHourBalance;
+    }
+
+    if (error && error.code !== 'PGRST116') {
       throw error;
     }
 
-    return data as ProfHourBalance;
+    return this.createProfessorBalance(professorId, franqueadoraId);
   }
 
-  async createProfessorBalance(professorId: string, unitId: string): Promise<ProfHourBalance> {
+  async getProfessorBalance(professorId: string, franqueadoraId: string): Promise<ProfHourBalance> {
+    return this.ensureProfessorBalance(professorId, franqueadoraId);
+  }
+
+  async createProfessorBalance(professorId: string, franqueadoraId: string): Promise<ProfHourBalance> {
     const { data, error } = await supabase
       .from('prof_hour_balance')
       .insert({
         professor_id: professorId,
-        unit_id: unitId,
+        franqueadora_id: franqueadoraId,
         available_hours: 0,
         locked_hours: 0
       })
@@ -297,78 +337,81 @@ class BalanceService {
       .single();
 
     if (error) throw error;
-    return data;
+    return data as ProfHourBalance;
   }
 
   async updateProfessorBalance(
     professorId: string,
-    unitId: string,
+    franqueadoraId: string,
     updates: Partial<Pick<ProfHourBalance, 'available_hours' | 'locked_hours'>>
   ): Promise<ProfHourBalance> {
     const { data, error } = await supabase
       .from('prof_hour_balance')
       .update(updates)
       .eq('professor_id', professorId)
-      .eq('unit_id', unitId)
+      .eq('franqueadora_id', franqueadoraId)
       .select()
       .single();
 
     if (error) throw error;
-    return data;
+    return data as ProfHourBalance;
   }
 
   async createHourTransaction(
     professorId: string,
-    unitId: string,
+    franqueadoraId: string,
     type: HourTransaction['type'],
     hours: number,
-    source: HourTransaction['source'] = 'SYSTEM',
-    bookingId?: string,
-    metaJson: Record<string, any> = {},
-    unlockAt?: string
+    options: ProfessorTransactionOptions = {}
   ): Promise<HourTransaction> {
+    const {
+      unitId = null,
+      source = 'SYSTEM',
+      bookingId,
+      metaJson = {},
+      unlockAt
+    } = options;
+
     const { data, error } = await supabase
       .from('hour_tx')
       .insert({
         professor_id: professorId,
+        franqueadora_id: franqueadoraId,
         unit_id: unitId,
         type,
         source,
         hours,
         booking_id: bookingId,
         meta_json: metaJson,
-        unlock_at: unlockAt
+        unlock_at: unlockAt ?? null
       })
       .select()
       .single();
 
     if (error) throw error;
-    return data;
+    return data as HourTransaction;
   }
 
   async purchaseProfessorHours(
     professorId: string,
-    unitId: string,
+    franqueadoraId: string,
     hours: number,
-    source: HourTransaction['source'] = 'PROFESSOR',
-    metaJson: Record<string, any> = {}
+    options: ProfessorTransactionOptions = {}
   ): Promise<{ balance: ProfHourBalance; transaction: HourTransaction }> {
-    // Get current balance
-    const balance = await this.getProfessorBalance(professorId, unitId);
-    
-    // Create transaction
+    const balance = await this.ensureProfessorBalance(professorId, franqueadoraId);
+
     const transaction = await this.createHourTransaction(
       professorId,
-      unitId,
+      franqueadoraId,
       'PURCHASE',
       hours,
-      source,
-      undefined,
-      metaJson
+      {
+        ...options,
+        source: options.source ?? 'PROFESSOR'
+      }
     );
 
-    // Update balance
-    const updatedBalance = await this.updateProfessorBalance(professorId, unitId, {
+    const updatedBalance = await this.updateProfessorBalance(professorId, franqueadoraId, {
       available_hours: balance.available_hours + hours
     });
 
@@ -377,35 +420,37 @@ class BalanceService {
 
   async lockProfessorHours(
     professorId: string,
-    unitId: string,
+    franqueadoraId: string,
     hours: number,
     bookingId: string,
     unlockAt: string,
-    source: HourTransaction['source'] = 'PROFESSOR'
+    options: ProfessorTransactionOptions = {}
   ): Promise<{ balance: ProfHourBalance; transaction: HourTransaction }> {
-    // Get current balance
-    const balance = await this.getProfessorBalance(professorId, unitId);
-    
-    // Check if enough available hours
-    const availableHours = balance.available_hours - balance.locked_hours;
-    if (availableHours < hours) {
-      throw new Error(`Saldo de horas insuficiente. Disponível: ${availableHours}, Necessário: ${hours}`);
+    const balance = await this.ensureProfessorBalance(professorId, franqueadoraId);
+    const available = balance.available_hours - balance.locked_hours;
+
+    if (available < hours) {
+      throw new Error(`Saldo de horas insuficiente. Disponivel: ${available}, Necessario: ${hours}`);
     }
 
-    // Create transaction
     const transaction = await this.createHourTransaction(
       professorId,
-      unitId,
+      franqueadoraId,
       'BONUS_LOCK',
       hours,
-      source,
-      bookingId,
-      { booking_id: bookingId },
-      unlockAt
+      {
+        ...options,
+        source: options.source ?? 'PROFESSOR',
+        bookingId,
+        unlockAt,
+        metaJson: {
+          ...options.metaJson,
+          booking_id: bookingId
+        }
+      }
     );
 
-    // Update balance
-    const updatedBalance = await this.updateProfessorBalance(professorId, unitId, {
+    const updatedBalance = await this.updateProfessorBalance(professorId, franqueadoraId, {
       locked_hours: balance.locked_hours + hours
     });
 
@@ -414,32 +459,34 @@ class BalanceService {
 
   async consumeProfessorHours(
     professorId: string,
-    unitId: string,
+    franqueadoraId: string,
     hours: number,
     bookingId: string,
-    source: HourTransaction['source'] = 'SYSTEM'
+    options: ProfessorTransactionOptions = {}
   ): Promise<{ balance: ProfHourBalance; transaction: HourTransaction }> {
-    // Get current balance
-    const balance = await this.getProfessorBalance(professorId, unitId);
-    
-    // Check if enough locked hours to consume
+    const balance = await this.ensureProfessorBalance(professorId, franqueadoraId);
+
     if (balance.locked_hours < hours) {
-      throw new Error(`Saldo bloqueado insuficiente para consumo. Bloqueado: ${balance.locked_hours}, Necessário: ${hours}`);
+      throw new Error(`Saldo bloqueado insuficiente para consumo. Bloqueado: ${balance.locked_hours}, Necessario: ${hours}`);
     }
 
-    // Create transaction
     const transaction = await this.createHourTransaction(
       professorId,
-      unitId,
+      franqueadoraId,
       'CONSUME',
       hours,
-      source,
-      bookingId,
-      { booking_id: bookingId }
+      {
+        ...options,
+        source: options.source ?? 'SYSTEM',
+        bookingId,
+        metaJson: {
+          ...options.metaJson,
+          booking_id: bookingId
+        }
+      }
     );
 
-    // Update balance
-    const updatedBalance = await this.updateProfessorBalance(professorId, unitId, {
+    const updatedBalance = await this.updateProfessorBalance(professorId, franqueadoraId, {
       locked_hours: balance.locked_hours - hours
     });
 
@@ -448,12 +495,12 @@ class BalanceService {
 
   async unlockProfessorHours(
     professorId: string,
-    unitId: string,
+    franqueadoraId: string,
     hours: number,
     bookingId: string,
-    source: HourTransaction['source'] = 'SYSTEM'
+    options: ProfessorTransactionOptions = {}
   ): Promise<{ balance: ProfHourBalance; transaction: HourTransaction }> {
-    const balance = await this.getProfessorBalance(professorId, unitId);
+    const balance = await this.ensureProfessorBalance(professorId, franqueadoraId);
 
     if (balance.locked_hours < hours) {
       throw new Error(`Saldo bloqueado insuficiente. Bloqueado: ${balance.locked_hours}, Necessario: ${hours}`);
@@ -461,25 +508,31 @@ class BalanceService {
 
     const transaction = await this.createHourTransaction(
       professorId,
-      unitId,
+      franqueadoraId,
       'BONUS_UNLOCK',
       hours,
-      source,
-      bookingId,
-      { booking_id: bookingId }
+      {
+        ...options,
+        bookingId,
+        metaJson: {
+          ...options.metaJson,
+          booking_id: bookingId
+        }
+      }
     );
 
-    const updatedBalance = await this.updateProfessorBalance(professorId, unitId, {
+    const updatedBalance = await this.updateProfessorBalance(professorId, franqueadoraId, {
       locked_hours: balance.locked_hours - hours
     });
 
     return { balance: updatedBalance, transaction };
   }
 
-  // Get transactions due for unlock (for scheduler)
+  // ---------------------------------------------------------------------------
+  // Scheduler helpers
   async getTransactionsToUnlock(): Promise<StudentClassTransaction[]> {
     const now = new Date().toISOString();
-    
+
     const { data, error } = await supabase
       .from('student_class_tx')
       .select('*')
@@ -488,12 +541,12 @@ class BalanceService {
       .is('booking_id', null);
 
     if (error) throw error;
-    return data;
+    return (data || []) as StudentClassTransaction[];
   }
 
   async getHourTransactionsToUnlock(): Promise<HourTransaction[]> {
     const now = new Date().toISOString();
-    
+
     const { data, error } = await supabase
       .from('hour_tx')
       .select('*')
@@ -502,7 +555,7 @@ class BalanceService {
       .is('booking_id', null);
 
     if (error) throw error;
-    return data;
+    return (data || []) as HourTransaction[];
   }
 }
 

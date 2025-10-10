@@ -1,5 +1,7 @@
 import { create } from 'zustand'
 import { useAuthStore } from './auth-store'
+import { useStudentUnitsStore } from './student-units-store'
+import { API_BASE_URL } from '../api'
 
 export interface Teacher {
   id: string
@@ -79,8 +81,8 @@ export interface StudentState {
   specialtyFilter: string
 
   // Ações
-  loadTeachers: (city?: string, state?: string) => Promise<void>
-  loadBookings: (studentId: string) => Promise<void>
+  loadTeachers: (city?: string, state?: string, unitIdOverride?: string) => Promise<void>
+  loadBookings: (studentId: string, unitId?: string) => Promise<void>
   createBooking: (bookingData: {
     student_id: string
     teacher_id: string
@@ -109,23 +111,49 @@ export const useStudentStore = create<StudentState>((set, get) => ({
   specialtyFilter: '',
 
   // Ações
-  loadTeachers: async (city?: string, state?: string) => {
+  loadTeachers: async (city?: string, state?: string, unitIdOverride?: string) => {
     set({ loading: true, error: null })
 
     try {
+      // Get active unit to filter teachers (fallback when no override)
+      const activeUnit = useStudentUnitsStore.getState().activeUnit
+
       // Construir URL com query params
       const params = new URLSearchParams()
       if (city) params.append('city', city)
       if (state) params.append('state', state)
+      const unitId = unitIdOverride || (activeUnit ? activeUnit.unit_id : '')
+      if (unitId) params.append('unit_id', unitId)
+      params.append('_ts', Date.now().toString())
 
       const queryString = params.toString()
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
-      const url = `${API_URL}/api/teachers${queryString ? `?${queryString}` : ''}`
+      const url = `${API_BASE_URL}/api/teachers${queryString ? `?${queryString}` : ''}`
 
       const response = await fetch(url)
 
+      if (response.status === 304) {
+        const { specialtyFilter } = get()
+        const cachedTeachers = get().teachers
+        let filteredTeachers = cachedTeachers
+
+        if (specialtyFilter) {
+          filteredTeachers = cachedTeachers.filter((teacher: Teacher) =>
+            teacher.teacher_profiles?.[0]?.specialties?.some((s: string) =>
+              s.toLowerCase().includes(specialtyFilter.toLowerCase())
+            )
+          )
+        }
+
+        set({ teachers: filteredTeachers, loading: false })
+        return
+      }
+
       if (!response.ok) {
-        throw new Error('Erro ao buscar professores')
+        const errorText = await response.text().catch(() => null)
+        throw new Error(
+          `Erro ao buscar professores: ${response.status} ${response.statusText}` +
+          (errorText ? ` - ${errorText}` : '')
+        )
       }
 
       const teachers = await response.json()
@@ -144,7 +172,6 @@ export const useStudentStore = create<StudentState>((set, get) => ({
 
       set({ teachers: filteredTeachers, loading: false })
     } catch (error) {
-      console.error('Erro ao carregar professores:', error)
       set({
         error: error instanceof Error ? error.message : 'Erro desconhecido',
         loading: false
@@ -152,17 +179,43 @@ export const useStudentStore = create<StudentState>((set, get) => ({
     }
   },
 
-  loadBookings: async (studentId: string) => {
+  loadBookings: async (studentId: string, unitId?: string) => {
     set({ loading: true, error: null })
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+      // Get active unit to filter bookings
+      const activeUnit = useStudentUnitsStore.getState().activeUnit
+
       const token = useAuthStore.getState().token
-      const url = `${API_URL}/api/bookings?student_id=${encodeURIComponent(studentId)}`
+
+      // Construir URL com query params incluindo unit_id
+      const params = new URLSearchParams()
+      params.append('student_id', studentId)
+      if (unitId) {
+        params.append('unit_id', unitId)
+      } else if (activeUnit) {
+        params.append('unit_id', activeUnit.unit_id)
+      }
+      params.append('_ts', Date.now().toString())
+
+      const url = `${API_BASE_URL}/api/bookings?${params.toString()}`
       const resp = await fetch(url, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
-      if (!resp.ok) throw new Error('Erro ao carregar agendamentos')
+
+      if (resp.status === 304) {
+        // Mantém agendamentos atuais já que não houve alteração
+        set({ loading: false })
+        return
+      }
+
+      if (!resp.ok) {
+        const errorText = await resp.text().catch(() => null)
+        throw new Error(
+          `Erro ao carregar agendamentos: ${resp.status} ${resp.statusText}` +
+          (errorText ? ` - ${errorText}` : '')
+        )
+      }
       const json = await resp.json()
       const bookings = (json.bookings || []).map((b: ApiBookingResponse) => ({
         id: b.id,
@@ -179,7 +232,6 @@ export const useStudentStore = create<StudentState>((set, get) => ({
       }))
       set({ bookings, loading: false })
     } catch (error) {
-      console.error('Erro ao carregar agendamentos:', error)
       set({
         error: error instanceof Error ? error.message : 'Erro desconhecido',
         loading: false
@@ -191,9 +243,8 @@ export const useStudentStore = create<StudentState>((set, get) => ({
     set({ loading: true, error: null })
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
       const token = useAuthStore.getState().token
-      const resp = await fetch(`${API_URL}/api/bookings`, {
+      const resp = await fetch(`${API_BASE_URL}/api/bookings`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -221,7 +272,6 @@ export const useStudentStore = create<StudentState>((set, get) => ({
       set({ loading: false })
       return mapped
     } catch (error) {
-      console.error('Erro ao criar agendamento:', error)
       set({
         error: error instanceof Error ? error.message : 'Erro desconhecido',
         loading: false
@@ -234,9 +284,8 @@ export const useStudentStore = create<StudentState>((set, get) => ({
     set({ loading: true, error: null })
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
       const token = useAuthStore.getState().token
-      const resp = await fetch(`${API_URL}/api/bookings/${bookingId}`, {
+      const resp = await fetch(`${API_BASE_URL}/api/bookings/${bookingId}`, {
         method: 'DELETE',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
@@ -251,7 +300,6 @@ export const useStudentStore = create<StudentState>((set, get) => ({
         loading: false
       }))
     } catch (error) {
-      console.error('Erro ao cancelar agendamento:', error)
       set({
         error: error instanceof Error ? error.message : 'Erro desconhecido',
         loading: false

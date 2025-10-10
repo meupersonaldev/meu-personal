@@ -42,9 +42,10 @@ export default function StudentLayout({ children }: StudentLayoutProps) {
         </div>
       )}
 
-      <div className="md:ml-64 flex min-h-screen flex-col">
-        <header className="md:hidden sticky top-0 z-40 border-b border-gray-200 bg-white/95 backdrop-blur">
-          <div className="flex items-center justify-between px-4 py-3">
+      <div className="md:ml-[17rem] flex min-h-screen flex-col">
+        {/* Mobile Header */}
+        <header className="block md:hidden sticky top-0 z-40 border-b border-gray-200 bg-white/95 backdrop-blur">
+          <div className="flex items-start justify-between px-4 py-3">
             <button
               type="button"
               onClick={() => setIsSidebarOpen((prev) => !prev)}
@@ -53,14 +54,15 @@ export default function StudentLayout({ children }: StudentLayoutProps) {
             >
               {isSidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
-            <span className="text-base font-semibold text-gray-900">Meu Personal</span>
-            <StudentHeaderActions variant="mobile" />
+            <div className="flex-1" />
+            <div className="flex items-start">
+              <StudentHeaderActions variant="mobile" />
+            </div>
           </div>
         </header>
 
-        <div className="hidden md:block">
-          <StudentHeader />
-        </div>
+        {/* Desktop Header */}
+        <StudentHeader />
 
         <main className="flex-1 bg-gray-50">{children}</main>
       </div>

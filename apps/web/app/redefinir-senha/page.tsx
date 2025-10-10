@@ -76,7 +76,6 @@ function ResetPasswordForm() {
         router.push(loginHref)
       }, 3000)
     } catch (error: any) {
-      console.error('Error:', error)
       const errorMessage = error?.message || 'Erro ao processar solicitação. Tente novamente.'
       setError(errorMessage)
       toast.error(errorMessage)

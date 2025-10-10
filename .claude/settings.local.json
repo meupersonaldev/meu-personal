@@ -33,7 +33,11 @@
       "Bash(tasklist:*)",
       "WebFetch(domain:www.figma.com)",
       "Bash(if not exist \"apps\\api\\uploads\" mkdir appsapiuploads)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "mcp__supabase__get_logs",
+      "Bash(npx shadcn@latest add:*)",
+      "Bash(npm run build:*)",
+      "Bash(npx tsc:*)"
     ],
     "deny": [],
     "ask": []

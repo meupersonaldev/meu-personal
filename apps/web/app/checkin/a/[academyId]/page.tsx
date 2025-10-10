@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
@@ -72,7 +72,6 @@ export default function CheckinPage() {
       const data = await checkinRes.json()
       setResult(data)
     } catch (error) {
-      console.error('Erro ao validar check-in:', error)
       setResult({
         allowed: false,
         message: 'Erro ao validar check-in. Tente novamente.'

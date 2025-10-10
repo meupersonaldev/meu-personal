@@ -87,7 +87,6 @@ function LoginTemplateContent({ expectedRole, defaultRedirect, copy, backgroundI
       toast.success(copy.successMessage ?? 'Login realizado com sucesso!')
       router.push(normalizedRedirect ?? defaultRedirect)
     } catch (error) {
-      console.error('Login error:', error)
       toast.error(copy.genericErrorMessage ?? 'Erro no login. Tente novamente.')
     } finally {
       setIsLoading(false)

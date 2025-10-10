@@ -44,10 +44,10 @@ const rawOrigins = process.env.CORS_ORIGINS || process.env.FRONTEND_URL || 'http
 const allowedOrigins = rawOrigins.split(',').map(o => o.trim()).filter(Boolean);
 app.use((0, cors_1.default)({
     origin: (origin, callback) => {
-        if (isProduction && !origin) {
-            return callback(new Error('Origin header required in production'));
-        }
-        if (!origin && !isProduction) {
+        if (!origin) {
+            if (isProduction) {
+                console.warn('CORS allowing request sem origem (provável health-check ou serviço interno)');
+            }
             return callback(null, true);
         }
         if (!isProduction) {
@@ -109,6 +109,7 @@ const teachers_1 = __importDefault(require("./routes/teachers"));
 const teacher_preferences_1 = __importDefault(require("./routes/teacher-preferences"));
 const teacher_students_1 = __importDefault(require("./routes/teacher-students"));
 const academies_1 = __importDefault(require("./routes/academies"));
+const student_units_1 = __importDefault(require("./routes/student-units"));
 const booking_scheduler_1 = require("./jobs/booking-scheduler");
 app.use('/uploads', express_1.default.static('uploads'));
 app.use('/api/auth', rateLimit_1.authRateLimit, auth_1.default);
@@ -126,6 +127,7 @@ app.use('/api/academies', academies_1.default);
 app.use('/api/teachers', teachers_1.default);
 app.use('/api/teachers', teacher_preferences_1.default);
 app.use('/api/teachers', teacher_students_1.default);
+app.use('/api/student-units', student_units_1.default);
 app.use('/api', rateLimit_1.uploadRateLimit, upload_1.default);
 app.use('/api/franqueadora', franqueadora_1.default);
 app.use('/api/admin', admin_1.default);

@@ -102,6 +102,7 @@ router.post('/login', (0, audit_1.auditAuthEvent)('LOGIN'), async (req, res) => 
     }
     catch (error) {
         if (error instanceof zod_1.z.ZodError) {
+            console.warn('Validação de login falhou:', JSON.stringify(error.errors, null, 2));
             return res.status(400).json({
                 message: 'Dados inválidos',
                 errors: error.errors
@@ -206,6 +207,7 @@ router.post('/register', (0, audit_1.auditSensitiveOperation)('CREATE', 'users')
     }
     catch (error) {
         if (error instanceof zod_1.z.ZodError) {
+            console.warn('Validação de registro falhou:', JSON.stringify(error.errors, null, 2));
             return res.status(400).json({
                 message: 'Dados inválidos',
                 errors: error.errors

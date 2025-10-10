@@ -125,7 +125,6 @@ export const useNotificationsStore = create<NotificationsState>()(
           const list = get().notifications.map(n => n.id === id ? { ...n, read: true } : n)
           set({ notifications: list, unreadCount: list.filter(x => !x.read).length })
         } catch (e) {
-          console.error('markRead error:', e)
         }
       },
 
@@ -141,7 +140,6 @@ export const useNotificationsStore = create<NotificationsState>()(
           const list = get().notifications.map(n => ({ ...n, read: true }))
           set({ notifications: list, unreadCount: 0 })
         } catch (e) {
-          console.error('markAllRead error:', e)
         }
       },
 
@@ -155,7 +153,6 @@ export const useNotificationsStore = create<NotificationsState>()(
           const list = get().notifications.map(n => ({ ...n, read: true }))
           set({ notifications: list, unreadCount: 0 })
         } catch (e) {
-          console.error('markAllReadFranqueadora error:', e)
         }
       },
 
@@ -172,7 +169,6 @@ export const useNotificationsStore = create<NotificationsState>()(
           const list = (json.notifications || []) as AppNotification[]
           set({ notifications: list, unreadCount: json.unreadCount || list.filter(n => !n.read).length })
         } catch (e) {
-          console.error('fetchInitial error:', e)
         }
       }
     }),

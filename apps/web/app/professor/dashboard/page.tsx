@@ -95,7 +95,6 @@ export default function ProfessorDashboardPage() {
             throw new Error('Unauthorized')
           }
           const errorData = await bookingsResponse.json().catch(() => ({}))
-          console.error('Erro ao buscar agendamentos:', errorData)
           throw new Error(errorData.message || 'Erro ao buscar agendamentos')
         }
 
@@ -117,7 +116,6 @@ export default function ProfessorDashboardPage() {
           throw new Error('Unauthorized')
         }
       } catch (err) {
-        console.error('Erro ao carregar dados:', err)
         if (err instanceof Error && err.message === 'Unauthorized') {
           setError('Sessão expirada. Faça login novamente.')
         } else {
@@ -166,7 +164,6 @@ export default function ProfessorDashboardPage() {
         )
       }
     } catch (err) {
-      console.error('Erro ao confirmar:', err)
     }
   }
 

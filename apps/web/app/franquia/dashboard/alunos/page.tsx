@@ -141,7 +141,6 @@ export default function AlunosPage() {
         toast.error('Erro ao atualizar aluno')
       }
     } catch (error) {
-      console.error('Erro ao atualizar aluno:', error)
       toast.error('Erro ao atualizar aluno')
     } finally {
       setCreateLoading(false)
@@ -199,7 +198,6 @@ export default function AlunosPage() {
         toast.error('Erro ao criar aluno')
       }
     } catch (error) {
-      console.error('Erro ao criar aluno:', error)
       toast.error('Erro ao criar aluno')
     } finally {
       setCreateLoading(false)

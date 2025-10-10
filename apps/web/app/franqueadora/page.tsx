@@ -34,7 +34,6 @@ export default function FranqueadoraLoginPage() {
         toast.error('Email ou senha incorretos')
       }
     } catch (error) {
-      console.error('Login error:', error)
       toast.error('Erro ao fazer login. Tente novamente.')
     } finally {
       setIsLoading(false)

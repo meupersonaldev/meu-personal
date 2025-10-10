@@ -56,7 +56,6 @@ export default function AgendamentosGestaoPage() {
       await Promise.all([fetchTeachers(), fetchStudents()])
       await fetchBookings()
     } catch (error) {
-      console.error('Error loading data:', error)
       toast.error('Erro ao carregar dados')
     } finally {
       setLoading(false)
@@ -66,26 +65,22 @@ export default function AgendamentosGestaoPage() {
 
   const fetchBookings = async () => {
     if (!franquiaUser?.academyId) {
-      console.log('No academy ID found')
       return
     }
 
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
       const url = `${API_URL}/api/bookings?franchise_id=${franquiaUser.academyId}`
-      console.log('Fetching bookings from:', url)
 
       const response = await fetch(url)
       if (!response.ok) throw new Error('Failed to fetch bookings')
 
       const data = await response.json()
-      console.log('Bookings received:', data.bookings)
 
       // Enriquecer com nomes e filtrar apenas bookings com alunos (não disponibilidades vazias)
       const enrichedBookings = data.bookings
         ?.filter((b: any) => {
           const hasStudent = b.student_id || b.studentId
-          console.log('Booking:', b.id, 'has student?', hasStudent, b)
           return hasStudent
         })
         .map((booking: any) => ({
@@ -96,10 +91,8 @@ export default function AgendamentosGestaoPage() {
           teacherName: booking.teacherName || teachers.find(t => t.id === booking.teacherId || t.id === booking.teacher_id)?.name || 'Professor não encontrado'
         })) || []
 
-      console.log('Enriched bookings:', enrichedBookings)
       setBookings(enrichedBookings)
     } catch (error) {
-      console.error('Error fetching bookings:', error)
       setBookings([])
     }
   }
@@ -132,7 +125,6 @@ export default function AgendamentosGestaoPage() {
       toast.success('Agendamento cancelado com sucesso')
       await fetchBookings()
     } catch (error) {
-      console.error('Error canceling booking:', error)
       toast.error('Erro ao cancelar agendamento')
     } finally {
       setCancelConfirm({ isOpen: false, bookingId: null })
@@ -153,7 +145,6 @@ export default function AgendamentosGestaoPage() {
       toast.success('Aula marcada como concluída')
       await fetchBookings()
     } catch (error) {
-      console.error('Error completing booking:', error)
       toast.error('Erro ao marcar como concluída')
     }
   }

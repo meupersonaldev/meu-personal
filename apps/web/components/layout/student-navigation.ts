@@ -3,9 +3,10 @@
 import {
   LayoutDashboard,
   Users,
-  Calendar,
   CreditCard,
-  GraduationCap
+  QrCode,
+  Clock,
+  History
 } from 'lucide-react'
 
 export interface StudentNavItem {
@@ -27,39 +28,39 @@ export const STUDENT_NAV_ITEMS: StudentNavItem[] = [
     id: 'dashboard',
     label: 'Dashboard',
     icon: LayoutDashboard,
-    href: '/aluno/inicio'
+    href: '/aluno/dashboard'
   },
   {
     id: 'professores',
     label: 'Professores',
     icon: Users,
-    href: '/aluno/inicio?section=professores'
-  },
-  {
-    id: 'agenda',
-    label: 'Agendamentos',
-    icon: Calendar,
-    href: '/aluno/inicio?section=agendamentos'
+    href: '/aluno/professores'
   },
   {
     id: 'creditos',
     label: 'Comprar Créditos',
     icon: CreditCard,
     href: '/aluno/comprar'
+  },
+  {
+    id: 'historico',
+    label: 'Histórico de Aulas',
+    icon: History,
+    href: '/aluno/historico'
   }
 ]
 
 export const STUDENT_QUICK_LINKS: StudentQuickLink[] = [
   {
-    id: 'aprenda',
-    label: 'Como funciona',
-    href: '/aluno/inicio?section=professores',
-    icon: GraduationCap
+    id: 'checkin',
+    label: 'Check-in',
+    href: '/aluno/checkin/scan',
+    icon: QrCode
   },
   {
-    id: 'pacotes',
-    label: 'Planos e Pacotes',
-    href: '/aluno/comprar',
-    icon: CreditCard
+    id: 'checkins',
+    label: 'Histórico de Check-ins',
+    href: '/aluno/checkins',
+    icon: Clock
   }
 ]

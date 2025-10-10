@@ -70,19 +70,14 @@ export default function ReservarHorarioPage() {
       try {
         setLoadingSlots(true)
         const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-        console.log('🔍 Buscando slots para:', { selectedFranchise, selectedData })
         const res = await fetch(`${API_URL}/api/academies/${selectedFranchise}/available-slots?date=${selectedData}&teacher_id=${user?.id}`)
-        console.log('📡 Resposta:', res.status)
         if (res.ok) {
           const data = await res.json()
-          console.log('📊 Slots recebidos:', data.slots?.length || 0, data)
           setAvailableSlots((data.slots || []) as Slot[])
         } else {
-          console.log('❌ Erro ao buscar slots')
           setAvailableSlots([])
         }
       } catch (e) {
-        console.error('Erro ao carregar horários livres:', e)
         setAvailableSlots([])
       } finally {
         setLoadingSlots(false)
@@ -128,7 +123,6 @@ export default function ReservarHorarioPage() {
           setStudents(studentsData.students || [])
         }
       } catch (error) {
-        console.error('Erro ao carregar dados:', error)
         toast.error('Erro ao carregar dados')
       } finally {
         setLoading(false)
@@ -185,7 +179,6 @@ export default function ReservarHorarioPage() {
         toast.error(data.message || 'Erro ao cadastrar aluno')
       }
     } catch (error) {
-      console.error('Erro ao cadastrar aluno:', error)
       toast.error('Erro ao processar cadastro')
     }
   }
@@ -252,7 +245,6 @@ export default function ReservarHorarioPage() {
         toast.error(data.message || 'Erro ao reservar horário')
       }
     } catch (error) {
-      console.error('Erro ao reservar:', error)
       toast.error('Erro ao processar reserva')
     } finally {
       setSubmitting(false)

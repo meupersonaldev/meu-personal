@@ -25,13 +25,10 @@ export default function FranquiaLoginPage() {
     setIsLoading(true)
 
     try {
-      console.log('Attempting login...')
       const success = await login(formData.email, formData.password)
-      console.log('Login result:', success)
       
       if (success) {
         toast.success('Login realizado com sucesso!')
-        console.log('Redirecting to dashboard...')
         // Garantir persistência salva antes de navegar
         try {
           // @ts-ignore
@@ -40,11 +37,9 @@ export default function FranquiaLoginPage() {
         } catch {}
         router.replace('/franquia/dashboard')
       } else {
-        console.log('Login failed')
         toast.error('Email ou senha incorretos')
       }
     } catch (error) {
-      console.error('Login error:', error)
       toast.error('Erro ao fazer login. Tente novamente.')
     } finally {
       setIsLoading(false)

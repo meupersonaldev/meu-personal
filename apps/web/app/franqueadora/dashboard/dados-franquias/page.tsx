@@ -100,7 +100,6 @@ export default function DadosFranquiasPage() {
         toast.error('Erro ao atualizar franquia')
       }
     } catch (error) {
-      console.error('Erro ao salvar:', error)
       toast.error('Erro ao atualizar franquia')
     }
   }
@@ -131,7 +130,6 @@ export default function DadosFranquiasPage() {
         toast.error('Erro ao excluir franquia')
       }
     } catch (error) {
-      console.error('Erro ao deletar:', error)
       toast.error('Erro ao excluir franquia')
     } finally {
       setIsDeleting(null)
@@ -153,7 +151,6 @@ export default function DadosFranquiasPage() {
         toast.error('Erro ao atualizar status')
       }
     } catch (error) {
-      console.error('Erro ao alterar status:', error)
       toast.error('Erro ao atualizar status')
     }
   }
@@ -185,7 +182,6 @@ export default function DadosFranquiasPage() {
       
       toast.success('Dados exportados com sucesso!')
     } catch (error) {
-      console.error('Erro ao exportar:', error)
       toast.error('Erro ao exportar dados')
     }
   }

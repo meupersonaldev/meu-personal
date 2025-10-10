@@ -43,7 +43,6 @@ export default function ProfessorCarteira() {
           setStats(data)
         }
       } catch (err) {
-        console.error('Erro ao carregar estatísticas:', err)
         setError('Erro ao carregar dados')
       } finally {
         setLoading(false)

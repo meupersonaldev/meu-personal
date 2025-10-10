@@ -201,7 +201,6 @@ export default function AddFranchisePage() {
       router.push('/franqueadora/dashboard')
       
     } catch (error) {
-      console.error('Erro ao adicionar franquia:', error)
       toast.error('Erro ao adicionar franquia. Tente novamente.')
     } finally {
       setIsLoading(false)

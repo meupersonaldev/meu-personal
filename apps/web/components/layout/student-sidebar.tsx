@@ -36,17 +36,23 @@ export default function StudentSidebar({
   }, [variant])
 
   const normalizedPath = pathname
+  const activeSection = searchParams.get('section')
 
   const isItemActive = (href: string) => {
     const [itemPath, query] = href.split('?')
     if (itemPath !== normalizedPath) {
       return false
     }
-    if (!query) return true
+    if (!query) {
+      return !activeSection
+    }
     const params = new URLSearchParams(query)
-    const section = params.get('section')
-    if (!section) return true
-    return searchParams.get('section') === section
+    for (const [key, value] of params.entries()) {
+      if (searchParams.get(key) !== value) {
+        return false
+      }
+    }
+    return true
   }
 
   const containerClasses = cn(
