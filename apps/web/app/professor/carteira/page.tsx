@@ -23,24 +23,30 @@ interface Stats {
 }
 
 export default function ProfessorCarteira() {
-  const { user } = useAuthStore()
+  const { user, token } = useAuthStore()
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchStats = async () => {
-      if (!user?.id) return
+      if (!user?.id || !token) return
 
       try {
         setLoading(true)
         const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-        
-        const response = await fetch(`${API_URL}/api/teachers/${user.id}/stats`)
+        const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
+
+        const response = await fetch(`${API_URL}/api/teachers/${user.id}/stats`, {
+          headers,
+          credentials: 'include'
+        })
         
         if (response.ok) {
           const data = await response.json()
           setStats(data)
+        } else {
+          throw new Error('Não foi possível carregar os dados')
         }
       } catch (err) {
         setError('Erro ao carregar dados')
@@ -50,7 +56,7 @@ export default function ProfessorCarteira() {
     }
 
     fetchStats()
-  }, [user?.id])
+  }, [user?.id, token])
 
   if (loading) {
     return (

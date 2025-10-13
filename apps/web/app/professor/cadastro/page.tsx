@@ -1,8 +1,8 @@
 'use client'
 
-import { RegisterTemplate } from "@/components/auth/register-template"
+import { RegisterTemplate, type RegisterFeatureIcon } from "@/components/auth/register-template"
 
-const features = [
+const features: { title: string; description: string; icon: RegisterFeatureIcon; accentClass?: string }[] = [
   {
     title: "Painel completo",
     description: "Gerencie agenda, check-ins e alunos em um lugar so.",
@@ -21,7 +21,7 @@ const features = [
     icon: "clipboard",
     accentClass: "bg-yellow-400/20 text-yellow-400",
   },
-] as const
+] 
 
 export default function ProfessorCadastroPage() {
   return (
@@ -47,12 +47,6 @@ export default function ProfessorCadastroPage() {
         features,
       }}
       successRedirect="/professor/dashboard"
-      extraFields={
-        <div className="rounded-lg border border-dashed border-meu-cyan/40 bg-meu-cyan/5 p-4 text-sm text-meu-cyan">
-          Em breve vamos solicitar informacoes profissionais adicionais (como CREF e especialidades) para completar seu perfil.
-        </div>
-      }
     />
   )
 }
-

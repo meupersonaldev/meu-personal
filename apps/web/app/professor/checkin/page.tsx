@@ -17,22 +17,44 @@ interface Academy {
 
 export default function ProfessorCheckinGateway() {
   const router = useRouter()
-  const { user } = useAuthStore()
+  const { user, token } = useAuthStore()
   const [academies, setAcademies] = useState<Academy[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const authFetch = async (url: string, init: RequestInit = {}) => {
+    if (!token) {
+      throw new Error('Sessao expirada. Faca login novamente.')
+    }
+
+    let headers: Record<string, string> = {}
+    if (init.headers instanceof Headers) {
+      headers = Object.fromEntries(init.headers.entries())
+    } else if (Array.isArray(init.headers)) {
+      headers = Object.fromEntries(init.headers)
+    } else if (init.headers) {
+      headers = { ...(init.headers as Record<string, string>) }
+    }
+
+    return fetch(url, {
+      ...init,
+      headers: {
+        ...headers,
+        Authorization: `Bearer ${token}`,
+      },
+      credentials: 'include',
+    })
+  }
+
   useEffect(() => {
     async function load() {
-      if (!user?.id) return
+      if (!user?.id || !token) return
       setLoading(true)
       setError(null)
       try {
         // Tenta obter academias vinculadas ao professor
         const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-        const res = await fetch(`${API_URL}/api/teachers/${user.id}/academies`, {
-          credentials: 'include'
-        })
+        const res = await authFetch(`${API_URL}/api/teachers/${user.id}/academies`)
 
         if (res.ok) {
           const data = await res.json()
@@ -75,7 +97,7 @@ export default function ProfessorCheckinGateway() {
     }
 
     load()
-  }, [router, user, user?.id])
+  }, [router, user, token, user?.id])
 
   if (loading) {
     return (

@@ -29,10 +29,22 @@ interface Booking {
   franchiseId?: string
   date: string
   duration: number
-  status: 'AVAILABLE' | 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED' | 'BLOCKED'
+  status:
+    | 'AVAILABLE'
+    | 'PENDING'
+    | 'RESERVED'
+    | 'CONFIRMED'
+    | 'PAID'
+    | 'COMPLETED'
+    | 'CANCELED'
+    | 'CANCELLED'
+    | 'BLOCKED'
   notes?: string
   creditsCost: number
 }
+
+const isConfirmedStatus = (status: Booking['status']) => status === 'PAID' || status === 'CONFIRMED'
+const isCanceledStatus = (status: Booking['status']) => status === 'CANCELED' || status === 'CANCELLED'
 
 interface Academy {
   id: string
@@ -178,7 +190,7 @@ export default function ProfessorAgendaPage() {
           
           // Marcar como COMPLETED automaticamente se passou o horário (usando timezone local)
           const updatedBookings = await Promise.all(allBookings.map(async (b: Booking) => {
-            if ((b.status === 'CONFIRMED' || b.status === 'PENDING') && b.studentId) {
+            if ((isConfirmedStatus(b.status) || b.status === 'PENDING') && b.studentId) {
               // Verificar se a aula já passou usando horário local
               const bookingLocalDate = utcToLocal(b.date)
               const bookingEnd = new Date(bookingLocalDate.getTime() + b.duration * 60000)
@@ -187,9 +199,9 @@ export default function ProfessorAgendaPage() {
                 // Aula já passou no horário local, marcar como COMPLETED
                 try {
                   await authFetch(`${API_URL}/api/bookings/${b.id}`, {
-                    method: 'PUT',
+                    method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ status: 'COMPLETED' })
+                    body: JSON.stringify({ status: 'DONE' })
                   })
                   return { ...b, status: 'COMPLETED' }
                 } catch (err) {
@@ -201,8 +213,8 @@ export default function ProfessorAgendaPage() {
           }))
           
           // Separar ativos e cancelados
-          const activeBookings = updatedBookings.filter((b: Booking) => b.status !== 'CANCELLED')
-          const cancelled = updatedBookings.filter((b: Booking) => b.status === 'CANCELLED')
+          const activeBookings = updatedBookings.filter((b: Booking) => !isCanceledStatus(b.status))
+          const cancelled = updatedBookings.filter((b: Booking) => isCanceledStatus(b.status))
           
           
           setBookings(activeBookings)
@@ -304,7 +316,7 @@ export default function ProfessorAgendaPage() {
       // Buscar bookings da unidade filtrada e priorizar por status
       const bookingsInUnit = allBookingsInSlot.filter(b => b.franchiseId === selectedFranchise)
       mainBooking = bookingsInUnit.find(b => b.status === 'PENDING') ||
-                    bookingsInUnit.find(b => b.status === 'CONFIRMED') ||
+                    bookingsInUnit.find(b => isConfirmedStatus(b.status)) ||
                     bookingsInUnit.find(b => b.status === 'COMPLETED') ||
                     bookingsInUnit.find(b => b.status === 'AVAILABLE') ||
                     bookingsInUnit.find(b => b.status === 'BLOCKED') ||
@@ -314,7 +326,7 @@ export default function ProfessorAgendaPage() {
     // Se não encontrou ou está em "todas", usar priorização normal
     if (!mainBooking) {
       mainBooking = allBookingsInSlot.find(b => b.status === 'PENDING') ||
-                    allBookingsInSlot.find(b => b.status === 'CONFIRMED') ||
+                    allBookingsInSlot.find(b => isConfirmedStatus(b.status)) ||
                     allBookingsInSlot.find(b => b.status === 'COMPLETED') ||
                     allBookingsInSlot.find(b => b.status === 'AVAILABLE') ||
                     allBookingsInSlot.find(b => b.status === 'BLOCKED')
@@ -344,19 +356,18 @@ export default function ProfessorAgendaPage() {
     try {
       const [hours, minutes] = selectedSlot.time.split(':')
       const bookingDate = new Date(selectedSlot.date + 'T' + selectedSlot.time + ':00Z')
+      const endTime = new Date(bookingDate.getTime() + 60 * 60 * 1000) // 60 minutes later
 
       const response = await authFetch(`${API_URL}/api/bookings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          teacher_id: user.id,
-          student_id: null,
-          franchise_id: franchiseId,
-          date: bookingDate.toISOString(),
-          duration: 60,
-          credits_cost: 1,
-          notes: 'Horário disponível',
-          status: 'AVAILABLE'
+          source: 'PROFESSOR',
+          professorId: user.id,
+          unitId: franchiseId,
+          startAt: bookingDate.toISOString(),
+          endAt: endTime.toISOString(),
+          professorNotes: 'Horário disponível'
         })
       })
 
@@ -376,15 +387,18 @@ export default function ProfessorAgendaPage() {
   const handleConfirmBooking = async (bookingId: string) => {
     try {
       const response = await authFetch(`${API_URL}/api/bookings/${bookingId}`, {
-        method: 'PUT',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'CONFIRMED' })
+        body: JSON.stringify({ status: 'PAID' })
       })
 
       if (response.ok) {
         toast.success('Aula confirmada!')
         fetchData()
         setShowModal(false)
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        toast.error(errorData.message || 'Erro ao confirmar')
       }
     } catch (error) {
       toast.error('Erro ao confirmar')
@@ -394,9 +408,9 @@ export default function ProfessorAgendaPage() {
   const handleCancelBooking = async (bookingId: string) => {
     try {
       const response = await authFetch(`${API_URL}/api/bookings/${bookingId}`, {
-        method: 'PUT',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'CANCELLED' })
+        body: JSON.stringify({ status: 'CANCELED' })
       })
 
       if (response.ok) {
@@ -424,6 +438,9 @@ export default function ProfessorAgendaPage() {
         }
         
         setShowModal(false)
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        toast.error(errorData.message || 'Erro ao cancelar')
       }
     } catch {
       toast.error('Erro ao cancelar')
@@ -469,7 +486,8 @@ export default function ProfessorAgendaPage() {
 
         
         if (response.ok) {
-          toast.success(selectedBooking?.status === 'CANCELLED' ? 'Cancelado removido!' : 'Disponibilidade removida!')
+          const wasCanceled = selectedBooking ? isCanceledStatus(selectedBooking.status) : false
+          toast.success(wasCanceled ? 'Cancelado removido!' : 'Disponibilidade removida!')
         } else {
           const errorData = await response.json()
           toast.error('Erro ao remover: ' + (errorData.message || 'Erro desconhecido'))
@@ -497,9 +515,11 @@ export default function ProfessorAgendaPage() {
     switch (status) {
       case 'AVAILABLE': return 'bg-green-500'
       case 'PENDING': return 'bg-yellow-500'
-      case 'CONFIRMED': return 'bg-blue-500'
+      case 'CONFIRMED':
+      case 'PAID': return 'bg-blue-500'
       case 'COMPLETED': return 'bg-gray-500'
-      case 'CANCELLED': return 'bg-red-500'
+      case 'CANCELLED':
+      case 'CANCELED': return 'bg-red-500'
       case 'BLOCKED': return 'bg-orange-500'
       default: return 'bg-gray-300'
     }
@@ -509,9 +529,11 @@ export default function ProfessorAgendaPage() {
     switch (status) {
       case 'AVAILABLE': return 'Disponível'
       case 'PENDING': return 'Pendente'
-      case 'CONFIRMED': return 'Confirmada'
+      case 'CONFIRMED':
+      case 'PAID': return 'Confirmada'
       case 'COMPLETED': return 'Concluída'
-      case 'CANCELLED': return 'Cancelada'
+      case 'CANCELLED':
+      case 'CANCELED': return 'Cancelada'
       case 'BLOCKED': return 'Bloqueado'
       default: return status
     }
@@ -934,7 +956,7 @@ export default function ProfessorAgendaPage() {
                         const blockedAcademiesCount = allBookingsInSlot.filter(b => b.status === 'BLOCKED').length
                         const availableAcademiesCount = allBookingsInSlot.filter(b => b.status === 'AVAILABLE').length
                         const pendingCount = allBookingsInSlot.filter(b => b.status === 'PENDING').length
-                        const confirmedCount = allBookingsInSlot.filter(b => b.status === 'CONFIRMED').length
+                        const confirmedCount = allBookingsInSlot.filter(b => isConfirmedStatus(b.status)).length
                         const completedCount = allBookingsInSlot.filter(b => b.status === 'COMPLETED').length
                         
                         // Determinar qual booking mostrar (prioridade: PENDING > CONFIRMED > COMPLETED > AVAILABLE > BLOCKED)
@@ -942,7 +964,7 @@ export default function ProfessorAgendaPage() {
                         if (pendingCount > 0) {
                           displayBooking = allBookingsInSlot.find(b => b.status === 'PENDING')
                         } else if (confirmedCount > 0) {
-                          displayBooking = allBookingsInSlot.find(b => b.status === 'CONFIRMED')
+                          displayBooking = allBookingsInSlot.find(b => isConfirmedStatus(b.status))
                         } else if (completedCount > 0) {
                           displayBooking = allBookingsInSlot.find(b => b.status === 'COMPLETED')
                         } else if (availableAcademiesCount > 0) {
@@ -959,7 +981,7 @@ export default function ProfessorAgendaPage() {
                           // Priorizar por status quando filtrado por unidade
                           const bookingsInUnit = allBookingsInSlot.filter(b => b.franchiseId === selectedFranchise)
                           booking = bookingsInUnit.find(b => b.status === 'PENDING') ||
-                                    bookingsInUnit.find(b => b.status === 'CONFIRMED') ||
+                                    bookingsInUnit.find(b => isConfirmedStatus(b.status)) ||
                                     bookingsInUnit.find(b => b.status === 'COMPLETED') ||
                                     bookingsInUnit.find(b => b.status === 'AVAILABLE') ||
                                     bookingsInUnit.find(b => b.status === 'BLOCKED') ||
@@ -1018,7 +1040,7 @@ export default function ProfessorAgendaPage() {
                                   {selectedFranchise === 'todas' && (
                                     <>
                                       {/* Indicador de bloqueios em outras unidades (quando há reserva/disponibilidade) */}
-                                      {(booking.status === 'PENDING' || booking.status === 'CONFIRMED') && blockedAcademiesCount > 0 && (
+                                      {(booking.status === 'PENDING' || isConfirmedStatus(booking.status)) && blockedAcademiesCount > 0 && (
                                         <span className="text-[10px] opacity-75 mt-0.5 truncate w-full text-center">
                                           🔒 +{blockedAcademiesCount} bloqueada(s)
                                         </span>
@@ -1255,7 +1277,7 @@ export default function ProfessorAgendaPage() {
                       )}
                       
                       {/* Botões para PENDING/CONFIRMED */}
-                      {(selectedBooking.status === 'PENDING' || selectedBooking.status === 'CONFIRMED') && (
+                      {(selectedBooking.status === 'PENDING' || isConfirmedStatus(selectedBooking.status)) && (
                         <div className="flex space-x-2">
                           {selectedBooking.status === 'PENDING' && (
                             <Button
@@ -1350,17 +1372,16 @@ export default function ProfessorAgendaPage() {
                                 for (let i = 0; i < teacherAcademies.length; i++) {
                                   const academy = teacherAcademies[i]
                                   try {
+                                    const endTime = new Date(bookingDate.getTime() + 60 * 60 * 1000) // 60 minutes later
                                     const payload = {
-                                      teacher_id: user.id,
-                                      student_id: null,
-                                      franchise_id: academy.id,
-                                      date: bookingDate.toISOString(),
-                                      duration: 60,
-                                      credits_cost: 1,
-                                      notes: 'Horário disponível',
-                                      status: 'AVAILABLE'
+                                      source: 'PROFESSOR',
+                                      professorId: user.id,
+                                      unitId: academy.id,
+                                      startAt: bookingDate.toISOString(),
+                                      endAt: endTime.toISOString(),
+                                      professorNotes: 'Horário disponível'
                                     }
-                                    
+
                                     const response = await authFetch(`${API_URL}/api/bookings`, {
                                       method: 'POST',
                                       headers: { 'Content-Type': 'application/json' },

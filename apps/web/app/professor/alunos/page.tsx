@@ -30,7 +30,7 @@ interface Student {
 }
 
 export default function AlunosPage() {
-  const { user } = useAuthStore()
+  const { user, token } = useAuthStore()
   const [students, setStudents] = useState<Student[]>([])
   const [loading, setLoading] = useState(true)
   const [teacherBio, setTeacherBio] = useState<string>('')
@@ -60,16 +60,24 @@ export default function AlunosPage() {
       fetchStudents()
       fetchTeacherPreferences()
     }
-  }, [user?.id])
+  }, [user?.id, token])
 
   const fetchStudents = async () => {
-    if (!user?.id) return
+    if (!user?.id || !token) {
+      setStudents([])
+      setLoading(false)
+      return
+    }
 
     try {
       setLoading(true)
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      
-      const response = await fetch(`${API_URL}/api/teachers/${user.id}/students`)
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
+
+      const response = await fetch(`${API_URL}/api/teachers/${user.id}/students`, {
+        headers,
+        credentials: 'include'
+      })
       
       if (response.ok) {
         const data = await response.json()
@@ -84,10 +92,14 @@ export default function AlunosPage() {
 
   // Carrega as preferências do professor (inclui bio)
   const fetchTeacherPreferences = async () => {
-    if (!user?.id) return
+    if (!user?.id || !token) return
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      const res = await fetch(`${API_URL}/api/teachers/${user.id}/preferences`)
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
+      const res = await fetch(`${API_URL}/api/teachers/${user.id}/preferences`, {
+        headers,
+        credentials: 'include'
+      })
       if (res.ok) {
         const data = await res.json()
         setTeacherBio(data.bio || '')
@@ -107,7 +119,12 @@ export default function AlunosPage() {
       })
     } else {
       setEditingStudent(null)
-      setFormData({ name: '', email: '', phone: '', notes: '' })
+      setFormData({
+        name: '',
+        email: '',
+        phone: '',
+        notes: ''
+      })
     }
     setShowModal(true)
   }
@@ -115,7 +132,12 @@ export default function AlunosPage() {
   const handleCloseModal = () => {
     setShowModal(false)
     setEditingStudent(null)
-    setFormData({ name: '', email: '', phone: '', notes: '' })
+    setFormData({
+      name: '',
+      email: '',
+      phone: '',
+      notes: ''
+    })
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -128,17 +150,30 @@ export default function AlunosPage() {
 
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      
+
       const url = editingStudent
         ? `${API_URL}/api/teachers/${user?.id}/students/${editingStudent.id}`
         : `${API_URL}/api/teachers/${user?.id}/students`
 
       const method = editingStudent ? 'PUT' : 'POST'
 
+      const payload: Record<string, unknown> = {
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        notes: formData.notes
+      }
+
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (token) {
+        headers.Authorization = `Bearer ${token}`
+      }
+
       const response = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        headers,
+        credentials: 'include',
+        body: JSON.stringify(payload)
       })
 
       if (response.ok) {
@@ -167,9 +202,11 @@ export default function AlunosPage() {
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
+
       const response = await fetch(
         `${API_URL}/api/teachers/${user?.id}/students/${deleteConfirm.studentId}`,
-        { method: 'DELETE' }
+        { method: 'DELETE', headers, credentials: 'include' }
       )
 
       if (response.ok) {

@@ -19,25 +19,47 @@ interface CheckinRecord {
 }
 
 export default function ProfessorCheckinsPage() {
-  const { user } = useAuthStore()
+  const { user, token } = useAuthStore()
   const [checkins, setCheckins] = useState<CheckinRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<'all' | 'GRANTED' | 'DENIED'>('all')
   const [dateFilter, setDateFilter] = useState<'today' | 'week' | 'month' | 'all'>('today')
 
+  const authFetch = async (url: string, init: RequestInit = {}) => {
+    if (!token) {
+      throw new Error('Sessao expirada. Faca login novamente.')
+    }
+
+    let headers: Record<string, string> = {}
+    if (init.headers instanceof Headers) {
+      headers = Object.fromEntries(init.headers.entries())
+    } else if (Array.isArray(init.headers)) {
+      headers = Object.fromEntries(init.headers)
+    } else if (init.headers) {
+      headers = { ...(init.headers as Record<string, string>) }
+    }
+
+    return fetch(url, {
+      ...init,
+      headers: {
+        ...headers,
+        Authorization: `Bearer ${token}`,
+      },
+      credentials: 'include',
+    })
+  }
+
   useEffect(() => {
-    if (!user?.id) return
+    if (!user?.id || !token) return
     loadData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id])
+  }, [user?.id, token])
 
   async function loadData() {
     setLoading(true)
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      const res = await fetch(`${API_URL}/api/checkins?teacher_id=${user?.id}`, {
-        credentials: 'include'
-      })
+      const res = await authFetch(`${API_URL}/api/checkins?teacher_id=${user?.id}`)
       if (!res.ok) {
         setCheckins([])
         return
@@ -100,7 +122,7 @@ export default function ProfessorCheckinsPage() {
   const deniedCount = checkins.filter(c => c.status === 'DENIED').length
   const todayCount = checkins.filter(c => new Date(c.created_at).toDateString() === new Date().toDateString()).length
 
-  if (!user?.id) {
+  if (!user?.id || !token) {
     return null
   }
 

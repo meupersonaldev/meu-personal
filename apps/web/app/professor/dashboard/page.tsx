@@ -19,6 +19,7 @@ import {
   MapPin,
   ArrowRight
 } from 'lucide-react'
+import { fmtTime, fmtDate } from '@/lib/date'
 
 const currencyFormatter = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -29,14 +30,14 @@ const formatCurrency = (value?: number | null) => currencyFormatter.format(value
 
 interface Booking {
   id: string
-  studentId: string
+  studentId?: string
   teacherId: string
-  studentName: string
+  studentName?: string
   franchiseName?: string
   franchiseAddress?: string
   date: string
   duration: number
-  status: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED'
+  status: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED' | 'RESERVED' | 'PAID' | 'DONE' | 'CANCELED' | 'BLOCKED' | 'AVAILABLE'
   notes?: string
   creditsCost: number
 }
@@ -99,8 +100,9 @@ export default function ProfessorDashboardPage() {
         }
 
         const bookingsData = await bookingsResponse.json()
+        const activeStatuses = new Set(['PENDING', 'CONFIRMED', 'RESERVED', 'PAID'])
         const activeBookings = (bookingsData.bookings || []).filter(
-          (b: Booking) => b.status === 'PENDING' || b.status === 'CONFIRMED'
+          (b: Booking) => activeStatuses.has(b.status) && Boolean(b.studentId)
         )
         setBookings(activeBookings)
 
@@ -131,8 +133,8 @@ export default function ProfessorDashboardPage() {
 
   if (!user) return null
 
-  const pendingBookings = bookings.filter((b) => b.status === 'PENDING')
-  const confirmedBookings = bookings.filter((b) => b.status === 'CONFIRMED')
+  const pendingBookings = bookings.filter((b) => b.status === 'PENDING' || b.status === 'RESERVED')
+  const confirmedBookings = bookings.filter((b) => b.status === 'CONFIRMED' || b.status === 'PAID')
   const activeBookingsCount = confirmedBookings.length + pendingBookings.length
 
   const today = new Date()
@@ -147,23 +149,23 @@ export default function ProfessorDashboardPage() {
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
       const response = await fetch(`${API_URL}/api/bookings/${bookingId}`, {
-        method: 'PUT',
+        method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
         credentials: 'include',
-        body: JSON.stringify({ status: 'CONFIRMED' })
+        body: JSON.stringify({ status: 'PAID' })
       })
 
       if (response.ok) {
         setBookings((prev) =>
           prev.map((b) =>
-            b.id === bookingId ? { ...b, status: 'CONFIRMED' } : b
+            b.id === bookingId ? { ...b, status: 'PAID' } : b
           )
         )
       }
-    } catch (err) {
+    } catch {
     }
   }
 
@@ -329,7 +331,6 @@ export default function ProfessorDashboardPage() {
                 </div>
               ) : (
                 bookings.map((booking) => {
-                  const bookingDate = new Date(booking.date)
                   return (
                     <div
                       key={booking.id}
@@ -344,7 +345,7 @@ export default function ProfessorDashboardPage() {
                             </div>
                             <span
                               className={`absolute -bottom-1 -right-1 h-4 w-4 rounded-full border-2 border-white ${
-                                booking.status === 'CONFIRMED'
+                                booking.status === 'CONFIRMED' || booking.status === 'PAID'
                                   ? 'bg-green-500'
                                   : 'bg-amber-500'
                               }`}
@@ -358,12 +359,12 @@ export default function ProfessorDashboardPage() {
                               </h4>
                               <Badge
                                 className={`w-fit ${
-                                  booking.status === 'CONFIRMED'
+                                  booking.status === 'CONFIRMED' || booking.status === 'PAID'
                                     ? 'bg-green-100 text-green-700 border-green-200'
                                     : 'bg-amber-100 text-amber-700 border-amber-200'
                                 }`}
                               >
-                                {booking.status === 'CONFIRMED'
+                                {booking.status === 'CONFIRMED' || booking.status === 'PAID'
                                   ? 'Confirmada'
                                   : 'Pendente'}
                               </Badge>
@@ -372,21 +373,11 @@ export default function ProfessorDashboardPage() {
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-gray-600">
                               <div className="flex items-center gap-2">
                                 <Clock className="h-4 w-4 text-meu-primary" />
-                                <span className="font-medium">
-                                  {bookingDate.toLocaleTimeString('pt-BR', {
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                    timeZone: 'UTC'
-                                  })}
-                                </span>
+                                <span className="font-medium">{fmtTime(booking.date)}</span>
                               </div>
                               <div className="flex items-center gap-2">
                                 <Calendar className="h-4 w-4 text-meu-primary" />
-                                <span>
-                                  {bookingDate.toLocaleDateString('pt-BR', {
-                                    timeZone: 'UTC'
-                                  })}
-                                </span>
+                                <span>{fmtDate(booking.date)}</span>
                               </div>
                               <div className="flex items-center gap-2">
                                 <Activity className="h-4 w-4 text-meu-primary" />
@@ -415,7 +406,7 @@ export default function ProfessorDashboardPage() {
                           </div>
                         </div>
 
-                        {booking.status === 'PENDING' && (
+                        {(booking.status === 'PENDING' || booking.status === 'RESERVED') && (
                           <Button
                             size="sm"
                             onClick={() => handleConfirmBooking(booking.id)}

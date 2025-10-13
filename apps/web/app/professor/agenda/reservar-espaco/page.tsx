@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -20,14 +20,24 @@ import { toast } from 'sonner'
 interface Franchise {
   id: string
   name: string
-  address: string
-  is_active: boolean
+  city: string
+  state: string
 }
 
 interface Booking {
   id: string
   date: string
-  status: string
+  status:
+    | 'AVAILABLE'
+    | 'PENDING'
+    | 'RESERVED'
+    | 'CONFIRMED'
+    | 'PAID'
+    | 'COMPLETED'
+    | 'DONE'
+    | 'CANCELED'
+    | 'CANCELLED'
+    | 'BLOCKED'
   franchiseId?: string
 }
 
@@ -40,7 +50,7 @@ interface Student {
 }
 
 export default function ReservarHorarioPage() {
-  const { user } = useAuthStore()
+  const { user, token } = useAuthStore()
   const [franchises, setFranchises] = useState<Franchise[]>([])
   const [academyIds, setAcademyIds] = useState<string[]>([])
   const [bookings, setBookings] = useState<Booking[]>([])
@@ -60,6 +70,32 @@ export default function ReservarHorarioPage() {
   const [selectedHorario, setSelectedHorario] = useState<string>('')
   const [expandedStep, setExpandedStep] = useState<number>(1) // Controla qual step está expandido
 
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+
+  const authFetch = useCallback(async (url: string, init: RequestInit = {}) => {
+    if (!token) {
+      throw new Error('Sessao expirada. Faca login novamente.')
+    }
+
+    let headers: Record<string, string> = {}
+    if (init.headers instanceof Headers) {
+      headers = Object.fromEntries(init.headers.entries())
+    } else if (Array.isArray(init.headers)) {
+      headers = Object.fromEntries(init.headers)
+    } else if (init.headers) {
+      headers = { ...(init.headers as Record<string, string>) }
+    }
+
+    return fetch(url, {
+      ...init,
+      headers: {
+        ...headers,
+        Authorization: `Bearer ${token}`,
+      },
+      credentials: 'include',
+    })
+  }, [token])
+
   // Buscar horários livres quando unidade e data forem selecionadas
   useEffect(() => {
     const fetchSlots = async () => {
@@ -69,8 +105,9 @@ export default function ReservarHorarioPage() {
       }
       try {
         setLoadingSlots(true)
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-        const res = await fetch(`${API_URL}/api/academies/${selectedFranchise}/available-slots?date=${selectedData}&teacher_id=${user?.id}`)
+        const res = await authFetch(
+          `${API_URL}/api/academies/${selectedFranchise}/available-slots?date=${selectedData}&teacher_id=${user?.id}`
+        )
         if (res.ok) {
           const data = await res.json()
           setAvailableSlots((data.slots || []) as Slot[])
@@ -84,40 +121,39 @@ export default function ReservarHorarioPage() {
       }
     }
     fetchSlots()
-  }, [selectedFranchise, selectedData])
+  }, [selectedFranchise, selectedData, authFetch, user?.id])
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!user?.id) return
+      if (!user?.id || !token) return
 
       try {
         setLoading(true)
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
-        // Buscar franquias disponíveis
-        const franchisesResponse = await fetch(`${API_URL}/api/franchises`)
-        
-        if (franchisesResponse.ok) {
-          const data = await franchisesResponse.json()
-          setFranchises(data.franchises || [])
+        // Buscar academias do professor
+        const academiesResponse = await authFetch(`${API_URL}/api/teachers/${user.id}/academies`)
+
+        if (academiesResponse.ok) {
+          const data = await academiesResponse.json()
+          setFranchises(data.academies || [])
         }
 
         // Buscar agendamentos existentes do professor
-        const bookingsResponse = await fetch(`${API_URL}/api/bookings?teacher_id=${user.id}`)
+        const bookingsResponse = await authFetch(`${API_URL}/api/bookings?teacher_id=${user.id}`)
         if (bookingsResponse.ok) {
           const data = await bookingsResponse.json()
           setBookings(data.bookings || [])
         }
 
         // Buscar preferências do professor (academy_ids)
-        const prefRes = await fetch(`${API_URL}/api/teachers/${user.id}/preferences`)
+        const prefRes = await authFetch(`${API_URL}/api/teachers/${user.id}/preferences`)
         if (prefRes.ok) {
           const pref = await prefRes.json()
           setAcademyIds(pref.academy_ids || [])
         }
 
         // Buscar alunos do professor
-        const studentsRes = await fetch(`${API_URL}/api/teachers/${user.id}/students`)
+        const studentsRes = await authFetch(`${API_URL}/api/teachers/${user.id}/students`)
         if (studentsRes.ok) {
           const studentsData = await studentsRes.json()
           setStudents(studentsData.students || [])
@@ -130,7 +166,7 @@ export default function ReservarHorarioPage() {
     }
 
     fetchData()
-  }, [user?.id])
+  }, [user?.id, token, authFetch])
 
   // Filtrar franquias pelas preferências do professor
   const franchisesFiltradas = useMemo(() => {
@@ -154,9 +190,7 @@ export default function ReservarHorarioPage() {
     }
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      
-      const response = await fetch(`${API_URL}/api/teachers/${user?.id}/students`, {
+      const response = await authFetch(`${API_URL}/api/teachers/${user?.id}/students`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -197,31 +231,42 @@ export default function ReservarHorarioPage() {
     setSubmitting(true)
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      
-      const [hours, minutes] = horario.split(':')
       const bookingDate = new Date(`${selectedData}T${horario}:00Z`)
-      
+
       if (isNaN(bookingDate.getTime())) {
         toast.error('Data ou horário inválido')
         setSubmitting(false)
         return
       }
 
-      const response = await fetch(`${API_URL}/api/bookings`, {
+      const slot = availableSlots.find(s => s.time === horario)
+      const slotDuration = slot?.slot_duration || 60
+      const endTime = new Date(bookingDate.getTime() + slotDuration * 60000)
+
+      const selectedStudentData = students.find(s => s.id === selectedStudent)
+      const studentId = selectedStudentData?.user_id || selectedStudent
+
+      if (!studentId) {
+        toast.error('Aluno invalido. Atualize a lista e tente novamente.')
+        setSubmitting(false)
+        return
+      }
+
+      const response = await authFetch(`${API_URL}/api/bookings`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          teacher_id: user?.id,
-          student_id: students.find(s => s.id === selectedStudent)?.user_id || selectedStudent,
-          franchise_id: selectedFranchise,
-          date: bookingDate.toISOString(),
-          duration: (availableSlots.find(s => s.time === horario)?.slot_duration) || 60,
-          credits_cost: 1,
-          notes: observacoes || `Agendamento para ${students.find(s => s.id === selectedStudent)?.name}`,
-          status: 'CONFIRMED'
+          source: 'PROFESSOR',
+          professorId: user?.id,
+          studentId,
+          unitId: selectedFranchise,
+          startAt: bookingDate.toISOString(),
+          endAt: endTime.toISOString(),
+          professorNotes:
+            observacoes ||
+            `Agendamento para ${selectedStudentData?.name || 'Aluno selecionado'}`
         })
       })
 
@@ -229,17 +274,25 @@ export default function ReservarHorarioPage() {
 
       if (response.ok) {
         toast.success('Horário reservado com sucesso!')
-        
-        // Atualizar lista de bookings localmente
-        const newBooking = {
-          id: data.booking?.id || Date.now().toString(),
-          date: bookingDate.toISOString(),
-          status: 'CONFIRMED',
-          franchiseId: selectedFranchise
+
+        const bookingsResponse = await authFetch(`${API_URL}/api/bookings?teacher_id=${user?.id}`)
+        if (bookingsResponse.ok) {
+          const bookingsData = await bookingsResponse.json()
+          setBookings(bookingsData.bookings || [])
         }
-        
-        setBookings([...bookings, newBooking])
+
+        if (selectedFranchise && selectedData) {
+          const slotsResponse = await authFetch(
+            `${API_URL}/api/academies/${selectedFranchise}/available-slots?date=${selectedData}&teacher_id=${user?.id}`
+          )
+          if (slotsResponse.ok) {
+            const slotsData = await slotsResponse.json()
+            setAvailableSlots((slotsData.slots || []) as Slot[])
+          }
+        }
+
         setSelectedStudent('')
+        setSelectedHorario('')
         setObservacoes('')
       } else {
         toast.error(data.message || 'Erro ao reservar horário')
@@ -261,7 +314,7 @@ export default function ReservarHorarioPage() {
     return (step / 4) * 100
   }, [selectedFranchise, selectedStudent, selectedData, selectedHorario])
 
-  if (!user) {
+  if (!user || !token) {
     return null
   }
 
@@ -707,3 +760,4 @@ export default function ReservarHorarioPage() {
     </ProfessorLayout>
   )
 }
+
