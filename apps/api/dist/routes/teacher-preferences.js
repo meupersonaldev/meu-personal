@@ -1,12 +1,31 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const supabase_1 = require("../config/supabase");
+const supabase_1 = require("../lib/supabase");
 const franqueadora_contacts_service_1 = require("../services/franqueadora-contacts.service");
+const auth_1 = require("../middleware/auth");
 const router = (0, express_1.Router)();
-router.get('/:teacherId/preferences', async (req, res) => {
+const ADMIN_ROLES = ['FRANQUEADORA', 'FRANQUIA', 'SUPER_ADMIN', 'ADMIN'];
+const TEACHER_ROLES = ['TEACHER', 'PROFESSOR'];
+const hasAdminAccess = (user) => Boolean(user && ADMIN_ROLES.includes(user.role));
+const hasTeacherAccess = (user, teacherId) => Boolean(user &&
+    teacherId &&
+    TEACHER_ROLES.includes(user.role) &&
+    user.userId === teacherId);
+const ensureTeacherOrAdmin = (req, res, teacherId) => {
+    const user = req.user;
+    if (!user || (!hasAdminAccess(user) && !hasTeacherAccess(user, teacherId))) {
+        res.status(403).json({ error: 'Forbidden' });
+        return false;
+    }
+    return true;
+};
+router.get('/:teacherId/preferences', auth_1.requireAuth, async (req, res) => {
     try {
         const { teacherId } = req.params;
+        if (!ensureTeacherOrAdmin(req, res, teacherId)) {
+            return;
+        }
         const { data, error } = await supabase_1.supabase
             .from('teacher_preferences')
             .select('*')
@@ -21,10 +40,13 @@ router.get('/:teacherId/preferences', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
-router.put('/:teacherId/preferences', async (req, res) => {
+router.put('/:teacherId/preferences', auth_1.requireAuth, async (req, res) => {
     try {
         const { teacherId } = req.params;
         const { academy_ids, bio } = req.body;
+        if (!ensureTeacherOrAdmin(req, res, teacherId)) {
+            return;
+        }
         console.log('Atualizando preferências do professor:', teacherId);
         console.log('Academias selecionadas:', academy_ids);
         const { data: oldPreferences } = await supabase_1.supabase
@@ -202,9 +224,12 @@ router.put('/:teacherId/preferences', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
-router.get('/:teacherId/hours', async (req, res) => {
+router.get('/:teacherId/hours', auth_1.requireAuth, async (req, res) => {
     try {
         const { teacherId } = req.params;
+        if (!ensureTeacherOrAdmin(req, res, teacherId)) {
+            return;
+        }
         const { data, error } = await supabase_1.supabase
             .from('users')
             .select('credits')

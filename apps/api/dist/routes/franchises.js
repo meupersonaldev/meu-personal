@@ -4,13 +4,24 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const supabase_1 = require("../config/supabase");
+const supabase_1 = require("../lib/supabase");
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const auth_1 = require("../middleware/auth");
+const audit_service_1 = require("../services/audit.service");
 const router = (0, express_1.Router)();
 router.post('/create', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEADORA', 'SUPER_ADMIN']), async (req, res) => {
     try {
         const { academy, admin } = req.body;
+        if (academy?.contract_start_date && academy?.contract_end_date) {
+            const start = new Date(academy.contract_start_date);
+            const end = new Date(academy.contract_end_date);
+            if (isFinite(start.getTime()) && isFinite(end.getTime()) && end < start) {
+                return res.status(400).json({
+                    error: 'CONTRACT_DATES_INVALID',
+                    message: 'Data de término deve ser maior ou igual à data de início'
+                });
+            }
+        }
         const hashedPassword = await bcryptjs_1.default.hash(admin.password, 10);
         const { data: user, error: userError } = await supabase_1.supabase
             .from('users')
@@ -40,10 +51,10 @@ router.post('/create', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEADOR
             zip_code: academy.zip_code,
             franchise_fee: academy.franchise_fee || 0,
             royalty_percentage: academy.royalty_percentage || 0,
-            monthly_revenue: 0,
+            monthly_revenue: academy.monthly_revenue || 0,
             contract_start_date: academy.contract_start_date,
             contract_end_date: academy.contract_end_date,
-            is_active: true
+            is_active: academy.is_active ?? true
         })
             .select()
             .single();
@@ -79,7 +90,7 @@ router.post('/create', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEADOR
         res.status(500).json({ error: error.message || 'Erro ao criar franquia' });
     }
 });
-router.get('/', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEADORA', 'SUPER_ADMIN']), async (req, res) => {
+router.get('/', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']), async (req, res) => {
     try {
         let { franqueadora_id } = req.query;
         if (!franqueadora_id && req.franqueadoraAdmin?.franqueadora_id) {
@@ -105,7 +116,10 @@ router.get('/', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEADORA', 'SU
             is_active: academy.is_active,
             monthly_revenue: academy.monthly_revenue,
             royalty_percentage: academy.royalty_percentage,
-            created_at: academy.created_at
+            created_at: academy.created_at,
+            credits_per_class: academy.credits_per_class,
+            class_duration_minutes: academy.class_duration_minutes,
+            checkin_tolerance: academy.checkin_tolerance
         }));
         res.json({ franchises });
     }
@@ -114,7 +128,7 @@ router.get('/', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEADORA', 'SU
         res.status(500).json({ error: error.message });
     }
 });
-router.get('/:id', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEADORA', 'FRANQUIA']), async (req, res) => {
+router.get('/:id', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEADORA', 'FRANQUIA', 'SUPER_ADMIN', 'ADMIN']), async (req, res) => {
     try {
         const { id } = req.params;
         const { data, error } = await supabase_1.supabase
@@ -136,7 +150,17 @@ router.get('/:id', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEADORA', 
 });
 router.post('/', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEADORA', 'SUPER_ADMIN']), async (req, res) => {
     try {
-        const { franqueadora_id, name, email, phone, address, city, state, zip_code, franchise_fee, royalty_percentage, contract_start_date, contract_end_date } = req.body;
+        const { franqueadora_id, name, email, phone, address, city, state, zip_code, franchise_fee, royalty_percentage, monthly_revenue, contract_start_date, contract_end_date, is_active } = req.body;
+        if (contract_start_date && contract_end_date) {
+            const start = new Date(contract_start_date);
+            const end = new Date(contract_end_date);
+            if (isFinite(start.getTime()) && isFinite(end.getTime()) && end < start) {
+                return res.status(400).json({
+                    error: 'CONTRACT_DATES_INVALID',
+                    message: 'Data de término deve ser maior ou igual à data de início'
+                });
+            }
+        }
         const { data, error } = await supabase_1.supabase
             .from('academies')
             .insert({
@@ -150,10 +174,10 @@ router.post('/', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEADORA', 'S
             zip_code,
             franchise_fee,
             royalty_percentage,
-            monthly_revenue: 0,
+            monthly_revenue: monthly_revenue || 0,
             contract_start_date,
             contract_end_date,
-            is_active: true
+            is_active: typeof is_active === 'boolean' ? is_active : true
         })
             .select()
             .single();
@@ -166,10 +190,24 @@ router.post('/', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEADORA', 'S
         res.status(500).json({ error: error.message });
     }
 });
-router.put('/:id', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEADORA', 'SUPER_ADMIN', 'FRANQUIA']), async (req, res) => {
+router.put('/:id', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN', 'FRANQUIA']), async (req, res) => {
     try {
         const { id } = req.params;
         const updates = req.body;
+        const policyFields = ['credits_per_class', 'class_duration_minutes', 'checkin_tolerance'];
+        const role = req?.user?.canonicalRole || req?.user?.role;
+        if (role !== 'FRANCHISOR' && role !== 'SUPER_ADMIN' && role !== 'ADMIN') {
+            for (const field of policyFields) {
+                if (field in updates) {
+                    delete updates[field];
+                }
+            }
+        }
+        const { data: beforePolicy } = await supabase_1.supabase
+            .from('academies')
+            .select('credits_per_class, class_duration_minutes, checkin_tolerance')
+            .eq('id', id)
+            .single();
         const { data, error } = await supabase_1.supabase
             .from('academies')
             .update(updates)
@@ -182,6 +220,37 @@ router.put('/:id', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEADORA', 
             return res.status(404).json({ error: 'Franchise not found' });
         }
         res.json(data);
+        try {
+            if (role === 'FRANCHISOR' || role === 'SUPER_ADMIN' || role === 'ADMIN') {
+                const changed = {};
+                for (const f of policyFields) {
+                    if (updates[f] !== undefined && beforePolicy && data && beforePolicy[f] !== data[f]) {
+                        changed[f] = { old: beforePolicy[f], new: data[f] };
+                    }
+                }
+                if (Object.keys(changed).length > 0) {
+                    await audit_service_1.auditService.createLog({
+                        tableName: 'academies',
+                        recordId: id,
+                        operation: 'SENSITIVE_CHANGE',
+                        actorId: req?.user?.userId,
+                        actorRole: req?.user?.role,
+                        oldValues: beforePolicy || undefined,
+                        newValues: {
+                            credits_per_class: data?.credits_per_class,
+                            class_duration_minutes: data?.class_duration_minutes,
+                            checkin_tolerance: data?.checkin_tolerance
+                        },
+                        metadata: { changedFields: Object.keys(changed) },
+                        ipAddress: req.ip,
+                        userAgent: req.headers?.['user-agent']
+                    });
+                }
+            }
+        }
+        catch (logErr) {
+            console.error('Audit log failed (franchises update):', logErr);
+        }
     }
     catch (error) {
         console.error('Error updating franchise:', error);

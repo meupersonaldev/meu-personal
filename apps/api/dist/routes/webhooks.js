@@ -4,7 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
-const supabase_1 = require("../config/supabase");
+const supabase_1 = require("../lib/supabase");
 const payment_intent_service_1 = require("../services/payment-intent.service");
 const notifications_1 = require("./notifications");
 const router = express_1.default.Router();
@@ -17,7 +17,14 @@ router.post('/asaas', async (req, res) => {
             status: event.payment?.status,
             value: event.payment?.value
         });
-        const webhookSecret = process.env.ASAAS_WEBHOOK_SECRET;
+        const expectedToken = process.env.ASAAS_WEBHOOK_SECRET || process.env.ASAAS_WEBHOOK_TOKEN;
+        if (expectedToken) {
+            const receivedToken = req.header('asaas-access-token');
+            if (!receivedToken || receivedToken !== expectedToken) {
+                console.warn('Asaas webhook rejeitado por token inválido ou ausente');
+                return res.status(401).json({ error: 'Invalid webhook token' });
+            }
+        }
         switch (event.event) {
             case 'PAYMENT_CONFIRMED':
             case 'PAYMENT_RECEIVED':
@@ -54,7 +61,7 @@ async function handlePaymentConfirmed(webhookData, externalRef) {
         .eq('asaas_payment_id', webhookData.paymentId);
     const { data: teacherPurchase } = await supabase_1.supabase
         .from('teacher_subscriptions')
-        .select('*, teacher:teacher_id(name, email), plan:plan_id(hours_included)')
+        .select('*, teacher:teacher_id(name, email), plan:plan_id(hours_included, hours_qty, metadata_json)')
         .eq('id', externalRef)
         .single();
     if (teacherPurchase) {
@@ -65,13 +72,26 @@ async function handlePaymentConfirmed(webhookData, externalRef) {
             asaas_payment_id: webhookData.paymentId
         })
             .eq('id', externalRef);
+        const planMetadata = teacherPurchase.plan?.metadata_json || {};
+        const rawPlanHours = Number(teacherPurchase.plan?.hours_included ??
+            teacherPurchase.plan?.hours_qty ??
+            planMetadata?.hours_included ??
+            planMetadata?.hours ??
+            0);
+        const planHours = Math.max(0, Math.floor(rawPlanHours));
+        if (planHours > 0) {
+            await supabase_1.supabase.rpc('add_teacher_hours', {
+                teacher_id: teacherPurchase.teacher_id,
+                hours_amount: planHours
+            });
+        }
         const { data: admin } = await supabase_1.supabase
             .from('franqueadora_admins')
             .select('user_id')
             .limit(1)
             .single();
         if (admin) {
-            await (0, notifications_1.createUserNotification)(admin.user_id, 'payment_received', 'Pagamento Confirmado - Professor', `${teacherPurchase.teacher?.name} comprou pacote de ${teacherPurchase.plan?.hours_included || 0} horas. Valor: R$ ${webhookData.value}`, {
+            await (0, notifications_1.createUserNotification)(admin.user_id, 'payment_received', 'Pagamento Confirmado - Professor', `${teacherPurchase.teacher?.name} comprou pacote de ${planHours} horas. Valor: R$ ${webhookData.value}`, {
                 subscription_id: externalRef,
                 payment_id: webhookData.paymentId,
                 amount: webhookData.value

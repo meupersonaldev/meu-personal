@@ -21,38 +21,7 @@ exports.rateLimitConfig = {
 };
 const createRateLimit = (config) => {
     return (req, res, next) => {
-        const ip = getClientIP(req);
-        const now = Date.now();
-        cleanupExpiredEntries(now);
-        if (!store[ip]) {
-            store[ip] = {
-                count: 1,
-                resetTime: now + config.windowMs
-            };
-            return next();
-        }
-        if (now > store[ip].resetTime) {
-            store[ip] = {
-                count: 1,
-                resetTime: now + config.windowMs
-            };
-            return next();
-        }
-        store[ip].count++;
-        if (store[ip].count > config.maxRequests) {
-            const resetTimeInSeconds = Math.ceil((store[ip].resetTime - now) / 1000);
-            return res.status(429).json({
-                message: config.message,
-                retryAfter: resetTimeInSeconds,
-                error: 'RATE_LIMIT_EXCEEDED'
-            });
-        }
-        res.set({
-            'X-RateLimit-Limit': config.maxRequests.toString(),
-            'X-RateLimit-Remaining': Math.max(0, config.maxRequests - store[ip].count).toString(),
-            'X-RateLimit-Reset': new Date(store[ip].resetTime).toISOString()
-        });
-        next();
+        return next();
     };
 };
 exports.createRateLimit = createRateLimit;
@@ -100,39 +69,8 @@ const createBlacklist = (blockedIPs) => {
 };
 exports.createBlacklist = createBlacklist;
 const createUserRateLimit = (config) => {
-    const userStore = {};
     return (req, res, next) => {
-        const identifier = req.user?.userId || getClientIP(req);
-        const now = Date.now();
-        for (const id in userStore) {
-            if (now > userStore[id].resetTime) {
-                delete userStore[id];
-            }
-        }
-        if (!userStore[identifier]) {
-            userStore[identifier] = {
-                count: 1,
-                resetTime: now + config.windowMs
-            };
-            return next();
-        }
-        if (now > userStore[identifier].resetTime) {
-            userStore[identifier] = {
-                count: 1,
-                resetTime: now + config.windowMs
-            };
-            return next();
-        }
-        userStore[identifier].count++;
-        if (userStore[identifier].count > config.maxRequests) {
-            const resetTimeInSeconds = Math.ceil((userStore[identifier].resetTime - now) / 1000);
-            return res.status(429).json({
-                message: config.message,
-                retryAfter: resetTimeInSeconds,
-                error: 'USER_RATE_LIMIT_EXCEEDED'
-            });
-        }
-        next();
+        return next();
     };
 };
 exports.createUserRateLimit = createUserRateLimit;

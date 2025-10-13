@@ -3,13 +3,17 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.auditMiddleware = auditMiddleware;
 exports.auditAuthEvent = auditAuthEvent;
 exports.auditSensitiveOperation = auditSensitiveOperation;
+const crypto_1 = require("crypto");
 const audit_service_1 = require("../services/audit.service");
 function auditMiddleware(req, res, next) {
+    const correlationId = req.headers['x-correlation-id'] || (0, crypto_1.randomUUID)();
     req.audit = {
         ipAddress: req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for'],
         userAgent: req.headers['user-agent'] || '',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        correlationId
     };
+    res.setHeader('x-correlation-id', correlationId);
     next();
 }
 function auditAuthEvent(operation) {
@@ -62,7 +66,8 @@ function auditSensitiveOperation(operation, tableName) {
                             method: req.method,
                             path: req.path,
                             timestamp: req.audit?.timestamp,
-                            response_status: res.statusCode
+                            response_status: res.statusCode,
+                            correlation_id: req.audit?.correlationId
                         },
                         ipAddress: req.audit?.ipAddress,
                         userAgent: req.audit?.userAgent

@@ -4,7 +4,7 @@ exports.resolveDefaultFranqueadoraId = resolveDefaultFranqueadoraId;
 exports.ensureFranqueadoraContact = ensureFranqueadoraContact;
 exports.addAcademyToContact = addAcademyToContact;
 exports.syncContactAcademies = syncContactAcademies;
-const supabase_1 = require("../config/supabase");
+const supabase_1 = require("../lib/supabase");
 function isMissingContactsTable(error) {
     if (!error)
         return false;

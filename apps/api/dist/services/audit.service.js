@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.auditService = void 0;
-const supabase_1 = require("../config/supabase");
+const supabase_1 = require("../lib/supabase");
 class AuditService {
     async createLog(params) {
         const { data: auditLog, error } = await supabase_1.supabase

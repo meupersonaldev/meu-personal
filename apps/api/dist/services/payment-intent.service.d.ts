@@ -8,6 +8,7 @@ export interface PaymentIntent {
     checkout_url?: string;
     payload_json: Record<string, any>;
     actor_user_id: string;
+    franqueadora_id: string;
     unit_id?: string;
     created_at: string;
     updated_at: string;
@@ -15,6 +16,7 @@ export interface PaymentIntent {
 export interface CreatePaymentIntentParams {
     type: 'STUDENT_PACKAGE' | 'PROF_HOURS';
     actorUserId: string;
+    franqueadoraId: string;
     unitId?: string;
     amountCents: number;
     metadata?: Record<string, any>;

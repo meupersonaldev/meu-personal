@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const supabase_1 = require("../config/supabase");
+const supabase_1 = require("../lib/supabase");
 const auth_1 = require("../middleware/auth");
 const router = (0, express_1.Router)();
 router.get('/summary', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEADORA', 'SUPER_ADMIN', 'FRANQUIA']), async (req, res) => {

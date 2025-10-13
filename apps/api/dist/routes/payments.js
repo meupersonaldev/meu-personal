@@ -5,7 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const zod_1 = require("zod");
-const supabase_1 = require("../config/supabase");
+const supabase_1 = require("../lib/supabase");
 const asaas_service_1 = require("../services/asaas.service");
 const router = express_1.default.Router();
 const studentPackagePurchaseSchema = zod_1.z.object({
@@ -42,7 +42,7 @@ router.post('/student/purchase-package', async (req, res) => {
             .from('users')
             .select('*')
             .eq('id', data.teacher_id)
-            .eq('role', 'TEACHER')
+            .in('role', ['TEACHER', 'PROFESSOR'])
             .single();
         if (teacherError || !teacher) {
             return res.status(404).json({ error: 'Professor não encontrado' });
@@ -52,11 +52,15 @@ router.post('/student/purchase-package', async (req, res) => {
             const customerResult = await asaas_service_1.asaasService.createCustomer({
                 name: student.name,
                 email: student.email,
-                cpfCnpj: student.cpf || '00000000000',
+                cpfCnpj: (student.cpf || '').replace(/\D/g, '') || '00000000000',
                 phone: student.phone
             });
             if (!customerResult.success) {
-                return res.status(500).json({ error: 'Erro ao criar cliente no Asaas' });
+                const message = Array.isArray(customerResult.error)
+                    ? (customerResult.error[0]?.description || 'Erro ao criar cliente no Asaas')
+                    : (customerResult.error || 'Erro ao criar cliente no Asaas');
+                const isCpfError = typeof message === 'string' && message.toLowerCase().includes('cpf');
+                return res.status(isCpfError ? 400 : 500).json({ error: message });
             }
             asaasCustomerId = customerResult.data.id;
             await supabase_1.supabase
@@ -101,6 +105,12 @@ router.post('/student/purchase-package', async (req, res) => {
             console.error('Erro ao salvar transação:', transactionError);
             return res.status(500).json({ error: 'Erro ao salvar transação' });
         }
+        const linkResult = await asaas_service_1.asaasService.generatePaymentLink(paymentResult.data.id);
+        const paymentLink = linkResult.success ? linkResult.data : {
+            paymentUrl: paymentResult.data.invoiceUrl,
+            bankSlipUrl: paymentResult.data.bankSlipUrl,
+            pixCode: paymentResult.data.payload
+        };
         res.status(201).json({
             message: 'Pagamento criado com sucesso',
             transaction_id: transaction.id,
@@ -109,10 +119,10 @@ router.post('/student/purchase-package', async (req, res) => {
                 status: paymentResult.data.status,
                 value: paymentResult.data.value,
                 due_date: paymentResult.data.dueDate,
-                invoice_url: paymentResult.data.invoiceUrl,
-                bank_slip_url: paymentResult.data.bankSlipUrl,
-                pix_qr_code: paymentResult.data.encodedImage,
-                pix_copy_paste: paymentResult.data.payload
+                invoice_url: paymentLink.paymentUrl,
+                bank_slip_url: paymentLink.bankSlipUrl,
+                pix_qr_code: null,
+                pix_copy_paste: paymentLink.pixCode
             }
         });
     }
@@ -134,7 +144,7 @@ router.post('/teacher/purchase-hours', async (req, res) => {
             .from('users')
             .select('*')
             .eq('id', data.teacher_id)
-            .eq('role', 'TEACHER')
+            .in('role', ['TEACHER', 'PROFESSOR'])
             .single();
         if (teacherError || !teacher) {
             return res.status(404).json({ error: 'Professor não encontrado' });
@@ -147,16 +157,30 @@ router.post('/teacher/purchase-hours', async (req, res) => {
         if (packageError || !hoursPackage) {
             return res.status(404).json({ error: 'Pacote de horas não encontrado' });
         }
+        const metadataJson = hoursPackage.metadata_json || {};
+        const rawHoursIncluded = Number(hoursPackage.hours_included ??
+            hoursPackage.hours_qty ??
+            metadataJson?.hours_included ??
+            metadataJson?.hours ??
+            0);
+        const hoursIncluded = Math.max(0, Math.floor(rawHoursIncluded));
+        if (!hoursIncluded) {
+            return res.status(400).json({ error: 'Pacote de horas sem quantidade configurada' });
+        }
         let asaasCustomerId = teacher.asaas_customer_id;
         if (!asaasCustomerId) {
             const customerResult = await asaas_service_1.asaasService.createCustomer({
                 name: teacher.name,
                 email: teacher.email,
-                cpfCnpj: teacher.cpf || '00000000000',
+                cpfCnpj: (teacher.cpf || '').replace(/\D/g, '') || '00000000000',
                 phone: teacher.phone
             });
             if (!customerResult.success) {
-                return res.status(500).json({ error: 'Erro ao criar cliente no Asaas' });
+                const message = Array.isArray(customerResult.error)
+                    ? (customerResult.error[0]?.description || 'Erro ao criar cliente no Asaas')
+                    : (customerResult.error || 'Erro ao criar cliente no Asaas');
+                const isCpfError = typeof message === 'string' && message.toLowerCase().includes('cpf');
+                return res.status(isCpfError ? 400 : 500).json({ error: message });
             }
             asaasCustomerId = customerResult.data.id;
             await supabase_1.supabase
@@ -188,7 +212,7 @@ router.post('/teacher/purchase-hours', async (req, res) => {
             reference_id: paymentResult.data.id,
             metadata: {
                 package_id: hoursPackage.id,
-                hours_to_add: hoursPackage.hours_included || 10,
+                hours_to_add: hoursIncluded,
                 asaas_payment_id: paymentResult.data.id,
                 payment_method: data.payment_method
             }
@@ -199,6 +223,12 @@ router.post('/teacher/purchase-hours', async (req, res) => {
             console.error('Erro ao salvar transação:', transactionError);
             return res.status(500).json({ error: 'Erro ao salvar transação' });
         }
+        const linkResult = await asaas_service_1.asaasService.generatePaymentLink(paymentResult.data.id);
+        const paymentLink = linkResult.success ? linkResult.data : {
+            paymentUrl: paymentResult.data.invoiceUrl,
+            bankSlipUrl: paymentResult.data.bankSlipUrl,
+            pixCode: paymentResult.data.payload
+        };
         res.status(201).json({
             message: 'Pagamento criado com sucesso',
             transaction_id: transaction.id,
@@ -207,10 +237,10 @@ router.post('/teacher/purchase-hours', async (req, res) => {
                 status: paymentResult.data.status,
                 value: paymentResult.data.value,
                 due_date: paymentResult.data.dueDate,
-                invoice_url: paymentResult.data.invoiceUrl,
-                bank_slip_url: paymentResult.data.bankSlipUrl,
-                pix_qr_code: paymentResult.data.encodedImage,
-                pix_copy_paste: paymentResult.data.payload
+                invoice_url: paymentLink.paymentUrl,
+                bank_slip_url: paymentLink.bankSlipUrl,
+                pix_qr_code: null,
+                pix_copy_paste: paymentLink.pixCode
             }
         });
     }
@@ -251,31 +281,40 @@ router.post('/webhook/asaas', async (req, res) => {
                     user_id: transaction.user_id,
                     credits_amount: metadata.credits_to_add
                 });
-                await supabase_1.supabase.rpc('add_teacher_hours', {
-                    teacher_id: metadata.teacher_id,
-                    hours_amount: metadata.hours_to_gift_teacher
-                });
+                const giftedHours = Math.max(0, Math.floor(Number(metadata.hours_to_gift_teacher || 0)));
+                if (giftedHours > 0 && metadata.teacher_id) {
+                    await supabase_1.supabase.rpc('add_teacher_hours', {
+                        teacher_id: metadata.teacher_id,
+                        hours_amount: giftedHours
+                    });
+                }
                 await supabase_1.supabase
                     .from('notifications')
                     .insert({
                     user_id: metadata.teacher_id,
                     type: 'HOURS_GIFTED',
                     title: 'Você ganhou horas!',
-                    message: `Parabéns! Você ganhou ${metadata.hours_to_gift_teacher}h de brinde por ter sido escolhido por um novo aluno.`,
+                    message: `Parabéns! Você ganhou ${giftedHours}h de brinde por ter sido escolhido por um novo aluno.`,
                     data: {
                         student_id: transaction.user_id,
-                        hours_gifted: metadata.hours_to_gift_teacher
+                        hours_gifted: giftedHours
                     }
                 });
                 console.log(`✅ Aluno ${transaction.user_id} recebeu ${metadata.credits_to_add} créditos`);
-                console.log(`🎁 Professor ${metadata.teacher_id} ganhou ${metadata.hours_to_gift_teacher}h de brinde`);
+                console.log(`🎁 Professor ${metadata.teacher_id} ganhou ${giftedHours}h de brinde`);
             }
             if (externalReference?.startsWith('TEACHER_HOURS_')) {
-                await supabase_1.supabase.rpc('add_teacher_hours', {
-                    teacher_id: transaction.user_id,
-                    hours_amount: metadata.hours_to_add
-                });
-                console.log(`✅ Professor ${transaction.user_id} recebeu ${metadata.hours_to_add}h`);
+                const hoursToAdd = Math.max(0, Math.floor(Number(metadata.hours_to_add || 0)));
+                if (hoursToAdd > 0) {
+                    await supabase_1.supabase.rpc('add_teacher_hours', {
+                        teacher_id: transaction.user_id,
+                        hours_amount: hoursToAdd
+                    });
+                    console.log(`✅ Professor ${transaction.user_id} recebeu ${hoursToAdd}h`);
+                }
+                else {
+                    console.warn('Compra de horas recebida sem quantidade válida:', metadata);
+                }
             }
             await supabase_1.supabase
                 .from('transactions')

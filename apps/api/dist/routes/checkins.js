@@ -2,25 +2,42 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const zod_1 = require("zod");
-const supabase_1 = require("../config/supabase");
+const supabase_1 = require("../lib/supabase");
 const notifications_1 = require("./notifications");
+const auth_1 = require("../middleware/auth");
 const router = (0, express_1.Router)();
-router.get('/', async (req, res) => {
+const ADMIN_ROLES = ['FRANQUEADORA', 'FRANQUIA', 'SUPER_ADMIN', 'ADMIN'];
+const TEACHER_ROLES = ['TEACHER', 'PROFESSOR'];
+const hasAdminAccess = (user) => Boolean(user && ADMIN_ROLES.includes(user.role));
+const hasTeacherScope = (user, teacherId) => Boolean(user &&
+    teacherId &&
+    TEACHER_ROLES.includes(user.role) &&
+    user.userId === teacherId);
+router.get('/', auth_1.requireAuth, async (req, res) => {
     try {
         const { academy_id, teacher_id } = req.query;
+        const requestedAcademyId = Array.isArray(academy_id) ? academy_id[0] : academy_id;
+        const requestedTeacherId = Array.isArray(teacher_id) ? teacher_id[0] : teacher_id;
+        const user = req.user;
+        if (!requestedAcademyId && !requestedTeacherId) {
+            return res.status(400).json({ error: 'academy_id ou teacher_id é obrigatório' });
+        }
+        if (requestedTeacherId && !hasAdminAccess(user) && !hasTeacherScope(user, requestedTeacherId)) {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+        if (requestedAcademyId && !hasAdminAccess(user)) {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
         let query = supabase_1.supabase
             .from('checkins')
             .select('*')
             .order('created_at', { ascending: false })
             .limit(500);
-        if (academy_id) {
-            query = query.eq('academy_id', academy_id);
+        if (requestedAcademyId) {
+            query = query.eq('academy_id', requestedAcademyId);
         }
-        if (teacher_id) {
-            query = query.eq('teacher_id', teacher_id);
-        }
-        if (!academy_id && !teacher_id) {
-            return res.status(400).json({ error: 'academy_id ou teacher_id é obrigatório' });
+        if (requestedTeacherId) {
+            query = query.eq('teacher_id', requestedTeacherId);
         }
         const { data, error } = await query;
         if (error) {
@@ -36,11 +53,14 @@ router.get('/', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
-router.get('/stats', async (req, res) => {
+router.get('/stats', auth_1.requireAuth, async (req, res) => {
     try {
         const { academy_id } = req.query;
         if (!academy_id) {
             return res.status(400).json({ error: 'academy_id é obrigatório' });
+        }
+        if (!hasAdminAccess(req.user)) {
+            return res.status(403).json({ error: 'Forbidden' });
         }
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);

@@ -11,16 +11,16 @@ export interface CreateBookingParams {
 export interface BookingCanonical {
     id: string;
     source: 'ALUNO' | 'PROFESSOR';
-    student_id?: string;
+    student_id?: string | null;
     teacher_id: string;
     professor_id?: string;
     unit_id: string;
     start_at: string;
     end_at: string;
-    status_canonical: 'RESERVED' | 'PAID' | 'CANCELED' | 'DONE';
-    cancellable_until?: string;
-    student_notes?: string;
-    professor_notes?: string;
+    status_canonical: 'RESERVED' | 'PAID' | 'CANCELED' | 'DONE' | 'AVAILABLE';
+    cancellable_until?: string | null;
+    student_notes?: string | null;
+    professor_notes?: string | null;
     created_at: string;
     updated_at: string;
 }

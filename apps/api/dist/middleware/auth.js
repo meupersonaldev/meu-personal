@@ -7,7 +7,7 @@ exports.requireAuth = requireAuth;
 exports.requireRole = requireRole;
 exports.requireFranqueadoraAdmin = requireFranqueadoraAdmin;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
-const supabase_1 = require("../config/supabase");
+const supabase_1 = require("../lib/supabase");
 const canonicalizeRole = (role) => {
     if (!role)
         return undefined;
@@ -48,8 +48,9 @@ function requireAuth(req, res, next) {
         if (!token) {
             return res.status(401).json({ message: 'Unauthorized' });
         }
-        const secret = process.env.JWT_SECRET;
-        if (!secret || secret.length < 32) {
+        const isProd = process.env.NODE_ENV === 'production';
+        const secret = process.env.JWT_SECRET || (!isProd ? 'dev-insecure-jwt-secret-please-set-env-32chars-123456' : '');
+        if (!secret || (isProd && secret.length < 32)) {
             return res.status(500).json({ message: 'Configuração de segurança inválida' });
         }
         const decoded = jsonwebtoken_1.default.verify(token, secret);

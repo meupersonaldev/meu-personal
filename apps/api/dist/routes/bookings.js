@@ -5,16 +5,17 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const zod_1 = require("zod");
-const supabase_1 = require("../config/supabase");
+const supabase_1 = require("../lib/supabase");
 const franqueadora_contacts_service_1 = require("../services/franqueadora-contacts.service");
 const notifications_1 = require("./notifications");
 const booking_canonical_service_1 = require("../services/booking-canonical.service");
 const auth_1 = require("../middleware/auth");
 const errorHandler_1 = require("../middleware/errorHandler");
+const booking_status_1 = require("../utils/booking-status");
 const router = express_1.default.Router();
 const createBookingSchema = zod_1.z.object({
     source: zod_1.z.enum(['ALUNO', 'PROFESSOR']),
-    studentId: zod_1.z.string().uuid().optional(),
+    studentId: zod_1.z.string().uuid().nullable().optional(),
     professorId: zod_1.z.string().uuid(),
     unitId: zod_1.z.string().uuid(),
     startAt: zod_1.z.string().datetime(),
@@ -52,7 +53,7 @@ router.get('/', auth_1.requireAuth, (0, errorHandler_1.asyncErrorHandler)(async 
             franchiseAddress: franchiseAddressParts.filter(Boolean).join(', ') || undefined,
             date: booking.date,
             duration: booking.duration ?? 60,
-            status: booking.status || booking.status_canonical || 'PENDING',
+            status: (0, booking_status_1.normalizeBookingStatus)(booking.status, booking.status_canonical),
             notes: booking.notes || undefined,
             creditsCost: booking.credits_cost ?? 0
         };
@@ -87,9 +88,11 @@ router.get('/', auth_1.requireAuth, (0, errorHandler_1.asyncErrorHandler)(async 
         }
         let results = studentBookings || [];
         if (status) {
+            const statusStr = Array.isArray(status) ? status[0] : String(status);
+            const statusTarget = (0, booking_status_1.normalizeBookingStatus)(statusStr, null);
             results = results.filter((booking) => {
-                const currentStatus = booking.status || booking.status_canonical;
-                return currentStatus === status;
+                const current = (0, booking_status_1.normalizeBookingStatus)(booking.status, booking.status_canonical);
+                return current === statusTarget;
             });
         }
         if (from) {
@@ -142,7 +145,7 @@ router.get('/', auth_1.requireAuth, (0, errorHandler_1.asyncErrorHandler)(async 
                 franchiseAddress: franchiseAddressParts.filter(Boolean).join(', ') || undefined,
                 date: booking.date,
                 duration: booking.duration ?? 60,
-                status: booking.status || booking.status_canonical || 'PENDING',
+                status: (0, booking_status_1.normalizeBookingStatus)(booking.status, booking.status_canonical),
                 notes: booking.notes || undefined,
                 creditsCost: booking.credits_cost ?? 0
             };
@@ -176,9 +179,11 @@ router.get('/', auth_1.requireAuth, (0, errorHandler_1.asyncErrorHandler)(async 
         }
         let results = teacherBookings || [];
         if (status) {
+            const statusStr = Array.isArray(status) ? status[0] : String(status);
+            const statusTarget = (0, booking_status_1.normalizeBookingStatus)(statusStr, null);
             results = results.filter((booking) => {
-                const currentStatus = booking.status || booking.status_canonical;
-                return currentStatus === status;
+                const current = (0, booking_status_1.normalizeBookingStatus)(booking.status, booking.status_canonical);
+                return current === statusTarget;
             });
         }
         if (from) {
@@ -259,7 +264,7 @@ router.get('/', auth_1.requireAuth, (0, errorHandler_1.asyncErrorHandler)(async 
                 franchiseAddress: franchiseAddressParts.filter(Boolean).join(', ') || undefined,
                 date: booking.date,
                 duration: booking.duration ?? 60,
-                status: booking.status || booking.status_canonical || 'PENDING',
+                status: (0, booking_status_1.normalizeBookingStatus)(booking.status, booking.status_canonical),
                 notes: booking.notes || undefined,
                 creditsCost: booking.credits_cost ?? 0
             };
@@ -319,9 +324,11 @@ router.get('/', auth_1.requireAuth, (0, errorHandler_1.asyncErrorHandler)(async 
         results = results.filter((booking) => booking.student_id === user.userId);
     }
     if (status) {
+        const statusStr = Array.isArray(status) ? status[0] : String(status);
+        const statusTarget = (0, booking_status_1.normalizeBookingStatus)(statusStr, null);
         results = results.filter((booking) => {
-            const currentStatus = booking.status || booking.status_canonical;
-            return currentStatus === status;
+            const current = (0, booking_status_1.normalizeBookingStatus)(booking.status, booking.status_canonical);
+            return current === statusTarget;
         });
     }
     if (from) {
@@ -365,6 +372,9 @@ router.get('/:id', auth_1.requireAuth, (0, errorHandler_1.asyncErrorHandler)(asy
 }));
 router.post('/', auth_1.requireAuth, (0, auth_1.requireRole)(['STUDENT', 'ALUNO', 'TEACHER', 'PROFESSOR', 'FRANQUIA', 'FRANQUEADORA']), (0, errorHandler_1.asyncErrorHandler)(async (req, res) => {
     const bookingData = createBookingSchema.parse(req.body);
+    if (bookingData.studentId === null) {
+        bookingData.studentId = undefined;
+    }
     const user = req.user;
     if (bookingData.source === 'ALUNO' && !['STUDENT', 'ALUNO', 'FRANQUIA', 'FRANQUEADORA'].includes(user.role)) {
         return res.status(403).json({ error: 'Apenas alunos podem criar agendamentos aluno-led' });

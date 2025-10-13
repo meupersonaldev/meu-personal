@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.bookingScheduler = exports.BookingScheduler = void 0;
-const supabase_1 = require("../config/supabase");
+const supabase_1 = require("../lib/supabase");
 class BookingScheduler {
     constructor() {
         this.FOUR_HOURS_MS = 4 * 60 * 60 * 1000;

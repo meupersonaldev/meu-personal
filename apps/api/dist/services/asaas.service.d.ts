@@ -25,6 +25,8 @@ interface AsaasSubscription {
 export declare class AsaasService {
     private api;
     constructor();
+    private sleep;
+    private withRetry;
     createCustomer(data: AsaasCustomer): Promise<{
         success: boolean;
         data: any;

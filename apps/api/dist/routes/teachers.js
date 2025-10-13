@@ -5,8 +5,30 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const zod_1 = require("zod");
-const supabase_1 = require("../config/supabase");
+const supabase_1 = require("../lib/supabase");
+const auth_1 = require("../middleware/auth");
+const booking_status_1 = require("../utils/booking-status");
 const router = express_1.default.Router();
+const ADMIN_ROLES = ['FRANQUEADORA', 'FRANQUIA', 'SUPER_ADMIN', 'ADMIN'];
+const TEACHER_ROLES = ['TEACHER', 'PROFESSOR'];
+const hasAdminAccess = (user) => Boolean(user && ADMIN_ROLES.includes(user.role));
+const hasTeacherSelfAccess = (user, teacherId) => Boolean(user && teacherId && TEACHER_ROLES.includes(user.role) && user.userId === teacherId);
+const ensureTeacherScope = (req, res, teacherId) => {
+    const user = req.user;
+    if (!user || (!hasAdminAccess(user) && !hasTeacherSelfAccess(user, teacherId))) {
+        res.status(403).json({ error: 'Forbidden' });
+        return false;
+    }
+    return true;
+};
+const ensureAdminScope = (req, res) => {
+    const user = req.user;
+    if (!user || !hasAdminAccess(user)) {
+        res.status(403).json({ error: 'Forbidden' });
+        return false;
+    }
+    return true;
+};
 const teacherSchema = zod_1.z.object({
     bio: zod_1.z.string().optional(),
     specialties: zod_1.z.array(zod_1.z.string()).optional(),
@@ -14,9 +36,41 @@ const teacherSchema = zod_1.z.object({
     availability: zod_1.z.object({}).optional(),
     is_available: zod_1.z.boolean().optional()
 });
-router.post('/:id/blocks/slot', async (req, res) => {
+router.get('/:id/hours', auth_1.requireAuth, async (req, res) => {
     try {
         const { id } = req.params;
+        const user = req.user;
+        const isAdmin = ['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN'].includes(user.role);
+        if (!isAdmin && user.userId !== id) {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+        const { data, error } = await supabase_1.supabase
+            .from('prof_hour_balance')
+            .select('available_hours, locked_hours')
+            .eq('professor_id', id);
+        if (error) {
+            console.error('Erro ao buscar saldo de horas:', error);
+            return res.status(500).json({ error: 'Erro ao buscar saldo de horas' });
+        }
+        const rows = data || [];
+        const totalAvailable = rows.reduce((sum, row) => {
+            const available = Number(row.available_hours) || 0;
+            const locked = Number(row.locked_hours) || 0;
+            return sum + Math.max(0, available - locked);
+        }, 0);
+        return res.json({ available_hours: totalAvailable });
+    }
+    catch (error) {
+        console.error('Erro ao processar saldo de horas:', error);
+        return res.status(500).json({ error: error.message || 'Erro interno do servidor' });
+    }
+});
+router.post('/:id/blocks/slot', auth_1.requireAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!ensureTeacherScope(req, res, id)) {
+            return;
+        }
         const { academy_id, date, time, notes } = req.body;
         if (!academy_id || !date || !time) {
             return res.status(400).json({ error: 'academy_id, date e time são obrigatórios' });
@@ -49,9 +103,12 @@ router.post('/:id/blocks/slot', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
-router.post('/:id/blocks/custom', async (req, res) => {
+router.post('/:id/blocks/custom', auth_1.requireAuth, async (req, res) => {
     try {
         const { id } = req.params;
+        if (!ensureTeacherScope(req, res, id)) {
+            return;
+        }
         const { academy_id, date, hours } = req.body;
         if (!academy_id || !date || !hours || hours.length === 0) {
             return res.status(400).json({ error: 'academy_id, date e hours são obrigatórios' });
@@ -104,9 +161,12 @@ router.post('/:id/blocks/custom', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
-router.post('/:id/blocks/day', async (req, res) => {
+router.post('/:id/blocks/day', auth_1.requireAuth, async (req, res) => {
     try {
         const { id } = req.params;
+        if (!ensureTeacherScope(req, res, id)) {
+            return;
+        }
         const { academy_id, date, notes } = req.body;
         if (!academy_id || !date) {
             return res.status(400).json({ error: 'academy_id e date são obrigatórios' });
@@ -142,9 +202,12 @@ router.post('/:id/blocks/day', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
-router.get('/:id/blocks', async (req, res) => {
+router.get('/:id/blocks', auth_1.requireAuth, async (req, res) => {
     try {
         const { id } = req.params;
+        if (!ensureTeacherScope(req, res, id)) {
+            return;
+        }
         const { academy_id, date } = req.query;
         let query = supabase_1.supabase
             .from('bookings')
@@ -168,9 +231,12 @@ router.get('/:id/blocks', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
-router.delete('/:id/blocks/:bookingId', async (req, res) => {
+router.delete('/:id/blocks/:bookingId', auth_1.requireAuth, async (req, res) => {
     try {
         const { id, bookingId } = req.params;
+        if (!ensureTeacherScope(req, res, id)) {
+            return;
+        }
         const { data: booking } = await supabase_1.supabase
             .from('bookings')
             .select('id, teacher_id')
@@ -192,9 +258,12 @@ router.delete('/:id/blocks/:bookingId', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
-router.delete('/:id/blocks/all/:date', async (req, res) => {
+router.delete('/:id/blocks/all/:date', auth_1.requireAuth, async (req, res) => {
     try {
         const { id, date } = req.params;
+        if (!ensureTeacherScope(req, res, id)) {
+            return;
+        }
         const startISO = new Date(`${date}T00:00:00Z`).toISOString();
         const endISO = new Date(`${date}T23:59:59Z`).toISOString();
         const { error } = await supabase_1.supabase
@@ -225,8 +294,11 @@ const createTeacherSchema = zod_1.z.object({
     availability: zod_1.z.object({}).optional(),
     commission_rate: zod_1.z.number().min(0).max(1).optional()
 });
-router.get('/', async (req, res) => {
+router.get('/', auth_1.requireAuth, async (req, res) => {
     try {
+        if (!ensureAdminScope(req, res)) {
+            return;
+        }
         const { academy_id, city, state, unit_id } = req.query;
         let query = supabase_1.supabase
             .from('users')
@@ -254,7 +326,7 @@ router.get('/', async (req, res) => {
           commission_rate
         )
       `)
-            .eq('role', 'TEACHER')
+            .in('role', ['TEACHER', 'PROFESSOR'])
             .eq('is_active', true)
             .eq('academy_teachers.status', 'active')
             .order('created_at', { ascending: false });
@@ -320,9 +392,109 @@ router.get('/', async (req, res) => {
         res.status(500).json({ error: 'Erro interno do servidor' });
     }
 });
-router.get('/:id', async (req, res) => {
+router.get('/:id/stats', auth_1.requireAuth, async (req, res) => {
     try {
         const { id } = req.params;
+        if (!ensureTeacherScope(req, res, id)) {
+            return;
+        }
+        const { data: teacher } = await supabase_1.supabase
+            .from('users')
+            .select('id, created_at')
+            .eq('id', id)
+            .in('role', ['TEACHER', 'PROFESSOR'])
+            .single();
+        if (!teacher) {
+            return res.status(404).json({ error: 'Professor não encontrado' });
+        }
+        const [bookingsData, transactionsData, subscriptionData, profileData] = await Promise.all([
+            supabase_1.supabase
+                .from('bookings')
+                .select('id, status, status_canonical, date, credits_cost, student_id, duration')
+                .eq('teacher_id', id),
+            supabase_1.supabase
+                .from('transactions')
+                .select('id, type, amount, created_at')
+                .eq('user_id', id),
+            supabase_1.supabase
+                .from('teacher_subscriptions')
+                .select(`
+          *,
+          teacher_plans (
+            name,
+            price,
+            commission_rate,
+            features
+          )
+        `)
+                .eq('teacher_id', id)
+                .eq('status', 'active')
+                .single(),
+            supabase_1.supabase
+                .from('teacher_profiles')
+                .select('hourly_rate')
+                .eq('user_id', id)
+                .single()
+        ]);
+        const bookings = bookingsData.data || [];
+        const transactions = transactionsData.data || [];
+        const subscription = subscriptionData.data;
+        const profile = profileData.data;
+        const normalizedBookings = bookings.map((b) => ({
+            ...b,
+            _status: (0, booking_status_1.normalizeBookingStatus)(b.status, b.status_canonical)
+        }));
+        const completedBookings = normalizedBookings.filter((b) => b._status === 'COMPLETED');
+        const totalRevenue = completedBookings.reduce((sum, b) => {
+            const rate = profile?.hourly_rate || 0;
+            const duration = Number(b.duration) || 60;
+            return sum + (rate * (duration / 60));
+        }, 0);
+        const totalCreditsUsed = normalizedBookings
+            .filter((b) => b.student_id && !['CANCELED', 'BLOCKED', 'AVAILABLE'].includes(b._status))
+            .reduce((sum, b) => sum + (b.credits_cost || 0), 0);
+        const stats = {
+            total_bookings: normalizedBookings.length,
+            completed_bookings: completedBookings.length,
+            pending_bookings: normalizedBookings.filter((b) => ['PENDING', 'RESERVED'].includes(b._status)).length,
+            cancelled_bookings: normalizedBookings.filter((b) => b._status === 'CANCELED').length,
+            total_students: new Set(normalizedBookings.map((b) => b.student_id).filter(Boolean)).size,
+            total_revenue: totalRevenue,
+            total_credits_used: totalCreditsUsed,
+            hourly_rate: profile?.hourly_rate || 0,
+            current_subscription: subscription,
+            last_booking_date: normalizedBookings.length > 0
+                ? normalizedBookings.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0].date
+                : null,
+            join_date: teacher.created_at,
+            monthly_earnings: {
+                current_month: completedBookings
+                    .filter((b) => {
+                    const bookingDate = new Date(b.date);
+                    const now = new Date();
+                    return bookingDate.getMonth() === now.getMonth() &&
+                        bookingDate.getFullYear() === now.getFullYear();
+                })
+                    .reduce((sum, b) => {
+                    const rate = profile?.hourly_rate || 0;
+                    const duration = Number(b.duration) || 60;
+                    return sum + (rate * (duration / 60));
+                }, 0)
+            }
+        };
+        res.json(stats);
+    }
+    catch (error) {
+        console.error('Erro ao processar requisição:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    }
+});
+router.get('/:id', auth_1.requireAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!ensureTeacherScope(req, res, id)) {
+            return;
+        }
         const { data: teacher, error } = await supabase_1.supabase
             .from('users')
             .select(`
@@ -385,19 +557,18 @@ router.get('/:id', async (req, res) => {
         res.status(500).json({ error: 'Erro interno do servidor' });
     }
 });
-router.put('/:id', async (req, res) => {
+router.put('/:id', auth_1.requireAuth, async (req, res) => {
     try {
         const { id } = req.params;
-        const authHeader = req.headers.authorization;
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            return res.status(401).json({ message: 'Token de acesso não fornecido' });
+        if (!ensureTeacherScope(req, res, id)) {
+            return;
         }
         const updateData = teacherSchema.parse(req.body);
         const { data: teacher, error: teacherError } = await supabase_1.supabase
             .from('users')
             .select('id')
             .eq('id', id)
-            .eq('role', 'TEACHER')
+            .in('role', ['TEACHER', 'PROFESSOR'])
             .single();
         if (teacherError || !teacher) {
             return res.status(404).json({ message: 'Professor não encontrado' });
@@ -436,8 +607,11 @@ router.put('/:id', async (req, res) => {
         res.status(500).json({ message: 'Erro interno do servidor' });
     }
 });
-router.post('/', async (req, res) => {
+router.post('/', auth_1.requireAuth, async (req, res) => {
     try {
+        if (!ensureAdminScope(req, res)) {
+            return;
+        }
         const validatedData = createTeacherSchema.parse(req.body);
         const { name, email, phone, academy_id, avatar_url, bio, specialties, hourly_rate, availability, commission_rate } = validatedData;
         const { data: existingUser } = await supabase_1.supabase
@@ -542,14 +716,17 @@ router.post('/', async (req, res) => {
         res.status(500).json({ error: 'Erro interno do servidor' });
     }
 });
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', auth_1.requireAuth, async (req, res) => {
     try {
+        if (!ensureAdminScope(req, res)) {
+            return;
+        }
         const { id } = req.params;
         const { data: existingTeacher } = await supabase_1.supabase
             .from('users')
             .select('id')
             .eq('id', id)
-            .eq('role', 'TEACHER')
+            .in('role', ['TEACHER', 'PROFESSOR'])
             .single();
         if (!existingTeacher) {
             return res.status(404).json({ error: 'Professor não encontrado' });
@@ -594,103 +771,12 @@ router.delete('/:id', async (req, res) => {
         res.status(500).json({ error: 'Erro interno do servidor' });
     }
 });
-router.get('/:id/stats', async (req, res) => {
+router.get('/:id/availability', auth_1.requireAuth, async (req, res) => {
     try {
         const { id } = req.params;
-        const { data: teacher } = await supabase_1.supabase
-            .from('users')
-            .select('id, created_at')
-            .eq('id', id)
-            .eq('role', 'TEACHER')
-            .single();
-        if (!teacher) {
-            return res.status(404).json({ error: 'Professor não encontrado' });
+        if (!ensureTeacherScope(req, res, id)) {
+            return;
         }
-        const [bookingsData, transactionsData, subscriptionData, profileData] = await Promise.all([
-            supabase_1.supabase
-                .from('bookings')
-                .select('id, status, date, credits_cost, student_id')
-                .eq('teacher_id', id),
-            supabase_1.supabase
-                .from('transactions')
-                .select('id, type, amount, created_at')
-                .eq('user_id', id),
-            supabase_1.supabase
-                .from('teacher_subscriptions')
-                .select(`
-          *,
-          teacher_plans (
-            name,
-            price,
-            commission_rate,
-            features
-          )
-        `)
-                .eq('teacher_id', id)
-                .eq('status', 'active')
-                .single(),
-            supabase_1.supabase
-                .from('teacher_profiles')
-                .select('hourly_rate')
-                .eq('user_id', id)
-                .single()
-        ]);
-        const bookings = bookingsData.data || [];
-        const transactions = transactionsData.data || [];
-        const subscription = subscriptionData.data;
-        const profile = profileData.data;
-        const completedBookings = bookings.filter(b => b.status === 'COMPLETED');
-        const totalRevenue = completedBookings.reduce((sum, b) => {
-            const rate = profile?.hourly_rate || 0;
-            const duration = 60;
-            return sum + (rate * (duration / 60));
-        }, 0);
-        const totalCreditsUsed = bookings
-            .filter(b => {
-            const hasStudent = b.student_id !== null && b.student_id !== undefined;
-            const isNotCancelled = b.status !== 'CANCELLED';
-            const isNotBlocked = b.status !== 'BLOCKED' && b.status !== 'AVAILABLE';
-            return hasStudent && isNotCancelled && isNotBlocked;
-        })
-            .reduce((sum, b) => sum + (b.credits_cost || 0), 0);
-        const stats = {
-            total_bookings: bookings.length,
-            completed_bookings: completedBookings.length,
-            pending_bookings: bookings.filter(b => b.status === 'PENDING').length,
-            cancelled_bookings: bookings.filter(b => b.status === 'CANCELLED').length,
-            total_students: new Set(bookings.map(b => b.student_id)).size,
-            total_revenue: totalRevenue,
-            total_credits_used: totalCreditsUsed,
-            hourly_rate: profile?.hourly_rate || 0,
-            current_subscription: subscription,
-            last_booking_date: bookings.length > 0
-                ? bookings.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0].date
-                : null,
-            join_date: teacher.created_at,
-            monthly_earnings: {
-                current_month: completedBookings
-                    .filter(b => {
-                    const bookingDate = new Date(b.date);
-                    const now = new Date();
-                    return bookingDate.getMonth() === now.getMonth() &&
-                        bookingDate.getFullYear() === now.getFullYear();
-                })
-                    .reduce((sum, b) => {
-                    const rate = profile?.hourly_rate || 0;
-                    return sum + (rate * 1);
-                }, 0)
-            }
-        };
-        res.json(stats);
-    }
-    catch (error) {
-        console.error('Erro ao processar requisição:', error);
-        res.status(500).json({ error: 'Erro interno do servidor' });
-    }
-});
-router.get('/:id/availability', async (req, res) => {
-    try {
-        const { id } = req.params;
         const { data: profile, error } = await supabase_1.supabase
             .from('teacher_profiles')
             .select('availability, is_available')
@@ -710,9 +796,12 @@ router.get('/:id/availability', async (req, res) => {
         res.status(500).json({ error: 'Erro interno do servidor' });
     }
 });
-router.put('/:id/availability', async (req, res) => {
+router.put('/:id/availability', auth_1.requireAuth, async (req, res) => {
     try {
         const { id } = req.params;
+        if (!ensureTeacherScope(req, res, id)) {
+            return;
+        }
         const { availability, is_available } = req.body;
         const updates = {
             updated_at: new Date().toISOString()
@@ -738,9 +827,12 @@ router.put('/:id/availability', async (req, res) => {
         res.status(500).json({ error: 'Erro interno do servidor' });
     }
 });
-router.get('/:id/academies', async (req, res) => {
+router.get('/:id/academies', auth_1.requireAuth, async (req, res) => {
     try {
         const { id } = req.params;
+        if (!ensureTeacherScope(req, res, id)) {
+            return;
+        }
         const { data, error } = await supabase_1.supabase
             .from('academy_teachers')
             .select(`

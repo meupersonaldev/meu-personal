@@ -1,7 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const supabase_1 = require("../config/supabase");
+const supabase_1 = require("../lib/supabase");
+const auth_1 = require("../middleware/auth");
 const router = (0, express_1.Router)();
 router.get('/', async (req, res) => {
     try {
@@ -100,7 +101,7 @@ router.delete('/:id', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
-router.post('/generate', async (req, res) => {
+router.post('/generate', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']), async (req, res) => {
     try {
         const { academy_id } = req.body;
         if (!academy_id) {

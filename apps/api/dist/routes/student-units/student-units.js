@@ -5,12 +5,11 @@ exports.getAvailableUnits = getAvailableUnits;
 exports.activateStudentUnit = activateStudentUnit;
 exports.getStudentActiveUnit = getStudentActiveUnit;
 exports.joinUnit = joinUnit;
-const supabase_js_1 = require("@supabase/supabase-js");
-const supabase = (0, supabase_js_1.createClient)(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+const supabase_1 = require("../../lib/supabase");
 async function getStudentUnits(req, res) {
     try {
         const { userId } = req.user;
-        const { data: studentUnits, error } = await supabase
+        const { data: studentUnits, error } = await supabase_1.supabase
             .from('student_units')
             .select(`
         *,
@@ -37,12 +36,12 @@ async function getStudentUnits(req, res) {
 async function getAvailableUnits(req, res) {
     try {
         const { userId } = req.user;
-        const { data: studentUnitIds } = await supabase
+        const { data: studentUnitIds } = await supabase_1.supabase
             .from('student_units')
             .select('unit_id')
             .eq('student_id', userId);
         const existingUnitIds = studentUnitIds?.map(su => su.unit_id) || [];
-        const { data: availableUnits, error } = await supabase
+        const { data: availableUnits, error } = await supabase_1.supabase
             .from('units')
             .select('*')
             .eq('is_active', true)
@@ -63,7 +62,7 @@ async function activateStudentUnit(req, res) {
     try {
         const { userId } = req.user;
         const { unitId } = req.params;
-        const { data: unit, error: unitError } = await supabase
+        const { data: unit, error: unitError } = await supabase_1.supabase
             .from('units')
             .select('*')
             .eq('id', unitId)
@@ -72,7 +71,7 @@ async function activateStudentUnit(req, res) {
         if (unitError || !unit) {
             return res.status(404).json({ error: 'Unidade não encontrada ou inativa' });
         }
-        const { data: existingAssociation, error: associationError } = await supabase
+        const { data: existingAssociation, error: associationError } = await supabase_1.supabase
             .from('student_units')
             .select('*')
             .eq('student_id', userId)
@@ -83,7 +82,7 @@ async function activateStudentUnit(req, res) {
             return res.status(500).json({ error: 'Erro ao verificar associação com unidade' });
         }
         if (!existingAssociation) {
-            const { error: insertError } = await supabase
+            const { error: insertError } = await supabase_1.supabase
                 .from('student_units')
                 .insert({
                 student_id: userId,
@@ -96,7 +95,7 @@ async function activateStudentUnit(req, res) {
             }
         }
         else {
-            const { error: updateError } = await supabase
+            const { error: updateError } = await supabase_1.supabase
                 .from('student_units')
                 .update({
                 is_active: true,
@@ -109,7 +108,7 @@ async function activateStudentUnit(req, res) {
                 return res.status(500).json({ error: 'Erro ao ativar unidade' });
             }
         }
-        const { data: updatedUnits, error: fetchError } = await supabase
+        const { data: updatedUnits, error: fetchError } = await supabase_1.supabase
             .from('student_units')
             .select(`
         *,
@@ -139,7 +138,7 @@ async function activateStudentUnit(req, res) {
 async function getStudentActiveUnit(req, res) {
     try {
         const { userId } = req.user;
-        const { data: activeUnit, error } = await supabase
+        const { data: activeUnit, error } = await supabase_1.supabase
             .from('student_units')
             .select(`
         *,
@@ -170,7 +169,7 @@ async function joinUnit(req, res) {
     try {
         const { userId } = req.user;
         const { unitId } = req.body;
-        const { data: unit, error: unitError } = await supabase
+        const { data: unit, error: unitError } = await supabase_1.supabase
             .from('units')
             .select('*')
             .eq('id', unitId)
@@ -179,7 +178,7 @@ async function joinUnit(req, res) {
         if (unitError || !unit) {
             return res.status(404).json({ error: 'Unidade não encontrada ou inativa' });
         }
-        const { data: existingAssociation } = await supabase
+        const { data: existingAssociation } = await supabase_1.supabase
             .from('student_units')
             .select('*')
             .eq('student_id', userId)
@@ -188,7 +187,7 @@ async function joinUnit(req, res) {
         if (existingAssociation) {
             return res.status(400).json({ error: 'Já está associado a esta unidade' });
         }
-        const { data: newAssociation, error: insertError } = await supabase
+        const { data: newAssociation, error: insertError } = await supabase_1.supabase
             .from('student_units')
             .insert({
             student_id: userId,

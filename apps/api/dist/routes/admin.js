@@ -6,7 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const auth_1 = require("../middleware/auth");
 const errorHandler_1 = require("../middleware/errorHandler");
-const supabase_1 = require("../config/supabase");
+const supabase_1 = require("../lib/supabase");
 const booking_scheduler_1 = require("../jobs/booking-scheduler");
 const router = express_1.default.Router();
 router.get('/scheduler/status', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEADORA', 'ADMIN']), (0, errorHandler_1.asyncErrorHandler)(async (req, res) => {

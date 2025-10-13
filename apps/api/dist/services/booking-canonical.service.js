@@ -1,201 +1,341 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.bookingCanonicalService = void 0;
-const supabase_1 = require("../config/supabase");
+const supabase_1 = require("../lib/supabase");
 const balance_service_1 = require("./balance.service");
+async function fetchFranqueadoraIdFromUnit(unitId) {
+    const { data: academyDirect } = await supabase_1.supabase
+        .from('academies')
+        .select('franqueadora_id')
+        .eq('id', unitId)
+        .single();
+    if (academyDirect?.franqueadora_id) {
+        return academyDirect.franqueadora_id;
+    }
+    const { data: unitData } = await supabase_1.supabase
+        .from('units')
+        .select('academy_legacy_id')
+        .eq('id', unitId)
+        .single();
+    if (unitData?.academy_legacy_id) {
+        const { data: legacyAcademy } = await supabase_1.supabase
+            .from('academies')
+            .select('franqueadora_id')
+            .eq('id', unitData.academy_legacy_id)
+            .single();
+        if (legacyAcademy?.franqueadora_id) {
+            return legacyAcademy.franqueadora_id;
+        }
+    }
+    throw new Error('Franqueadora nao identificada para unidade informada');
+}
+function getAvailableClasses(balance) {
+    return balance.total_purchased - balance.total_consumed - balance.locked_qty;
+}
+function getAvailableHours(balance) {
+    return balance.available_hours - balance.locked_hours;
+}
 class BookingCanonicalService {
     async createBooking(params) {
         const cancellableUntil = new Date(params.startAt.getTime() - 4 * 60 * 60 * 1000);
         if (params.source === 'ALUNO') {
-            return await this.createStudentLedBooking(params, cancellableUntil);
+            return this.createStudentLedBooking(params, cancellableUntil);
         }
-        else {
-            return await this.createProfessorLedBooking(params, cancellableUntil);
-        }
+        return this.createProfessorLedBooking(params, cancellableUntil);
     }
     async createStudentLedBooking(params, cancellableUntil) {
         if (!params.studentId) {
-            throw new Error('studentId é obrigatório para agendamento aluno-led');
+            throw new Error('studentId eh obrigatorio para agendamento aluno-led');
         }
-        try {
-            const studentBalance = await balance_service_1.balanceService.getStudentBalance(params.studentId, params.unitId);
-            const availableClasses = studentBalance.total_purchased - studentBalance.total_consumed - studentBalance.locked_qty;
-            if (availableClasses < 1) {
-                throw new Error('Saldo insuficiente de aulas');
+        const franqueadoraId = await fetchFranqueadoraIdFromUnit(params.unitId);
+        const studentBalance = await balance_service_1.balanceService.getStudentBalance(params.studentId, franqueadoraId);
+        const availableClasses = getAvailableClasses(studentBalance);
+        if (availableClasses < 1) {
+            throw new Error('Saldo insuficiente de aulas');
+        }
+        const { data: booking, error: bookingError } = await supabase_1.supabase
+            .from('bookings')
+            .insert({
+            source: params.source,
+            student_id: params.studentId,
+            teacher_id: params.professorId,
+            unit_id: params.unitId,
+            date: params.startAt.toISOString(),
+            start_at: params.startAt.toISOString(),
+            end_at: params.endAt.toISOString(),
+            status_canonical: 'RESERVED',
+            cancellable_until: cancellableUntil.toISOString(),
+            student_notes: params.studentNotes,
+            professor_notes: params.professorNotes
+        })
+            .select()
+            .single();
+        if (bookingError || !booking) {
+            throw bookingError || new Error('Falha ao criar booking');
+        }
+        await balance_service_1.balanceService.lockStudentClasses(params.studentId, franqueadoraId, 1, booking.id, cancellableUntil.toISOString(), {
+            unitId: params.unitId,
+            source: 'ALUNO',
+            metaJson: {
+                booking_id: booking.id,
+                origin: 'student_led'
             }
-            const { data: booking, error: bookingError } = await supabase_1.supabase
-                .from('bookings')
-                .insert({
-                source: params.source,
-                student_id: params.studentId,
-                teacher_id: params.professorId,
-                unit_id: params.unitId,
-                date: params.startAt.toISOString(),
-                start_at: params.startAt.toISOString(),
-                end_at: params.endAt.toISOString(),
-                status_canonical: 'RESERVED',
-                cancellable_until: cancellableUntil.toISOString(),
-                student_notes: params.studentNotes,
-                professor_notes: params.professorNotes
-            })
-                .select()
-                .single();
-            if (bookingError)
-                throw bookingError;
-            await balance_service_1.balanceService.lockStudentClasses(params.studentId, params.unitId, 1, booking.id, cancellableUntil.toISOString(), 'ALUNO');
-            await balance_service_1.balanceService.lockProfessorHours(params.professorId, params.unitId, 1, booking.id, cancellableUntil.toISOString(), 'SYSTEM');
-            await this.createOrUpdateStudentUnit(params.studentId, params.unitId, booking.id);
-            return booking;
-        }
-        catch (error) {
-            throw error;
-        }
+        });
+        await balance_service_1.balanceService.purchaseProfessorHours(params.professorId, franqueadoraId, 1, {
+            unitId: params.unitId,
+            source: 'SYSTEM',
+            bookingId: booking.id,
+            metaJson: {
+                booking_id: booking.id,
+                origin: 'student_booking_reward'
+            }
+        });
+        await balance_service_1.balanceService.lockProfessorHours(params.professorId, franqueadoraId, 1, booking.id, cancellableUntil.toISOString(), {
+            unitId: params.unitId,
+            source: 'SYSTEM',
+            metaJson: {
+                booking_id: booking.id,
+                origin: 'student_led'
+            }
+        });
+        await this.createOrUpdateStudentUnit(params.studentId, params.unitId, booking.id);
+        return booking;
     }
     async createProfessorLedBooking(params, cancellableUntil) {
-        try {
-            const professorBalance = await balance_service_1.balanceService.getProfessorBalance(params.professorId, params.unitId);
-            const availableHours = professorBalance.available_hours - professorBalance.locked_hours;
-            if (availableHours < 1) {
-                throw new Error('Saldo de horas insuficiente');
-            }
-            const { data: booking, error: bookingError } = await supabase_1.supabase
+        const franqueadoraId = await fetchFranqueadoraIdFromUnit(params.unitId);
+        const hasStudent = Boolean(params.studentId);
+        if (!hasStudent) {
+            const { data: availability, error: availabilityError } = await supabase_1.supabase
                 .from('bookings')
                 .insert({
                 source: params.source,
+                student_id: null,
                 teacher_id: params.professorId,
                 unit_id: params.unitId,
                 date: params.startAt.toISOString(),
                 start_at: params.startAt.toISOString(),
                 end_at: params.endAt.toISOString(),
-                status_canonical: 'RESERVED',
+                status: 'AVAILABLE',
+                status_canonical: 'AVAILABLE',
                 cancellable_until: cancellableUntil.toISOString(),
                 student_notes: params.studentNotes,
                 professor_notes: params.professorNotes
             })
                 .select()
                 .single();
-            if (bookingError)
-                throw bookingError;
-            await balance_service_1.balanceService.lockProfessorHours(params.professorId, params.unitId, 1, booking.id, cancellableUntil.toISOString(), 'PROFESSOR');
-            return booking;
+            if (availabilityError || !availability) {
+                throw availabilityError || new Error('Falha ao criar disponibilidade do professor');
+            }
+            return availability;
         }
-        catch (error) {
-            throw error;
+        const professorBalance = await balance_service_1.balanceService.getProfessorBalance(params.professorId, franqueadoraId);
+        const availableHours = getAvailableHours(professorBalance);
+        if (availableHours < 1) {
+            throw new Error('Saldo de horas insuficiente');
         }
+        const { data: booking, error: bookingError } = await supabase_1.supabase
+            .from('bookings')
+            .insert({
+            source: params.source,
+            student_id: params.studentId ?? null,
+            teacher_id: params.professorId,
+            unit_id: params.unitId,
+            date: params.startAt.toISOString(),
+            start_at: params.startAt.toISOString(),
+            end_at: params.endAt.toISOString(),
+            status_canonical: 'RESERVED',
+            cancellable_until: cancellableUntil.toISOString(),
+            student_notes: params.studentNotes,
+            professor_notes: params.professorNotes
+        })
+            .select()
+            .single();
+        if (bookingError || !booking) {
+            throw bookingError || new Error('Falha ao criar booking professor-led');
+        }
+        await balance_service_1.balanceService.lockProfessorHours(params.professorId, franqueadoraId, 1, booking.id, cancellableUntil.toISOString(), {
+            unitId: params.unitId,
+            source: 'PROFESSOR',
+            metaJson: {
+                booking_id: booking.id,
+                origin: 'professor_led'
+            }
+        });
+        if (params.studentId) {
+            await this.createOrUpdateStudentUnit(params.studentId, params.unitId, booking.id);
+        }
+        return booking;
     }
     async checkSlotCapacity(unitId, startAt) {
-        const { data: existingBookings, error } = await supabase_1.supabase
+        const startIso = startAt.toISOString();
+        const { data: unit } = await supabase_1.supabase
+            .from('units')
+            .select('capacity_per_slot')
+            .eq('id', unitId)
+            .single();
+        const capacity = unit?.capacity_per_slot ?? 1;
+        const { data: currentBookings } = await supabase_1.supabase
             .from('bookings')
             .select('id')
             .eq('unit_id', unitId)
-            .eq('start_at', startAt.toISOString())
-            .in('status_canonical', ['RESERVED', 'PAID']);
-        if (error)
-            throw error;
-        return existingBookings ? 1 - existingBookings.length : 1;
+            .eq('date', startIso)
+            .neq('status_canonical', 'CANCELED');
+        const usedSlots = currentBookings?.length ?? 0;
+        return Math.max(0, capacity - usedSlots);
     }
     async cancelBooking(bookingId, userId) {
-        try {
-            const { data: booking, error: fetchError } = await supabase_1.supabase
-                .from('bookings')
-                .select('*')
-                .eq('id', bookingId)
-                .single();
-            if (fetchError)
-                throw fetchError;
-            if (!booking)
-                throw new Error('Booking nao encontrado');
-            const now = new Date();
-            const cancellableUntil = new Date(booking.cancellable_until);
-            if (now > cancellableUntil) {
-                throw new Error('Booking não pode mais ser cancelado (fora da janela T-4h)');
-            }
-            const { data: updatedBooking, error: updateError } = await supabase_1.supabase
-                .from('bookings')
-                .update({
-                status_canonical: 'CANCELED',
-                updated_at: now.toISOString()
-            })
-                .eq('id', bookingId)
-                .select()
-                .single();
-            if (updateError)
-                throw updateError;
-            if (booking.student_id) {
-                await balance_service_1.balanceService.unlockStudentClasses(booking.student_id, booking.unit_id, 1, bookingId, 'ALUNO');
-            }
-            await balance_service_1.balanceService.unlockProfessorHours(booking.teacher_id, booking.unit_id, 1, bookingId, 'SYSTEM');
-            return updatedBooking;
+        const { data: booking, error: fetchError } = await supabase_1.supabase
+            .from('bookings')
+            .select('*')
+            .eq('id', bookingId)
+            .single();
+        if (fetchError || !booking) {
+            throw fetchError || new Error('Booking nao encontrado');
         }
-        catch (error) {
-            throw error;
+        if (booking.status_canonical === 'CANCELED') {
+            return booking;
         }
+        const franqueadoraId = await fetchFranqueadoraIdFromUnit(booking.unit_id);
+        if (booking.student_id) {
+            await balance_service_1.balanceService.unlockStudentClasses(booking.student_id, franqueadoraId, 1, bookingId, {
+                unitId: booking.unit_id,
+                source: 'ALUNO',
+                metaJson: {
+                    booking_id: bookingId,
+                    actor: userId,
+                    reason: 'booking_cancelled'
+                }
+            });
+        }
+        await balance_service_1.balanceService.unlockProfessorHours(booking.teacher_id, franqueadoraId, 1, bookingId, {
+            unitId: booking.unit_id,
+            source: 'SYSTEM',
+            metaJson: {
+                booking_id: bookingId,
+                actor: userId,
+                reason: 'booking_cancelled'
+            }
+        });
+        const cancellableUntil = booking.cancellable_until ? new Date(booking.cancellable_until) : null;
+        const currentTime = new Date();
+        const withinRefundWindow = cancellableUntil ? currentTime <= cancellableUntil : false;
+        if (booking.student_id && booking.source === 'ALUNO' && withinRefundWindow) {
+            await balance_service_1.balanceService.revokeProfessorHours(booking.teacher_id, franqueadoraId, 1, bookingId, {
+                unitId: booking.unit_id,
+                source: 'SYSTEM',
+                metaJson: {
+                    booking_id: bookingId,
+                    actor: userId,
+                    reason: 'booking_cancelled_refund'
+                }
+            });
+        }
+        const now = new Date();
+        const { data: updatedBooking, error: updateError } = await supabase_1.supabase
+            .from('bookings')
+            .update({
+            status_canonical: 'CANCELED',
+            updated_at: now.toISOString()
+        })
+            .eq('id', bookingId)
+            .select()
+            .single();
+        if (updateError || !updatedBooking) {
+            throw updateError || new Error('Falha ao cancelar booking');
+        }
+        return updatedBooking;
     }
     async confirmBooking(bookingId) {
-        try {
-            const { data: booking, error: fetchError } = await supabase_1.supabase
-                .from('bookings')
-                .select('*')
-                .eq('id', bookingId)
-                .single();
-            if (fetchError)
-                throw fetchError;
-            if (!booking)
-                throw new Error('Booking nao encontrado');
-            const now = new Date();
-            const { data: updatedBooking, error: updateError } = await supabase_1.supabase
-                .from('bookings')
-                .update({
-                status_canonical: 'PAID',
-                updated_at: now.toISOString()
-            })
-                .eq('id', bookingId)
-                .select()
-                .single();
-            if (updateError)
-                throw updateError;
-            return updatedBooking;
+        const { data: booking, error: fetchError } = await supabase_1.supabase
+            .from('bookings')
+            .select('*')
+            .eq('id', bookingId)
+            .single();
+        if (fetchError || !booking) {
+            throw fetchError || new Error('Booking nao encontrado');
         }
-        catch (error) {
-            throw error;
+        if (booking.status_canonical === 'PAID') {
+            return booking;
         }
+        const franqueadoraId = await fetchFranqueadoraIdFromUnit(booking.unit_id);
+        if (booking.student_id) {
+            await balance_service_1.balanceService.consumeStudentClasses(booking.student_id, franqueadoraId, 1, bookingId, {
+                unitId: booking.unit_id,
+                source: 'ALUNO',
+                metaJson: {
+                    booking_id: bookingId,
+                    reason: 'booking_confirmed'
+                }
+            });
+        }
+        await balance_service_1.balanceService.consumeProfessorHours(booking.teacher_id, franqueadoraId, 1, bookingId, {
+            unitId: booking.unit_id,
+            source: 'SYSTEM',
+            metaJson: {
+                booking_id: bookingId,
+                reason: 'booking_confirmed'
+            }
+        });
+        const now = new Date();
+        const { data: updatedBooking, error: updateError } = await supabase_1.supabase
+            .from('bookings')
+            .update({
+            status_canonical: 'PAID',
+            updated_at: now.toISOString()
+        })
+            .eq('id', bookingId)
+            .select()
+            .single();
+        if (updateError || !updatedBooking) {
+            throw updateError || new Error('Falha ao confirmar booking');
+        }
+        return updatedBooking;
     }
     async completeBooking(bookingId) {
-        try {
-            const { data: booking, error: fetchError } = await supabase_1.supabase
-                .from('bookings')
-                .select('*')
-                .eq('id', bookingId)
-                .single();
-            if (fetchError)
-                throw fetchError;
-            if (!booking)
-                throw new Error('Booking não encontrado');
-            const now = new Date();
-            const { data: updatedBooking, error: updateError } = await supabase_1.supabase
-                .from('bookings')
-                .update({
-                status_canonical: 'DONE',
-                updated_at: now.toISOString()
-            })
-                .eq('id', bookingId)
-                .select()
-                .single();
-            if (updateError)
-                throw updateError;
-            if (booking.student_id) {
-                await balance_service_1.balanceService.consumeStudentClasses(booking.student_id, booking.unit_id, 1, bookingId, 'ALUNO');
+        const { data: booking, error: fetchError } = await supabase_1.supabase
+            .from('bookings')
+            .select('*')
+            .eq('id', bookingId)
+            .single();
+        if (fetchError || !booking) {
+            throw fetchError || new Error('Booking nao encontrado');
+        }
+        const franqueadoraId = await fetchFranqueadoraIdFromUnit(booking.unit_id);
+        if (booking.student_id) {
+            await balance_service_1.balanceService.consumeStudentClasses(booking.student_id, franqueadoraId, 1, bookingId, {
+                unitId: booking.unit_id,
+                source: 'ALUNO',
+                metaJson: {
+                    booking_id: bookingId,
+                    reason: 'booking_completed'
+                }
+            });
+        }
+        await balance_service_1.balanceService.consumeProfessorHours(booking.teacher_id, franqueadoraId, 1, bookingId, {
+            unitId: booking.unit_id,
+            source: 'SYSTEM',
+            metaJson: {
+                booking_id: bookingId,
+                reason: 'booking_completed'
             }
-            await balance_service_1.balanceService.consumeProfessorHours(booking.teacher_id, booking.unit_id, 1, bookingId, 'SYSTEM');
-            return updatedBooking;
+        });
+        const now = new Date();
+        const { data: updatedBooking, error: updateError } = await supabase_1.supabase
+            .from('bookings')
+            .update({
+            status_canonical: 'DONE',
+            updated_at: now.toISOString()
+        })
+            .eq('id', bookingId)
+            .select()
+            .single();
+        if (updateError || !updatedBooking) {
+            throw updateError || new Error('Falha ao concluir booking');
         }
-        catch (error) {
-            throw error;
-        }
+        return updatedBooking;
     }
     async createOrUpdateStudentUnit(studentId, unitId, bookingId) {
         try {
-            console.log(`🔗 Criando/Atualizando vínculo aluno-unidade: aluno ${studentId} → unidade ${unitId} (booking: ${bookingId})`);
             const { data: existingStudentUnit } = await supabase_1.supabase
                 .from('student_units')
                 .select('id, first_booking_date, last_booking_date, total_bookings, active')
@@ -214,13 +354,11 @@ class BookingCanonicalService {
                 })
                     .eq('id', existingStudentUnit.id);
                 if (updateError) {
-                    console.error('Erro ao atualizar vínculo student_units:', updateError);
                     throw updateError;
                 }
-                console.log(`✅ Vínculo student_units atualizado: ${existingStudentUnit.id} (total: ${existingStudentUnit.total_bookings + 1} agendamentos)`);
             }
             else {
-                const { data: newStudentUnit, error: createError } = await supabase_1.supabase
+                const { error: createError } = await supabase_1.supabase
                     .from('student_units')
                     .insert({
                     student_id: studentId,
@@ -231,19 +369,15 @@ class BookingCanonicalService {
                     active: true,
                     created_at: now,
                     updated_at: now
-                })
-                    .select()
-                    .single();
+                });
                 if (createError) {
-                    console.error('Erro ao criar vínculo student_units:', createError);
                     throw createError;
                 }
-                console.log(`✅ Novo vínculo student_units criado: ${newStudentUnit.id}`);
             }
         }
         catch (error) {
             console.error('Erro em createOrUpdateStudentUnit:', error);
-            console.warn('⚠️ Falha ao criar vínculo aluno-unidade, mas agendamento foi concluído');
+            console.warn('Falha ao atualizar vinculo aluno-unidade; prosseguindo com agendamento.');
         }
     }
 }

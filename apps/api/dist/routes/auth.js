@@ -8,10 +8,15 @@ const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const zod_1 = require("zod");
 const resend_1 = require("resend");
-const supabase_1 = require("../config/supabase");
+const supabase_1 = require("../lib/supabase");
 const franqueadora_contacts_service_1 = require("../services/franqueadora-contacts.service");
 const audit_1 = require("../middleware/audit");
 const router = express_1.default.Router();
+function normalizeCref(v) {
+    if (!v)
+        return v;
+    return v.toUpperCase().replace(/\s+/g, ' ').trim();
+}
 const loginSchema = zod_1.z.object({
     email: zod_1.z.string().email('Email inválido'),
     password: zod_1.z.string().min(6, 'Senha deve ter pelo menos 6 caracteres')
@@ -22,7 +27,9 @@ const registerSchema = zod_1.z.object({
     password: zod_1.z.string().min(6, 'Senha deve ter pelo menos 6 caracteres'),
     phone: zod_1.z.string().optional(),
     cpf: zod_1.z.string().min(11, 'CPF deve ter 11 dígitos').max(14, 'CPF inválido'),
-    role: zod_1.z.enum(['STUDENT', 'TEACHER']).default('STUDENT')
+    role: zod_1.z.enum(['STUDENT', 'TEACHER']).default('STUDENT'),
+    cref: zod_1.z.string().optional(),
+    specialties: zod_1.z.array(zod_1.z.string()).optional()
 });
 const forgotPasswordSchema = zod_1.z.object({
     email: zod_1.z.string().email('Email inválido')
@@ -59,9 +66,10 @@ router.post('/login', (0, audit_1.auditAuthEvent)('LOGIN'), async (req, res) => 
         if (!validPassword) {
             return res.status(401).json({ message: 'Email ou senha incorretos' });
         }
-        const jwtSecret = process.env.JWT_SECRET;
-        if (!jwtSecret || jwtSecret.length < 32) {
-            throw new Error('JWT_SECRET deve ter pelo menos 32 caracteres para segurança');
+        const isProd = process.env.NODE_ENV === 'production';
+        const jwtSecret = process.env.JWT_SECRET || (!isProd ? 'dev-insecure-jwt-secret-please-set-env-32chars-123456' : '');
+        if (!jwtSecret || (isProd && jwtSecret.length < 32)) {
+            throw new Error('JWT_SECRET inválido (produção exige >=32 chars)');
         }
         const jwtSecretKey = jwtSecret;
         const expiresIn = (process.env.JWT_EXPIRES_IN || '15m');
@@ -115,6 +123,15 @@ router.post('/login', (0, audit_1.auditAuthEvent)('LOGIN'), async (req, res) => 
 router.post('/register', (0, audit_1.auditSensitiveOperation)('CREATE', 'users'), async (req, res) => {
     try {
         const userData = registerSchema.parse(req.body);
+        if (userData.role === 'TEACHER') {
+            if (!userData.cref || !userData.cref.trim()) {
+                return res.status(400).json({ message: 'CREF é obrigatório para professores' });
+            }
+            if (!userData.specialties || userData.specialties.length === 0) {
+                return res.status(400).json({ message: 'Informe ao menos uma especialidade' });
+            }
+        }
+        const sanitizedCpf = userData.cpf.replace(/\D/g, '');
         const { data: existingUser, error: checkError } = await supabase_1.supabase
             .from('users')
             .select('id')
@@ -122,6 +139,18 @@ router.post('/register', (0, audit_1.auditSensitiveOperation)('CREATE', 'users')
             .single();
         if (existingUser) {
             return res.status(400).json({ message: 'Email já está em uso' });
+        }
+        const { data: existingCpfUsers, error: cpfCheckError } = await supabase_1.supabase
+            .from('users')
+            .select('id')
+            .eq('cpf', sanitizedCpf)
+            .limit(1);
+        if (cpfCheckError) {
+            console.error('Erro ao verificar CPF existente:', cpfCheckError);
+            return res.status(500).json({ message: 'Erro ao validar CPF' });
+        }
+        if (existingCpfUsers && existingCpfUsers.length > 0) {
+            return res.status(400).json({ message: 'CPF já está em uso' });
         }
         const passwordHash = await bcryptjs_1.default.hash(userData.password, 10);
         const { data: franqueadora } = await supabase_1.supabase
@@ -133,7 +162,7 @@ router.post('/register', (0, audit_1.auditSensitiveOperation)('CREATE', 'users')
             name: userData.name,
             email: userData.email,
             phone: userData.phone || null,
-            cpf: userData.cpf.replace(/\D/g, ''),
+            cpf: sanitizedCpf,
             role: userData.role,
             credits: userData.role === 'STUDENT' ? 5 : 0,
             is_active: true,
@@ -161,18 +190,24 @@ router.post('/register', (0, audit_1.auditSensitiveOperation)('CREATE', 'users')
             console.warn('Falha ao sincronizar contato da franqueadora:', contactError);
         }
         if (userData.role === 'TEACHER') {
+            const crefNormalized = normalizeCref(userData.cref || '');
             const { error: profileError } = await supabase_1.supabase
                 .from('teacher_profiles')
                 .insert([{
                     user_id: createdUser.id,
                     bio: '',
-                    specialties: [],
+                    specialization: Array.isArray(userData.specialties) ? userData.specialties : [],
                     hourly_rate: 0,
                     availability: {},
-                    is_available: false
+                    is_available: false,
+                    cref: crefNormalized || null
                 }]);
             if (profileError) {
+                if (profileError.code === '23505') {
+                    return res.status(409).json({ message: 'CREF já cadastrado' });
+                }
                 console.error('Erro ao criar perfil de professor:', profileError);
+                return res.status(500).json({ message: 'Erro ao criar perfil de professor' });
             }
         }
         const jwtSecret = process.env.JWT_SECRET;
@@ -226,9 +261,10 @@ router.get('/me', async (req, res) => {
         return res.status(401).json({ message: 'Token não fornecido' });
     }
     try {
-        const jwtSecret = process.env.JWT_SECRET;
-        if (!jwtSecret || jwtSecret.length < 32) {
-            throw new Error('JWT_SECRET deve ter pelo menos 32 caracteres para segurança');
+        const isProd = process.env.NODE_ENV === 'production';
+        const jwtSecret = process.env.JWT_SECRET || (!isProd ? 'dev-insecure-jwt-secret-please-set-env-32chars-123456' : '');
+        if (!jwtSecret || (isProd && jwtSecret.length < 32)) {
+            throw new Error('JWT_SECRET inválido (produção exige >=32 chars)');
         }
         const decoded = jsonwebtoken_1.default.verify(token, jwtSecret);
         const { data: user, error } = await supabase_1.supabase
@@ -267,11 +303,13 @@ router.post('/forgot-password', async (req, res) => {
             .eq('is_active', true)
             .single();
         if (user && !error) {
+            const isProd = process.env.NODE_ENV === 'production';
+            const jwtSecret = process.env.JWT_SECRET || (!isProd ? 'dev-insecure-jwt-secret-please-set-env-32chars-123456' : '');
             const resetToken = jsonwebtoken_1.default.sign({
                 userId: user.id,
                 email: email,
                 type: 'password_reset'
-            }, process.env.JWT_SECRET, { expiresIn: '1h' });
+            }, jwtSecret, { expiresIn: '1h' });
             const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
             const resetUrl = new URL('/redefinir-senha', frontendUrl);
             resetUrl.searchParams.set('token', resetToken);
@@ -339,7 +377,9 @@ router.post('/reset-password', (0, audit_1.auditSensitiveOperation)('SENSITIVE_C
             password: zod_1.z.string().min(6, 'Senha deve ter pelo menos 6 caracteres'),
             token: zod_1.z.string().min(1, 'Token é obrigatório')
         }).parse(req.body);
-        const decoded = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET);
+        const isProd = process.env.NODE_ENV === 'production';
+        const jwtSecret = process.env.JWT_SECRET || (!isProd ? 'dev-insecure-jwt-secret-please-set-env-32chars-123456' : '');
+        const decoded = jsonwebtoken_1.default.verify(token, jwtSecret);
         if (decoded.type !== 'password_reset') {
             return res.status(401).json({ message: 'Token inválido' });
         }
@@ -498,19 +538,4 @@ router.post('/check-email', async (req, res) => {
     }
 });
 exports.default = router;
-router.post('/check-email', async (req, res) => {
-    try {
-        const schema = zod_1.z.object({ email: zod_1.z.string().email() });
-        const { email } = schema.parse(req.body);
-        const { data } = await supabase_1.supabase
-            .from('users')
-            .select('id')
-            .eq('email', email)
-            .maybeSingle();
-        return res.json({ exists: !!data });
-    }
-    catch (err) {
-        return res.json({ exists: false });
-    }
-});
 //# sourceMappingURL=auth.js.map

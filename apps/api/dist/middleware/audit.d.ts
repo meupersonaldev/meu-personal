@@ -9,6 +9,7 @@ declare global {
                 ipAddress?: string;
                 userAgent?: string;
                 timestamp?: string;
+                correlationId?: string;
             };
         }
     }

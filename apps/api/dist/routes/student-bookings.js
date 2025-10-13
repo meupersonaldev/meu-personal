@@ -5,9 +5,39 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const zod_1 = require("zod");
-const supabase_1 = require("../config/supabase");
+const supabase_1 = require("../lib/supabase");
+const balance_service_1 = require("../services/balance.service");
 const notifications_1 = require("./notifications");
 const router = express_1.default.Router();
+async function fetchFranqueadoraIdFromUnit(unitId) {
+    const { data: academyDirect } = await supabase_1.supabase
+        .from('academies')
+        .select('franqueadora_id')
+        .eq('id', unitId)
+        .single();
+    if (academyDirect?.franqueadora_id) {
+        return academyDirect.franqueadora_id;
+    }
+    const { data: unitData } = await supabase_1.supabase
+        .from('units')
+        .select('academy_legacy_id')
+        .eq('id', unitId)
+        .single();
+    if (unitData?.academy_legacy_id) {
+        const { data: legacyAcademy } = await supabase_1.supabase
+            .from('academies')
+            .select('franqueadora_id')
+            .eq('id', unitData.academy_legacy_id)
+            .single();
+        if (legacyAcademy?.franqueadora_id) {
+            return legacyAcademy.franqueadora_id;
+        }
+    }
+    return null;
+}
+function calculateAvailableClasses(totalPurchased, totalConsumed, lockedQty) {
+    return totalPurchased - totalConsumed - lockedQty;
+}
 router.post('/student', async (req, res) => {
     try {
         const schema = zod_1.z.object({
@@ -16,7 +46,7 @@ router.post('/student', async (req, res) => {
             franchise_id: zod_1.z.string().uuid(),
             date: zod_1.z.string(),
             duration: zod_1.z.number().min(15).max(240).optional(),
-            notes: zod_1.z.string().optional(),
+            notes: zod_1.z.string().optional()
         });
         const { student_id, teacher_id, franchise_id, date, duration, notes } = schema.parse(req.body);
         const { data: student, error: studentError } = await supabase_1.supabase
@@ -25,7 +55,11 @@ router.post('/student', async (req, res) => {
             .eq('id', student_id)
             .single();
         if (studentError || !student) {
-            return res.status(404).json({ message: 'Aluno não encontrado' });
+            return res.status(404).json({ message: 'Aluno nao encontrado' });
+        }
+        const franqueadoraId = await fetchFranqueadoraIdFromUnit(franchise_id);
+        if (!franqueadoraId) {
+            return res.status(400).json({ message: 'Franqueadora nao localizada para a unidade informada' });
         }
         const { data: academyCfg } = await supabase_1.supabase
             .from('academies')
@@ -37,8 +71,10 @@ router.post('/student', async (req, res) => {
         const effectiveDuration = (typeof duration === 'number' && !Number.isNaN(duration))
             ? duration
             : Math.max(15, academyCfg?.class_duration_minutes ?? 60);
-        if ((student.credits || 0) < effectiveCost) {
-            return res.status(400).json({ message: 'Créditos insuficientes do aluno' });
+        const studentBalance = await balance_service_1.balanceService.getStudentBalance(student_id, franqueadoraId);
+        const availableClasses = calculateAvailableClasses(studentBalance.total_purchased, studentBalance.total_consumed, studentBalance.locked_qty);
+        if (availableClasses < effectiveCost) {
+            return res.status(400).json({ message: 'Creditos insuficientes do aluno' });
         }
         const startDate = new Date(date);
         const endDate = new Date(startDate.getTime() + effectiveDuration * 60000);
@@ -55,7 +91,7 @@ router.post('/student', async (req, res) => {
             return res.status(500).json({ message: 'Erro ao validar disponibilidade' });
         }
         if (conflicts && conflicts.length > 0) {
-            return res.status(409).json({ message: 'Professor indisponível neste horário na unidade selecionada' });
+            return res.status(409).json({ message: 'Professor indisponivel neste horario na unidade selecionada' });
         }
         const { data: booking, error: bookingError } = await supabase_1.supabase
             .from('bookings')
@@ -78,21 +114,26 @@ router.post('/student', async (req, res) => {
         franchise:academies!bookings_franchise_id_fkey (id, name)
       `)
             .single();
-        if (bookingError) {
+        if (bookingError || !booking) {
             console.error('Erro ao criar agendamento do aluno:', bookingError);
             return res.status(500).json({ message: 'Erro ao criar agendamento' });
         }
-        const remaining = (student.credits || 0) - effectiveCost;
-        const { error: debitError } = await supabase_1.supabase
+        const { balance: updatedBalance } = await balance_service_1.balanceService.consumeStudentClasses(student_id, franqueadoraId, effectiveCost, booking.id, {
+            unitId: franchise_id,
+            source: 'ALUNO',
+            metaJson: {
+                booking_id: booking.id,
+                origin: 'student_booking'
+            }
+        });
+        const remainingCredits = calculateAvailableClasses(updatedBalance.total_purchased, updatedBalance.total_consumed, updatedBalance.locked_qty);
+        await supabase_1.supabase
             .from('users')
-            .update({ credits: remaining, updated_at: new Date().toISOString() })
+            .update({ credits: Math.max(0, remainingCredits), updated_at: new Date().toISOString() })
             .eq('id', student_id);
-        if (debitError) {
-            console.error('Erro ao debitar créditos do aluno:', debitError);
-        }
         try {
             await (0, notifications_1.createNotification)(franchise_id, 'new_booking', 'Nova reserva', 'Um aluno confirmou uma nova reserva.', { student_id, teacher_id, date: startDate.toISOString() });
-            await (0, notifications_1.createUserNotification)(teacher_id, 'new_booking', 'Nova reserva confirmada', 'Você tem uma nova aula confirmada.', { student_id, date: startDate.toISOString() });
+            await (0, notifications_1.createUserNotification)(teacher_id, 'new_booking', 'Nova reserva confirmada', 'Voce tem uma nova aula confirmada.', { student_id, date: startDate.toISOString() });
             await (0, notifications_1.createUserNotification)(student_id, 'new_booking', 'Reserva confirmada', 'Sua reserva foi confirmada com sucesso.', { teacher_id, date: startDate.toISOString() });
         }
         catch { }
@@ -103,7 +144,7 @@ router.post('/student', async (req, res) => {
     }
     catch (err) {
         if (err instanceof zod_1.z.ZodError) {
-            return res.status(400).json({ message: 'Dados inválidos', errors: err.errors });
+            return res.status(400).json({ message: 'Dados invalidos', errors: err.errors });
         }
         console.error('Erro inesperado no agendamento do aluno:', err);
         return res.status(500).json({ message: 'Erro interno' });
@@ -118,28 +159,40 @@ router.post('/:id/cancel', async (req, res) => {
             .eq('id', id)
             .single();
         if (getError || !booking) {
-            return res.status(404).json({ message: 'Agendamento não encontrado' });
+            return res.status(404).json({ message: 'Agendamento nao encontrado' });
         }
         if (booking.status === 'CANCELLED' || booking.status === 'COMPLETED') {
-            return res.status(400).json({ message: 'Agendamento não pode ser cancelado' });
+            return res.status(400).json({ message: 'Agendamento nao pode ser cancelado' });
         }
         let refund = null;
         const start = new Date(booking.date);
         const now = new Date();
         const hoursDiff = (start.getTime() - now.getTime()) / (1000 * 60 * 60);
-        if (booking.payment_source === 'student_credits' && hoursDiff >= 4 && booking.student_id) {
-            const { data: student } = await supabase_1.supabase
-                .from('users')
-                .select('credits')
-                .eq('id', booking.student_id)
-                .single();
-            const newBalance = (student?.credits || 0) + (booking.credits_cost || 0);
-            const { error: refundError } = await supabase_1.supabase
-                .from('users')
-                .update({ credits: newBalance, updated_at: new Date().toISOString() })
-                .eq('id', booking.student_id);
-            if (!refundError) {
-                refund = { refunded: true, credits: booking.credits_cost || 0, recipient: 'student' };
+        const franqueadoraId = await fetchFranqueadoraIdFromUnit(booking.franchise_id);
+        if (franqueadoraId &&
+            booking.payment_source === 'student_credits' &&
+            hoursDiff >= 4 &&
+            booking.student_id) {
+            const refundQty = booking.credits_cost || 0;
+            if (refundQty > 0) {
+                const currentBalance = await balance_service_1.balanceService.getStudentBalance(booking.student_id, franqueadoraId);
+                await balance_service_1.balanceService.createStudentTransaction(booking.student_id, franqueadoraId, 'REFUND', refundQty, {
+                    unitId: booking.franchise_id,
+                    source: 'SYSTEM',
+                    metaJson: {
+                        booking_id: booking.id,
+                        reason: 'booking_cancelled'
+                    }
+                });
+                const restoredBalance = await balance_service_1.balanceService.updateStudentBalance(booking.student_id, franqueadoraId, {
+                    total_consumed: Math.max(0, currentBalance.total_consumed - refundQty)
+                });
+                const availableAfterRefund = calculateAvailableClasses(restoredBalance.total_purchased, restoredBalance.total_consumed, restoredBalance.locked_qty);
+                await supabase_1.supabase
+                    .from('users')
+                    .update({ credits: Math.max(0, availableAfterRefund), updated_at: new Date().toISOString() })
+                    .eq('id', booking.student_id);
+                refund = { refunded: true, credits: refundQty, recipient: 'student' };
             }
         }
         const { error: cancelError } = await supabase_1.supabase

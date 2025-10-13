@@ -1,7 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.paymentIntentService = void 0;
-const supabase_1 = require("../config/supabase");
+const supabase_1 = require("../lib/supabase");
+const errorHandler_1 = require("../middleware/errorHandler");
 const asaas_service_1 = require("./asaas.service");
 const balance_service_1 = require("./balance.service");
 class PaymentIntentService {
@@ -16,6 +17,7 @@ class PaymentIntentService {
             status: 'PENDING',
             payload_json: params.metadata || {},
             actor_user_id: params.actorUserId,
+            franqueadora_id: params.franqueadoraId,
             unit_id: params.unitId
         })
             .select()
@@ -27,14 +29,24 @@ class PaymentIntentService {
             throw new Error('Usuário não encontrado');
         let asaasCustomerId = user.asaas_customer_id;
         if (!asaasCustomerId) {
+            if (process.env.ASAAS_ENV === 'production') {
+                const cpfSanitizedPre = (user.cpf || '').replace(/\D/g, '');
+                if (cpfSanitizedPre.length < 11) {
+                    throw new errorHandler_1.CustomError('CPF obrigatório para pagamento', 400, true, 'BUSINESS_RULE_VIOLATION');
+                }
+            }
             const customerResult = await asaas_service_1.asaasService.createCustomer({
                 name: user.name,
                 email: user.email,
-                cpfCnpj: '38534592808',
+                cpfCnpj: (user.cpf || '').replace(/\D/g, '') || '00000000000',
                 phone: user.phone
             });
             if (!customerResult.success) {
-                throw new Error('Erro ao criar cliente no Asaas');
+                const message = Array.isArray(customerResult.error)
+                    ? (customerResult.error[0]?.description || 'Erro ao criar cliente no Asaas')
+                    : (customerResult.error || 'Erro ao criar cliente no Asaas');
+                const isCpfError = typeof message === 'string' && message.toLowerCase().includes('cpf');
+                throw new errorHandler_1.CustomError(message, isCpfError ? 400 : 502, true, isCpfError ? 'BUSINESS_RULE_VIOLATION' : 'EXTERNAL_PROVIDER_ERROR', { provider: 'ASAAS', step: 'createCustomer' });
             }
             asaasCustomerId = customerResult.data.id;
             await supabase_1.supabase
@@ -56,15 +68,23 @@ class PaymentIntentService {
         if (!paymentResult.success) {
             throw new Error('Erro ao criar pagamento no Asaas');
         }
+        const linkResult = await asaas_service_1.asaasService.generatePaymentLink(paymentResult.data.id);
+        const paymentLink = linkResult.success ? linkResult.data : {
+            paymentUrl: paymentResult.data.invoiceUrl,
+            bankSlipUrl: paymentResult.data.bankSlipUrl,
+            pixCode: paymentResult.data.payload
+        };
         const { data: updatedIntent, error: updateError } = await supabase_1.supabase
             .from('payment_intents')
             .update({
             provider_id: paymentResult.data.id,
-            checkout_url: paymentResult.data.invoiceUrl,
+            checkout_url: paymentLink.paymentUrl,
             payload_json: {
                 ...params.metadata,
                 asaas_payment_id: paymentResult.data.id,
-                billing_type: 'PIX'
+                billing_type: 'PIX',
+                franqueadora_id: params.franqueadoraId,
+                unit_id: params.unitId || null
             }
         })
             .eq('id', intent.id)
@@ -104,18 +124,26 @@ class PaymentIntentService {
     async creditPackage(intent) {
         const metadata = intent.payload_json;
         if (intent.type === 'STUDENT_PACKAGE') {
-            await balance_service_1.balanceService.purchaseStudentClasses(intent.actor_user_id, intent.unit_id, metadata.classes_qty, 'ALUNO', {
-                payment_intent_id: intent.id,
-                provider_id: intent.provider_id,
-                package_title: metadata.package_title
+            await balance_service_1.balanceService.purchaseStudentClasses(intent.actor_user_id, intent.franqueadora_id, metadata.classes_qty, {
+                unitId: intent.unit_id || null,
+                source: 'ALUNO',
+                metaJson: {
+                    payment_intent_id: intent.id,
+                    provider_id: intent.provider_id,
+                    package_title: metadata.package_title
+                }
             });
             console.log(`✅ Aluno ${intent.actor_user_id} recebeu ${metadata.classes_qty} aulas`);
         }
         if (intent.type === 'PROF_HOURS') {
-            await balance_service_1.balanceService.purchaseProfessorHours(intent.actor_user_id, intent.unit_id, metadata.hours_qty, 'PROFESSOR', {
-                payment_intent_id: intent.id,
-                provider_id: intent.provider_id,
-                package_title: metadata.package_title
+            await balance_service_1.balanceService.purchaseProfessorHours(intent.actor_user_id, intent.franqueadora_id, metadata.hours_qty, {
+                unitId: intent.unit_id || null,
+                source: 'PROFESSOR',
+                metaJson: {
+                    payment_intent_id: intent.id,
+                    provider_id: intent.provider_id,
+                    package_title: metadata.package_title
+                }
             });
             console.log(`✅ Professor ${intent.actor_user_id} recebeu ${metadata.hours_qty} horas`);
         }
