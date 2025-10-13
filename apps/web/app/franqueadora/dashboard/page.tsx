@@ -9,7 +9,6 @@ import {
   MapPin,
   Activity
 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { useFranqueadoraStore } from '@/lib/stores/franqueadora-store'
 import FranqueadoraGuard from '@/components/auth/franqueadora-guard'
@@ -179,18 +178,8 @@ export default function FranqueadoraDashboard() {
                   const now = new Date()
                   const monthsData = []
 
-                  // Dados reais baseados no banco para garantir funcionamento
-                  const realAcademiesData = [
-                    { name: 'Franqueado Orbi Academia', created_at: '2025-10-01T15:11:54.235917+00' },
-                    { name: 'Franquia Teste', created_at: '2025-09-30T06:51:00.64146+00' },
-                    { name: 'Meu Personal - Unidade Paulista', created_at: '2025-09-30T00:07:34.313937+00' },
-                    { name: 'Meu Personal - Unidade Vila Mariana', created_at: '2025-09-30T00:07:34.313937+00' }
-                  ]
-
-                  // Se os dados da API vierem com created_at, usar eles. Senão, usar os dados reais.
-                  const sourceAcademies = academies.length > 0 && academies[0].created_at
-                    ? academies
-                    : realAcademiesData
+                  // Usar dados vindos da API; caso não haja created_at, o mês contará como 0
+                  const sourceAcademies = academies
 
                   for (let i = 5; i >= 0; i--) {
                     const monthDate = new Date(now.getFullYear(), now.getMonth() - i, 1)

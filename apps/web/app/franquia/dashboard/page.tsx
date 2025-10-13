@@ -117,31 +117,31 @@ export default function FranquiaDashboard() {
         return (
           <div className="space-y-6">
             {/* KPIs Principais - Linha 1 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-              <Card className="p-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6">
+              <Card className="p-4 sm:p-6">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
-                    <Users className="h-8 w-8 text-blue-600" />
+                    <Users className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
                   </div>
-                  <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-600">Total Alunos</p>
-                    <p className="text-2xl font-bold text-gray-900">{students.length}</p>
-                    <p className="text-sm text-blue-600">
+                  <div className="ml-3 sm:ml-4 min-w-0 flex-1">
+                    <p className="text-xs sm:text-sm font-medium text-gray-600">Total Alunos</p>
+                    <p className="text-xl sm:text-2xl font-bold text-gray-900">{students.length}</p>
+                    <p className="text-xs sm:text-sm text-blue-600 truncate">
                       {students.filter(s => s.status === 'active').length} ativos
                     </p>
                   </div>
                 </div>
               </Card>
 
-              <Card className="p-6">
+              <Card className="p-4 sm:p-6">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
-                    <GraduationCap className="h-8 w-8 text-emerald-600" />
+                    <GraduationCap className="h-6 w-6 sm:h-8 sm:w-8 text-emerald-600" />
                   </div>
-                  <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-600">Professores</p>
-                    <p className="text-2xl font-bold text-gray-900">{teachers.length}</p>
-                    <p className="text-sm text-emerald-600">
+                  <div className="ml-3 sm:ml-4 min-w-0 flex-1">
+                    <p className="text-xs sm:text-sm font-medium text-gray-600">Professores</p>
+                    <p className="text-xl sm:text-2xl font-bold text-gray-900">{teachers.length}</p>
+                    <p className="text-xs sm:text-sm text-emerald-600 truncate">
                       {teachers.filter(t => t.status === 'active').length} ativos
                       {teachers.filter(t => t.status === 'pending').length > 0 && `, ${teachers.filter(t => t.status === 'pending').length} pendente(s)`}
                     </p>
@@ -149,37 +149,37 @@ export default function FranquiaDashboard() {
                 </div>
               </Card>
 
-              <Card className="p-6">
+              <Card className="p-4 sm:p-6">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
-                    <Calendar className="h-8 w-8 text-purple-600" />
+                    <Calendar className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600" />
                   </div>
-                  <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-600">Aulas Este Mês</p>
-                    <p className="text-2xl font-bold text-gray-900">{analytics?.totalClasses || 0}</p>
-                    <p className="text-sm text-purple-600">Agendamentos ativos</p>
+                  <div className="ml-3 sm:ml-4 min-w-0 flex-1">
+                    <p className="text-xs sm:text-sm font-medium text-gray-600">Aulas Este Mês</p>
+                    <p className="text-xl sm:text-2xl font-bold text-gray-900">{analytics?.totalClasses || 0}</p>
+                    <p className="text-xs sm:text-sm text-purple-600 truncate">Agendamentos ativos</p>
                   </div>
                 </div>
               </Card>
 
-              <Card className="p-6 bg-gradient-to-br from-amber-50 to-yellow-50 border-amber-200">
+              <Card className="p-4 sm:p-6 bg-gradient-to-br from-amber-50 to-yellow-50 border-amber-200">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
-                    <DollarSign className="h-8 w-8 text-amber-700" />
+                    <DollarSign className="h-6 w-6 sm:h-8 sm:w-8 text-amber-700" />
                   </div>
-                  <div className="ml-4">
-                    <p className="text-sm font-medium text-amber-700">Receita Mensal</p>
-                    <p className="text-2xl font-bold text-amber-900">
+                  <div className="ml-3 sm:ml-4 min-w-0 flex-1">
+                    <p className="text-xs sm:text-sm font-medium text-amber-700">Receita Mensal</p>
+                    <p className="text-xl sm:text-2xl font-bold text-amber-900">
                       R$ {analytics ? ((analytics.totalRevenue || 0) / 1000).toFixed(1) : '0'}k
                     </p>
-                    <p className="text-sm text-amber-600">Faturamento estimado</p>
+                    <p className="text-xs sm:text-sm text-amber-600 truncate">Faturamento estimado</p>
                   </div>
                 </div>
               </Card>
             </div>
 
             {/* KPIs Secundários - Linha 2 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6">
               <Card className="p-6">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
@@ -601,12 +601,26 @@ export default function FranquiaDashboard() {
   const [hydrated, setHydrated] = useState(false)
   useEffect(() => { setHydrated(true) }, [])
 
+  // Aguarda hidratação do store persistido antes de aplicar redirects
+  const [storeHydrated, setStoreHydrated] = useState<boolean>(() => (useFranquiaStore as any)?.persist?.hasHydrated?.() ?? false)
   useEffect(() => {
-    if (!hydrated) return
+    const p = (useFranquiaStore as any)?.persist
+    // Se já estiver hidratado, marca imediatamente
+    if (p?.hasHydrated?.()) setStoreHydrated(true)
+    const unsub = p?.onFinishHydration?.(() => setStoreHydrated(true))
+    return () => unsub?.()
+  }, [])
+
+  useEffect(() => {
+    console.log('[DASHBOARD] Estado:', { hydrated, storeHydrated, isAuthenticated, franquiaUser: !!franquiaUser })
+    if (!hydrated || !storeHydrated) return
     if (!isAuthenticated) {
+      console.log('[DASHBOARD] Não autenticado, redirecionando para /franquia')
       router.replace('/franquia')
+    } else {
+      console.log('[DASHBOARD] Autenticado, permanecendo no dashboard')
     }
-  }, [router, isAuthenticated, hydrated])
+  }, [router, isAuthenticated, hydrated, storeHydrated, franquiaUser])
 
 
   // Mapeadores para modais
@@ -693,7 +707,7 @@ export default function FranquiaDashboard() {
     setDeleteConfirm({ isOpen: false, type: null, id: null, name: '' })
   }
 
-  if (!hydrated) {
+  if (!hydrated || !storeHydrated) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -714,14 +728,13 @@ export default function FranquiaDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="p-6 lg:p-8">
-          <div className="lg:hidden mb-6">
+      <div className="p-4 sm:p-6 lg:p-8">
+          <div className="lg:hidden mb-4 sm:mb-6">
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Dashboard da Franquia</h1>
-                <p className="text-sm text-gray-600">Bem-vindo, {franquiaUser?.name || 'Admin'}</p>
+                <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Dashboard</h1>
+                <p className="text-xs sm:text-sm text-gray-600">Bem-vindo, {franquiaUser?.name || 'Admin'}</p>
               </div>
-              <NotificationsBell />
             </div>
           </div>
 
@@ -730,10 +743,9 @@ export default function FranquiaDashboard() {
               <p className="text-sm uppercase tracking-wide text-gray-500">Painel</p>
               <h1 className="text-3xl font-bold text-gray-900">Dashboard da Franquia</h1>
             </div>
-            <NotificationsBell />
           </div>
 
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
           {renderTabContent()}
         </div>
       </div>

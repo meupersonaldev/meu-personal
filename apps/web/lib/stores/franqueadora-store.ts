@@ -14,7 +14,7 @@ export interface FranqueadoraUser {
   id: string
   name: string
   email: string
-  role: 'SUPER_ADMIN' | 'ADMIN' | 'ANALYST' | 'FRANCHISE_ADMIN'
+  role: 'SUPER_ADMIN' | 'ADMIN' | 'ANALYST' | 'FRANCHISE_ADMIN' | 'FRANQUEADORA'
 }
 
 export interface Franqueadora {
@@ -35,15 +35,46 @@ export interface Academy {
   name: string
   email: string
   phone?: string
+  address?: string
   city?: string
   state?: string
+  zip_code?: string
   franchise_fee: number
   royalty_percentage: number
   monthly_revenue: number
+  // Policy fields (editable only by Franqueadora)
+  credits_per_class?: number
+  class_duration_minutes?: number
+  checkin_tolerance?: number
   contract_start_date?: string
   contract_end_date?: string
   is_active: boolean
   created_at: string
+}
+
+export interface CreateAcademyPayload {
+  franqueadora_id: string
+  name: string
+  email: string
+  phone?: string | null
+  address?: string | null
+  city: string
+  state: string
+  zip_code?: string | null
+  franchise_fee: number
+  royalty_percentage: number
+  monthly_revenue: number
+  contract_start_date?: string | null
+  contract_end_date?: string | null
+  is_active: boolean
+  // Campos opcionais (UI): gestor e observações
+  manager_name?: string | null
+  manager_email?: string | null
+  manager_phone?: string | null
+  notes?: string | null
+  admin_name: string
+  admin_email: string
+  admin_password: string
 }
 
 export interface FranchisePackage {
@@ -246,7 +277,6 @@ interface FranqueadoraState {
   packages: FranchisePackage[]
   studentPackages: StudentCreditPackage[]
   hourPackages: HourCreditPackage[]
-  leads: FranchiseLead[]
   users: User[]
   analytics: ConsolidatedAnalytics | null
 
@@ -262,7 +292,7 @@ interface FranqueadoraState {
 
   // Academies/Franchises
   fetchAcademies: () => Promise<void>
-  addAcademy: (academy: Omit<Academy, 'id'> & { admin_name?: string; admin_email?: string; admin_password?: string }) => Promise<boolean>
+  addAcademy: (academy: CreateAcademyPayload) => Promise<boolean>
   updateAcademy: (id: string, updates: Partial<Academy>) => Promise<boolean>
   deleteAcademy: (id: string) => Promise<boolean>
   fetchAcademyStats: (academyId: string) => Promise<AcademyStats | null>
@@ -281,12 +311,8 @@ interface FranqueadoraState {
   updateHourPackage: (id: string, payload: CreateHourPackageInput) => Promise<boolean>
   deleteHourPackage: (id: string) => Promise<boolean>
 
-  // Leads
-  fetchLeads: () => Promise<void>
-  updateLead: (id: string, updates: Partial<FranchiseLead>) => Promise<boolean>
-
   // Users
-  fetchUsers: (params?: { page?: number; limit?: number; search?: string; role?: string; status?: string }) => Promise<UsersResponse | null>
+  fetchUsers: (params?: { page?: number; limit?: number; search?: string; role?: string; status?: string; assigned?: 'assigned' | 'unassigned'; academy_id?: string }) => Promise<UsersResponse | null>
 
   // Analytics
   fetchAnalytics: () => Promise<void>
@@ -304,7 +330,6 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
       packages: [],
       studentPackages: [],
       hourPackages: [],
-      leads: [],
       users: [],
       analytics: null,
       isLoading: false,
@@ -357,12 +382,11 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             isAuthenticated: true,
             isLoading: false
           })
-          const { fetchFranqueadora, fetchAcademies, fetchPackages, fetchLeads, fetchAnalytics } = get()
+          const { fetchFranqueadora, fetchAcademies, fetchPackages, fetchAnalytics } = get()
           await Promise.all([
             fetchFranqueadora(),
             fetchAcademies(),
             fetchPackages(),
-            fetchLeads(),
             fetchAnalytics()
           ])
 
@@ -372,7 +396,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             useNotificationsStore.getState().connectFranqueadora(franqueadoraId)
           }
           return true
-        } catch (error) {
+        } catch {
           set({ isLoading: false })
           return false
         }
@@ -414,7 +438,6 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           token: null,
           academies: [],
           packages: [],
-          leads: [],
           analytics: null
         })
         if (typeof document !== 'undefined') {
@@ -468,19 +491,36 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             ...academy,
             monthly_revenue: safeNumber(academy.monthly_revenue),
             royalty_percentage: safeNumber(academy.royalty_percentage),
-            franchise_fee: safeNumber(academy.franchise_fee)
+            franchise_fee: safeNumber(academy.franchise_fee),
+            credits_per_class: safeNumber(academy.credits_per_class, 1),
+            class_duration_minutes: safeNumber(academy.class_duration_minutes, 60),
+            checkin_tolerance: safeNumber(academy.checkin_tolerance, 30)
           }))
 
           set({ academies: safeAcademies })
-        } catch (error) {
-        }
+        } catch {}
       },
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      addAcademy: async (academyData: any) => {
+      addAcademy: async (academyData: CreateAcademyPayload) => {
         try {
           const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           const token = get().token
+          const academyPayload = {
+            franqueadora_id: academyData.franqueadora_id,
+            name: academyData.name,
+            email: academyData.email,
+            phone: academyData.phone ?? null,
+            address: academyData.address ?? null,
+            city: academyData.city,
+            state: academyData.state,
+            zip_code: academyData.zip_code ?? null,
+            franchise_fee: academyData.franchise_fee,
+            royalty_percentage: academyData.royalty_percentage,
+            monthly_revenue: academyData.monthly_revenue,
+            contract_start_date: academyData.contract_start_date ?? null,
+            contract_end_date: academyData.contract_end_date ?? null,
+            is_active: academyData.is_active,
+          }
           const response = await fetch(`${API_URL}/api/franchises/create`, {
             method: 'POST',
             headers: {
@@ -489,7 +529,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             },
             credentials: 'include',
             body: JSON.stringify({
-              academy: academyData,
+              academy: academyPayload,
               admin: {
                 name: academyData.admin_name,
                 email: academyData.admin_email,
@@ -508,7 +548,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           const { academy } = await response.json()
           set(state => ({ academies: [...state.academies, academy] }))
           return true
-        } catch (error) {
+        } catch {
           return false
         }
       },
@@ -535,7 +575,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           }
           await get().fetchAcademies()
           return true
-        } catch (error) {
+        } catch {
           return false
         }
       },
@@ -558,7 +598,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           }
           set(state => ({ academies: state.academies.filter(academy => academy.id !== id) }))
           return true
-        } catch (error) {
+        } catch {
           return false
         }
       },
@@ -567,7 +607,11 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
         try {
           const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           const token = get().token
-          const resp = await fetch(`${API_URL}/api/franqueadora/academies/${academyId}/stats`, {
+          const franqueadoraId = await get().ensureFranqueadoraId()
+          const statsUrl = franqueadoraId
+            ? `${API_URL}/api/franqueadora/academies/${academyId}/stats?franqueadora_id=${encodeURIComponent(franqueadoraId)}`
+            : `${API_URL}/api/franqueadora/academies/${academyId}/stats`
+          const resp = await fetch(statsUrl, {
             credentials: 'include',
             headers: token ? { Authorization: `Bearer ${token}` } : undefined,
           })
@@ -580,7 +624,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           }
           const response = await resp.json()
           return response.data as AcademyStats
-        } catch (error) {
+        } catch {
           return null
         }
       },
@@ -590,7 +634,11 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
         try {
           const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           const token = get().token
-          const resp = await fetch(`${API_URL}/api/franqueadora/packages`, {
+          const franqueadoraId = await get().ensureFranqueadoraId()
+          const url = franqueadoraId
+            ? `${API_URL}/api/franqueadora/packages?franqueadora_id=${encodeURIComponent(franqueadoraId)}`
+            : `${API_URL}/api/franqueadora/packages`
+          const resp = await fetch(url, {
             credentials: 'include',
             headers: token ? { Authorization: `Bearer ${token}` } : undefined,
           })
@@ -602,16 +650,19 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             throw new Error('Failed to fetch packages')
           }
           const json = await resp.json()
-          set({ packages: json.packages || [] })
-        } catch (error) {
-        }
+          set({ packages: Array.isArray(json.data) ? json.data : [] })
+        } catch {}
       },
 
       addPackage: async (packageData) => {
         try {
           const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           const token = get().token
-          const resp = await fetch(`${API_URL}/api/franqueadora/packages`, {
+          const franqueadoraId = await get().ensureFranqueadoraId()
+          const url = franqueadoraId
+            ? `${API_URL}/api/franqueadora/packages?franqueadora_id=${encodeURIComponent(franqueadoraId)}`
+            : `${API_URL}/api/franqueadora/packages`
+          const resp = await fetch(url, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -629,7 +680,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           }
           await get().fetchPackages()
           return true
-        } catch (error) {
+        } catch {
           return false
         }
       },
@@ -638,7 +689,11 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
         try {
           const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           const token = get().token
-          const resp = await fetch(`${API_URL}/api/franqueadora/packages/${id}`, {
+          const franqueadoraId = await get().ensureFranqueadoraId()
+          const url = franqueadoraId
+            ? `${API_URL}/api/franqueadora/packages/${id}?franqueadora_id=${encodeURIComponent(franqueadoraId)}`
+            : `${API_URL}/api/franqueadora/packages/${id}`
+          const resp = await fetch(url, {
             method: 'PUT',
             headers: {
               'Content-Type': 'application/json',
@@ -656,7 +711,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           }
           await get().fetchPackages()
           return true
-        } catch (error) {
+        } catch {
           return false
         }
       },
@@ -665,7 +720,11 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
         try {
           const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           const token = get().token
-          const resp = await fetch(`${API_URL}/api/franqueadora/packages/${id}`, {
+          const franqueadoraId = await get().ensureFranqueadoraId()
+          const url = franqueadoraId
+            ? `${API_URL}/api/franqueadora/packages/${id}?franqueadora_id=${encodeURIComponent(franqueadoraId)}`
+            : `${API_URL}/api/franqueadora/packages/${id}`
+          const resp = await fetch(url, {
             method: 'DELETE',
             headers: token ? { Authorization: `Bearer ${token}` } : undefined,
             credentials: 'include'
@@ -679,7 +738,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           }
           await get().fetchPackages()
           return true
-        } catch (error) {
+        } catch {
           return false
         }
       },
@@ -714,8 +773,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
 
           const json = await resp.json()
           set({ studentPackages: json.packages || [] })
-        } catch (error) {
-        } finally {
+        } catch {} finally {
           set({ isPackagesLoading: false })
         }
       },
@@ -750,8 +808,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
 
           const json = await resp.json()
           set({ hourPackages: json.packages || [] })
-        } catch (error) {
-        } finally {
+        } catch {} finally {
           set({ isPackagesLoading: false })
         }
       },
@@ -801,7 +858,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             toast.success('Pacote de aluno criado com sucesso.')
           } catch {}
           return true
-        } catch (error) {
+        } catch {
           try {
             const { toast } = await import('sonner')
             toast.error('Erro inesperado ao criar pacote de aluno.')
@@ -855,7 +912,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             toast.success('Pacote de professor criado com sucesso.')
           } catch {}
           return true
-        } catch (error) {
+        } catch {
           try {
             const { toast } = await import('sonner')
             toast.error('Erro inesperado ao criar pacote de professor.')
@@ -864,54 +921,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
         }
       },
 
-      // Leads
-      fetchLeads: async () => {
-        try {
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-          const token = get().token
-          const resp = await fetch(`${API_URL}/api/franqueadora/leads`, {
-            credentials: 'include',
-            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-          })
-          if (!resp.ok) {
-            if ((resp.status === 401 || resp.status === 403) && get().isAuthenticated) {
-              try { const { toast } = await import('sonner'); toast.error('Sem permissão para listar leads.') } catch {}
-              return
-            }
-            throw new Error('Failed to fetch leads')
-          }
-          const json = await resp.json()
-          set({ leads: json.leads || [] })
-        } catch (error) {
-        }
-      },
 
-      updateLead: async (id, updates) => {
-        try {
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-          const token = get().token
-          const resp = await fetch(`${API_URL}/api/franqueadora/leads/${id}`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(token ? { Authorization: `Bearer ${token}` } : {})
-            },
-            credentials: 'include',
-            body: JSON.stringify(updates)
-          })
-          if (!resp.ok) {
-            if ((resp.status === 401 || resp.status === 403) && get().isAuthenticated) {
-              try { const { toast } = await import('sonner'); toast.error('Sem permissão para atualizar lead.') } catch {}
-              return false
-            }
-            throw new Error('Failed to update lead')
-          }
-          await get().fetchLeads()
-          return true
-        } catch (error) {
-          return false
-        }
-      },
 
       // Users
       fetchUsers: async (params = {}) => {
@@ -925,26 +935,27 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           if (!franqueadoraId) {
             try {
               await get().fetchFranqueadora()
-            } catch (fetchError) {
+            } catch {
             }
             franqueadoraId = get().franqueadora?.id
           }
 
-          if (franqueadoraId) {
-            queryParams.append('franqueadora_id', franqueadoraId)
-          }
-
+          if (franqueadoraId) queryParams.append('franqueadora_id', franqueadoraId)
           if (params.page) queryParams.append('page', params.page.toString())
           if (params.limit) queryParams.append('limit', params.limit.toString())
           if (params.search) queryParams.append('search', params.search)
           if (params.role) queryParams.append('role', params.role)
-          if (params.status) queryParams.append('status', params.status)
-
-          if (!franqueadoraId) {
-            throw new Error('Franqueadora context not available for user listing')
+          if (params.role && params.role.toLowerCase() === 'teacher') {
+            if (params.assigned === 'assigned') queryParams.append('assigned', 'true')
+            if (params.assigned === 'unassigned') queryParams.append('assigned', 'false')
+            if (params.academy_id) queryParams.append('academy_id', params.academy_id)
           }
+          if ((params as any).status === 'active') queryParams.append('user_active', 'true')
+          if ((params as any).status === 'inactive') queryParams.append('user_active', 'false')
 
-          const response = await fetch(`${API_URL}/api/franqueadora/users?${queryParams}`, {
+          if (!franqueadoraId) throw new Error('Franqueadora context not available for user listing')
+
+          const response = await fetch(`${API_URL}/api/franqueadora/contacts?${queryParams}`, {
             credentials: 'include',
             headers: token ? { Authorization: `Bearer ${token}` } : undefined,
           })
@@ -953,30 +964,57 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             if ((response.status === 401 || response.status === 403) && get().isAuthenticated) {
               try {
                 const { toast } = await import('sonner')
-                toast.error('Sem permissão para visualizar usuários.')
+                toast.error('Sem permissão para visualizar contatos.')
               } catch {}
               return null
             }
-            throw new Error('Failed to fetch users')
+            throw new Error('Failed to fetch contacts')
           }
 
-          const data: UsersResponse = await response.json()
+          const payload = await response.json()
+
+          const contacts: any[] = Array.isArray(payload.data) ? payload.data : []
+          // Mapear contacts -> User para reuso da UI
+          const mappedUsers: User[] = contacts.map((c) => ({
+            id: c.user?.id || c.id,
+            name: c.user?.name || '',
+            email: c.user?.email || '',
+            phone: c.user?.phone || '',
+            cpf: c.user?.cpf || '',
+            role: c.user?.role || 'STUDENT',
+            avatar_url: c.user?.avatar_url,
+            created_at: c.user?.created_at || new Date().toISOString(),
+            updated_at: c.user?.updated_at || new Date().toISOString(),
+            last_login_at: c.user?.last_login_at,
+            active: c.user?.is_active ?? true,
+            email_verified: c.user?.email_verified ?? false,
+            phone_verified: c.user?.phone_verified ?? false,
+            franchisor_id: c.user?.franchisor_id,
+            franchise_id: c.user?.franchise_id,
+            teacher_profiles: c.user?.teacher_profiles || [],
+            student_profiles: c.user?.student_profiles || [],
+            operational_links: c.user?.operational_links || undefined,
+            booking_stats: c.user?.booking_stats || undefined,
+            balance_info: c.user?.balance_info || undefined,
+            hours_info: c.user?.hours_info || undefined,
+          }))
+
+          const result: UsersResponse = {
+            data: mappedUsers,
+            pagination: payload.pagination || { page: (params as any).page || 1, limit: (params as any).limit || 20, total: mappedUsers.length, totalPages: 1 }
+          }
 
           if (params.page === 1) {
-            // Primeira página, substitui todos os usuários
-            set({ users: data.data })
+            set({ users: result.data })
           } else {
-            // Páginas seguintes, adiciona aos usuários existentes
-            set(state => ({
-              users: [...state.users, ...data.data]
-            }))
+            set(state => ({ users: [...state.users, ...result.data] }))
           }
 
-          return data
-        } catch (error) {
+          return result
+        } catch {
           try {
             const { toast } = await import('sonner')
-            toast.error('Erro ao carregar usuários.')
+            toast.error('Erro ao carregar contatos.')
           } catch {}
           return null
         }
@@ -1012,8 +1050,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           }
 
           set({ analytics: safeAnalytics })
-        } catch (error) {
-        }
+        } catch {}
       },
 
       // Novas funções de CRUD para pacotes de aluno
@@ -1054,7 +1091,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             toast.success('Pacote de aluno atualizado com sucesso.')
           } catch {}
           return true
-        } catch (error) {
+        } catch {
           try {
             const { toast } = await import('sonner')
             toast.error('Erro inesperado ao atualizar pacote de aluno.')
@@ -1089,7 +1126,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             toast.success('Pacote de aluno excluído com sucesso.')
           } catch {}
           return true
-        } catch (error) {
+        } catch {
           try {
             const { toast } = await import('sonner')
             toast.error('Erro inesperado ao excluir pacote de aluno.')
@@ -1136,7 +1173,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             toast.success('Pacote de professor atualizado com sucesso.')
           } catch {}
           return true
-        } catch (error) {
+        } catch {
           try {
             const { toast } = await import('sonner')
             toast.error('Erro inesperado ao atualizar pacote de professor.')
@@ -1171,7 +1208,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             toast.success('Pacote de professor excluído com sucesso.')
           } catch {}
           return true
-        } catch (error) {
+        } catch {
           try {
             const { toast } = await import('sonner')
             toast.error('Erro inesperado ao excluir pacote de professor.')

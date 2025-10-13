@@ -30,6 +30,9 @@ export default function ComprarHorasPage() {
   const [loading, setLoading] = useState(false)
   const [paymentData, setPaymentData] = useState<any>(null)
   const [step, setStep] = useState<'select-package' | 'payment' | 'success'>('select-package')
+  const [showCpfModal, setShowCpfModal] = useState(false)
+  const [cpfInput, setCpfInput] = useState('')
+  const [cpfSaving, setCpfSaving] = useState(false)
 
   // Carregar pacotes de horas disponíveis para o professor
   useEffect(() => {
@@ -86,12 +89,70 @@ export default function ComprarHorasPage() {
         setPaymentData(data.payment_intent)
         setStep('success')
       } else {
-        toast.error('Erro ao processar pagamento: ' + (data?.error || data?.message || ''))
+        const errMsg = (data?.error || data?.message || '').toString()
+        if (response.status === 400 && errMsg.toLowerCase().includes('cpf')) {
+          setShowCpfModal(true)
+          return
+        }
+        toast.error('Erro ao processar pagamento: ' + errMsg)
       }
-    } catch (error) {
+    } catch {
       toast.error('Erro ao processar pagamento')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const saveCpfAndRetry = async () => {
+    if (!user?.id) return
+    const token = useAuthStore.getState().token
+    try {
+      setCpfSaving(true)
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      // Atualizar CPF
+      const patchResp = await fetch(`${API_URL}/api/users/${user.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ cpf: cpfInput })
+      })
+      const patchData = await patchResp.json().catch(() => ({}))
+      if (!patchResp.ok) {
+        const msg = (patchData?.error || patchData?.message || 'Falha ao salvar CPF').toString()
+        toast.error(msg)
+        return
+      }
+
+      // Retry checkout
+      const response = await fetch(`${API_BASE_URL}/api/packages/professor/checkout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          package_id: selectedPackage?.id,
+          payment_method: paymentMethod,
+        })
+      })
+
+      const data = await response.json().catch(() => ({}))
+      if (response.ok) {
+        const checkoutUrl = data?.payment_intent?.checkout_url
+        if (checkoutUrl) window.open(checkoutUrl, '_blank')
+        setPaymentData(data.payment_intent)
+        setStep('success')
+        setShowCpfModal(false)
+      } else {
+        const errMsg = (data?.error || data?.message || 'Erro ao processar pagamento').toString()
+        toast.error(errMsg)
+      }
+    } catch {
+      toast.error('Falha ao salvar CPF ou processar pagamento')
+    } finally {
+      setCpfSaving(false)
     }
   }
 
@@ -347,35 +408,51 @@ export default function ComprarHorasPage() {
                 Pagamento Criado com Sucesso!
               </h2>
 
-              {paymentMethod === 'PIX' && paymentData.pix_qr_code && (
+              {paymentMethod === 'PIX' && (
                 <div className="mb-6">
-                  <p className="text-gray-600 mb-4">Escaneie o QR Code para pagar:</p>
-                  <img
-                    src={`data:image/png;base64,${paymentData.pix_qr_code}`}
-                    alt="QR Code PIX"
-                    className="mx-auto w-64 h-64"
-                  />
-                  <div className="mt-4">
-                    <p className="text-sm text-gray-600 mb-2">Ou copie o código:</p>
-                    <div className="bg-gray-100 p-3 rounded text-xs break-all">
-                      {paymentData.pix_copy_paste}
+                  {paymentData.pix_qr_code && (
+                    <>
+                      <p className="text-gray-600 mb-4">Escaneie o QR Code para pagar:</p>
+                      <img
+                        src={`data:image/png;base64,${paymentData.pix_qr_code}`}
+                        alt="QR Code PIX"
+                        className="mx-auto w-64 h-64"
+                      />
+                    </>
+                  )}
+                  {paymentData.pix_copy_paste && (
+                    <div className="mt-4">
+                      <p className="text-sm text-gray-600 mb-2">Ou copie o código:</p>
+                      <div className="bg-gray-100 p-3 rounded text-xs break-all">
+                        {paymentData.pix_copy_paste}
+                      </div>
+                      <Button
+                        onClick={() => navigator.clipboard.writeText(paymentData.pix_copy_paste)}
+                        variant="outline"
+                        className="mt-2"
+                      >
+                        Copiar Código
+                      </Button>
                     </div>
-                    <Button
-                      onClick={() => navigator.clipboard.writeText(paymentData.pix_copy_paste)}
-                      variant="outline"
-                      className="mt-2"
-                    >
-                      Copiar Código
-                    </Button>
-                  </div>
+                  )}
+                  {!paymentData.pix_copy_paste && paymentData.checkout_url && (
+                    <div className="mt-4">
+                      <Button
+                        onClick={() => window.open(paymentData.checkout_url, '_blank')}
+                        className="bg-blue-600 hover:bg-blue-700"
+                      >
+                        Abrir Checkout
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
 
-              {paymentMethod === 'BOLETO' && paymentData.invoice_url && (
+              {paymentMethod === 'BOLETO' && (paymentData.invoice_url || paymentData.payment_url || paymentData.checkout_url) && (
                 <div className="mb-6">
                   <p className="text-gray-600 mb-4">Seu boleto foi gerado!</p>
                   <Button
-                    onClick={() => window.open(paymentData.invoice_url, '_blank')}
+                    onClick={() => window.open(paymentData.invoice_url || paymentData.payment_url || paymentData.checkout_url, '_blank')}
                     className="bg-blue-600 hover:bg-blue-700"
                   >
                     <Barcode className="h-4 w-4 mr-2" />
@@ -402,6 +479,27 @@ export default function ComprarHorasPage() {
         )}
       </div>
       </div>
+    {showCpfModal && (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl">
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">CPF obrigatório</h3>
+          <p className="text-sm text-gray-600 mb-4">Digite seu CPF para continuar com o pagamento.</p>
+          <input
+            type="text"
+            value={cpfInput}
+            onChange={(e) => setCpfInput(e.target.value)}
+            placeholder="000.000.000-00"
+            className="w-full border rounded px-3 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <div className="flex gap-3 justify-end">
+            <Button variant="outline" onClick={() => setShowCpfModal(false)} disabled={cpfSaving}>Cancelar</Button>
+            <Button onClick={saveCpfAndRetry} disabled={cpfSaving} className="bg-blue-600 hover:bg-blue-700 text-white">
+              {cpfSaving ? 'Salvando...' : 'Salvar CPF e tentar novamente'}
+            </Button>
+          </div>
+        </div>
+      </div>
+    )}
     </ProfessorLayout>
   )
 }

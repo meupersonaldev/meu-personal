@@ -25,21 +25,45 @@ export default function FranquiaLoginPage() {
     setIsLoading(true)
 
     try {
+      console.log('[LOGIN] Iniciando login...')
       const success = await login(formData.email, formData.password)
+      console.log('[LOGIN] Resultado do login:', success)
       
       if (success) {
         toast.success('Login realizado com sucesso!')
+        
+        // Verificar estado do store
+        const state = useFranquiaStore.getState()
+        console.log('[LOGIN] Estado após login:', {
+          isAuthenticated: state.isAuthenticated,
+          franquiaUser: state.franquiaUser,
+          academy: state.academy
+        })
+        
         // Garantir persistência salva antes de navegar
         try {
           // @ts-ignore
           const p = (useFranquiaStore as any).persist
           await p?.flush?.()
-        } catch {}
-        router.replace('/franquia/dashboard')
+          console.log('[LOGIN] Persist flush concluído')
+        } catch (e) {
+          console.error('[LOGIN] Erro no flush:', e)
+        }
+        
+        // Pequeno delay para garantir que o store foi persistido
+        await new Promise(resolve => setTimeout(resolve, 100))
+        
+        console.log('[LOGIN] Redirecionando para dashboard...')
+        console.log('[LOGIN] URL atual:', window.location.href)
+        
+        // Usar window.location para garantir navegação
+        window.location.href = '/franquia/dashboard'
       } else {
+        console.log('[LOGIN] Login falhou')
         toast.error('Email ou senha incorretos')
       }
     } catch (error) {
+      console.error('[LOGIN] Erro no login:', error)
       toast.error('Erro ao fazer login. Tente novamente.')
     } finally {
       setIsLoading(false)

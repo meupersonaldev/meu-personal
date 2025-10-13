@@ -309,8 +309,7 @@ export default function ConfiguracoesPage() {
           phone: settings.phone,
           city: settings.city,
           state: settings.state,
-          zip_code: settings.zipCode,
-          credits_per_class: Number(settings.creditsPerClass || 1)
+          zip_code: settings.zipCode
         })
       })
 
@@ -332,18 +331,10 @@ export default function ConfiguracoesPage() {
       return
     }
 
-    // Validações
-    if (settings.checkinTolerance < 0 || settings.checkinTolerance > 180) {
-      toast.error('Tolerância deve estar entre 0 e 180 minutos')
-      return
-    }
-
     setLoading(true)
     try {
       const payload = {
-        schedule: JSON.stringify(settings.schedule),
-        checkin_tolerance: Number(settings.checkinTolerance),
-        class_duration_minutes: Number(settings.classDurationMinutes || 60)
+        schedule: JSON.stringify(settings.schedule)
       }
 
 
@@ -498,22 +489,28 @@ export default function ConfiguracoesPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Tolerância de check-in (minutos)</label>
                   <Input
                     value={settings.checkinTolerance}
-                    onChange={(e) => setSettings({ ...settings, checkinTolerance: Number(e.target.value) || 0 })}
+                    readOnly
+                    disabled
+                    className="bg-gray-50 cursor-not-allowed"
                     type="number"
                     min={0}
                     max={180}
                   />
+                  <p className="text-xs text-gray-500 mt-1">Definido pela franqueadora</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Duração padrão de aula (minutos)</label>
                   <Input
                     value={settings.classDurationMinutes}
-                    onChange={(e) => setSettings({ ...settings, classDurationMinutes: Math.max(15, Number(e.target.value) || 60) })}
+                    readOnly
+                    disabled
+                    className="bg-gray-50 cursor-not-allowed"
                     type="number"
                     min={15}
                     max={240}
                   />
                   <p className="text-xs text-gray-500 mt-1">Usado para calcular o tempo dos agendamentos e os intervalos dos slots.</p>
+                  <p className="text-xs text-gray-500">Definido pela franqueadora</p>
                 </div>
               </div>
 
@@ -629,12 +626,15 @@ export default function ConfiguracoesPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Créditos por aula (60 min)</label>
                   <Input 
                     value={settings.creditsPerClass}
-                    onChange={(e) => setSettings({...settings, creditsPerClass: Number(e.target.value) || 1})}
+                    readOnly
+                    disabled
+                    className="bg-gray-50 cursor-not-allowed"
                     placeholder="1"
                     type="number"
                     min={1}
                   />
                   <p className="text-xs text-gray-500 mt-1">Usado para cobrar o aluno ao confirmar uma aula.</p>
+                  <p className="text-xs text-gray-500">Definido pela franqueadora</p>
                 </div>
               </div>
               <div className="grid md:grid-cols-3 gap-6">

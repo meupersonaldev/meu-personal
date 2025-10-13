@@ -271,8 +271,15 @@ export const useFranquiaStore = create<FranquiaState>()(
             return false
           }
 
-          // Salvar token
+          // Salvar token e cookie para o middleware
           localStorage.setItem('auth_token', token)
+          try {
+            if (typeof document !== 'undefined') {
+              // 7 dias de validade
+              const maxAge = 7 * 24 * 60 * 60
+              document.cookie = `auth-token=${token}; Path=/; Max-Age=${maxAge}; SameSite=Lax`
+            }
+          } catch {}
 
           // 2. Buscar dados do admin na tabela franchise_admins
           const { data: franchiseAdminData, error: adminError } = await supabase
@@ -372,6 +379,14 @@ export const useFranquiaStore = create<FranquiaState>()(
           approvalRequests: [],
           unreadNotifications: 0
         })
+
+        // Limpar token persistido e cookie
+        try {
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('auth_token')
+            document.cookie = 'auth-token=; Path=/; Max-Age=0; SameSite=Lax'
+          }
+        } catch {}
 
         // Redirecionar para landing page
         if (typeof window !== 'undefined') {
@@ -1246,7 +1261,8 @@ export const useFranquiaStore = create<FranquiaState>()(
       partialize: (state) => ({
         franquiaUser: state.franquiaUser,
         academy: state.academy,
-        isAuthenticated: state.isAuthenticated
+        isAuthenticated: state.isAuthenticated,
+        sessionChecked: state.sessionChecked
       })
     }
   )

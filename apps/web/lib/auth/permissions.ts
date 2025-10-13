@@ -2,12 +2,14 @@
 
 import { useFranqueadoraStore } from '@/lib/stores/franqueadora-store'
 
-export type FranqueadoraRole = 'SUPER_ADMIN' | 'ADMIN' | 'ANALYST' | 'FRANCHISE_ADMIN'
+export type FranqueadoraRole = 'SUPER_ADMIN' | 'ADMIN' | 'ANALYST' | 'FRANCHISE_ADMIN' | 'FRANCHISOR' | 'FRANQUEADORA'
 
 export const FRANQUEADORA_ALLOWED_ROLES: FranqueadoraRole[] = [
   'SUPER_ADMIN',
   'ADMIN',
-  'FRANCHISE_ADMIN'
+  'FRANCHISE_ADMIN',
+  'FRANCHISOR',
+  'FRANQUEADORA'
 ]
 
 export function hasFranqueadoraAccess(role?: FranqueadoraRole | null, allowed: FranqueadoraRole[] = FRANQUEADORA_ALLOWED_ROLES) {

@@ -166,21 +166,6 @@ export default function FranqueadoraLoginPage() {
               </div>
             </div>
 
-            {/* Feature 2 */}
-            <div className="flex items-start space-x-4">
-              <div className="w-12 h-12 bg-meu-accent/20 rounded-xl flex items-center justify-center flex-shrink-0">
-                <Users className="h-6 w-6 text-meu-accent" />
-              </div>
-              <div>
-                <h3 className="text-xl font-semibold text-white mb-2">
-                  Pipeline de Leads
-                </h3>
-                <p className="text-white/70">
-                  Gerencie interessados em franquias e acompanhe conversões
-                </p>
-              </div>
-            </div>
-
             {/* Feature 3 */}
             <div className="flex items-start space-x-4">
               <div className="w-12 h-12 bg-meu-accent/20 rounded-xl flex items-center justify-center flex-shrink-0">

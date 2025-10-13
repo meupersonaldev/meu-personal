@@ -29,6 +29,7 @@ import {
   X
 } from 'lucide-react'
 import { useFranqueadoraStore, type Academy, type AcademyStats } from '@/lib/stores/franqueadora-store'
+import FranqueadoraGuard from '@/components/auth/franqueadora-guard'
 
 interface EditingFranchise extends Partial<Academy> {
   id: string
@@ -84,7 +85,7 @@ export default function FranquiaDetailsPage() {
       } else {
         toast.error('Erro ao carregar dados da franquia')
       }
-    } catch (error) {
+    } catch {
       toast.error('Erro ao carregar dados da franquia')
     } finally {
       setLoadingStats(false)
@@ -142,7 +143,7 @@ export default function FranquiaDetailsPage() {
       } else {
         toast.error('Erro ao atualizar franquia')
       }
-    } catch (error) {
+    } catch {
       toast.error('Erro ao atualizar franquia')
     } finally {
       setIsSaving(false)
@@ -193,6 +194,7 @@ export default function FranquiaDetailsPage() {
   }
 
   return (
+    <FranqueadoraGuard requiredPermission="canViewDashboard">
     <div className="min-h-screen bg-gray-50">
       <div className="p-6 lg:p-8">
         {/* Header */}
@@ -631,5 +633,6 @@ export default function FranquiaDetailsPage() {
         )}
       </div>
     </div>
+    </FranqueadoraGuard>
   )
 }

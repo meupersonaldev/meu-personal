@@ -103,6 +103,7 @@ export function FranqueadoraPackageManager({ variant = DEFAULT_VARIANT }: Franqu
 
   const showStudent = variant !== 'hour'
   const showHour = variant !== 'student'
+  const showStudentStatus = variant !== 'student'
 
   const [studentForm, setStudentForm] = useState<StudentFormState>(initialStudentForm)
   const [hourForm, setHourForm] = useState<HourFormState>(initialHourForm)
@@ -135,7 +136,7 @@ export function FranqueadoraPackageManager({ variant = DEFAULT_VARIANT }: Franqu
   }, [showStudent, showHour, fetchStudentPackages, fetchHourPackages])
 
   const displayedStudentPackages = useMemo(() => studentPackages, [studentPackages])
-  const displayedHourPackages = useMemo(() => hourPackages.slice(0, 2), [hourPackages])
+  const displayedHourPackages = useMemo(() => hourPackages, [hourPackages])
   const hasStudentPackages = displayedStudentPackages.length > 0
   const hasHourPackages = displayedHourPackages.length > 0
 
@@ -445,9 +446,11 @@ export function FranqueadoraPackageManager({ variant = DEFAULT_VARIANT }: Franqu
                         )}
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className={`text-xs font-medium ${pkg.status === 'active' ? 'text-green-600' : 'text-gray-400'}`}>
-                          {pkg.status === 'active' ? 'Ativo' : 'Inativo'}
-                        </span>
+                        {showStudentStatus && (
+                          <span className={`text-xs font-medium ${pkg.status === 'active' ? 'text-green-600' : 'text-gray-400'}`}>
+                            {pkg.status === 'active' ? 'Ativo' : 'Inativo'}
+                          </span>
+                        )}
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="sm" className="h-8 w-8 p-0">

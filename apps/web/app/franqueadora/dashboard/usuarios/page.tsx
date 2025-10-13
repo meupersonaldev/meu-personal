@@ -1,21 +1,18 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import {
   Search,
   Filter,
   Users,
   UserCheck,
-  UserX,
   BookOpen,
   Calendar,
-  Phone,
-  Mail,
   MapPin,
-  Award,
-  Clock,
-  DollarSign,
+  Mail,
+  Phone,
   ChevronDown,
   Eye,
   Download,
@@ -25,20 +22,25 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { useFranqueadoraStore, User } from '@/lib/stores/franqueadora-store'
+import { useFranqueadoraStore, User, UsersResponse } from '@/lib/stores/franqueadora-store'
+import { toast } from 'sonner'
 import FranqueadoraGuard from '@/components/auth/franqueadora-guard'
 
 export default function UsuariosPage() {
   const router = useRouter()
-  const { user, franqueadora, isAuthenticated, isLoading, users, fetchUsers } = useFranqueadoraStore()
+  const { franqueadora, isAuthenticated, isLoading, fetchUsers, token, ensureFranqueadoraId, academies, fetchAcademies } =
+    useFranqueadoraStore()
 
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
   const [showFilters, setShowFilters] = useState(false)
+  const [assignmentFilter, setAssignmentFilter] = useState('all')
+  const [academyFilter, setAcademyFilter] = useState('all')
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [showUserDetails, setShowUserDetails] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 20,
@@ -61,13 +63,7 @@ export default function UsuariosPage() {
     }
   }, [router, isAuthenticated, hydrated])
 
-  useEffect(() => {
-    if (hydrated && isAuthenticated) {
-      fetchUsuarios()
-    }
-  }, [hydrated, isAuthenticated, search, roleFilter, statusFilter, pagination.page])
-
-  const fetchUsuarios = async () => {
+  const fetchUsuarios = useCallback(async () => {
     if (!isAuthenticated) return
 
     setLoading(true)
@@ -77,7 +73,18 @@ export default function UsuariosPage() {
         limit: pagination.limit,
         search,
         role: roleFilter !== 'all' ? roleFilter : undefined,
-        status: statusFilter !== 'all' ? statusFilter : undefined
+        status: statusFilter !== 'all' ? statusFilter : undefined,
+        ...(roleFilter === 'teacher'
+          ? {
+              assigned:
+                assignmentFilter === 'assigned'
+                  ? 'assigned'
+                  : assignmentFilter === 'unassigned'
+                  ? 'unassigned'
+                  : undefined,
+              academy_id: academyFilter !== 'all' ? academyFilter : undefined,
+            }
+          : {})
       })
 
       if (data) {
@@ -87,15 +94,32 @@ export default function UsuariosPage() {
         })
         setPagination(data.pagination)
       }
-    } catch (error) {
+    } catch {
     } finally {
       setLoading(false)
     }
-  }
+  }, [isAuthenticated, fetchUsers, pagination.page, pagination.limit, search, roleFilter, statusFilter, assignmentFilter, academyFilter])
+
+  useEffect(() => {
+    if (hydrated && isAuthenticated) {
+      fetchUsuarios()
+    }
+  }, [hydrated, isAuthenticated, fetchUsuarios])
+
+  useEffect(() => {
+    if (!hydrated || !isAuthenticated) return
+    if (!academies || academies.length === 0) {
+      fetchAcademies()
+    }
+  }, [hydrated, isAuthenticated, academies, fetchAcademies])
+
+  
 
   const formatarCPF = (cpf?: string) => {
-    if (!cpf) return 'Não informado'
-    return cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')
+    if (!cpf) return '—'
+    const digits = cpf.replace(/\D/g, '')
+    if (digits.length !== 11) return cpf
+    return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')
   }
 
   const formatarTelefone = (phone?: string) => {
@@ -148,6 +172,186 @@ export default function UsuariosPage() {
     return active ? 'Ativo' : 'Inativo'
   }
 
+  const hasEmailInfo = (user: User) => {
+    return Boolean(user.email && user.email.trim().length > 0)
+  }
+
+  const hasPhoneInfo = (user: User) => {
+    return Boolean(user.phone && user.phone.trim().length > 0)
+  }
+
+  const getEmailStatusValue = (user: User) => {
+    if (user.email_verified) return 'Sim (verificado)'
+    return hasEmailInfo(user) ? 'Sim' : 'Não'
+  }
+
+  const getPhoneStatusValue = (user: User) => {
+    if (user.phone_verified) return 'Sim (verificado)'
+    return hasPhoneInfo(user) ? 'Sim' : 'Não'
+  }
+
+  const handleExportUsuarios = async () => {
+    if (exporting) return
+    if (!usersData.pagination.total) {
+      toast.info('Nenhum usuário para exportar.')
+      return
+    }
+
+    setExporting(true)
+
+    try {
+      const xlsxModule = await import('xlsx')
+      const XLSX = xlsxModule.default || xlsxModule
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+
+      let franqueadoraId: string | null = franqueadora?.id ?? null
+      if (!franqueadoraId) {
+        franqueadoraId = await ensureFranqueadoraId()
+      }
+
+      if (!franqueadoraId) {
+        toast.error('Não foi possível identificar a franqueadora.')
+        return
+      }
+
+      const limit = pagination.limit || 20
+      let totalPages = pagination.totalPages || 1
+      let totalExpected = usersData.pagination.total || 0
+      const resolvedFranqueadoraId = franqueadoraId as string
+      const authHeaders: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {}
+
+      const fetchPage = async (page: number): Promise<UsersResponse> => {
+        const params = new URLSearchParams()
+        params.set('page', page.toString())
+        params.set('limit', limit.toString())
+        params.set('franqueadora_id', resolvedFranqueadoraId)
+        if (search) params.set('search', search)
+        if (roleFilter !== 'all') params.set('role', roleFilter)
+        if (roleFilter === 'teacher') {
+          if (assignmentFilter === 'assigned') params.set('assigned', 'true')
+          if (assignmentFilter === 'unassigned') params.set('assigned', 'false')
+          if (academyFilter !== 'all') params.set('academy_id', academyFilter)
+        }
+
+        if (statusFilter === 'active') params.set('user_active', 'true')
+        if (statusFilter === 'inactive') params.set('user_active', 'false')
+
+        const response = await fetch(`${API_URL}/api/franqueadora/contacts?${params.toString()}`, {
+          credentials: 'include',
+          headers: authHeaders
+        })
+
+        if (!response.ok) {
+          throw new Error('Falha ao buscar usuários para exportação.')
+        }
+
+        const payload = await response.json()
+        const contacts: any[] = Array.isArray(payload.data) ? payload.data : []
+        const mappedUsers: User[] = contacts.map((c) => ({
+          id: c.user?.id || c.id,
+          name: c.user?.name || '',
+          email: c.user?.email || '',
+          phone: c.user?.phone || '',
+          cpf: c.user?.cpf || '',
+          role: c.user?.role || 'STUDENT',
+          avatar_url: c.user?.avatar_url,
+          created_at: c.user?.created_at || new Date().toISOString(),
+          updated_at: c.user?.updated_at || new Date().toISOString(),
+          last_login_at: c.user?.last_login_at,
+          active: c.user?.is_active ?? true,
+          email_verified: c.user?.email_verified ?? false,
+          phone_verified: c.user?.phone_verified ?? false,
+          franchisor_id: c.user?.franchisor_id,
+          franchise_id: c.user?.franchise_id,
+          teacher_profiles: c.user?.teacher_profiles || [],
+          student_profiles: c.user?.student_profiles || [],
+          operational_links: c.user?.operational_links || undefined,
+          booking_stats: c.user?.booking_stats || undefined,
+          balance_info: c.user?.balance_info || undefined,
+          hours_info: c.user?.hours_info || undefined,
+        }))
+
+        return {
+          data: mappedUsers,
+          pagination: payload.pagination || { page, limit, total: mappedUsers.length, totalPages: 1 }
+        }
+      }
+
+      const allUsers: User[] = []
+
+      for (let page = 1; page <= totalPages; page++) {
+        const pageResult = await fetchPage(page)
+        if (page === 1) {
+          totalPages = pageResult.pagination.totalPages
+          totalExpected = pageResult.pagination.total
+        }
+
+        if (pageResult.data?.length) {
+          allUsers.push(...pageResult.data)
+        }
+
+        if (!pageResult.data?.length || (totalExpected && allUsers.length >= totalExpected)) {
+          break
+        }
+      }
+
+      if (!allUsers.length) {
+        toast.info('Nenhum usuário encontrado para exportar.')
+        return
+      }
+
+      const headers = [
+        'Nome',
+        'Email',
+        'Telefone',
+        'CPF',
+        'Tipo',
+        'Status',
+        'Email cadastrado',
+        'Telefone cadastrado',
+        'Último Acesso',
+        'Criado em'
+      ]
+
+      const rows = [
+        headers,
+        ...allUsers.map((usuario) => [
+          usuario.name || '',
+          usuario.email || '',
+          usuario.phone ? formatarTelefone(usuario.phone) : '',
+          usuario.cpf ? formatarCPF(usuario.cpf) : '',
+          getRoleLabel(usuario.role),
+          usuario.active ? 'Ativo' : 'Inativo',
+          getEmailStatusValue(usuario),
+          getPhoneStatusValue(usuario),
+          usuario.last_login_at ? formatarData(usuario.last_login_at) : 'Nunca',
+          formatarData(usuario.created_at)
+        ])
+      ]
+
+      const worksheet = XLSX.utils.aoa_to_sheet(rows)
+      const workbook = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Usuários')
+
+      const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' })
+      const blob = new Blob([excelBuffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      })
+      const link = document.createElement('a')
+      const url = URL.createObjectURL(blob)
+      link.href = url
+      link.download = `usuarios_${new Date().toISOString().split('T')[0]}.xlsx`
+      link.click()
+      URL.revokeObjectURL(url)
+
+      toast.success('Usuários exportados com sucesso!')
+    } catch {
+      toast.error('Erro ao exportar usuários.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   if (!hydrated || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -166,100 +370,53 @@ export default function UsuariosPage() {
   return (
     <FranqueadoraGuard requiredPermission="canViewDashboard">
       <div className="p-6 lg:p-8">
-          {/* Header */}
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-8">
-            <div>
-              <p className="text-sm uppercase tracking-wide text-gray-500">Usuários</p>
-              <h1 className="text-3xl font-bold text-gray-900">
-                Usuários Cadastrados — {franqueadora?.name || 'Franqueadora'}
-              </h1>
-              <p className="text-sm text-gray-600 mt-1">
-                Total de {usersData.pagination.total} usuários encontrados
-              </p>
-            </div>
-
-            <div className="flex items-center space-x-3 mt-4 lg:mt-0">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowFilters(!showFilters)}
-              >
-                <Filter className="h-4 w-4 mr-2" />
-                Filtros
-                <ChevronDown className={`h-4 w-4 ml-2 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
-              </Button>
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={fetchUsuarios}
-                disabled={loading}
-              >
-                <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                Atualizar
-              </Button>
-
-              <Button variant="outline" size="sm">
-                <Download className="h-4 w-4 mr-2" />
-                Exportar
-              </Button>
-            </div>
+        {/* Header */}
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-8">
+          <div>
+            <p className="text-sm uppercase tracking-wide text-gray-500">Usuários</p>
+            <h1 className="text-3xl font-bold text-gray-900">
+              Usuários Cadastrados — {franqueadora?.name || 'Franqueadora'}
+            </h1>
+            <p className="text-sm text-gray-600 mt-1">
+              Total de {usersData.pagination.total} usuários encontrados
+            </p>
           </div>
 
-          {/* Filtros */}
-          {showFilters && (
-            <Card className="p-6 mb-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Buscar
-                  </label>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <Input
-                      placeholder="Nome, email ou telefone..."
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      className="pl-10"
-                    />
-                  </div>
-                </div>
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-4 lg:mt-0">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowFilters(!showFilters)}
+            >
+              <Filter className="h-4 w-4 mr-2" />
+              Filtros
+              <ChevronDown className={`h-4 w-4 ml-2 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+            </Button>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Tipo de Usuário
-                  </label>
-                  <select
-                    value={roleFilter}
-                    onChange={(e) => setRoleFilter(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-meu-primary focus:border-transparent"
-                  >
-                    <option value="all">Todos</option>
-                    <option value="teacher">Professores</option>
-                    <option value="student">Alunos</option>
-                  </select>
-                </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchUsuarios}
+              disabled={loading}
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+              Atualizar
+            </Button>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Status
-                  </label>
-                  <select
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-meu-primary focus:border-transparent"
-                  >
-                    <option value="all">Todos</option>
-                    <option value="active">Ativos</option>
-                    <option value="inactive">Inativos</option>
-                  </select>
-                </div>
-              </div>
-            </Card>
-          )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportUsuarios}
+              disabled={!usersData.pagination.total || exporting}
+            >
+              <Download className={`h-4 w-4 mr-2 ${exporting ? 'animate-spin' : ''}`} />
+              {exporting ? 'Exportando...' : 'Exportar'}
+            </Button>
+          </div>
 
-          {/* Cards de Estatísticas */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <Card className="p-6">
               <div className="flex items-center">
                 <div className="flex-shrink-0">
@@ -279,9 +436,7 @@ export default function UsuariosPage() {
                 </div>
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-600">Usuários Ativos</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {usersData.users.filter(u => u.active).length}
-                  </p>
+                  <p className="text-2xl font-bold text-gray-900">{usersData.users.filter(u => u.active).length}</p>
                 </div>
               </div>
             </Card>
@@ -293,9 +448,7 @@ export default function UsuariosPage() {
                 </div>
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-600">Professores</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {usersData.users.filter(u => u.role === 'TEACHER' || u.role === 'PROFESSOR').length}
-                  </p>
+                  <p className="text-2xl font-bold text-gray-900">{usersData.users.filter(u => u.role === 'TEACHER' || u.role === 'PROFESSOR').length}</p>
                 </div>
               </div>
             </Card>
@@ -307,13 +460,87 @@ export default function UsuariosPage() {
                 </div>
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-600">Alunos</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {usersData.users.filter(u => u.role === 'STUDENT' || u.role === 'ALUNO').length}
-                  </p>
+                  <p className="text-2xl font-bold text-gray-900">{usersData.users.filter(u => u.role === 'STUDENT' || u.role === 'ALUNO').length}</p>
                 </div>
               </div>
             </Card>
           </div>
+
+          {showFilters && (
+            <Card className="p-6 mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Buscar</label>
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Search className="h-4 w-4 text-gray-400" />
+                    </span>
+                    <Input
+                      value={search}
+                      onChange={(e) => { setSearch(e.target.value); setPagination(prev => ({ ...prev, page: 1 })) }}
+                      placeholder="Nome ou email..."
+                      className="pl-9"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de Usuário</label>
+                  <select
+                    value={roleFilter}
+                    onChange={(e) => { const v = e.target.value; setRoleFilter(v); setPagination(prev => ({ ...prev, page: 1 })); if (v !== 'teacher') { setAssignmentFilter('all'); setAcademyFilter('all') } }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+                  >
+                    <option value="all">Todos</option>
+                    <option value="teacher">Professores</option>
+                    <option value="student">Alunos</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => { setStatusFilter(e.target.value); setPagination(prev => ({ ...prev, page: 1 })) }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+                  >
+                    <option value="all">Todos</option>
+                    <option value="active">Ativos</option>
+                    <option value="inactive">Inativos</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Atribuição (apenas Professor)</label>
+                  <select
+                    value={assignmentFilter}
+                    onChange={(e) => { setAssignmentFilter(e.target.value); setPagination(prev => ({ ...prev, page: 1 })) }}
+                    disabled={roleFilter !== 'teacher'}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-meu-primary focus:border-transparent disabled:opacity-50"
+                  >
+                    <option value="all">Todos</option>
+                    <option value="assigned">Atribuídos</option>
+                    <option value="unassigned">Não atribuídos</option>
+                  </select>
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Academia (apenas Professor)</label>
+                  <select
+                    value={academyFilter}
+                    onChange={(e) => { setAcademyFilter(e.target.value); setPagination(prev => ({ ...prev, page: 1 })) }}
+                    disabled={roleFilter !== 'teacher'}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-meu-primary focus:border-transparent disabled:opacity-50"
+                  >
+                    <option value="all">Todas</option>
+                    {academies?.map((a) => (
+                      <option key={a.id} value={a.id}>{a.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </Card>
+          )}
 
           {/* Tabela de Usuários */}
           <Card className="overflow-hidden">
@@ -327,27 +554,15 @@ export default function UsuariosPage() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Tipo
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Contato
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Agendamentos
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Último Acesso
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Ações
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Detalhes
                     </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {loading ? (
                     <tr>
-                      <td colSpan={7} className="px-6 py-12 text-center">
+                      <td colSpan={3} className="px-6 py-12 text-center">
                         <div className="flex items-center justify-center">
                           <RefreshCw className="h-6 w-6 animate-spin text-meu-primary mr-2" />
                           <span className="text-gray-600">Carregando usuários...</span>
@@ -356,21 +571,24 @@ export default function UsuariosPage() {
                     </tr>
                   ) : usersData.users.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                      <td colSpan={3} className="px-6 py-12 text-center text-gray-500">
                         Nenhum usuário encontrado com os filtros selecionados.
                       </td>
                     </tr>
                   ) : (
                     usersData.users.map((usuario) => (
                       <tr key={usuario.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
                             <div className="flex-shrink-0 h-10 w-10">
                               {usuario.avatar_url ? (
-                                <img
-                                  className="h-10 w-10 rounded-full"
+                                <Image
+                                  className="h-10 w-10 rounded-full object-cover"
                                   src={usuario.avatar_url}
                                   alt={usuario.name}
+                                  width={40}
+                                  height={40}
+                                  unoptimized
                                 />
                               ) : (
                                 <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
@@ -378,12 +596,12 @@ export default function UsuariosPage() {
                                 </div>
                               )}
                             </div>
-                            <div className="ml-4">
+                            <div>
                               <div className="text-sm font-medium text-gray-900">
                                 {usuario.name}
                               </div>
-                              <div className="text-sm text-gray-500">
-                                CPF: {formatarCPF(usuario.cpf)}
+                              <div className="text-xs text-gray-500">
+                                Último acesso: {formatarData(usuario.last_login_at)}
                               </div>
                             </div>
                           </div>
@@ -393,50 +611,7 @@ export default function UsuariosPage() {
                             {getRoleLabel(usuario.role)}
                           </Badge>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">
-                            <div className="flex items-center mb-1">
-                              <Mail className="h-3 w-3 mr-1 text-gray-400" />
-                              {usuario.email}
-                            </div>
-                            <div className="flex items-center">
-                              <Phone className="h-3 w-3 mr-1 text-gray-400" />
-                              {formatarTelefone(usuario.phone)}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <Badge className={getStatusColor(usuario.active)}>
-                            {getStatusLabel(usuario.active)}
-                          </Badge>
-                          <div className="text-xs text-gray-500 mt-1">
-                            {usuario.email_verified ? '✓ Email' : '✗ Email'}
-                            {usuario.phone_verified ? ' / ✓ Telefone' : ' / ✗ Telefone'}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">
-                            <div className="flex items-center justify-between mb-1">
-                              <span>Total:</span>
-                              <span className="font-medium">{usuario.booking_stats?.total || 0}</span>
-                            </div>
-                            <div className="flex space-x-2 text-xs">
-                              <span className="text-green-600">
-                                ✓ {usuario.booking_stats?.completed || 0}
-                              </span>
-                              <span className="text-yellow-600">
-                                ⏳ {usuario.booking_stats?.pending || 0}
-                              </span>
-                              <span className="text-red-600">
-                                ✗ {usuario.booking_stats?.cancelled || 0}
-                              </span>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {formatarData(usuario.last_login_at)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                           <Button
                             variant="ghost"
                             size="sm"
@@ -534,25 +709,42 @@ export default function UsuariosPage() {
                 </div>
 
                 <div className="space-y-6">
+                  {/* Ficha do Usuário - Cabeçalho compacto */}
+                  <div className="flex items-center gap-4 p-4 border rounded bg-gray-50">
+                    <div className="h-12 w-12 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center">
+                      {selectedUser.avatar_url ? (
+                        <Image src={selectedUser.avatar_url} alt={selectedUser.name} width={48} height={48} className="h-12 w-12 object-cover" />
+                      ) : (
+                        <span className="text-gray-700 font-semibold">
+                          {(selectedUser.name || '').split(' ').slice(0,2).map(n => n[0]).join('').toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base font-semibold text-gray-900">{selectedUser.name}</span>
+                        <Badge className={getRoleColor(selectedUser.role)}>
+                          {getRoleLabel(selectedUser.role)}
+                        </Badge>
+                        <Badge className={getStatusColor(selectedUser.active)}>
+                          {getStatusLabel(selectedUser.active)}
+                        </Badge>
+                      </div>
+                      <div className="mt-1 flex flex-wrap gap-3 text-sm text-gray-600">
+                        <span className="flex items-center gap-1"><Mail className="h-4 w-4" />{selectedUser.email}</span>
+                        <span className="flex items-center gap-1"><Phone className="h-4 w-4" />{formatarTelefone(selectedUser.phone)}</span>
+                        <span className="flex items-center gap-1">CPF: <span title={selectedUser.cpf || ''}>{selectedUser.cpf ? formatarCPF(selectedUser.cpf) : '—'}</span></span>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Informações Básicas */}
                   <div>
                     <h4 className="text-sm font-medium text-gray-900 mb-3">Informações Básicas</h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm text-gray-500">Nome</label>
-                        <p className="text-sm font-medium text-gray-900">{selectedUser.name}</p>
-                      </div>
-                      <div>
-                        <label className="block text-sm text-gray-500">Email</label>
-                        <p className="text-sm font-medium text-gray-900">{selectedUser.email}</p>
-                      </div>
-                      <div>
-                        <label className="block text-sm text-gray-500">Telefone</label>
-                        <p className="text-sm font-medium text-gray-900">{formatarTelefone(selectedUser.phone)}</p>
-                      </div>
-                      <div>
                         <label className="block text-sm text-gray-500">CPF</label>
-                        <p className="text-sm font-medium text-gray-900">{formatarCPF(selectedUser.cpf)}</p>
+                        <p className="text-sm font-medium text-gray-900" title={selectedUser.cpf || ''}>{selectedUser.cpf ? formatarCPF(selectedUser.cpf) : '—'}</p>
                       </div>
                       <div>
                         <label className="block text-sm text-gray-500">Tipo</label>

@@ -21,7 +21,6 @@ import {
   FileText,
   UserCheck,
   Bell,
-  CreditCard,
   Clock,
   Settings
 } from 'lucide-react'
@@ -31,6 +30,7 @@ export default function FranquiaSidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const [expandedSections, setExpandedSections] = useState<string[]>(['overview'])
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
   const toggleSection = (section: string) => {
     setExpandedSections(prev =>
@@ -87,13 +87,6 @@ export default function FranquiaSidebar() {
       ]
     },
     {
-      id: 'plans',
-      label: 'Gestão de Planos',
-      icon: CreditCard,
-      href: '/franquia/dashboard/planos',
-      isExpanded: expandedSections.includes('plans')
-    },
-    {
       id: 'finance',
       label: 'Financeiro',
       icon: DollarSign,
@@ -114,12 +107,42 @@ export default function FranquiaSidebar() {
   }
 
   return (
-    <div className="sidebar-desktop w-64 h-screen fixed left-0 top-0 z-50 bg-meu-primary border-r border-meu-primary/20 flex flex-col shadow-lg">
+    <>
+      {/* Mobile Menu Button */}
+      <button
+        onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-meu-primary text-white rounded-lg shadow-lg"
+        aria-label="Toggle menu"
+      >
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          {isMobileMenuOpen ? (
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          ) : (
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          )}
+        </svg>
+      </button>
+
+      {/* Overlay para mobile */}
+      {isMobileMenuOpen && (
+        <div
+          className="lg:hidden fixed inset-0 bg-black/50 z-40"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <div className={`
+        w-64 h-screen fixed left-0 top-0 z-50 bg-meu-primary border-r border-meu-primary/20 flex flex-col shadow-lg
+        transition-transform duration-300 ease-in-out
+        lg:translate-x-0
+        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
+      `}>
 
       {/* Header do Sidebar */}
       <div className="p-6 border-b border-meu-primary/20">
         {/* Logo */}
-        <div className="mb-4">
+        <div className="mb-2">
           <Logo 
             size="lg" 
             variant="default" 
@@ -130,14 +153,14 @@ export default function FranquiaSidebar() {
         </div>
         
         {/* Perfil da Franquia */}
-        <div className="space-y-1 text-center" style={{ marginTop: '0' }}>
-          <div className="text-sm text-white">
+        <div className="space-y-1 text-center" style={{ marginTop: '-77px' }}>
+          <div className="text-sm text-white/80">
             Bem-vindo
           </div>
           <div className="font-semibold text-white text-lg">
             {franquiaUser?.name || 'Admin'}
           </div>
-          <div className="text-sm text-white">
+          <div className="text-xs text-white/70">
             {franquiaUser?.role === 'FRANCHISE_ADMIN' ? 'Administrador' : franquiaUser?.role}
           </div>
         </div>
@@ -217,5 +240,6 @@ export default function FranquiaSidebar() {
         </Button>
       </div>
     </div>
+    </>
   )
 }

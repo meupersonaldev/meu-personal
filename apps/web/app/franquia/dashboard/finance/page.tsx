@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { DollarSign, CreditCard, TrendingUp, Users, Calendar, ArrowUpRight, ArrowDownRight, Filter, Loader2, Check, Clock, XCircle, RefreshCw } from 'lucide-react'
+import { DollarSign, TrendingUp, Loader2, Check, Clock, XCircle, RefreshCw } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -97,8 +97,9 @@ export default function FinancePageNew() {
 
       const data = await response.json()
       setPayments(data.payments || [])
-    } catch (error) {
-      toast.error('Erro ao carregar pagamentos')
+    } catch {
+      toast.error('Erro ao carregar pagamentos. Verifique se a tabela payments existe no banco.')
+      setPayments([])
     } finally {
       setLoading(false)
     }
@@ -126,7 +127,8 @@ export default function FinancePageNew() {
 
       const data = await response.json()
       setStats(data.stats)
-    } catch (error) {
+    } catch {
+      // Silenciar erros de estatísticas para não poluir UI
     }
   }
 
@@ -162,7 +164,7 @@ export default function FinancePageNew() {
 
   if (loading && !stats) {
     return (
-      <div className="p-6 ml-8">
+      <div className="p-4 sm:p-6 lg:p-8">
         <div className="flex items-center justify-center h-64">
           <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
         </div>
@@ -171,16 +173,16 @@ export default function FinancePageNew() {
   }
 
   return (
-    <div className="p-6 ml-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between">
+      <div className="mb-6 sm:mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Financeiro</h1>
-            <p className="text-gray-600">Acompanhe pagamentos e receitas via Asaas</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Financeiro</h1>
+            <p className="text-sm sm:text-base text-gray-600">Acompanhe pagamentos e receitas via Asaas</p>
           </div>
 
-          <Button onClick={() => { fetchPayments(); fetchStats() }} variant="outline">
+          <Button onClick={() => { fetchPayments(); fetchStats() }} variant="outline" className="w-full sm:w-auto">
             <RefreshCw className="h-4 w-4 mr-2" />
             Atualizar
           </Button>
@@ -189,7 +191,7 @@ export default function FinancePageNew() {
 
       {/* Filtros */}
       <Card className="p-4 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
             <select
@@ -244,16 +246,16 @@ export default function FinancePageNew() {
 
       {/* Métricas Principais */}
       {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
-          <Card className="p-6 border-t-4 border-t-green-500">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
+          <Card className="p-4 sm:p-6 border-t-4 border-t-green-500">
             <div className="flex items-center justify-between mb-2">
-              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                <DollarSign className="h-6 w-6 text-green-600" />
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-green-600" />
               </div>
               <Check className="h-5 w-5 text-green-600" />
             </div>
-            <div className="text-sm text-gray-600 mb-1">Receita Recebida</div>
-            <div className="text-3xl font-bold text-gray-900">
+            <div className="text-xs sm:text-sm text-gray-600 mb-1">Receita Recebida</div>
+            <div className="text-2xl sm:text-3xl font-bold text-gray-900">
               R$ {stats.total_revenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </div>
             <div className="text-xs text-gray-500 mt-1">
@@ -261,14 +263,14 @@ export default function FinancePageNew() {
             </div>
           </Card>
 
-          <Card className="p-6 border-t-4 border-t-yellow-500">
+          <Card className="p-4 sm:p-6 border-t-4 border-t-yellow-500">
             <div className="flex items-center justify-between mb-2">
-              <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                <Clock className="h-6 w-6 text-yellow-600" />
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+                <Clock className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-600" />
               </div>
             </div>
-            <div className="text-sm text-gray-600 mb-1">Pendente</div>
-            <div className="text-3xl font-bold text-gray-900">
+            <div className="text-xs sm:text-sm text-gray-600 mb-1">Pendente</div>
+            <div className="text-2xl sm:text-3xl font-bold text-gray-900">
               R$ {stats.pending_revenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </div>
             <div className="text-xs text-gray-500 mt-1">
@@ -276,14 +278,14 @@ export default function FinancePageNew() {
             </div>
           </Card>
 
-          <Card className="p-6 border-t-4 border-t-red-500">
+          <Card className="p-4 sm:p-6 border-t-4 border-t-red-500">
             <div className="flex items-center justify-between mb-2">
-              <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
-                <XCircle className="h-6 w-6 text-red-600" />
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-red-100 rounded-lg flex items-center justify-center">
+                <XCircle className="h-5 w-5 sm:h-6 sm:w-6 text-red-600" />
               </div>
             </div>
-            <div className="text-sm text-gray-600 mb-1">Vencidos</div>
-            <div className="text-3xl font-bold text-gray-900">
+            <div className="text-xs sm:text-sm text-gray-600 mb-1">Vencidos</div>
+            <div className="text-2xl sm:text-3xl font-bold text-gray-900">
               R$ {stats.overdue_revenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </div>
             <div className="text-xs text-gray-500 mt-1">
@@ -291,14 +293,14 @@ export default function FinancePageNew() {
             </div>
           </Card>
 
-          <Card className="p-6 border-t-4 border-t-blue-500">
+          <Card className="p-4 sm:p-6 border-t-4 border-t-blue-500">
             <div className="flex items-center justify-between mb-2">
-              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                <TrendingUp className="h-6 w-6 text-blue-600" />
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
               </div>
             </div>
-            <div className="text-sm text-gray-600 mb-1">Total de Transações</div>
-            <div className="text-3xl font-bold text-gray-900">
+            <div className="text-xs sm:text-sm text-gray-600 mb-1">Total de Transações</div>
+            <div className="text-2xl sm:text-3xl font-bold text-gray-900">
               {stats.total_transactions}
             </div>
             <div className="text-xs text-gray-500 mt-1">
@@ -310,9 +312,9 @@ export default function FinancePageNew() {
 
       {/* Gráficos */}
       {stats && (
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-8">
-          <Card className="p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Por Tipo</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
+          <Card className="p-4 sm:p-6">
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Por Tipo</h3>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">Compra de Plano</span>
@@ -329,8 +331,8 @@ export default function FinancePageNew() {
             </div>
           </Card>
 
-          <Card className="p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Por Forma de Pagamento</h3>
+          <Card className="p-4 sm:p-6">
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Por Forma de Pagamento</h3>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">PIX</span>
@@ -347,8 +349,8 @@ export default function FinancePageNew() {
             </div>
           </Card>
 
-          <Card className="p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Por Status</h3>
+          <Card className="p-4 sm:p-6">
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Por Status</h3>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">Recebido</span>
@@ -372,7 +374,7 @@ export default function FinancePageNew() {
       )}
 
       {/* Lista de Pagamentos */}
-      <Card className="p-6">
+      <Card className="p-4 sm:p-6">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-semibold text-gray-900">Pagamentos Recebidos</h3>
           <Badge variant="outline">{payments.length} pagamento(s)</Badge>
@@ -388,7 +390,7 @@ export default function FinancePageNew() {
             <p>Nenhum pagamento encontrado</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
