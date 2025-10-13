@@ -60,7 +60,7 @@ router.post('/student/purchase-package', async (req, res) => {
       .from('users')
       .select('*')
       .eq('id', data.teacher_id)
-      .eq('role', 'TEACHER')
+      .in('role', ['TEACHER', 'PROFESSOR'])
       .single()
 
     if (teacherError || !teacher) {
@@ -192,7 +192,7 @@ router.post('/teacher/purchase-hours', async (req, res) => {
       .from('users')
       .select('*')
       .eq('id', data.teacher_id)
-      .eq('role', 'TEACHER')
+      .in('role', ['TEACHER', 'PROFESSOR'])
       .single()
 
     if (teacherError || !teacher) {
@@ -208,6 +208,20 @@ router.post('/teacher/purchase-hours', async (req, res) => {
 
     if (packageError || !hoursPackage) {
       return res.status(404).json({ error: 'Pacote de horas não encontrado' })
+    }
+
+    const metadataJson = (hoursPackage as any).metadata_json || {}
+    const rawHoursIncluded = Number(
+      (hoursPackage as any).hours_included ??
+      (hoursPackage as any).hours_qty ??
+      metadataJson?.hours_included ??
+      metadataJson?.hours ??
+      0
+    )
+    const hoursIncluded = Math.max(0, Math.floor(rawHoursIncluded))
+
+    if (!hoursIncluded) {
+      return res.status(400).json({ error: 'Pacote de horas sem quantidade configurada' })
     }
 
     // 3. Criar/buscar cliente no Asaas
@@ -266,7 +280,7 @@ router.post('/teacher/purchase-hours', async (req, res) => {
         reference_id: paymentResult.data.id,
         metadata: {
           package_id: hoursPackage.id,
-          hours_to_add: hoursPackage.hours_included || 10, // TODO: Adicionar campo hours_included
+          hours_to_add: hoursIncluded,
           asaas_payment_id: paymentResult.data.id,
           payment_method: data.payment_method
         }
@@ -363,10 +377,14 @@ router.post('/webhook/asaas', async (req, res) => {
         })
 
         // 2. DAR HORAS DE BRINDE PARA O PROFESSOR
-        await supabase.rpc('add_teacher_hours', {
-          teacher_id: metadata.teacher_id,
-          hours_amount: metadata.hours_to_gift_teacher
-        })
+        const giftedHours = Math.max(0, Math.floor(Number(metadata.hours_to_gift_teacher || 0)))
+
+        if (giftedHours > 0 && metadata.teacher_id) {
+          await supabase.rpc('add_teacher_hours', {
+            teacher_id: metadata.teacher_id,
+            hours_amount: giftedHours
+          })
+        }
 
         // 3. Criar notificação para o professor
         await supabase
@@ -375,26 +393,32 @@ router.post('/webhook/asaas', async (req, res) => {
             user_id: metadata.teacher_id,
             type: 'HOURS_GIFTED',
             title: 'Você ganhou horas!',
-            message: `Parabéns! Você ganhou ${metadata.hours_to_gift_teacher}h de brinde por ter sido escolhido por um novo aluno.`,
+            message: `Parabéns! Você ganhou ${giftedHours}h de brinde por ter sido escolhido por um novo aluno.`,
             data: {
               student_id: transaction.user_id,
-              hours_gifted: metadata.hours_to_gift_teacher
+              hours_gifted: giftedHours
             }
           })
 
         console.log(`✅ Aluno ${transaction.user_id} recebeu ${metadata.credits_to_add} créditos`)
-        console.log(`🎁 Professor ${metadata.teacher_id} ganhou ${metadata.hours_to_gift_teacher}h de brinde`)
+        console.log(`🎁 Professor ${metadata.teacher_id} ganhou ${giftedHours}h de brinde`)
       }
 
       // COMPRA DE HORAS DE PROFESSOR
       if (externalReference?.startsWith('TEACHER_HOURS_')) {
-        // Adicionar horas no banco de horas do professor
-        await supabase.rpc('add_teacher_hours', {
-          teacher_id: transaction.user_id,
-          hours_amount: metadata.hours_to_add
-        })
+        const hoursToAdd = Math.max(0, Math.floor(Number(metadata.hours_to_add || 0)))
 
-        console.log(`✅ Professor ${transaction.user_id} recebeu ${metadata.hours_to_add}h`)
+        if (hoursToAdd > 0) {
+          // Adicionar horas no banco de horas do professor
+          await supabase.rpc('add_teacher_hours', {
+            teacher_id: transaction.user_id,
+            hours_amount: hoursToAdd
+          })
+
+          console.log(`✅ Professor ${transaction.user_id} recebeu ${hoursToAdd}h`)
+        } else {
+          console.warn('Compra de horas recebida sem quantidade válida:', metadata)
+        }
       }
 
       // Atualizar status da transação

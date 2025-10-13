@@ -100,7 +100,7 @@ async function handlePaymentConfirmed(webhookData: any, externalRef: string) {
   // Verificar se é compra de pacote de professor
   const { data: teacherPurchase } = await supabase
     .from('teacher_subscriptions')
-    .select('*, teacher:teacher_id(name, email), plan:plan_id(hours_included)')
+    .select('*, teacher:teacher_id(name, email), plan:plan_id(hours_included, hours_qty, metadata_json)')
     .eq('id', externalRef)
     .single()
 
@@ -114,11 +114,22 @@ async function handlePaymentConfirmed(webhookData: any, externalRef: string) {
       })
       .eq('id', externalRef)
 
-    // TODO: Adicionar horas ao professor (implementar RPC ou campo hours_available)
-    // await supabase.rpc('increment_teacher_hours', {
-    //   user_id: teacherPurchase.teacher_id,
-    //   hours: teacherPurchase.plan?.hours_included || 0
-    // })
+    const planMetadata = teacherPurchase.plan?.metadata_json || {}
+    const rawPlanHours = Number(
+      teacherPurchase.plan?.hours_included ??
+      teacherPurchase.plan?.hours_qty ??
+      planMetadata?.hours_included ??
+      planMetadata?.hours ??
+      0
+    )
+    const planHours = Math.max(0, Math.floor(rawPlanHours))
+
+    if (planHours > 0) {
+      await supabase.rpc('add_teacher_hours', {
+        teacher_id: teacherPurchase.teacher_id,
+        hours_amount: planHours
+      })
+    }
 
     // Notificar admin
     const { data: admin } = await supabase
@@ -132,7 +143,7 @@ async function handlePaymentConfirmed(webhookData: any, externalRef: string) {
         admin.user_id,
         'payment_received',
         'Pagamento Confirmado - Professor',
-        `${teacherPurchase.teacher?.name} comprou pacote de ${teacherPurchase.plan?.hours_included || 0} horas. Valor: R$ ${webhookData.value}`,
+        `${teacherPurchase.teacher?.name} comprou pacote de ${planHours} horas. Valor: R$ ${webhookData.value}`,
         {
           subscription_id: externalRef,
           payment_id: webhookData.paymentId,
