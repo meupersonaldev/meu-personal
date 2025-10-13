@@ -4,7 +4,7 @@ import jwt, { type Secret, type SignOptions } from 'jsonwebtoken'
 import type { StringValue } from 'ms'
 import { z } from 'zod'
 import { Resend } from 'resend'
-import { supabase } from '../config/supabase'
+import { supabase } from '../lib/supabase'
 import { ensureFranqueadoraContact } from '../services/franqueadora-contacts.service'
 import { auditAuthEvent, auditSensitiveOperation } from '../middleware/audit'
 import { auditService } from '../services/audit.service'
@@ -142,6 +142,7 @@ router.post('/login', auditAuthEvent('LOGIN'), async (req, res) => {
 router.post('/register', auditSensitiveOperation('CREATE', 'users'), async (req, res) => {
   try {
     const userData = registerSchema.parse(req.body)
+    const sanitizedCpf = userData.cpf.replace(/\D/g, '')
 
     // Verificar se email já existe
     const { data: existingUser, error: checkError } = await supabase
@@ -152,6 +153,22 @@ router.post('/register', auditSensitiveOperation('CREATE', 'users'), async (req,
 
     if (existingUser) {
       return res.status(400).json({ message: 'Email já está em uso' })
+    }
+
+    // Verificar se CPF já existe
+    const { data: existingCpfUsers, error: cpfCheckError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('cpf', sanitizedCpf)
+      .limit(1)
+
+    if (cpfCheckError) {
+      console.error('Erro ao verificar CPF existente:', cpfCheckError)
+      return res.status(500).json({ message: 'Erro ao validar CPF' })
+    }
+
+    if (existingCpfUsers && existingCpfUsers.length > 0) {
+      return res.status(400).json({ message: 'CPF já está em uso' })
     }
 
     // Criar novo usuário no Supabase
@@ -168,7 +185,7 @@ router.post('/register', auditSensitiveOperation('CREATE', 'users'), async (req,
       name: userData.name,
       email: userData.email,
       phone: userData.phone || null,
-      cpf: userData.cpf.replace(/\D/g, ''), // Armazenar apenas números
+      cpf: sanitizedCpf, // Armazenar apenas números
       role: userData.role,
       credits: userData.role === 'STUDENT' ? 5 : 0, // Créditos de boas-vindas
       is_active: true,
@@ -620,21 +637,5 @@ router.post('/check-email', async (req, res) => {
 })
 
 export default router
+ 
 
-// Extra endpoint: verificar se email já existe (usado pelo front antes de criar admin)
-router.post('/check-email', async (req, res) => {
-  try {
-    const schema = z.object({ email: z.string().email() })
-    const { email } = schema.parse(req.body)
-
-    const { data } = await supabase
-      .from('users')
-      .select('id')
-      .eq('email', email)
-      .maybeSingle()
-
-    return res.json({ exists: !!data })
-  } catch (err) {
-    return res.json({ exists: false })
-  }
-})

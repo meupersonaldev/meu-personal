@@ -1,4 +1,4 @@
-import { supabase } from '../config/supabase';
+import { supabase } from '../lib/supabase';
 import { balanceService } from '../services/balance.service';
 
 /**
@@ -392,3 +392,4 @@ export class BookingScheduler {
 }
 
 export const bookingScheduler = new BookingScheduler();
+

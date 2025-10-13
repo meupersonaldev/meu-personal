@@ -1,4 +1,4 @@
-import { supabase } from '../config/supabase'
+import { supabase } from '../lib/supabase'
 
 function isMissingContactsTable(error: unknown) {
   if (!error) return false
@@ -250,3 +250,4 @@ export async function syncContactAcademies(userId: string, academyIds: string[])
     console.warn('Erro ao sincronizar academias do contato:', updateError.message)
   }
 }
+

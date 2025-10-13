@@ -1,6 +1,6 @@
 import express from 'express';
 import { z } from 'zod';
-import { supabase } from '../config/supabase';
+import { supabase } from '../lib/supabase';
 import { balanceService } from '../services/balance.service';
 import { createNotification, createUserNotification } from './notifications';
 
@@ -320,3 +320,4 @@ router.post('/:id/cancel', async (req, res) => {
 });
 
 export default router;
+

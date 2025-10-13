@@ -1,6 +1,6 @@
 import express from 'express'
 import { z } from 'zod'
-import { supabase } from '../config/supabase'
+import { supabase } from '../lib/supabase'
 import { asaasService } from '../services/asaas.service'
 
 const router = express.Router()
@@ -74,12 +74,16 @@ router.post('/student/purchase-package', async (req, res) => {
       const customerResult = await asaasService.createCustomer({
         name: student.name,
         email: student.email,
-        cpfCnpj: student.cpf || '00000000000', // TODO: Adicionar CPF no cadastro
+        cpfCnpj: (student.cpf || '').replace(/\D/g, '') || '00000000000',
         phone: student.phone
       })
 
       if (!customerResult.success) {
-        return res.status(500).json({ error: 'Erro ao criar cliente no Asaas' })
+        const message = Array.isArray(customerResult.error)
+          ? (customerResult.error[0]?.description || 'Erro ao criar cliente no Asaas')
+          : (customerResult.error || 'Erro ao criar cliente no Asaas')
+        const isCpfError = typeof message === 'string' && message.toLowerCase().includes('cpf')
+        return res.status(isCpfError ? 400 : 500).json({ error: message })
       }
 
       asaasCustomerId = customerResult.data.id
@@ -135,7 +139,14 @@ router.post('/student/purchase-package', async (req, res) => {
       return res.status(500).json({ error: 'Erro ao salvar transação' })
     }
 
-    // 7. Retornar dados do pagamento
+    // 7. Obter links de pagamento do Asaas e retornar dados
+    const linkResult = await asaasService.generatePaymentLink(paymentResult.data.id)
+    const paymentLink = linkResult.success ? linkResult.data : {
+      paymentUrl: paymentResult.data.invoiceUrl,
+      bankSlipUrl: paymentResult.data.bankSlipUrl,
+      pixCode: paymentResult.data.payload
+    }
+
     res.status(201).json({
       message: 'Pagamento criado com sucesso',
       transaction_id: transaction.id,
@@ -144,11 +155,10 @@ router.post('/student/purchase-package', async (req, res) => {
         status: paymentResult.data.status,
         value: paymentResult.data.value,
         due_date: paymentResult.data.dueDate,
-        // Links de pagamento
-        invoice_url: paymentResult.data.invoiceUrl, // Boleto
-        bank_slip_url: paymentResult.data.bankSlipUrl, // Boleto PDF
-        pix_qr_code: paymentResult.data.encodedImage, // QR Code PIX
-        pix_copy_paste: paymentResult.data.payload // Código PIX copia e cola
+        invoice_url: paymentLink.paymentUrl,
+        bank_slip_url: paymentLink.bankSlipUrl,
+        pix_qr_code: null,
+        pix_copy_paste: paymentLink.pixCode
       }
     })
 
@@ -207,12 +217,16 @@ router.post('/teacher/purchase-hours', async (req, res) => {
       const customerResult = await asaasService.createCustomer({
         name: teacher.name,
         email: teacher.email,
-        cpfCnpj: teacher.cpf || '00000000000',
+        cpfCnpj: (teacher.cpf || '').replace(/\D/g, '') || '00000000000',
         phone: teacher.phone
       })
 
       if (!customerResult.success) {
-        return res.status(500).json({ error: 'Erro ao criar cliente no Asaas' })
+        const message = Array.isArray(customerResult.error)
+          ? (customerResult.error[0]?.description || 'Erro ao criar cliente no Asaas')
+          : (customerResult.error || 'Erro ao criar cliente no Asaas')
+        const isCpfError = typeof message === 'string' && message.toLowerCase().includes('cpf')
+        return res.status(isCpfError ? 400 : 500).json({ error: message })
       }
 
       asaasCustomerId = customerResult.data.id
@@ -265,7 +279,14 @@ router.post('/teacher/purchase-hours', async (req, res) => {
       return res.status(500).json({ error: 'Erro ao salvar transação' })
     }
 
-    // 6. Retornar dados do pagamento
+    // 6. Obter links e retornar dados do pagamento
+    const linkResult = await asaasService.generatePaymentLink(paymentResult.data.id)
+    const paymentLink = linkResult.success ? linkResult.data : {
+      paymentUrl: paymentResult.data.invoiceUrl,
+      bankSlipUrl: paymentResult.data.bankSlipUrl,
+      pixCode: paymentResult.data.payload
+    }
+
     res.status(201).json({
       message: 'Pagamento criado com sucesso',
       transaction_id: transaction.id,
@@ -274,10 +295,10 @@ router.post('/teacher/purchase-hours', async (req, res) => {
         status: paymentResult.data.status,
         value: paymentResult.data.value,
         due_date: paymentResult.data.dueDate,
-        invoice_url: paymentResult.data.invoiceUrl,
-        bank_slip_url: paymentResult.data.bankSlipUrl,
-        pix_qr_code: paymentResult.data.encodedImage,
-        pix_copy_paste: paymentResult.data.payload
+        invoice_url: paymentLink.paymentUrl,
+        bank_slip_url: paymentLink.bankSlipUrl,
+        pix_qr_code: null,
+        pix_copy_paste: paymentLink.pixCode
       }
     })
 
@@ -573,3 +594,4 @@ function getMonthlyRevenue(payments: any[]) {
 }
 
 export default router
+

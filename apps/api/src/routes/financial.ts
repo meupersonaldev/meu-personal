@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { supabase } from '../config/supabase'
+import { supabase } from '../lib/supabase'
 import { requireAuth, requireRole } from '../middleware/auth'
 
 const router = Router()
@@ -359,3 +359,4 @@ router.get('/summary-franqueadora', requireAuth, requireRole(['FRANQUEADORA', 'S
 })
 
 export default router
+

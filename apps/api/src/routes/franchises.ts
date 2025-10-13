@@ -1,7 +1,8 @@
 import { Router } from 'express'
-import { supabase } from '../config/supabase'
+import { supabase } from '../lib/supabase'
 import bcrypt from 'bcryptjs'
 import { requireAuth, requireRole } from '../middleware/auth'
+import { auditService } from '../services/audit.service'
 
 const router = Router()
 
@@ -13,6 +14,18 @@ const router = Router()
 router.post('/create', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN']), async (req, res) => {
   try {
     const { academy, admin } = req.body
+
+    // Validação de datas de contrato (se ambas fornecidas)
+    if (academy?.contract_start_date && academy?.contract_end_date) {
+      const start = new Date(academy.contract_start_date)
+      const end = new Date(academy.contract_end_date)
+      if (isFinite(start.getTime()) && isFinite(end.getTime()) && end < start) {
+        return res.status(400).json({
+          error: 'CONTRACT_DATES_INVALID',
+          message: 'Data de término deve ser maior ou igual à data de início'
+        })
+      }
+    }
 
     // 1. Criar usuário admin
     const hashedPassword = await bcrypt.hash(admin.password, 10)
@@ -48,10 +61,10 @@ router.post('/create', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN'])
         zip_code: academy.zip_code,
         franchise_fee: academy.franchise_fee || 0,
         royalty_percentage: academy.royalty_percentage || 0,
-        monthly_revenue: 0,
+        monthly_revenue: academy.monthly_revenue || 0,
         contract_start_date: academy.contract_start_date,
         contract_end_date: academy.contract_end_date,
-        is_active: true
+        is_active: academy.is_active ?? true
       })
       .select()
       .single()
@@ -95,7 +108,7 @@ router.post('/create', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN'])
 })
 
 // GET /api/franchises - Listar todas as franquias (academias)
-router.get('/', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN']), async (req, res) => {
+router.get('/', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']), async (req, res) => {
   try {
     let { franqueadora_id } = req.query as { franqueadora_id?: string }
 
@@ -128,7 +141,11 @@ router.get('/', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN']), async
       is_active: academy.is_active,
       monthly_revenue: academy.monthly_revenue,
       royalty_percentage: academy.royalty_percentage,
-      created_at: academy.created_at
+      created_at: academy.created_at,
+      // Campos de políticas para consumo no dashboard da Franqueadora
+      credits_per_class: academy.credits_per_class,
+      class_duration_minutes: academy.class_duration_minutes,
+      checkin_tolerance: academy.checkin_tolerance
     }))
 
     res.json({ franchises })
@@ -139,7 +156,7 @@ router.get('/', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN']), async
 })
 
 // GET /api/franchises/:id - Obter detalhes de uma franquia
-router.get('/:id', requireAuth, requireRole(['FRANQUEADORA', 'FRANQUIA']), async (req, res) => {
+router.get('/:id', requireAuth, requireRole(['FRANQUEADORA', 'FRANQUIA', 'SUPER_ADMIN', 'ADMIN']), async (req, res) => {
   try {
     const { id } = req.params
 
@@ -176,9 +193,23 @@ router.post('/', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN']), asyn
       zip_code,
       franchise_fee,
       royalty_percentage,
+      monthly_revenue,
       contract_start_date,
-      contract_end_date
+      contract_end_date,
+      is_active
     } = req.body
+
+    // Validação de datas de contrato (se ambas fornecidas)
+    if (contract_start_date && contract_end_date) {
+      const start = new Date(contract_start_date)
+      const end = new Date(contract_end_date)
+      if (isFinite(start.getTime()) && isFinite(end.getTime()) && end < start) {
+        return res.status(400).json({
+          error: 'CONTRACT_DATES_INVALID',
+          message: 'Data de término deve ser maior ou igual à data de início'
+        })
+      }
+    }
 
     const { data, error } = await supabase
       .from('academies')
@@ -193,10 +224,10 @@ router.post('/', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN']), asyn
         zip_code,
         franchise_fee,
         royalty_percentage,
-        monthly_revenue: 0,
+        monthly_revenue: monthly_revenue || 0,
         contract_start_date,
         contract_end_date,
-        is_active: true
+        is_active: typeof is_active === 'boolean' ? is_active : true
       })
       .select()
       .single()
@@ -211,10 +242,28 @@ router.post('/', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN']), asyn
 })
 
 // PUT /api/franchises/:id - Atualizar franquia
-router.put('/:id', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 'FRANQUIA']), async (req, res) => {
+router.put('/:id', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN', 'FRANQUIA']), async (req, res) => {
   try {
     const { id } = req.params
     const updates = req.body
+
+    // Restringir campos de políticas para perfis que não sejam FRANCHISOR/SUPER_ADMIN/ADMIN
+    const policyFields = ['credits_per_class', 'class_duration_minutes', 'checkin_tolerance'] as const
+    const role = (req as any)?.user?.canonicalRole || (req as any)?.user?.role
+    if (role !== 'FRANCHISOR' && role !== 'SUPER_ADMIN' && role !== 'ADMIN') {
+      for (const field of policyFields) {
+        if (field in updates) {
+          delete updates[field]
+        }
+      }
+    }
+
+    // Buscar valores atuais para auditoria
+    const { data: beforePolicy } = await supabase
+      .from('academies')
+      .select('credits_per_class, class_duration_minutes, checkin_tolerance')
+      .eq('id', id)
+      .single()
 
     const { data, error } = await supabase
       .from('academies')
@@ -230,6 +279,38 @@ router.put('/:id', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 'FRA
     }
 
     res.json(data)
+
+    // Audit log de mudanças de políticas
+    try {
+      if (role === 'FRANCHISOR' || role === 'SUPER_ADMIN' || role === 'ADMIN') {
+        const changed: Record<string, any> = {}
+        for (const f of policyFields) {
+          if ((updates as any)[f] !== undefined && beforePolicy && data && (beforePolicy as any)[f] !== (data as any)[f]) {
+            changed[f] = { old: (beforePolicy as any)[f], new: (data as any)[f] }
+          }
+        }
+        if (Object.keys(changed).length > 0) {
+          await auditService.createLog({
+            tableName: 'academies',
+            recordId: id,
+            operation: 'SENSITIVE_CHANGE',
+            actorId: (req as any)?.user?.userId,
+            actorRole: (req as any)?.user?.role,
+            oldValues: beforePolicy || undefined,
+            newValues: {
+              credits_per_class: (data as any)?.credits_per_class,
+              class_duration_minutes: (data as any)?.class_duration_minutes,
+              checkin_tolerance: (data as any)?.checkin_tolerance
+            },
+            metadata: { changedFields: Object.keys(changed) },
+            ipAddress: (req as any).ip,
+            userAgent: (req as any).headers?.['user-agent']
+          })
+        }
+      }
+    } catch (logErr) {
+      console.error('Audit log failed (franchises update):', logErr)
+    }
   } catch (error: any) {
     console.error('Error updating franchise:', error)
     res.status(500).json({ error: error.message })
@@ -581,3 +662,4 @@ router.put('/leads/:id', async (req, res) => {
 })
 
 export default router
+

@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { supabase } from '../config/supabase'
+import { supabase } from '../lib/supabase'
 import { syncContactAcademies } from '../services/franqueadora-contacts.service'
 
 const router = Router()
@@ -261,6 +261,7 @@ router.get('/:teacherId/hours', async (req, res) => {
 })
 
 export default router
+
 
 
 

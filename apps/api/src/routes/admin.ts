@@ -2,7 +2,7 @@ import express from 'express';
 import { z } from 'zod';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { asyncErrorHandler } from '../middleware/errorHandler';
-import { supabase } from '../config/supabase';
+import { supabase } from '../lib/supabase';
 import { bookingScheduler } from '../jobs/booking-scheduler';
 
 const router = express.Router();

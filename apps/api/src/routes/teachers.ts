@@ -1,6 +1,6 @@
 import express from 'express'
 import { z } from 'zod'
-import { supabase } from '../config/supabase'
+import { supabase } from '../lib/supabase'
 
 const router = express.Router()
 
@@ -940,3 +940,4 @@ router.get('/:id/academies', async (req, res) => {
 })
 
 export default router
+

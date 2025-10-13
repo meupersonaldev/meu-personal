@@ -1,4 +1,4 @@
-import { supabase } from '../config/supabase';
+import { supabase } from '../lib/supabase';
 
 export interface BalanceScope {
   franqueadoraId: string;
@@ -528,6 +528,38 @@ class BalanceService {
     return { balance: updatedBalance, transaction };
   }
 
+  async revokeProfessorHours(
+    professorId: string,
+    franqueadoraId: string,
+    hours: number,
+    bookingId: string,
+    options: ProfessorTransactionOptions = {}
+  ): Promise<{ balance: ProfHourBalance; transaction: HourTransaction }> {
+    const balance = await this.ensureProfessorBalance(professorId, franqueadoraId);
+
+    const transaction = await this.createHourTransaction(
+      professorId,
+      franqueadoraId,
+      'REVOKE',
+      hours,
+      {
+        ...options,
+        source: options.source ?? 'SYSTEM',
+        bookingId,
+        metaJson: {
+          ...options.metaJson,
+          booking_id: bookingId
+        }
+      }
+    );
+
+    const updatedBalance = await this.updateProfessorBalance(professorId, franqueadoraId, {
+      available_hours: Math.max(0, balance.available_hours - hours)
+    });
+
+    return { balance: updatedBalance, transaction };
+  }
+
   // ---------------------------------------------------------------------------
   // Scheduler helpers
   async getTransactionsToUnlock(): Promise<StudentClassTransaction[]> {
@@ -560,3 +592,4 @@ class BalanceService {
 }
 
 export const balanceService = new BalanceService();
+

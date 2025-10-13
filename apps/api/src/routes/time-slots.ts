@@ -1,5 +1,6 @@
 import { Router } from 'express'
-import { supabase } from '../config/supabase'
+import { supabase } from '../lib/supabase'
+import { requireAuth, requireRole } from '../middleware/auth'
 
 const router = Router()
 
@@ -119,7 +120,7 @@ router.delete('/:id', async (req, res) => {
 })
 
 // POST /api/time-slots/generate - Gerar slots automaticamente baseado no schedule
-router.post('/generate', async (req, res) => {
+router.post('/generate', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']), async (req, res) => {
   try {
     const { academy_id } = req.body
 
@@ -212,3 +213,4 @@ router.post('/generate', async (req, res) => {
 })
 
 export default router
+

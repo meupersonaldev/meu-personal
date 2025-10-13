@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { supabase } from '../config/supabase'
+import { supabase } from '../lib/supabase'
 import { createNotification, createUserNotification } from './notifications'
 
 const router = Router()
@@ -272,3 +272,4 @@ router.post('/scan', async (req, res) => {
 })
 
 export default router
+

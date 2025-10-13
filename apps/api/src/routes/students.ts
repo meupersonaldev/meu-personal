@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { supabase } from '../config/supabase'
+import { supabase } from '../lib/supabase'
 
 const router = Router()
 
@@ -503,3 +503,4 @@ router.get('/:id/stats', async (req, res) => {
 })
 
 export default router
+

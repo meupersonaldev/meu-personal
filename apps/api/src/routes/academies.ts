@@ -1,15 +1,53 @@
 import { Router } from 'express'
-import { supabase } from '../config/supabase'
-import { requireAuth, requireRole } from '../middleware/auth'
+import { supabase } from '../lib/supabase'
+import { requireAuth, requireRole, requireFranqueadoraAdmin } from '../middleware/auth'
+import { auditService } from '../services/audit.service'
 
 const router = Router()
+
+// Helpers de validação de overrides (campos permitidos e faixas)
+const POLICY_FIELDS: Record<string, { min?: number; max?: number }> = {
+  credits_per_class: { min: 0 },
+  class_duration_minutes: { min: 15 },
+  checkin_tolerance_minutes: { min: 0, max: 180 },
+  student_min_booking_notice_minutes: { min: 0, max: 10080 },
+  student_reschedule_min_notice_minutes: { min: 0, max: 10080 },
+  late_cancel_threshold_minutes: { min: 0, max: 1440 },
+  late_cancel_penalty_credits: { min: 0 },
+  no_show_penalty_credits: { min: 0 },
+  teacher_minutes_per_class: { min: 0 },
+  teacher_rest_minutes_between_classes: { min: 0, max: 180 },
+  teacher_max_daily_classes: { min: 0, max: 48 },
+  max_future_booking_days: { min: 1, max: 365 },
+  max_cancel_per_month: { min: 0 }
+}
+
+function validateOverrides(input: any): string[] {
+  if (!input || typeof input !== 'object') return ['overrides inválido']
+  const errors: string[] = []
+  for (const [k, v] of Object.entries(input)) {
+    if (!(k in POLICY_FIELDS)) {
+      errors.push(`campo não permitido: ${k}`)
+      continue
+    }
+    const n = Number(v)
+    if (!Number.isFinite(n)) {
+      errors.push(`${k} inválido`)
+      continue
+    }
+    const { min, max } = POLICY_FIELDS[k]
+    if (min != null && n < min) errors.push(`${k} deve ser ≥ ${min}`)
+    if (max != null && n > max) errors.push(`${k} deve ser ≤ ${max}`)
+  }
+  return errors
+}
 
 // GET /api/academies - Listar todas as academias (depreciado, usar /units)
 router.get('/', requireAuth, requireRole(['FRANQUEADORA', 'FRANQUIA', 'TEACHER', 'PROFESSOR']), async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('academies')
-      .select('id, name, city, state, credits_per_class, class_duration_minutes')
+      .select('id, name, city, state, credits_per_class, class_duration_minutes, checkin_tolerance')
       .eq('is_active', true)
       .order('name')
 
@@ -43,10 +81,22 @@ router.get('/:id', requireAuth, requireRole(['FRANQUEADORA', 'FRANQUIA', 'TEACHE
 })
 
 // PUT /api/academies/:id - Atualizar academia (depreciado, usar /units)
-router.put('/:id', requireAuth, requireRole(['FRANQUEADORA', 'FRANQUIA']), async (req, res) => {
+router.put('/:id', requireAuth, requireRole(['FRANQUEADORA', 'FRANQUIA', 'SUPER_ADMIN', 'ADMIN']), async (req, res) => {
   try {
     const { id } = req.params
     const updateData = req.body
+
+    // Restringir campos de políticas para perfis que não sejam FRANQUEADORA/SUPER_ADMIN
+    const policyFields = ['credits_per_class', 'class_duration_minutes', 'checkin_tolerance'] as const
+    // req.user.role pode ser 'FRANQUEADORA', 'FRANQUIA', 'SUPER_ADMIN', etc.
+    const role = (req as any)?.user?.role
+    if (role !== 'FRANQUEADORA' && role !== 'SUPER_ADMIN' && role !== 'ADMIN') {
+      for (const field of policyFields) {
+        if (field in updateData) {
+          delete updateData[field]
+        }
+      }
+    }
 
     // Validar ownership: academia precisa pertencer à franqueadora do admin (quando disponível)
     if (req.franqueadoraAdmin?.franqueadora_id) {
@@ -59,6 +109,13 @@ router.put('/:id', requireAuth, requireRole(['FRANQUEADORA', 'FRANQUIA']), async
         return res.status(403).json({ error: 'Forbidden' })
       }
     }
+
+    // Buscar valores atuais para audit
+    const { data: beforePolicy } = await supabase
+      .from('academies')
+      .select('credits_per_class, class_duration_minutes, checkin_tolerance')
+      .eq('id', id)
+      .single()
 
     const { data, error } = await supabase
       .from('academies')
@@ -73,6 +130,38 @@ router.put('/:id', requireAuth, requireRole(['FRANQUEADORA', 'FRANQUIA']), async
     if (error) throw error
 
     res.json({ academy: data, message: 'Academia atualizada com sucesso' })
+
+    // Audit log de mudanças de políticas (somente quando houve alteração por papel autorizado)
+    try {
+      if (role === 'FRANQUEADORA' || role === 'SUPER_ADMIN' || role === 'ADMIN') {
+        const changed: Record<string, any> = {}
+        for (const f of policyFields) {
+          if ((updateData as any)[f] !== undefined && beforePolicy && data && (beforePolicy as any)[f] !== (data as any)[f]) {
+            changed[f] = { old: (beforePolicy as any)[f], new: (data as any)[f] }
+          }
+        }
+        if (Object.keys(changed).length > 0) {
+          await auditService.createLog({
+            tableName: 'academies',
+            recordId: id,
+            operation: 'SENSITIVE_CHANGE',
+            actorId: (req as any)?.user?.userId,
+            actorRole: (req as any)?.user?.role,
+            oldValues: beforePolicy || undefined,
+            newValues: {
+              credits_per_class: (data as any)?.credits_per_class,
+              class_duration_minutes: (data as any)?.class_duration_minutes,
+              checkin_tolerance: (data as any)?.checkin_tolerance
+            },
+            metadata: { changedFields: Object.keys(changed) },
+            ipAddress: (req as any).ip,
+            userAgent: (req as any).headers?.['user-agent']
+          })
+        }
+      }
+    } catch (logErr) {
+      console.error('Audit log failed (academies update):', logErr)
+    }
   } catch (error: any) {
     console.error('Error updating academy:', error)
     res.status(500).json({ error: error.message })
@@ -270,6 +359,180 @@ router.get('/:id/available-slots', async (req, res) => {
   } catch (error: any) {
     console.error('Error fetching available slots:', error)
     res.status(500).json({ error: error.message })
+  }
+})
+
+// ========================
+// Overrides e Política Efetiva
+// ========================
+
+// GET overrides da unidade
+router.get('/:id/policies-overrides', requireAuth, requireRole(['FRANQUEADORA', 'FRANQUIA', 'SUPER_ADMIN', 'ADMIN']), async (req, res) => {
+  try {
+    const { id } = req.params
+    const { data, error } = await supabase
+      .from('academy_policy_overrides')
+      .select('overrides')
+      .eq('academy_id', id)
+      .maybeSingle()
+    if (error) throw error
+    return res.json({ success: true, overrides: data?.overrides || {} })
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message })
+  }
+})
+
+// PUT overrides da unidade (apenas Franqueadora)
+router.put('/:id/policies-overrides', requireAuth, requireRole(['FRANQUEADORA']), requireFranqueadoraAdmin, async (req, res) => {
+  try {
+    const { id } = req.params
+    const overrides = req.body?.overrides || {}
+
+    // Validar ownership: academia precisa pertencer à franqueadora do admin
+    const { data: academy, error: aErr } = await supabase
+      .from('academies')
+      .select('franqueadora_id')
+      .eq('id', id)
+      .single()
+    if (aErr || !academy) return res.status(404).json({ error: 'ACADEMY_NOT_FOUND' })
+    if (academy.franqueadora_id !== req.franqueadoraAdmin?.franqueadora_id) return res.status(403).json({ error: 'Forbidden' })
+
+    const errors = validateOverrides(overrides)
+    if (errors.length) return res.status(400).json({ error: 'VALIDATION_ERROR', details: errors })
+
+    // Upsert overrides
+    const { data: current } = await supabase
+      .from('academy_policy_overrides')
+      .select('id')
+      .eq('academy_id', id)
+      .maybeSingle()
+
+    if (current) {
+      const { data, error } = await supabase
+        .from('academy_policy_overrides')
+        .update({ overrides, updated_at: new Date().toISOString() })
+        .eq('id', current.id)
+        .select()
+        .single()
+      if (error) throw error
+      return res.json({ success: true, overrides: data.overrides })
+    } else {
+      const { data, error } = await supabase
+        .from('academy_policy_overrides')
+        .insert({ academy_id: id, overrides })
+        .select()
+        .single()
+      if (error) throw error
+      return res.status(201).json({ success: true, overrides: data.overrides })
+    }
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message })
+  }
+})
+
+// DELETE override específico (apenas Franqueadora)
+router.delete('/:id/policies-overrides/:field', requireAuth, requireRole(['FRANQUEADORA']), requireFranqueadoraAdmin, async (req, res) => {
+  try {
+    const { id, field } = req.params as { id: string; field: string }
+    if (!(field in POLICY_FIELDS)) return res.status(400).json({ error: 'FIELD_NOT_ALLOWED' })
+
+    // Validar ownership
+    const { data: academy, error: aErr } = await supabase
+      .from('academies')
+      .select('franqueadora_id')
+      .eq('id', id)
+      .single()
+    if (aErr || !academy) return res.status(404).json({ error: 'ACADEMY_NOT_FOUND' })
+    if (academy.franqueadora_id !== req.franqueadoraAdmin?.franqueadora_id) return res.status(403).json({ error: 'Forbidden' })
+
+    const { data: current, error: cErr } = await supabase
+      .from('academy_policy_overrides')
+      .select('id, overrides')
+      .eq('academy_id', id)
+      .maybeSingle()
+    if (cErr) throw cErr
+    if (!current) return res.status(204).send()
+
+    const newOverrides = { ...(current.overrides || {}) }
+    delete (newOverrides as any)[field]
+
+    const { error } = await supabase
+      .from('academy_policy_overrides')
+      .update({ overrides: newOverrides, updated_at: new Date().toISOString() })
+      .eq('id', current.id)
+    if (error) throw error
+    return res.status(204).send()
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message })
+  }
+})
+
+// GET política efetiva da unidade (merge entre publicada e overrides)
+router.get('/:id/policies-effective', requireAuth, requireRole(['FRANQUEADORA', 'FRANQUIA', 'SUPER_ADMIN', 'ADMIN', 'TEACHER', 'PROFESSOR']), async (req, res) => {
+  try {
+    const { id } = req.params
+    // Buscar academia e franqueadora
+    const { data: academy, error: aErr } = await supabase
+      .from('academies')
+      .select('franqueadora_id')
+      .eq('id', id)
+      .single()
+    if (aErr || !academy) return res.status(404).json({ error: 'ACADEMY_NOT_FOUND' })
+
+    // Buscar política publicada da franqueadora
+    const { data: published, error: pErr } = await supabase
+      .from('franchisor_policies')
+      .select('*')
+      .eq('franqueadora_id', academy.franqueadora_id)
+      .eq('status', 'published')
+      .order('effective_from', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (pErr) throw pErr
+
+    const base: Record<string, any> = published ? {
+      credits_per_class: published.credits_per_class,
+      class_duration_minutes: published.class_duration_minutes,
+      checkin_tolerance_minutes: published.checkin_tolerance_minutes,
+      student_min_booking_notice_minutes: published.student_min_booking_notice_minutes,
+      student_reschedule_min_notice_minutes: published.student_reschedule_min_notice_minutes,
+      late_cancel_threshold_minutes: published.late_cancel_threshold_minutes,
+      late_cancel_penalty_credits: published.late_cancel_penalty_credits,
+      no_show_penalty_credits: published.no_show_penalty_credits,
+      teacher_minutes_per_class: published.teacher_minutes_per_class,
+      teacher_rest_minutes_between_classes: published.teacher_rest_minutes_between_classes,
+      teacher_max_daily_classes: published.teacher_max_daily_classes,
+      max_future_booking_days: published.max_future_booking_days,
+      max_cancel_per_month: published.max_cancel_per_month,
+    } : {
+      credits_per_class: 1,
+      class_duration_minutes: 60,
+      checkin_tolerance_minutes: 30,
+      student_min_booking_notice_minutes: 0,
+      student_reschedule_min_notice_minutes: 0,
+      late_cancel_threshold_minutes: 120,
+      late_cancel_penalty_credits: 1,
+      no_show_penalty_credits: 1,
+      teacher_minutes_per_class: 60,
+      teacher_rest_minutes_between_classes: 10,
+      teacher_max_daily_classes: 12,
+      max_future_booking_days: 30,
+      max_cancel_per_month: 0,
+    }
+
+    // Buscar overrides
+    const { data: ov } = await supabase
+      .from('academy_policy_overrides')
+      .select('overrides')
+      .eq('academy_id', id)
+      .maybeSingle()
+    const overrides = (ov?.overrides || {}) as Record<string, any>
+
+    const effective = { ...base, ...overrides }
+    return res.json({ success: true, effective, published: !!published, overrides })
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message })
   }
 })
 

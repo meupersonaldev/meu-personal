@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { supabase } from '../config/supabase'
+import { supabase } from '../lib/supabase'
 import { requireAuth, requireRole, requireFranqueadoraAdmin } from '../middleware/auth'
 import { asyncErrorHandler } from '../middleware/errorHandler'
 import {
@@ -13,11 +13,13 @@ import {
 import { auditSensitiveOperation } from '../middleware/audit'
 import { resolveDefaultFranqueadoraId } from '../services/franqueadora-contacts.service'
 import { auditService } from '../services/audit.service'
+import { cacheService } from '../services/cache.service'
+import { FRANQUEADORA_CONTACTS_SELECT } from '../dto/franqueadora-contacts'
 
 const router = Router()
 
 // GET /api/franqueadora/me - contexto da franqueadora do admin atual
-router.get('/me', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN']), requireFranqueadoraAdmin, async (req, res) => {
+router.get('/me', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']), requireFranqueadoraAdmin, async (req, res) => {
   try {
     let franqueadoraId = req.franqueadoraAdmin?.franqueadora_id
 
@@ -56,7 +58,7 @@ router.get('/me', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN']), req
 
 router.get('/contacts',
   requireAuth,
-  requireRole(['FRANQUEADORA', 'SUPER_ADMIN']),
+  requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']),
   extractPagination,
   addPaginationHeaders,
   asyncErrorHandler(async (req, res) => {
@@ -72,7 +74,7 @@ router.get('/contacts',
     let query = supabase
       .from('franqueadora_contacts')
       .select(
-        'id, franqueadora_id, user_id, role, status, origin, assigned_academy_ids, last_assignment_at, created_at, updated_at, user:users (id, name, email, phone, role, is_active, credits, created_at)',
+        FRANQUEADORA_CONTACTS_SELECT,
         { count: 'exact' }
       );
 
@@ -84,6 +86,11 @@ router.get('/contacts',
     const statusFilter = queryParams.status ? String(queryParams.status).toUpperCase() : undefined;
     const assignedFlag = queryParams.assigned ? String(queryParams.assigned) : undefined;
     const academyId = queryParams.academy_id ? String(queryParams.academy_id) : undefined;
+    const userActiveParam = queryParams.user_active;
+    const userActive = typeof userActiveParam === 'string'
+      ? (userActiveParam === 'true' || userActiveParam === '1')
+      : undefined;
+    const isStudent = roleFilter === 'STUDENT';
     const search = queryParams.search ? String(queryParams.search).trim() : undefined;
 
     if (roleFilter && ['STUDENT', 'TEACHER'].includes(roleFilter)) {
@@ -91,17 +98,32 @@ router.get('/contacts',
     }
 
     if (statusFilter && ['UNASSIGNED', 'ASSIGNED', 'INACTIVE'].includes(statusFilter)) {
-      query = query.eq('status', statusFilter);
+      if (isStudent) {
+        // Para STUDENT, ignorar ASSIGNED/UNASSIGNED (aluno não fica atrelado a unidade). Permitir apenas INACTIVE.
+        if (statusFilter === 'INACTIVE') {
+          query = query.eq('status', 'INACTIVE');
+        }
+      } else {
+        query = query.eq('status', statusFilter);
+      }
     }
 
-    if (academyId) {
+    // Filtros de atribuição só fazem sentido para TEACHER
+    if (!isStudent && academyId) {
       query = query.contains('assigned_academy_ids', [academyId]);
     }
 
-    if (assignedFlag === 'true') {
-      query = query.not('assigned_academy_ids', 'eq', '{}');
-    } else if (assignedFlag === 'false') {
-      query = query.eq('assigned_academy_ids', '{}');
+    if (!isStudent) {
+      if (assignedFlag === 'true') {
+        query = query.not('assigned_academy_ids', 'eq', '{}');
+      } else if (assignedFlag === 'false') {
+        query = query.eq('assigned_academy_ids', '{}');
+      }
+    }
+
+    // Filtro de status do usuário (ativo/inativo) proveniente da UI
+    if (typeof userActive === 'boolean') {
+      query = query.eq('user.is_active', userActive);
     }
 
     if (search) {
@@ -147,7 +169,8 @@ router.get('/contacts',
 // Packages (Franchise Packages) COM PAGINAÇÃO E FILTROS
 router.get('/packages',
   requireAuth,
-  requireRole(['FRANQUEADORA', 'SUPER_ADMIN']),
+  requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']),
+  requireFranqueadoraAdmin,
   extractPagination,
   extractFilters(['is_active', 'name', 'investment_amount']),
   addPaginationHeaders,
@@ -209,7 +232,8 @@ router.get('/packages',
 
 router.post('/packages',
   requireAuth,
-  requireRole(['FRANQUEADORA', 'SUPER_ADMIN']),
+  requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']),
+  requireFranqueadoraAdmin,
   auditSensitiveOperation('CREATE', 'franchise_packages'),
   asyncErrorHandler(async (req, res) => {
     if (!req.franqueadoraAdmin?.franqueadora_id) {
@@ -244,8 +268,9 @@ router.post('/packages',
 
 router.put('/packages/:id',
   requireAuth,
-  requireRole(['FRANQUEADORA', 'SUPER_ADMIN']),
-  auditSensitiveOperation('CREATE', 'franchise_packages'),
+  requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']),
+  requireFranqueadoraAdmin,
+  auditSensitiveOperation('UPDATE', 'franchise_packages'),
   asyncErrorHandler(async (req, res) => {
     if (!req.franqueadoraAdmin?.franqueadora_id) {
       return res.status(400).json({
@@ -307,8 +332,9 @@ router.put('/packages/:id',
 
 router.delete('/packages/:id',
   requireAuth,
-  requireRole(['FRANQUEADORA', 'SUPER_ADMIN']),
-  auditSensitiveOperation('CREATE', 'franchise_packages'),
+  requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']),
+  requireFranqueadoraAdmin,
+  auditSensitiveOperation('DELETE', 'franchise_packages'),
   asyncErrorHandler(async (req, res) => {
     if (!req.franqueadoraAdmin?.franqueadora_id) {
       return res.status(400).json({
@@ -366,7 +392,8 @@ router.delete('/packages/:id',
 // Leads (COM PAGINAÇÃO E FILTROS)
 router.get('/leads',
   requireAuth,
-  requireRole(['FRANQUEADORA', 'SUPER_ADMIN']),
+  requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']),
+  requireFranqueadoraAdmin,
   extractPagination,
   extractFilters(['status', 'name', 'email', 'phone']),
   addPaginationHeaders,
@@ -424,7 +451,7 @@ router.get('/leads',
   })
 )
 
-router.put('/leads/:id', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN']), async (req, res) => {
+router.put('/leads/:id', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']), requireFranqueadoraAdmin, async (req, res) => {
   try {
     if (!req.franqueadoraAdmin?.franqueadora_id) return res.status(400).json({ error: 'No franqueadora context' })
     const { id } = req.params
@@ -449,7 +476,7 @@ router.put('/leads/:id', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN'
 })
 
 // Academy stats (OTIMIZADO: consulta única agregada com cache)
-router.get('/academies/:id/stats', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN']), requireFranqueadoraAdmin, asyncErrorHandler(async (req, res) => {
+router.get('/academies/:id/stats', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']), requireFranqueadoraAdmin, asyncErrorHandler(async (req, res) => {
   const { id } = req.params
   if (!req.franqueadoraAdmin?.franqueadora_id) {
     return res.status(400).json({
@@ -459,20 +486,18 @@ router.get('/academies/:id/stats', requireAuth, requireRole(['FRANQUEADORA', 'SU
     })
   }
 
-  // Cache simples por 5 minutos para estatísticas
+  // Cache distribuído por 5 minutos para estatísticas
   const cacheKey = `academy_stats_${id}_${req.franqueadoraAdmin.franqueadora_id}`
   const cacheTime = 5 * 60 * 1000 // 5 minutos
 
-  // Verificar se temos dados em cache (em produção usar Redis)
-  if (process.env.NODE_ENV === 'production' && (global as any).cache?.[cacheKey]) {
-    const cached = (global as any).cache[cacheKey]
-    if (Date.now() - cached.timestamp < cacheTime) {
-      return res.json({
-        success: true,
-        data: cached.data,
-        cached: true
-      })
-    }
+  // Verificar cache distribuído
+  const cachedStats = await cacheService.get(cacheKey)
+  if (cachedStats) {
+    return res.json({
+      success: true,
+      data: cachedStats,
+      cached: true
+    })
   }
 
   // Verificar permissão e obter dados básicos da academia
@@ -513,7 +538,9 @@ router.get('/academies/:id/stats', requireAuth, requireRole(['FRANQUEADORA', 'SU
     const [
       teachersResult,
       studentsResult,
-      bookingsResult
+      totalBookingsResult,
+      completedBookingsResult,
+      cancelledBookingsResult
     ] = await Promise.all([
       // Contagem de professores
       supabase
@@ -521,17 +548,27 @@ router.get('/academies/:id/stats', requireAuth, requireRole(['FRANQUEADORA', 'SU
         .select('*', { count: 'exact', head: true })
         .eq('academy_id', id),
       
-      // Contagem de alunos (total e ativos)
+      // Alunos (dados para contar ativos)
       supabase
         .from('academy_students')
-        .select('status', { count: 'exact' })
+        .select('status')
         .eq('academy_id', id),
       
-      // Estatísticas de agendamentos
+      // Estatísticas de agendamentos (contagens com head:true)
       supabase
         .from('bookings')
-        .select('status', { count: 'exact' })
-        .eq('franchise_id', id)
+        .select('*', { count: 'exact', head: true })
+        .eq('academy_id', id),
+      supabase
+        .from('bookings')
+        .select('*', { count: 'exact', head: true })
+        .eq('academy_id', id)
+        .eq('status_canonical', 'DONE'),
+      supabase
+        .from('bookings')
+        .select('*', { count: 'exact', head: true })
+        .eq('academy_id', id)
+        .eq('status_canonical', 'CANCELED')
     ])
 
     // Processar resultados
@@ -540,10 +577,9 @@ router.get('/academies/:id/stats', requireAuth, requireRole(['FRANQUEADORA', 'SU
     const totalStudents = allStudents.length
     const activeStudents = allStudents.filter(s => s.status === 'active').length
     
-    const allBookings = bookingsResult.data || []
-    const totalBookings = allBookings.length
-    const completedBookings = allBookings.filter(b => b.status === 'COMPLETED').length
-    const cancelledBookings = allBookings.filter(b => b.status === 'CANCELLED').length
+    const totalBookings = totalBookingsResult.count || 0
+    const completedBookings = completedBookingsResult.count || 0
+    const cancelledBookings = cancelledBookingsResult.count || 0
 
     const finalStats = {
       academy: {
@@ -564,14 +600,8 @@ router.get('/academies/:id/stats', requireAuth, requireRole(['FRANQUEADORA', 'SU
       lastUpdated: new Date().toISOString()
     }
 
-    // Salvar em cache
-    if (process.env.NODE_ENV === 'production') {
-      if (!(global as any).cache) (global as any).cache = {}
-      ;(global as any).cache[cacheKey] = {
-        data: finalStats,
-        timestamp: Date.now()
-      }
-    }
+    // Salvar em cache distribuído
+    await cacheService.set(cacheKey, finalStats, cacheTime)
 
     return res.json({
       success: true,
@@ -591,14 +621,8 @@ router.get('/academies/:id/stats', requireAuth, requireRole(['FRANQUEADORA', 'SU
     lastUpdated: new Date().toISOString()
   }
 
-  // Salvar em cache
-  if (process.env.NODE_ENV === 'production') {
-    if (!(global as any).cache) (global as any).cache = {}
-    ;(global as any).cache[cacheKey] = {
-      data: finalStats,
-      timestamp: Date.now()
-    }
-  }
+  // Salvar em cache distribuído
+  await cacheService.set(cacheKey, finalStats, cacheTime)
 
   return res.json({
     success: true,
@@ -610,7 +634,7 @@ router.get('/academies/:id/stats', requireAuth, requireRole(['FRANQUEADORA', 'SU
 // GET /api/franqueadora/users - Listar todos os usuários com informações detalhadas
 router.get('/users',
   requireAuth,
-  requireRole(['FRANQUEADORA', 'SUPER_ADMIN']),
+  requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']),
   extractPagination,
   addPaginationHeaders,
   asyncErrorHandler(async (req, res) => {
@@ -619,19 +643,7 @@ router.get('/users',
     const { role, search, status } = queryParams;
 
     try {
-      let franqueadoraId = queryParams.franqueadora_id || (req.franqueadoraAdmin && req.franqueadoraAdmin.franqueadora_id) || null;
-
-      if (!franqueadoraId && req.user && req.user.role === 'SUPER_ADMIN') {
-        franqueadoraId = await resolveDefaultFranqueadoraId();
-      }
-
-      if (!franqueadoraId) {
-        return res.status(400).json({
-          error: 'ID da franqueadora não encontrado',
-          message: 'Especifique franqueadora_id ou seja admin de uma franqueadora'
-        });
-      }
-
+      // Usuários são globais - não filtrar por franqueadora
       // Construir query base - busca todos os usuários (alunos e professores)
       let query = supabase
         .from('users')
@@ -663,11 +675,18 @@ router.get('/users',
             available_in_person
           )
         `, { count: 'exact' })
-        .in('role', ['STUDENT', 'TEACHER']);
+        .in('role', ['STUDENT', 'TEACHER', 'ALUNO', 'PROFESSOR']);
 
       // Aplicar filtros
       if (role && role !== 'all') {
-        query = query.eq('role', role.toUpperCase());
+        const r = role.toUpperCase();
+        if (r === 'STUDENT' || r === 'ALUNO') {
+          query = query.in('role', ['STUDENT', 'ALUNO']);
+        } else if (r === 'TEACHER' || r === 'PROFESSOR') {
+          query = query.in('role', ['TEACHER', 'PROFESSOR']);
+        } else {
+          query = query.eq('role', r);
+        }
       }
 
       if (search) {
@@ -694,68 +713,104 @@ router.get('/users',
         throw new Error(`Erro ao buscar usuários: ${error.message}`);
       }
 
-      // Enriquecer dados com estatísticas adicionais
-      const enrichedUsers = await Promise.all(users.map(async (user: any) => {
-        try {
-          // Buscar vínculos operacionais
-          const { data: professorUnits } = await supabase
-            .from('professor_units')
-            .select('unit_id, units(name, city, state)')
-            .eq('professor_id', user.id);
+      // Otimização: buscar dados complementares em lote para evitar N+1
+      const userIds = users.map(u => u.id);
+      const studentIds = users.filter(u => u.role === 'STUDENT' || u.role === 'ALUNO').map(u => u.id);
+      const teacherIds = users.filter(u => u.role === 'TEACHER' || u.role === 'PROFESSOR').map(u => u.id);
 
-          const { data: studentUnits } = await supabase
-            .from('student_units')
-            .select('unit_id, units(name, city, state), total_bookings, first_booking_date, last_booking_date')
-            .eq('student_id', user.id);
+      // Buscar todos os dados complementares em paralelo
+      const [
+        allProfessorUnits,
+        allStudentUnits,
+        allBookingStats,
+        allStudentBalances,
+        allProfessorBalances
+      ] = await Promise.all([
+        // Professor units
+        teacherIds.length > 0 ? supabase
+          .from('professor_units')
+          .select('professor_id, unit_id, units(name, city, state)')
+          .in('professor_id', teacherIds) : Promise.resolve({ data: [] }),
+        
+        // Student units  
+        studentIds.length > 0 ? supabase
+          .from('student_units')
+          .select('student_id, unit_id, units(name, city, state), total_bookings, first_booking_date, last_booking_date')
+          .in('student_id', studentIds) : Promise.resolve({ data: [] }),
+        
+        // Booking stats
+        userIds.length > 0 ? supabase
+          .from('bookings')
+          .select('professor_id, student_id, status_canonical')
+          .or(`professor_id.in.(${userIds.join(',')}),student_id.in.(${userIds.join(',')})`) : Promise.resolve({ data: [] }),
+        
+        // Student balances
+        studentIds.length > 0 ? supabase
+          .from('student_class_balance')
+          .select('student_id, unit_id, total_purchased, total_consumed, locked_qty')
+          .in('student_id', studentIds) : Promise.resolve({ data: [] }),
+        
+        // Professor balances
+        teacherIds.length > 0 ? supabase
+          .from('prof_hour_balance')
+          .select('professor_id, unit_id, total_hours, available_hours, locked_hours')
+          .in('professor_id', teacherIds) : Promise.resolve({ data: [] })
+      ]);
 
-          // Buscar estatísticas de agendamentos
-          const { data: bookingStats } = await supabase
-            .from('bookings')
-            .select('status_canonical')
-            .or(`professor_id.eq.${user.id},student_id.eq.${user.id}`);
+      // Agrupar dados por usuário
+      const professorUnitsMap = new Map();
+      (allProfessorUnits.data || []).forEach(pu => {
+        if (!professorUnitsMap.has(pu.professor_id)) professorUnitsMap.set(pu.professor_id, []);
+        professorUnitsMap.get(pu.professor_id).push(pu);
+      });
 
-          // Buscar informações de saldo (se for aluno)
-          let balanceInfo = null;
-          if (user.role === 'STUDENT' || user.role === 'ALUNO') {
-            const { data: studentBalances } = await supabase
-              .from('student_balances')
-              .select('unit_id, total_purchased, total_consumed, locked_qty, units(name, city, state)')
-              .eq('student_id', user.id);
+      const studentUnitsMap = new Map();
+      (allStudentUnits.data || []).forEach(su => {
+        if (!studentUnitsMap.has(su.student_id)) studentUnitsMap.set(su.student_id, []);
+        studentUnitsMap.get(su.student_id).push(su);
+      });
 
-            balanceInfo = studentBalances;
-          }
-
-          // Buscar informações de horas (se for professor)
-          let hoursInfo = null;
-          if (user.role === 'TEACHER' || user.role === 'PROFESSOR') {
-            const { data: professorBalances } = await supabase
-              .from('professor_balances')
-              .select('unit_id, total_hours, available_hours, locked_hours, units(name, city, state)')
-              .eq('professor_id', user.id);
-
-            hoursInfo = professorBalances;
-          }
-
-          return {
-            ...user,
-            operational_links: {
-              professor_units: professorUnits || [],
-              student_units: studentUnits || []
-            },
-            booking_stats: {
-              total: bookingStats?.length || 0,
-              completed: bookingStats?.filter(b => b.status_canonical === 'DONE').length || 0,
-              pending: bookingStats?.filter(b => b.status_canonical === 'RESERVED').length || 0,
-              cancelled: bookingStats?.filter(b => b.status_canonical === 'CANCELED').length || 0
-            },
-            balance_info: balanceInfo,
-            hours_info: hoursInfo
-          };
-        } catch (err) {
-          console.error('Erro ao enriquecer dados do usuário:', user.id, err);
-          return user;
+      const bookingStatsMap = new Map();
+      (allBookingStats.data || []).forEach(booking => {
+        const userId = booking.professor_id || booking.student_id;
+        if (userId) {
+          if (!bookingStatsMap.has(userId)) bookingStatsMap.set(userId, []);
+          bookingStatsMap.get(userId).push(booking);
         }
-      }));
+      });
+
+      const studentBalancesMap = new Map();
+      (allStudentBalances.data || []).forEach(balance => {
+        if (!studentBalancesMap.has(balance.student_id)) studentBalancesMap.set(balance.student_id, []);
+        studentBalancesMap.get(balance.student_id).push(balance);
+      });
+
+      const professorBalancesMap = new Map();
+      (allProfessorBalances.data || []).forEach(balance => {
+        if (!professorBalancesMap.has(balance.professor_id)) professorBalancesMap.set(balance.professor_id, []);
+        professorBalancesMap.get(balance.professor_id).push(balance);
+      });
+
+      // Enriquecer usuários com dados agrupados
+      const enrichedUsers = users.map((user: any) => {
+        const userBookings = bookingStatsMap.get(user.id) || [];
+        
+        return {
+          ...user,
+          operational_links: {
+            professor_units: professorUnitsMap.get(user.id) || [],
+            student_units: studentUnitsMap.get(user.id) || []
+          },
+          booking_stats: {
+            total: userBookings.length,
+            completed: userBookings.filter(b => b.status_canonical === 'DONE').length,
+            pending: userBookings.filter(b => b.status_canonical === 'RESERVED').length,
+            cancelled: userBookings.filter(b => b.status_canonical === 'CANCELED').length
+          },
+          balance_info: studentBalancesMap.get(user.id) || null,
+          hours_info: professorBalancesMap.get(user.id) || null
+        };
+      });
 
       const response = buildPaginatedResponse(enrichedUsers, count, pagination);
 
@@ -765,8 +820,7 @@ router.get('/users',
         filters: {
           role,
           search,
-          status,
-          franqueadora_id: franqueadoraId
+          status
         }
       });
     } catch (err: any) {

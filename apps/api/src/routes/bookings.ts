@@ -1,6 +1,6 @@
 import express from 'express'
 import { z } from 'zod'
-import { supabase } from '../config/supabase'
+import { supabase } from '../lib/supabase'
 import { addAcademyToContact } from '../services/franqueadora-contacts.service'
 import { createNotification, createUserNotification } from './notifications'
 import { bookingCanonicalService } from '../services/booking-canonical.service'
@@ -617,3 +617,4 @@ router.delete('/:id', requireAuth, asyncErrorHandler(async (req, res) => {
 }))
 
 export default router
+

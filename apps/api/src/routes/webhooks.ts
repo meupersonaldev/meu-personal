@@ -1,5 +1,5 @@
 import express from 'express'
-import { supabase } from '../config/supabase'
+import { supabase } from '../lib/supabase'
 import { asaasService } from '../services/asaas.service'
 import { paymentIntentService } from '../services/payment-intent.service'
 import { createNotification, createUserNotification } from './notifications'
@@ -30,9 +30,16 @@ router.post('/asaas', async (req, res) => {
       value: event.payment?.value
     })
 
-    // Validar webhook secret (se configurado)
-    const webhookSecret = process.env.ASAAS_WEBHOOK_SECRET
-    // TODO: Implementar validação de assinatura do Asaas
+    // Validar webhook token (se configurado no Asaas)
+    // Doc: https://docs.asaas.com/docs/sobre-os-webhooks (header asaas-access-token)
+    const expectedToken = process.env.ASAAS_WEBHOOK_SECRET || process.env.ASAAS_WEBHOOK_TOKEN
+    if (expectedToken) {
+      const receivedToken = req.header('asaas-access-token')
+      if (!receivedToken || receivedToken !== expectedToken) {
+        console.warn('Asaas webhook rejeitado por token inválido ou ausente')
+        return res.status(401).json({ error: 'Invalid webhook token' })
+      }
+    }
 
     // Processar diferentes tipos de eventos
     switch (event.event) {
@@ -276,3 +283,4 @@ async function handlePaymentRefunded(webhookData: any, externalRef: string) {
 }
 
 export default router
+

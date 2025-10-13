@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { supabase } from '../config/supabase'
+import { supabase } from '../lib/supabase'
 
 const router = Router()
 
@@ -204,3 +204,4 @@ router.delete('/:teacherId/students/:studentId', async (req, res) => {
 })
 
 export default router
+

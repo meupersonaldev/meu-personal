@@ -1,4 +1,5 @@
-import { supabase } from '../config/supabase';
+import { supabase } from '../lib/supabase';
+import { CustomError } from '../middleware/errorHandler';
 import { asaasService } from './asaas.service';
 import { balanceService } from './balance.service';
 
@@ -54,15 +55,32 @@ class PaymentIntentService {
 
     let asaasCustomerId = user.asaas_customer_id;
     if (!asaasCustomerId) {
+      // Em produção, exigir CPF válido antes de criar cliente no Asaas
+      if (process.env.ASAAS_ENV === 'production') {
+        const cpfSanitizedPre = (user.cpf || '').replace(/\D/g, '');
+        if (cpfSanitizedPre.length < 11) {
+          throw new CustomError('CPF obrigatório para pagamento', 400, true, 'BUSINESS_RULE_VIOLATION');
+        }
+      }
       const customerResult = await asaasService.createCustomer({
         name: user.name,
         email: user.email,
-        cpfCnpj: '38534592808', // CPF válido para testes
+        cpfCnpj: (user.cpf || '').replace(/\D/g, '') || '00000000000',
         phone: user.phone
       });
 
       if (!customerResult.success) {
-        throw new Error('Erro ao criar cliente no Asaas');
+        const message = Array.isArray(customerResult.error)
+          ? (customerResult.error[0]?.description || 'Erro ao criar cliente no Asaas')
+          : (customerResult.error || 'Erro ao criar cliente no Asaas');
+        const isCpfError = typeof message === 'string' && message.toLowerCase().includes('cpf');
+        throw new CustomError(
+          message,
+          isCpfError ? 400 : 502,
+          true,
+          isCpfError ? 'BUSINESS_RULE_VIOLATION' : 'EXTERNAL_PROVIDER_ERROR',
+          { provider: 'ASAAS', step: 'createCustomer' }
+        );
       }
 
       asaasCustomerId = customerResult.data.id;
@@ -93,11 +111,17 @@ class PaymentIntentService {
     }
 
     // 3. Atualizar PaymentIntent com provider_id e checkout_url
+    const linkResult = await asaasService.generatePaymentLink(paymentResult.data.id);
+    const paymentLink = linkResult.success ? linkResult.data : {
+      paymentUrl: paymentResult.data.invoiceUrl,
+      bankSlipUrl: paymentResult.data.bankSlipUrl,
+      pixCode: paymentResult.data.payload
+    };
     const { data: updatedIntent, error: updateError } = await supabase
       .from('payment_intents')
       .update({
         provider_id: paymentResult.data.id,
-        checkout_url: paymentResult.data.invoiceUrl,
+        checkout_url: paymentLink.paymentUrl,
         payload_json: {
           ...params.metadata,
           asaas_payment_id: paymentResult.data.id,
@@ -251,3 +275,4 @@ class PaymentIntentService {
 }
 
 export const paymentIntentService = new PaymentIntentService();
+

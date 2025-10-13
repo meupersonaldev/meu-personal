@@ -1,4 +1,4 @@
-import { supabase } from '../config/supabase';
+import { supabase } from '../lib/supabase';
 import {
   balanceService,
   StudentClassBalance,
@@ -134,6 +134,21 @@ class BookingCanonicalService {
         metaJson: {
           booking_id: booking.id,
           origin: 'student_led'
+        }
+      }
+    );
+
+    await balanceService.purchaseProfessorHours(
+      params.professorId,
+      franqueadoraId,
+      1,
+      {
+        unitId: params.unitId,
+        source: 'SYSTEM',
+        bookingId: booking.id,
+        metaJson: {
+          booking_id: booking.id,
+          origin: 'student_booking_reward'
         }
       }
     );
@@ -288,6 +303,28 @@ class BookingCanonicalService {
         }
       }
     );
+
+    const cancellableUntil = booking.cancellable_until ? new Date(booking.cancellable_until) : null;
+    const currentTime = new Date();
+    const withinRefundWindow = cancellableUntil ? currentTime <= cancellableUntil : false;
+
+    if (booking.student_id && booking.source === 'ALUNO' && withinRefundWindow) {
+      await balanceService.revokeProfessorHours(
+        booking.teacher_id,
+        franqueadoraId,
+        1,
+        bookingId,
+        {
+          unitId: booking.unit_id,
+          source: 'SYSTEM',
+          metaJson: {
+            booking_id: bookingId,
+            actor: userId,
+            reason: 'booking_cancelled_refund'
+          }
+        }
+      );
+    }
 
     const now = new Date();
     const { data: updatedBooking, error: updateError } = await supabase
@@ -488,3 +525,4 @@ class BookingCanonicalService {
 }
 
 export const bookingCanonicalService = new BookingCanonicalService();
+

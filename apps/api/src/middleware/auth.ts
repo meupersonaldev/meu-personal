@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
-import { supabase } from '../config/supabase'
+import { supabase } from '../lib/supabase'
 
 const canonicalizeRole = (role?: string) => {
   if (!role) return undefined
@@ -186,3 +186,4 @@ export async function requireFranqueadoraAdmin(req: Request, res: Response, next
     return res.status(403).json({ message: 'Forbidden' })
   }
 }
+

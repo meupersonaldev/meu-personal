@@ -2,7 +2,7 @@ import { Router } from 'express'
 import multer from 'multer'
 import path from 'path'
 import fs from 'fs'
-import { supabase } from '../config/supabase'
+import { supabase } from '../lib/supabase'
 const router = Router()
 
 // Supabase client centralizado (envs validados no config)\r\nconst router = Router()
@@ -100,4 +100,5 @@ router.post('/users/:id/avatar', (req, res) => {
 })
 
 export default router
+
 

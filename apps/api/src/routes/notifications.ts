@@ -1,6 +1,6 @@
 import express from 'express'
 import { z } from 'zod'
-import { supabase } from '../config/supabase'
+import { supabase } from '../lib/supabase'
 import { requireAuth } from '../middleware/auth'
 import { publish, topicForAcademy, topicForUser, subscribe, topicForFranqueadora } from '../lib/notify'
 
@@ -338,3 +338,4 @@ router.get('/stream', requireAuth, async (req, res) => {
 })
 
 export default router
+

@@ -1,10 +1,11 @@
 import { Router } from 'express'
-import { supabase } from '../config/supabase'
+import { supabase } from '../lib/supabase'
 import multer from 'multer'
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID } from 'crypto'
 import path from 'path'
+import { requireAuth } from '../middleware/auth'
 
-// Cliente Supabase centralizado importado de ../config/supabase
+// Cliente Supabase centralizado importado de ../lib/supabase
 
 const router = Router()
 
@@ -24,9 +25,14 @@ const upload = multer({
 })
 
 // GET /api/users/:id - Buscar usuário
-router.get('/:id', async (req, res) => {
+router.get('/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params
+    const user = (req as any).user
+    const isAdmin = ['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN'].includes(user?.role)
+    if (!isAdmin && user?.userId !== id) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
 
     const { data, error } = await supabase
       .from('users')
@@ -47,10 +53,15 @@ router.get('/:id', async (req, res) => {
 })
 
 // PUT /api/users/:id - Atualizar usuário
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params
     const { name, email, phone, bio } = req.body
+    const user = (req as any).user
+    const isAdmin = ['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN'].includes(user?.role)
+    if (!isAdmin && user?.userId !== id) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
 
     const { data, error } = await supabase
       .from('users')
@@ -90,14 +101,26 @@ router.put('/:id', async (req, res) => {
 })
 
 // PATCH /api/users/:id - Atualizar parcialmente usuário
-router.patch('/:id', async (req, res) => {
+router.patch('/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params
-    const { name, email } = req.body
+    const { name, email, cpf } = req.body
+    const user = (req as any).user
+    const isAdmin = ['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN'].includes(user?.role)
+    if (!isAdmin && user?.userId !== id) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
 
     const updateData: any = { updated_at: new Date().toISOString() }
     if (name !== undefined) updateData.name = name
     if (email !== undefined) updateData.email = email
+    if (cpf !== undefined) {
+      const cpfSanitized = String(cpf).replace(/\D/g, '')
+      if (process.env.ASAAS_ENV === 'production' && cpfSanitized.length < 11) {
+        return res.status(400).json({ error: 'CPF inválido' })
+      }
+      updateData.cpf = cpfSanitized
+    }
 
     const { data, error } = await supabase
       .from('users')
@@ -119,13 +142,18 @@ router.patch('/:id', async (req, res) => {
 })
 
 // PUT /api/users/:id/password - Alterar senha
-router.put('/:id/password', async (req, res) => {
+router.put('/:id/password', requireAuth, async (req, res) => {
   try {
     const { id } = req.params
     const { currentPassword, newPassword } = req.body
+    const user = (req as any).user
+    // Apenas o próprio usuário pode trocar a sua senha
+    if (user?.userId !== id) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
 
     // Buscar usuário atual
-    const { data: user, error: fetchError } = await supabase
+    const { data: dbUser, error: fetchError } = await supabase
       .from('users')
       .select('password')
       .eq('id', id)
@@ -135,7 +163,7 @@ router.put('/:id/password', async (req, res) => {
 
     // Verificar senha atual (em produção, usar bcrypt)
     // Por enquanto, comparação simples
-    if (user.password !== currentPassword) {
+    if (dbUser.password !== currentPassword) {
       return res.status(401).json({ error: 'Senha atual incorreta' })
     }
 
@@ -158,10 +186,15 @@ router.put('/:id/password', async (req, res) => {
 })
 
 // POST /api/users/:id/avatar - Upload de avatar
-router.post('/:id/avatar', upload.single('avatar'), async (req, res) => {
+router.post('/:id/avatar', requireAuth, upload.single('avatar'), async (req, res) => {
   try {
     const { id } = req.params
     const file = req.file
+    const user = (req as any).user
+    // Apenas o próprio usuário pode trocar seu avatar
+    if (user?.userId !== id) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
 
     if (!file) {
       return res.status(400).json({ error: 'Nenhum arquivo enviado' })
@@ -169,7 +202,7 @@ router.post('/:id/avatar', upload.single('avatar'), async (req, res) => {
 
     // Gerar nome único para o arquivo
     const fileExt = path.extname(file.originalname)
-    const fileName = `${id}-${uuidv4()}${fileExt}`
+    const fileName = `${id}-${randomUUID()}${fileExt}`
     const filePath = `avatars/${fileName}`
 
     // Upload para Supabase Storage
@@ -206,3 +239,4 @@ router.post('/:id/avatar', upload.single('avatar'), async (req, res) => {
 })
 
 export default router
+

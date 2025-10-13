@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { randomUUID } from 'crypto';
 import { auditService } from '../services/audit.service';
 
 /**
@@ -6,11 +7,14 @@ import { auditService } from '../services/audit.service';
  */
 export function auditMiddleware(req: Request, res: Response, next: NextFunction): void {
   // Extrair informações do request para uso posterior
+  const correlationId = (req.headers['x-correlation-id'] as string) || randomUUID();
   req.audit = {
     ipAddress: req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for'] as string,
-    userAgent: req.headers['user-agent'] || '',
-    timestamp: new Date().toISOString()
+    userAgent: (req.headers['user-agent'] as string) || '',
+    timestamp: new Date().toISOString(),
+    correlationId
   };
+  res.setHeader('x-correlation-id', correlationId);
 
   next();
 }
@@ -90,7 +94,8 @@ export function auditSensitiveOperation(operation: string, tableName: string) {
               method: req.method,
               path: req.path,
               timestamp: req.audit?.timestamp,
-              response_status: res.statusCode
+              response_status: res.statusCode,
+              correlation_id: req.audit?.correlationId
             },
             ipAddress: req.audit?.ipAddress,
             userAgent: req.audit?.userAgent
@@ -115,6 +120,7 @@ declare global {
         ipAddress?: string;
         userAgent?: string;
         timestamp?: string;
+        correlationId?: string;
       };
     }
   }

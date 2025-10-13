@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { supabase } from '../config/supabase'
+import { supabase } from '../lib/supabase'
 
 const router = Router()
 
@@ -194,3 +194,4 @@ function getEventColor(status: string): string {
 }
 
 export default router
+

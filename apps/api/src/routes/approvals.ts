@@ -1,5 +1,5 @@
 import express from 'express'
-import { supabase } from '../config/supabase'
+import { supabase } from '../lib/supabase'
 import { createNotification } from './notifications'
 
 const router = express.Router()

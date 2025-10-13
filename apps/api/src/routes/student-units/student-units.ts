@@ -1,7 +1,7 @@
 import { Request, Response } from 'express'
-import { supabase } from '../../config/supabase'
+import { supabase } from '../../lib/supabase'
 
-// Cliente Supabase unificado importado de ../../config/supabase
+// Cliente Supabase unificado importado de ../../lib/supabase
 
 export interface Unit {
   id: string

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { balanceService } from '../services/balance.service';
 import { paymentIntentService } from '../services/payment-intent.service';
-import { supabase } from '../config/supabase';
+import { supabase } from '../lib/supabase';
 import { asyncErrorHandler } from '../middleware/errorHandler';
 import { extractPagination } from '../middleware/pagination';
 import { resolveDefaultFranqueadoraId } from '../services/franqueadora-contacts.service';
@@ -244,6 +244,18 @@ router.post('/student/checkout', requireAuth, requireRole(['STUDENT', 'ALUNO']),
     }
   });
 
+  // Log estruturado de criação do intent
+  console.log('checkout_student_intent_created', {
+    correlationId: req.audit?.correlationId,
+    intentId: paymentIntent.id,
+    userId: user.userId,
+    packageId: package_id,
+    franqueadoraId,
+    unitId: unit_id || null,
+    amountCents: packageData.price_cents,
+    createdAt: paymentIntent.created_at
+  });
+
   res.status(201).json({
     message: 'Pagamento criado com sucesso',
     payment_intent: {
@@ -308,6 +320,18 @@ router.post('/professor/checkout', requireAuth, requireRole(['TEACHER', 'PROFESS
       hours_qty: packageData.hours_qty,
       payment_method
     }
+  });
+
+  // Log estruturado de criação do intent
+  console.log('checkout_professor_intent_created', {
+    correlationId: req.audit?.correlationId,
+    intentId: paymentIntent.id,
+    userId: user.userId,
+    packageId: package_id,
+    franqueadoraId,
+    unitId: unit_id || null,
+    amountCents: packageData.price_cents,
+    createdAt: paymentIntent.created_at
   });
 
   res.status(201).json({
@@ -915,3 +939,4 @@ router.delete(
 );
 
 export default router;
+

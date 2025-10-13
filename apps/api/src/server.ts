@@ -18,7 +18,7 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') })
 // Configurar timezone globalmente
 process.env.TZ = 'America/Sao_Paulo'
 
-const app = express()
+export const app = express()
 const PORT = process.env.PORT || 3001
 
 // SEGURANÇA CRÍTICA: Headers de segurança aprimorados
@@ -91,7 +91,8 @@ app.use(cors({
     'Accept',
     'Authorization',
     'Cache-Control',
-    'Pragma'
+    'Pragma',
+    'asaas-access-token'
   ],
   exposedHeaders: ['X-Total-Count', 'X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset'],
   maxAge: isProduction ? 86400 : 3600, // 24h em produção, 1h em dev
@@ -126,9 +127,9 @@ import notificationsRoutes from './routes/notifications'
 import approvalsRoutes from './routes/approvals'
 import franchisesRoutes from './routes/franchises'
 import webhooksRoutes from './routes/webhooks'
-import checkoutRoutes from './routes/checkout'
 import checkinsRoutes from './routes/checkins'
 import financialRoutes from './routes/financial'
+import paymentsRoutes from './routes/payments'
 import calendarRoutes from './routes/calendar'
 import timeSlotsRoutes from './routes/time-slots'
 import uploadRoutes from './routes/upload'
@@ -140,6 +141,7 @@ import teacherPreferencesRoutes from './routes/teacher-preferences'
 import teacherStudentsRoutes from './routes/teacher-students'
 import academiesRoutes from './routes/academies'
 import studentUnitsRoutes from './routes/student-units'
+import franchisorPoliciesRoutes from './routes/franchisor-policies'
 import { bookingScheduler } from './jobs/booking-scheduler'
 
 // Servir arquivos estáticos de uploads
@@ -150,11 +152,11 @@ app.use('/api/users', usersRoutes)
 app.use('/api/bookings', bookingsRoutes)
 app.use('/api/checkins', checkinsRoutes)
 app.use('/api/financial', financialRoutes)
+app.use('/api/payments', paymentsRoutes)
 app.use('/api/calendar', calendarRoutes)
 app.use('/api/franchises', franchisesRoutes)
 app.use('/api/notifications', notificationsRoutes)
 app.use('/api/time-slots', timeSlotsRoutes)
-app.use('/api/checkout', checkoutRoutes)
 app.use('/api/packages', packagesRoutes)
 app.use('/api/academies', academiesRoutes)
 app.use('/api/teachers', teachersRoutes)
@@ -165,6 +167,7 @@ app.use('/api/student-units', studentUnitsRoutes)
 app.use('/api', uploadRateLimit, uploadRoutes)
 app.use('/api/franqueadora', franqueadoraRoutes)
 app.use('/api/admin', adminRoutes)
+app.use('/api/franchisor/policies', franchisorPoliciesRoutes)
 
 // SEGURANÇA CRÍTICA: Middleware para rotas não encontradas (deve vir antes do errorHandler)
 app.use(notFoundHandler)
@@ -172,7 +175,7 @@ app.use(notFoundHandler)
 // SEGURANÇA CRÍTICA: Middleware de tratamento de erros avançado (deve ser o último)
 app.use(errorHandler)
 
-app.listen(PORT, () => {
+if (process.env.NODE_ENV !== 'test') app.listen(PORT, () => {
   console.log(`🚀 Servidor rodando na porta ${PORT}`)
   console.log(`📚 API Documentation: http://localhost:${PORT}/api`)
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`)

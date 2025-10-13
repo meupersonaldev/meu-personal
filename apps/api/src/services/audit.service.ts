@@ -1,4 +1,4 @@
-import { supabase } from '../config/supabase';
+import { supabase } from '../lib/supabase';
 
 export interface AuditLog {
   id: string;
@@ -400,3 +400,4 @@ class AuditService {
 }
 
 export const auditService = new AuditService();
+
