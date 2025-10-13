@@ -25,6 +25,7 @@ interface AuthState {
     phone?: string
     cpf: string
     role: UserRole
+    teacher?: { cref?: string; specialties?: string[] }
   }) => Promise<boolean>
   logout: (options?: { redirect?: boolean }) => Promise<void>
   updateUser: (userData: Partial<User>) => Promise<void>
@@ -141,7 +142,10 @@ export const useAuthStore = create<AuthState>()(
               password: userData.password,
               phone: userData.phone,
               cpf: userData.cpf,
-              role: userData.role
+              role: userData.role,
+              // dados profissionais (apenas para TEACHER)
+              cref: userData.teacher?.cref,
+              specialties: userData.teacher?.specialties
             })
           })
 

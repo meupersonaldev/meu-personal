@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import bcrypt from 'bcryptjs'
 import { supabase } from '../lib/supabase'
 import multer from 'multer'
 import { randomUUID } from 'crypto'
@@ -145,33 +146,47 @@ router.patch('/:id', requireAuth, async (req, res) => {
 router.put('/:id/password', requireAuth, async (req, res) => {
   try {
     const { id } = req.params
-    const { currentPassword, newPassword } = req.body
+    const { currentPassword, newPassword } = req.body as { currentPassword?: string; newPassword?: string }
     const user = (req as any).user
-    // Apenas o próprio usuário pode trocar a sua senha
+
     if (user?.userId !== id) {
       return res.status(403).json({ error: 'Forbidden' })
     }
 
-    // Buscar usuário atual
+    if (typeof currentPassword !== 'string' || typeof newPassword !== 'string') {
+      return res.status(400).json({ error: 'Parâmetros inválidos' })
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'Nova senha deve ter pelo menos 6 caracteres' })
+    }
+
     const { data: dbUser, error: fetchError } = await supabase
       .from('users')
-      .select('password')
+      .select('password, password_hash')
       .eq('id', id)
       .single()
 
-    if (fetchError) throw fetchError
+    if (fetchError || !dbUser) throw fetchError || new Error('Usuário não encontrado')
 
-    // Verificar senha atual (em produção, usar bcrypt)
-    // Por enquanto, comparação simples
-    if (dbUser.password !== currentPassword) {
+    let validPassword = false
+    if (dbUser.password_hash) {
+      validPassword = await bcrypt.compare(currentPassword, dbUser.password_hash)
+    } else if (dbUser.password) {
+      validPassword = dbUser.password === currentPassword
+    }
+
+    if (!validPassword) {
       return res.status(401).json({ error: 'Senha atual incorreta' })
     }
 
-    // Atualizar senha
+    const newHash = await bcrypt.hash(newPassword, 10)
+
     const { error: updateError } = await supabase
       .from('users')
       .update({
-        password: newPassword, // Em produção, fazer hash com bcrypt
+        password_hash: newHash,
+        password: null,
         updated_at: new Date().toISOString()
       })
       .eq('id', id)
@@ -181,7 +196,7 @@ router.put('/:id/password', requireAuth, async (req, res) => {
     res.json({ message: 'Senha alterada com sucesso' })
   } catch (error: any) {
     console.error('Error updating password:', error)
-    res.status(500).json({ error: error.message })
+    res.status(500).json({ error: error.message || 'Erro interno do servidor' })
   }
 })
 

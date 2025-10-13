@@ -94,6 +94,8 @@ export function RegisterTemplate({
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [teacherCref, setTeacherCref] = useState('')
+  const [teacherSpecialties, setTeacherSpecialties] = useState('')
 
   useEffect(() => {
     if (!lockedRole) return
@@ -134,6 +136,33 @@ export function RegisterTemplate({
     setIsLoading(true)
 
     try {
+      if (effectiveRole === 'TEACHER') {
+        const specialtiesArr = teacherSpecialties
+          .split(',')
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0)
+        if (!teacherCref.trim()) {
+          toast.error('CREF é obrigatório para professores')
+          setIsLoading(false)
+          return
+        }
+        if (specialtiesArr.length === 0) {
+          toast.error('Informe ao menos uma especialidade')
+          setIsLoading(false)
+          return
+        }
+      }
+      const teacherPayload = effectiveRole === 'TEACHER'
+        ? {
+            teacher: {
+              cref: teacherCref.trim() || undefined,
+              specialties: teacherSpecialties
+                .split(',')
+                .map((s) => s.trim())
+                .filter((s) => s.length > 0),
+            },
+          }
+        : {}
       const success = await register({
         name: formData.name,
         email: formData.email,
@@ -141,6 +170,7 @@ export function RegisterTemplate({
         cpf: formData.cpf,
         password: formData.password,
         role: effectiveRole,
+        ...(teacherPayload as any),
       })
 
       if (!success) {
@@ -423,6 +453,42 @@ export function RegisterTemplate({
             )}
 
             {extraFields}
+
+          {effectiveRole === 'TEACHER' && (
+            <div className="space-y-5">
+              <div className="rounded-lg border border-dashed border-meu-primary/30 bg-white p-4 text-sm text-meu-primary-dark">
+                Preencha suas informações profissionais para ser encontrado pelos alunos. CREF e especialidades são obrigatórios.
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="cref" className="block text-sm font-medium text-gray-700">
+                  CREF
+                </label>
+                <Input
+                  id="cref"
+                  type="text"
+                  value={teacherCref}
+                  onChange={(e) => setTeacherCref(e.target.value)}
+                  className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+                  placeholder="Ex.: CREF 123456-G/SP"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="specialties" className="block text-sm font-medium text-gray-700">
+                  Especialidades (separadas por vírgula)
+                </label>
+                <Input
+                  id="specialties"
+                  type="text"
+                  value={teacherSpecialties}
+                  onChange={(e) => setTeacherSpecialties(e.target.value)}
+                  className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+                  placeholder="Ex.: Musculação, Funcional, HIIT"
+                  required
+                />
+              </div>
+            </div>
+          )}
 
             {/* Submit Button */}
             <Button

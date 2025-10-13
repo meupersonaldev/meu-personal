@@ -11,6 +11,11 @@ import { auditService } from '../services/audit.service'
 
 const router = express.Router()
 
+function normalizeCref(v?: string | null) {
+  if (!v) return v as any
+  return v.toUpperCase().replace(/\s+/g, ' ').trim()
+}
+
 // Schemas de validação
 const loginSchema = z.object({
   email: z.string().email('Email inválido'),
@@ -23,7 +28,9 @@ const registerSchema = z.object({
   password: z.string().min(6, 'Senha deve ter pelo menos 6 caracteres'),
   phone: z.string().optional(),
   cpf: z.string().min(11, 'CPF deve ter 11 dígitos').max(14, 'CPF inválido'),
-  role: z.enum(['STUDENT', 'TEACHER']).default('STUDENT')
+  role: z.enum(['STUDENT', 'TEACHER']).default('STUDENT'),
+  cref: z.string().optional(),
+  specialties: z.array(z.string()).optional()
 })
 
 const forgotPasswordSchema = z.object({
@@ -73,10 +80,11 @@ router.post('/login', auditAuthEvent('LOGIN'), async (req, res) => {
       return res.status(401).json({ message: 'Email ou senha incorretos' })
     }
 
-    // SEGURANÇA CRÍTICA: Validar secret forte e obrigatório
-    const jwtSecret = process.env.JWT_SECRET
-    if (!jwtSecret || jwtSecret.length < 32) {
-      throw new Error('JWT_SECRET deve ter pelo menos 32 caracteres para segurança')
+    // SEGURANÇA CRÍTICA: Validar secret forte (exigente em produção). Fallback em dev.
+    const isProd = process.env.NODE_ENV === 'production'
+    const jwtSecret = process.env.JWT_SECRET || (!isProd ? 'dev-insecure-jwt-secret-please-set-env-32chars-123456' : '')
+    if (!jwtSecret || (isProd && jwtSecret.length < 32)) {
+      throw new Error('JWT_SECRET inválido (produção exige >=32 chars)')
     }
     const jwtSecretKey: Secret = jwtSecret
     const expiresIn: StringValue = (process.env.JWT_EXPIRES_IN || '15m') as StringValue
@@ -142,6 +150,14 @@ router.post('/login', auditAuthEvent('LOGIN'), async (req, res) => {
 router.post('/register', auditSensitiveOperation('CREATE', 'users'), async (req, res) => {
   try {
     const userData = registerSchema.parse(req.body)
+    if (userData.role === 'TEACHER') {
+      if (!userData.cref || !userData.cref.trim()) {
+        return res.status(400).json({ message: 'CREF é obrigatório para professores' })
+      }
+      if (!userData.specialties || userData.specialties.length === 0) {
+        return res.status(400).json({ message: 'Informe ao menos uma especialidade' })
+      }
+    }
     const sanitizedCpf = userData.cpf.replace(/\D/g, '')
 
     // Verificar se email já existe
@@ -216,19 +232,25 @@ router.post('/register', auditSensitiveOperation('CREATE', 'users'), async (req,
     }
     // Se for professor, criar perfil de professor
     if (userData.role === 'TEACHER') {
+      const crefNormalized = normalizeCref(userData.cref || '')
       const { error: profileError } = await supabase
         .from('teacher_profiles')
         .insert([{
           user_id: createdUser.id,
           bio: '',
-          specialties: [],
+          specialization: Array.isArray(userData.specialties) ? userData.specialties : [],
           hourly_rate: 0,
           availability: {},
-          is_available: false
+          is_available: false,
+          cref: crefNormalized || null
         }])
 
       if (profileError) {
+        if ((profileError as any).code === '23505') {
+          return res.status(409).json({ message: 'CREF já cadastrado' })
+        }
         console.error('Erro ao criar perfil de professor:', profileError)
+        return res.status(500).json({ message: 'Erro ao criar perfil de professor' })
       }
     }
 
@@ -300,12 +322,11 @@ router.get('/me', async (req, res) => {
   }
 
   try {
-    // SEGURANÇA CRÍTICA: Validar secret forte
-    const jwtSecret = process.env.JWT_SECRET
-    if (!jwtSecret || jwtSecret.length < 32) {
-      throw new Error('JWT_SECRET deve ter pelo menos 32 caracteres para segurança')
+    const isProd = process.env.NODE_ENV === 'production'
+    const jwtSecret = process.env.JWT_SECRET || (!isProd ? 'dev-insecure-jwt-secret-please-set-env-32chars-123456' : '')
+    if (!jwtSecret || (isProd && jwtSecret.length < 32)) {
+      throw new Error('JWT_SECRET inválido (produção exige >=32 chars)')
     }
-    
     const decoded = jwt.verify(token, jwtSecret) as any
 
     // Buscar usuário no Supabase
@@ -354,13 +375,15 @@ router.post('/forgot-password', async (req, res) => {
     // Se usuário existe, gerar token de reset
     if (user && !error) {
       // Gerar token único para reset de senha
+      const isProd = process.env.NODE_ENV === 'production'
+      const jwtSecret = process.env.JWT_SECRET || (!isProd ? 'dev-insecure-jwt-secret-please-set-env-32chars-123456' : '')
       const resetToken = jwt.sign(
         {
           userId: user.id,
           email: email,
           type: 'password_reset'
         },
-        process.env.JWT_SECRET!,
+        jwtSecret,
         { expiresIn: '1h' } // Token expira em 1 hora
       )
 
@@ -439,7 +462,9 @@ router.post('/reset-password', auditSensitiveOperation('SENSITIVE_CHANGE', 'user
     }).parse(req.body)
 
     // Validar token JWT
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any
+    const isProd = process.env.NODE_ENV === 'production'
+    const jwtSecret = process.env.JWT_SECRET || (!isProd ? 'dev-insecure-jwt-secret-please-set-env-32chars-123456' : '')
+    const decoded = jwt.verify(token, jwtSecret) as any
     
     if (decoded.type !== 'password_reset') {
       return res.status(401).json({ message: 'Token inválido' })

@@ -67,12 +67,12 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
       return res.status(401).json({ message: 'Unauthorized' })
     }
 
-    // SEGURANÇA CRÍTICA: Validar secret forte e obrigatório
-    const secret = process.env.JWT_SECRET
-    if (!secret || secret.length < 32) {
+    // SEGURANÇA CRÍTICA: Validar secret forte em produção; fallback seguro em dev/test
+    const isProd = process.env.NODE_ENV === 'production'
+    const secret = process.env.JWT_SECRET || (!isProd ? 'dev-insecure-jwt-secret-please-set-env-32chars-123456' : '')
+    if (!secret || (isProd && secret.length < 32)) {
       return res.status(500).json({ message: 'Configuração de segurança inválida' })
     }
-    
     const decoded = jwt.verify(token, secret) as any
     req.user = {
       userId: decoded.userId,
