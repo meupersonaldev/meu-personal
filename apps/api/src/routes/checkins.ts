@@ -2,13 +2,43 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { supabase } from '../lib/supabase'
 import { createNotification, createUserNotification } from './notifications'
+import { requireAuth } from '../middleware/auth'
 
 const router = Router()
 
+const ADMIN_ROLES = ['FRANQUEADORA', 'FRANQUIA', 'SUPER_ADMIN', 'ADMIN'] as const
+const TEACHER_ROLES = ['TEACHER', 'PROFESSOR'] as const
+
+const hasAdminAccess = (user?: { role?: string }) =>
+  Boolean(user && ADMIN_ROLES.includes(user.role as typeof ADMIN_ROLES[number]))
+
+const hasTeacherScope = (user: { userId?: string; role?: string } | undefined, teacherId?: string) =>
+  Boolean(
+    user &&
+      teacherId &&
+      TEACHER_ROLES.includes(user.role as typeof TEACHER_ROLES[number]) &&
+      user.userId === teacherId
+  )
+
 // GET /api/checkins?academy_id=xxx - Listar check-ins de uma academia
-router.get('/', async (req, res) => {
+router.get('/', requireAuth, async (req, res) => {
   try {
-    const { academy_id, teacher_id } = req.query as { academy_id?: string; teacher_id?: string }
+    const { academy_id, teacher_id } = req.query as { academy_id?: string | string[]; teacher_id?: string | string[] }
+    const requestedAcademyId = Array.isArray(academy_id) ? academy_id[0] : academy_id
+    const requestedTeacherId = Array.isArray(teacher_id) ? teacher_id[0] : teacher_id
+    const user = req.user
+
+    if (!requestedAcademyId && !requestedTeacherId) {
+      return res.status(400).json({ error: 'academy_id ou teacher_id é obrigatório' })
+    }
+
+    if (requestedTeacherId && !hasAdminAccess(user) && !hasTeacherScope(user, requestedTeacherId)) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+
+    if (requestedAcademyId && !hasAdminAccess(user)) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
 
     let query = supabase
       .from('checkins')
@@ -16,15 +46,11 @@ router.get('/', async (req, res) => {
       .order('created_at', { ascending: false })
       .limit(500)
 
-    if (academy_id) {
-      query = query.eq('academy_id', academy_id)
+    if (requestedAcademyId) {
+      query = query.eq('academy_id', requestedAcademyId)
     }
-    if (teacher_id) {
-      query = query.eq('teacher_id', teacher_id)
-    }
-
-    if (!academy_id && !teacher_id) {
-      return res.status(400).json({ error: 'academy_id ou teacher_id é obrigatório' })
+    if (requestedTeacherId) {
+      query = query.eq('teacher_id', requestedTeacherId)
     }
 
     const { data, error } = await query
@@ -45,12 +71,16 @@ router.get('/', async (req, res) => {
 })
 
 // GET /api/checkins/stats?academy_id=xxx - Estatísticas de check-ins
-router.get('/stats', async (req, res) => {
+router.get('/stats', requireAuth, async (req, res) => {
   try {
     const { academy_id } = req.query
 
     if (!academy_id) {
       return res.status(400).json({ error: 'academy_id é obrigatório' })
+    }
+
+    if (!hasAdminAccess(req.user)) {
+      return res.status(403).json({ error: 'Forbidden' })
     }
 
     // Buscar check-ins dos últimos 30 dias

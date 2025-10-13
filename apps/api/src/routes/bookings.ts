@@ -6,13 +6,14 @@ import { createNotification, createUserNotification } from './notifications'
 import { bookingCanonicalService } from '../services/booking-canonical.service'
 import { requireAuth, requireRole } from '../middleware/auth'
 import { asyncErrorHandler } from '../middleware/errorHandler'
+import { normalizeBookingStatus } from '../utils/booking-status'
 
 const router = express.Router()
 
 // Schema de validação para criação de booking canônico
 const createBookingSchema = z.object({
   source: z.enum(['ALUNO', 'PROFESSOR']),
-  studentId: z.string().uuid().optional(),
+  studentId: z.string().uuid().nullable().optional(),
   professorId: z.string().uuid(),
   unitId: z.string().uuid(),
   startAt: z.string().datetime(),
@@ -58,7 +59,7 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
       franchiseAddress: franchiseAddressParts.filter(Boolean).join(', ') || undefined,
       date: booking.date,
       duration: booking.duration ?? 60,
-      status: booking.status || booking.status_canonical || 'PENDING',
+      status: normalizeBookingStatus(booking.status, booking.status_canonical),
       notes: booking.notes || undefined,
       creditsCost: booking.credits_cost ?? 0
     }
@@ -100,9 +101,11 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
     let results = studentBookings || []
 
     if (status) {
+      const statusStr = Array.isArray(status) ? status[0] : String(status)
+      const statusTarget = normalizeBookingStatus(statusStr, null)
       results = results.filter((booking: any) => {
-        const currentStatus = booking.status || booking.status_canonical
-        return currentStatus === status
+        const current = normalizeBookingStatus(booking.status, booking.status_canonical)
+        return current === statusTarget
       })
     }
 
@@ -166,7 +169,7 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
         franchiseAddress: franchiseAddressParts.filter(Boolean).join(', ') || undefined,
         date: booking.date,
         duration: booking.duration ?? 60,
-        status: booking.status || booking.status_canonical || 'PENDING',
+        status: normalizeBookingStatus(booking.status, booking.status_canonical),
         notes: booking.notes || undefined,
         creditsCost: booking.credits_cost ?? 0
       }
@@ -207,9 +210,11 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
     let results = teacherBookings || []
 
     if (status) {
+      const statusStr = Array.isArray(status) ? status[0] : String(status)
+      const statusTarget = normalizeBookingStatus(statusStr, null)
       results = results.filter((booking: any) => {
-        const currentStatus = booking.status || booking.status_canonical
-        return currentStatus === status
+        const current = normalizeBookingStatus(booking.status, booking.status_canonical)
+        return current === statusTarget
       })
     }
 
@@ -317,7 +322,7 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
         franchiseAddress: franchiseAddressParts.filter(Boolean).join(', ') || undefined,
         date: booking.date,
         duration: booking.duration ?? 60,
-        status: booking.status || booking.status_canonical || 'PENDING',
+        status: normalizeBookingStatus(booking.status, booking.status_canonical),
         notes: booking.notes || undefined,
         creditsCost: booking.credits_cost ?? 0
       }
@@ -389,9 +394,11 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
   }
 
   if (status) {
+    const statusStr = Array.isArray(status) ? status[0] : String(status)
+    const statusTarget = normalizeBookingStatus(statusStr, null)
     results = results.filter((booking: any) => {
-      const currentStatus = booking.status || booking.status_canonical
-      return currentStatus === status
+      const current = normalizeBookingStatus(booking.status, booking.status_canonical)
+      return current === statusTarget
     })
   }
 
@@ -449,6 +456,9 @@ router.get('/:id', requireAuth, asyncErrorHandler(async (req, res) => {
 // POST /api/bookings - Criar novo agendamento (endpoint canônico)
 router.post('/', requireAuth, requireRole(['STUDENT', 'ALUNO', 'TEACHER', 'PROFESSOR', 'FRANQUIA', 'FRANQUEADORA']), asyncErrorHandler(async (req, res) => {
   const bookingData = createBookingSchema.parse(req.body)
+  if (bookingData.studentId === null) {
+    bookingData.studentId = undefined
+  }
   const user = req.user
 
   // Validar permissões baseado no source
@@ -548,7 +558,7 @@ router.patch('/:id', requireAuth, asyncErrorHandler(async (req, res) => {
   // Verificar permissão
   const hasPermission =
     booking.student_id === user.userId ||
-    booking.professor_id === user.userId ||
+    booking.teacher_id === user.userId ||
     ['FRANQUIA', 'FRANQUEADORA', 'ADMIN'].includes(user.role)
 
   if (!hasPermission) {
@@ -601,7 +611,7 @@ router.delete('/:id', requireAuth, asyncErrorHandler(async (req, res) => {
   // Verificar permissão
   const hasPermission =
     booking.student_id === user.userId ||
-    booking.professor_id === user.userId ||
+    booking.teacher_id === user.userId ||
     ['FRANQUIA', 'FRANQUEADORA', 'ADMIN'].includes(user.role)
 
   if (!hasPermission) {

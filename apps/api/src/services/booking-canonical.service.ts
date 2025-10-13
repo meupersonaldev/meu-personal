@@ -59,16 +59,16 @@ export interface CreateBookingParams {
 export interface BookingCanonical {
   id: string;
   source: 'ALUNO' | 'PROFESSOR';
-  student_id?: string;
+  student_id?: string | null;
   teacher_id: string;
   professor_id?: string;
   unit_id: string;
   start_at: string;
   end_at: string;
-  status_canonical: 'RESERVED' | 'PAID' | 'CANCELED' | 'DONE';
-  cancellable_until?: string;
-  student_notes?: string;
-  professor_notes?: string;
+  status_canonical: 'RESERVED' | 'PAID' | 'CANCELED' | 'DONE' | 'AVAILABLE';
+  cancellable_until?: string | null;
+  student_notes?: string | null;
+  professor_notes?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -179,7 +179,42 @@ class BookingCanonicalService {
     cancellableUntil: Date
   ): Promise<BookingCanonical> {
     const franqueadoraId = await fetchFranqueadoraIdFromUnit(params.unitId);
-    const professorBalance = await balanceService.getProfessorBalance(params.professorId, franqueadoraId);
+    const hasStudent = Boolean(params.studentId);
+
+    if (!hasStudent) {
+      // CRIAÇÃO DE DISPONIBILIDADE (sem aluno)
+      const { data: availability, error: availabilityError } = await supabase
+        .from('bookings')
+        .insert({
+          source: params.source,
+          student_id: null,
+          teacher_id: params.professorId,
+          unit_id: params.unitId,
+          date: params.startAt.toISOString(),
+          start_at: params.startAt.toISOString(),
+          end_at: params.endAt.toISOString(),
+          status: 'AVAILABLE',
+          status_canonical: 'AVAILABLE',
+          cancellable_until: cancellableUntil.toISOString(),
+          student_notes: params.studentNotes,
+          professor_notes: params.professorNotes
+        })
+        .select()
+        .single();
+
+      if (availabilityError || !availability) {
+        throw availabilityError || new Error('Falha ao criar disponibilidade do professor');
+      }
+
+      return availability;
+    }
+
+    // CRIAÇÃO COM ALUNO (agendamento direto do professor)
+    // Neste caso, professor está agendando para um aluno específico
+    const professorBalance = await balanceService.getProfessorBalance(
+      params.professorId,
+      franqueadoraId
+    );
     const availableHours = getAvailableHours(professorBalance);
 
     if (availableHours < 1) {
@@ -205,7 +240,7 @@ class BookingCanonicalService {
       .single();
 
     if (bookingError || !booking) {
-      throw bookingError || new Error('Falha ao criar booking');
+      throw bookingError || new Error('Falha ao criar booking professor-led com aluno');
     }
 
     await balanceService.lockProfessorHours(
@@ -216,7 +251,7 @@ class BookingCanonicalService {
       cancellableUntil.toISOString(),
       {
         unitId: params.unitId,
-        source: 'SYSTEM',
+        source: 'PROFESSOR',
         metaJson: {
           booking_id: booking.id,
           origin: 'professor_led'
@@ -288,21 +323,24 @@ class BookingCanonicalService {
       );
     }
 
-    await balanceService.unlockProfessorHours(
-      booking.teacher_id,
-      franqueadoraId,
-      1,
-      bookingId,
-      {
-        unitId: booking.unit_id,
-        source: 'SYSTEM',
-        metaJson: {
-          booking_id: bookingId,
-          actor: userId,
-          reason: 'booking_cancelled'
+    // Só desbloquear horas do professor se não for uma disponibilidade (AVAILABLE)
+    if (booking.status_canonical !== 'AVAILABLE') {
+      await balanceService.unlockProfessorHours(
+        booking.teacher_id,
+        franqueadoraId,
+        1,
+        bookingId,
+        {
+          unitId: booking.unit_id,
+          source: 'SYSTEM',
+          metaJson: {
+            booking_id: bookingId,
+            actor: userId,
+            reason: 'booking_cancelled'
+          }
         }
-      }
-    );
+      );
+    }
 
     const cancellableUntil = booking.cancellable_until ? new Date(booking.cancellable_until) : null;
     const currentTime = new Date();
