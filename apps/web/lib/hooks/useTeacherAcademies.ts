@@ -11,7 +11,7 @@ interface Academy {
 }
 
 export function useTeacherAcademies() {
-  const { user } = useAuthStore()
+  const { user, token } = useAuthStore()
   const [academies, setAcademies] = useState<Academy[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -29,9 +29,11 @@ export function useTeacherAcademies() {
         setError(null)
         const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
+        const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
+
         const academiesRes = await fetch(
           `${API_URL}/api/teachers/${user.id}/academies`,
-          { credentials: 'include' }
+          { headers, credentials: 'include' }
         )
 
         if (!academiesRes.ok) {
@@ -49,7 +51,7 @@ export function useTeacherAcademies() {
     }
 
     fetchAcademies()
-  }, [user?.id])
+  }, [user?.id, token])
 
   return { academies, loading, error }
 }

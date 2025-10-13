@@ -23,7 +23,7 @@ export interface ProfessorHeaderData {
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
 export function useProfessorHeaderData(): ProfessorHeaderData {
-  const { user } = useAuthStore()
+  const { user, token } = useAuthStore()
   const [availableHours, setAvailableHours] = useState(0)
   const [notifications, setNotifications] = useState<ProfessorNotification[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -37,9 +37,10 @@ export function useProfessorHeaderData(): ProfessorHeaderData {
 
     setIsLoading(true)
     try {
+      const authHeaders: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {}
       const [hoursResponse, notificationsResponse] = await Promise.all([
-        fetch(`${API_URL}/api/teachers/${user.id}/hours`),
-        fetch(`${API_URL}/api/notifications?user_id=${user.id}&unread=true`)
+        fetch(`${API_URL}/api/teachers/${user.id}/hours`, { headers: authHeaders }),
+        fetch(`${API_URL}/api/notifications?user_id=${user.id}&unread_only=true`, { headers: authHeaders })
       ])
 
       if (hoursResponse.ok) {
@@ -55,11 +56,11 @@ export function useProfessorHeaderData(): ProfessorHeaderData {
       } else {
         setNotifications([])
       }
-    } catch (error) {
+    } catch {
     } finally {
       setIsLoading(false)
     }
-  }, [user?.id])
+  }, [user?.id, token])
 
   useEffect(() => {
     fetchData()
@@ -70,9 +71,10 @@ export function useProfessorHeaderData(): ProfessorHeaderData {
       if (!user?.id) return
 
       try {
+        const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {}
         const response = await fetch(
           `${API_URL}/api/notifications/${notificationId}/read`,
-          { method: 'PUT' }
+          { method: 'PATCH', headers }
         )
 
         if (response.ok) {
@@ -80,10 +82,10 @@ export function useProfessorHeaderData(): ProfessorHeaderData {
             prev.filter((notification) => notification.id !== notificationId)
           )
         }
-      } catch (error) {
+      } catch {
       }
     },
-    [user?.id]
+    [user?.id, token]
   )
 
   return {

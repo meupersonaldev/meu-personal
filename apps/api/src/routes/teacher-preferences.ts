@@ -1,13 +1,45 @@
 import { Router } from 'express'
 import { supabase } from '../lib/supabase'
 import { syncContactAcademies } from '../services/franqueadora-contacts.service'
+import { requireAuth } from '../middleware/auth'
 
 const router = Router()
 
+const ADMIN_ROLES = ['FRANQUEADORA', 'FRANQUIA', 'SUPER_ADMIN', 'ADMIN'] as const
+const TEACHER_ROLES = ['TEACHER', 'PROFESSOR'] as const
+
+const hasAdminAccess = (user?: { role?: string }) =>
+  Boolean(user && ADMIN_ROLES.includes(user.role as typeof ADMIN_ROLES[number]))
+
+const hasTeacherAccess = (user: { userId?: string; role?: string } | undefined, teacherId?: string) =>
+  Boolean(
+    user &&
+      teacherId &&
+      TEACHER_ROLES.includes(user.role as typeof TEACHER_ROLES[number]) &&
+      user.userId === teacherId
+  )
+
+const ensureTeacherOrAdmin = (
+  req: { user?: { userId?: string; role?: string } },
+  res: { status: (code: number) => { json: (body: any) => void } },
+  teacherId: string
+) => {
+  const user = req.user
+  if (!user || (!hasAdminAccess(user) && !hasTeacherAccess(user, teacherId))) {
+    res.status(403).json({ error: 'Forbidden' })
+    return false
+  }
+  return true
+}
+
 // GET /api/teachers/:teacherId/preferences - Buscar preferências do professor
-router.get('/:teacherId/preferences', async (req, res) => {
+router.get('/:teacherId/preferences', requireAuth, async (req, res) => {
   try {
     const { teacherId } = req.params
+
+    if (!ensureTeacherOrAdmin(req, res, teacherId)) {
+      return
+    }
 
     const { data, error } = await supabase
       .from('teacher_preferences')
@@ -25,10 +57,14 @@ router.get('/:teacherId/preferences', async (req, res) => {
 })
 
 // PUT /api/teachers/:teacherId/preferences - Atualizar preferências
-router.put('/:teacherId/preferences', async (req, res) => {
+router.put('/:teacherId/preferences', requireAuth, async (req, res) => {
   try {
     const { teacherId } = req.params
     const { academy_ids, bio } = req.body
+
+    if (!ensureTeacherOrAdmin(req, res, teacherId)) {
+      return
+    }
 
     console.log('Atualizando preferências do professor:', teacherId)
     console.log('Academias selecionadas:', academy_ids)
@@ -241,9 +277,13 @@ router.put('/:teacherId/preferences', async (req, res) => {
 })
 
 // GET /api/teachers/:teacherId/hours - Buscar horas disponíveis
-router.get('/:teacherId/hours', async (req, res) => {
+router.get('/:teacherId/hours', requireAuth, async (req, res) => {
   try {
     const { teacherId } = req.params
+
+    if (!ensureTeacherOrAdmin(req, res, teacherId)) {
+      return
+    }
 
     const { data, error } = await supabase
       .from('users')

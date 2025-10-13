@@ -1,12 +1,44 @@
 import { Router } from 'express'
 import { supabase } from '../lib/supabase'
+import { requireAuth } from '../middleware/auth'
 
 const router = Router()
 
+const ADMIN_ROLES = ['FRANQUEADORA', 'FRANQUIA', 'SUPER_ADMIN', 'ADMIN'] as const
+const TEACHER_ROLES = ['TEACHER', 'PROFESSOR'] as const
+
+const hasAdminAccess = (user?: { role?: string }) =>
+  Boolean(user && ADMIN_ROLES.includes(user.role as typeof ADMIN_ROLES[number]))
+
+const hasTeacherScope = (user: { userId?: string; role?: string } | undefined, teacherId?: string) =>
+  Boolean(
+    user &&
+      teacherId &&
+      TEACHER_ROLES.includes(user.role as typeof TEACHER_ROLES[number]) &&
+      user.userId === teacherId
+  )
+
+const ensureTeacherStudentAccess = (
+  req: { user?: { userId?: string; role?: string } },
+  res: { status: (code: number) => { json: (body: any) => void } },
+  teacherId: string
+) => {
+  const user = req.user
+  if (!user || (!hasAdminAccess(user) && !hasTeacherScope(user, teacherId))) {
+    res.status(403).json({ error: 'Forbidden' })
+    return false
+  }
+  return true
+}
+
 // GET /api/teachers/:teacherId/students - Listar alunos do professor
-router.get('/:teacherId/students', async (req, res) => {
+router.get('/:teacherId/students', requireAuth, async (req, res) => {
   try {
     const { teacherId } = req.params
+
+    if (!ensureTeacherStudentAccess(req, res, teacherId)) {
+      return
+    }
 
     const { data: teacherStudents, error } = await supabase
       .from('teacher_students')
@@ -40,18 +72,20 @@ router.get('/:teacherId/students', async (req, res) => {
 })
 
 // POST /api/teachers/:teacherId/students - Criar aluno
-router.post('/:teacherId/students', async (req, res) => {
+router.post('/:teacherId/students', requireAuth, async (req, res) => {
   try {
     const { teacherId } = req.params
     const { name, email, phone, notes, academy_id } = req.body
+
+    if (!ensureTeacherStudentAccess(req, res, teacherId)) {
+      return
+    }
 
     if (!name || !email) {
       return res.status(400).json({ error: 'Nome e email são obrigatórios' })
     }
 
-    if (!academy_id) {
-      return res.status(400).json({ error: 'academy_id é obrigatório' })
-    }
+    const normalizedAcademyId = typeof academy_id === 'string' && academy_id.trim() ? academy_id.trim() : null
 
     // 1. Verificar se aluno já existe na lista do professor (por email)
     const { data: existingTeacherStudent } = await supabase
@@ -127,23 +161,24 @@ router.post('/:teacherId/students', async (req, res) => {
     }
 
     // 4. Verificar se aluno já está vinculado à academia
-    const { data: existingAcademyStudent } = await supabase
-      .from('academy_students')
-      .select('*')
-      .eq('academy_id', academy_id)
-      .eq('student_id', userId)
-      .single()
-
-    if (!existingAcademyStudent) {
-      // 5. Vincular aluno à academia
-      await supabase
+    if (normalizedAcademyId) {
+      const { data: existingAcademyStudent } = await supabase
         .from('academy_students')
-        .insert({
-          academy_id,
-          student_id: userId,
-          status: 'active',
-          created_at: new Date().toISOString()
-        })
+        .select('*')
+        .eq('academy_id', normalizedAcademyId)
+        .eq('student_id', userId)
+        .single()
+
+      if (!existingAcademyStudent) {
+        await supabase
+          .from('academy_students')
+          .insert({
+            academy_id: normalizedAcademyId,
+            student_id: userId,
+            status: 'active',
+            created_at: new Date().toISOString()
+          })
+      }
     }
 
     res.status(201).json({ 
@@ -157,10 +192,14 @@ router.post('/:teacherId/students', async (req, res) => {
 })
 
 // PUT /api/teachers/:teacherId/students/:studentId - Atualizar aluno
-router.put('/:teacherId/students/:studentId', async (req, res) => {
+router.put('/:teacherId/students/:studentId', requireAuth, async (req, res) => {
   try {
     const { teacherId, studentId } = req.params
     const { name, email, phone, notes } = req.body
+
+    if (!ensureTeacherStudentAccess(req, res, teacherId)) {
+      return
+    }
 
     const { data, error } = await supabase
       .from('teacher_students')
@@ -184,9 +223,13 @@ router.put('/:teacherId/students/:studentId', async (req, res) => {
 })
 
 // DELETE /api/teachers/:teacherId/students/:studentId - Excluir aluno
-router.delete('/:teacherId/students/:studentId', async (req, res) => {
+router.delete('/:teacherId/students/:studentId', requireAuth, async (req, res) => {
   try {
     const { teacherId, studentId } = req.params
+
+    if (!ensureTeacherStudentAccess(req, res, teacherId)) {
+      return
+    }
 
     const { error } = await supabase
       .from('teacher_students')
