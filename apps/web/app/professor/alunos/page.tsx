@@ -26,6 +26,7 @@ interface Student {
   email: string
   phone?: string
   notes?: string
+  hourly_rate?: number
   created_at: string
 }
 
@@ -43,7 +44,8 @@ export default function AlunosPage() {
     name: '',
     email: '',
     phone: '',
-    notes: ''
+    notes: '',
+    hourly_rate: ''
   })
   const [deleteConfirm, setDeleteConfirm] = useState<{
     isOpen: boolean
@@ -115,7 +117,8 @@ export default function AlunosPage() {
         name: student.name,
         email: student.email,
         phone: student.phone || '',
-        notes: student.notes || ''
+        notes: student.notes || '',
+        hourly_rate: student.hourly_rate?.toString() || ''
       })
     } else {
       setEditingStudent(null)
@@ -123,7 +126,8 @@ export default function AlunosPage() {
         name: '',
         email: '',
         phone: '',
-        notes: ''
+        notes: '',
+        hourly_rate: ''
       })
     }
     setShowModal(true)
@@ -136,7 +140,8 @@ export default function AlunosPage() {
       name: '',
       email: '',
       phone: '',
-      notes: ''
+      notes: '',
+      hourly_rate: ''
     })
   }
 
@@ -161,7 +166,8 @@ export default function AlunosPage() {
         name: formData.name,
         email: formData.email,
         phone: formData.phone,
-        notes: formData.notes
+        notes: formData.notes,
+        hourly_rate: formData.hourly_rate ? parseFloat(formData.hourly_rate) : null
       }
 
       const headers: Record<string, string> = { 'Content-Type': 'application/json' }
@@ -334,6 +340,9 @@ export default function AlunosPage() {
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Email
                       </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Valor/Hora
+                      </th>
                       <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Ações
                       </th>
@@ -365,6 +374,11 @@ export default function AlunosPage() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm text-gray-900">{student.email}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">
+                            {student.hourly_rate ? `R$ ${student.hourly_rate.toFixed(2)}` : '-'}
+                          </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-center">
                           <div className="flex items-center justify-center space-x-2">
@@ -460,6 +474,21 @@ export default function AlunosPage() {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Valor da Hora/Aula (R$)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={formData.hourly_rate}
+                      onChange={(e) => setFormData({ ...formData, hourly_rate: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+                      placeholder="Ex: 150.00"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
                       Observações
                     </label>
                     <textarea
@@ -539,6 +568,15 @@ export default function AlunosPage() {
                         <div>
                           <p className="text-xs text-gray-500">Telefone</p>
                           <p className="text-sm font-medium text-gray-900">{selectedStudent.phone}</p>
+                        </div>
+                      </div>
+                    )}
+                    {selectedStudent.hourly_rate && (
+                      <div className="flex items-center space-x-3 p-3 bg-green-50 rounded-lg border border-green-200">
+                        <div className="h-5 w-5 flex items-center justify-center text-green-600 font-bold">R$</div>
+                        <div>
+                          <p className="text-xs text-gray-500">Valor da Hora/Aula</p>
+                          <p className="text-sm font-medium text-gray-900">R$ {selectedStudent.hourly_rate.toFixed(2)}</p>
                         </div>
                       </div>
                     )}

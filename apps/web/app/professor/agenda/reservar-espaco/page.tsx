@@ -47,6 +47,7 @@ interface Student {
   email: string
   phone?: string
   user_id?: string
+  hourly_rate?: number
 }
 
 export default function ReservarHorarioPage() {
@@ -66,7 +67,7 @@ export default function ReservarHorarioPage() {
   const [students, setStudents] = useState<Student[]>([])
   const [selectedStudent, setSelectedStudent] = useState<string>('')
   const [showNewStudentForm, setShowNewStudentForm] = useState(false)
-  const [newStudent, setNewStudent] = useState({ name: '', email: '', phone: '' })
+  const [newStudent, setNewStudent] = useState({ name: '', email: '', phone: '', hourly_rate: '' })
   const [selectedHorario, setSelectedHorario] = useState<string>('')
   const [expandedStep, setExpandedStep] = useState<number>(1) // Controla qual step está expandido
 
@@ -198,7 +199,8 @@ export default function ReservarHorarioPage() {
           name: newStudent.name,
           email: newStudent.email,
           phone: newStudent.phone,
-          academy_id: selectedFranchise
+          academy_id: selectedFranchise,
+          hourly_rate: newStudent.hourly_rate ? parseFloat(newStudent.hourly_rate) : null
         })
       })
 
@@ -209,7 +211,7 @@ export default function ReservarHorarioPage() {
         setStudents([...students, data.student])
         setSelectedStudent(data.student.id)
         setShowNewStudentForm(false)
-        setNewStudent({ name: '', email: '', phone: '' })
+        setNewStudent({ name: '', email: '', phone: '', hourly_rate: '' })
       } else {
         toast.error(data.message || 'Erro ao cadastrar aluno')
       }
@@ -497,6 +499,7 @@ export default function ReservarHorarioPage() {
                           {students.map((student) => (
                             <option key={student.id} value={student.id}>
                               {student.name} - {student.email}
+                              {student.hourly_rate ? ` (R$ ${student.hourly_rate.toFixed(2)}/h)` : ''}
                             </option>
                           ))}
                         </select>
@@ -553,6 +556,21 @@ export default function ReservarHorarioPage() {
                             placeholder="(11) 99999-9999"
                           />
                         </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Valor da Hora/Aula (R$) (opcional)
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={newStudent.hourly_rate}
+                            onChange={(e) => setNewStudent({ ...newStudent, hourly_rate: e.target.value })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+                            placeholder="Ex: 150.00"
+                          />
+                        </div>
                       </div>
                       
                       <div className="flex space-x-2">
@@ -566,7 +584,7 @@ export default function ReservarHorarioPage() {
                           variant="outline"
                           onClick={() => {
                             setShowNewStudentForm(false)
-                            setNewStudent({ name: '', email: '', phone: '' })
+                            setNewStudent({ name: '', email: '', phone: '', hourly_rate: '' })
                           }}
                           className="flex-1"
                         >
@@ -702,6 +720,11 @@ export default function ReservarHorarioPage() {
                           <span className="text-sm text-gray-600">Aluno:</span>
                           <p className="font-medium text-gray-900">
                             {students.find(s => s.id === selectedStudent)?.name}
+                            {students.find(s => s.id === selectedStudent)?.hourly_rate && (
+                              <span className="ml-2 text-sm text-green-600 font-semibold">
+                                (R$ {students.find(s => s.id === selectedStudent)?.hourly_rate?.toFixed(2)}/h)
+                              </span>
+                            )}
                           </p>
                         </div>
                       )}
