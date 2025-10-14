@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, Suspense } from 'react'
 import { useFranqueadoraStore } from '@/lib/stores/franqueadora-store'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -33,7 +33,7 @@ interface PolicyForm {
   comment: string
 }
 
-export default function PoliticasPage() {
+function PoliticasPageContent() {
   const { user, academies, fetchAcademies, token } = useFranqueadoraStore((s) => ({
     user: s.user,
     academies: s.academies,
@@ -536,5 +536,19 @@ export default function PoliticasPage() {
       )}
     </div>
     </FranqueadoraGuard>
+  )
+}
+
+export default function PoliticasPage() {
+  return (
+    <Suspense fallback={
+      <div className="p-4 sm:p-6 lg:p-8">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-meu-primary" />
+        </div>
+      </div>
+    }>
+      <PoliticasPageContent />
+    </Suspense>
   )
 }
