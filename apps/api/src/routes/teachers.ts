@@ -11,8 +11,8 @@ const TEACHER_ROLES = ['TEACHER'] as const
 
 type RoleValue = typeof ADMIN_ROLES[number] | typeof TEACHER_ROLES[number] | string
 
-const hasAdminAccess = (user?: { role: RoleValue }) =>
-  Boolean(user && ADMIN_ROLES.includes(user.role as typeof ADMIN_ROLES[number]))
+const hasAdminAccess = (user?: { role?: RoleValue }) =>
+  Boolean(user?.role && ADMIN_ROLES.includes(user.role as typeof ADMIN_ROLES[number]))
 
 const hasTeacherSelfAccess = (
   user: { userId: string; role?: RoleValue } | undefined,
@@ -35,7 +35,7 @@ const ensureTeacherScope = (
   return true
 }
 
-const ensureAdminScope = (req: express.Request & { user?: { role: RoleValue } }, res: express.Response) => {
+const ensureAdminScope = (req: express.Request & { user?: { role?: RoleValue } }, res: express.Response) => {
   const user = req.user
   if (!user || !hasAdminAccess(user)) {
     res.status(403).json({ error: 'Forbidden' })
