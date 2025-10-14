@@ -608,16 +608,52 @@ router.delete('/:id', requireAuth, asyncErrorHandler(async (req, res) => {
     return res.status(404).json({ error: 'Agendamento não encontrado' })
   }
 
-  // Verificar permissão
+  // Verificar permissão (professor pode deletar seus próprios horários) 
   const hasPermission =
     booking.student_id === user.userId ||
     booking.teacher_id === user.userId ||
-    ['FRANQUIA', 'FRANQUEADORA', 'ADMIN'].includes(user.role)
+    ['FRANQUIA', 'FRANQUEADORA', 'ADMIN', 'TEACHER', 'PROFESSOR'].includes(user.role)
 
   if (!hasPermission) {
     return res.status(403).json({ error: 'Acesso não autorizado' })
   }
+  
+  console.log('🚀 CÓDIGO ATUALIZADO - VERSÃO NOVA RODANDO!')
 
+  // Se for disponibilidade sem aluno (AVAILABLE, RESERVED, CANCELED, BLOCKED), deletar do banco
+  // Se for agendamento com aluno, apenas cancelar
+  const isAvailabilitySlot = !booking.student_id && 
+    ['AVAILABLE', 'RESERVED', 'CANCELED', 'BLOCKED'].includes(booking.status_canonical)
+  
+  console.log('🔍 DEBUG DELETE:', {
+    id,
+    status_canonical: booking.status_canonical,
+    student_id: booking.student_id,
+    hasNoStudent: !booking.student_id,
+    isAvailabilitySlot,
+    willDelete: isAvailabilitySlot
+  })
+  
+  if (isAvailabilitySlot) {
+    console.log('✅ DELETANDO disponibilidade do banco...')
+    const { error: deleteError } = await supabase
+      .from('bookings')
+      .delete()
+      .eq('id', id)
+
+    if (deleteError) {
+      console.log('❌ Erro ao deletar:', deleteError)
+      return res.status(500).json({ error: 'Erro ao remover disponibilidade' })
+    }
+
+    console.log('✅ Disponibilidade DELETADA com sucesso!')
+    return res.json({
+      message: 'Disponibilidade removida com sucesso',
+      status: 'DELETED'
+    })
+  }
+
+  // Para agendamentos com aluno, cancelar
   await bookingCanonicalService.cancelBooking(id, user.userId)
 
   res.json({

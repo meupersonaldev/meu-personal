@@ -212,12 +212,12 @@ export default function ProfessorAgendaPage() {
             return b
           }))
           
-          // Separar ativos e cancelados
-          const activeBookings = updatedBookings.filter((b: Booking) => !isCanceledStatus(b.status))
+          // Manter todos os bookings (incluindo cancelados) para mostrar na agenda
+          // Os cancelados serão exibidos com card vermelho
+          setBookings(updatedBookings)
+          
+          // Separar cancelados para estatísticas se necessário
           const cancelled = updatedBookings.filter((b: Booking) => isCanceledStatus(b.status))
-          
-          
-          setBookings(activeBookings)
           setCancelledBookings(cancelled)
         } catch (err) {
           setBookings([])

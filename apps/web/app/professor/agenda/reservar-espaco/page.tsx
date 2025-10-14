@@ -105,8 +105,9 @@ export default function ReservarHorarioPage() {
       }
       try {
         setLoadingSlots(true)
+        const timestamp = Date.now() // Cache buster
         const res = await authFetch(
-          `${API_URL}/api/academies/${selectedFranchise}/available-slots?date=${selectedData}&teacher_id=${user?.id}`
+          `${API_URL}/api/academies/${selectedFranchise}/available-slots?date=${selectedData}&teacher_id=${user?.id}&_t=${timestamp}`
         )
         if (res.ok) {
           const data = await res.json()
@@ -282,8 +283,9 @@ export default function ReservarHorarioPage() {
         }
 
         if (selectedFranchise && selectedData) {
+          const timestamp = Date.now() // Cache buster
           const slotsResponse = await authFetch(
-            `${API_URL}/api/academies/${selectedFranchise}/available-slots?date=${selectedData}&teacher_id=${user?.id}`
+            `${API_URL}/api/academies/${selectedFranchise}/available-slots?date=${selectedData}&teacher_id=${user?.id}&_t=${timestamp}`
           )
           if (slotsResponse.ok) {
             const slotsData = await slotsResponse.json()

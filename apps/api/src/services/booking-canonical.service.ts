@@ -100,7 +100,17 @@ class BookingCanonicalService {
       throw new Error('Saldo insuficiente de aulas');
     }
 
-    const { data: booking, error: bookingError } = await supabase
+    // Deletar horários AVAILABLE do mesmo professor no mesmo horário/unidade
+    await supabase
+      .from('bookings')
+      .delete()
+      .eq('teacher_id', params.professorId)
+      .eq('unit_id', params.unitId)
+      .eq('start_at', params.startAt.toISOString())
+      .eq('status_canonical', 'AVAILABLE')
+      .is('student_id', null);
+
+    const { data: booking, error: bookingError} = await supabase
       .from('bookings')
       .insert({
         source: params.source,
@@ -110,7 +120,8 @@ class BookingCanonicalService {
         date: params.startAt.toISOString(),
         start_at: params.startAt.toISOString(),
         end_at: params.endAt.toISOString(),
-        status_canonical: 'RESERVED',
+        status: 'CONFIRMED', // Campo antigo (enum só aceita CONFIRMED)
+        status_canonical: 'PAID', // Confirmado direto, sem aprovação
         cancellable_until: cancellableUntil.toISOString(),
         student_notes: params.studentNotes,
         professor_notes: params.professorNotes
@@ -122,12 +133,12 @@ class BookingCanonicalService {
       throw bookingError || new Error('Falha ao criar booking');
     }
 
-    await balanceService.lockStudentClasses(
+    // Como o booking já é criado como PAID (confirmado), consumir créditos direto
+    await balanceService.consumeStudentClasses(
       params.studentId,
       franqueadoraId,
       1,
       booking.id,
-      cancellableUntil.toISOString(),
       {
         unitId: params.unitId,
         source: 'ALUNO',
@@ -138,6 +149,7 @@ class BookingCanonicalService {
       }
     );
 
+    // Professor recebe as horas direto (já confirmado)
     await balanceService.purchaseProfessorHours(
       params.professorId,
       franqueadoraId,
@@ -149,22 +161,6 @@ class BookingCanonicalService {
         metaJson: {
           booking_id: booking.id,
           origin: 'student_booking_reward'
-        }
-      }
-    );
-
-    await balanceService.lockProfessorHours(
-      params.professorId,
-      franqueadoraId,
-      1,
-      booking.id,
-      cancellableUntil.toISOString(),
-      {
-        unitId: params.unitId,
-        source: 'SYSTEM',
-        metaJson: {
-          booking_id: booking.id,
-          origin: 'student_led'
         }
       }
     );
@@ -221,6 +217,16 @@ class BookingCanonicalService {
       throw new Error('Saldo de horas insuficiente');
     }
 
+    // Deletar horários AVAILABLE do mesmo professor no mesmo horário/unidade
+    await supabase
+      .from('bookings')
+      .delete()
+      .eq('teacher_id', params.professorId)
+      .eq('unit_id', params.unitId)
+      .eq('start_at', params.startAt.toISOString())
+      .eq('status_canonical', 'AVAILABLE')
+      .is('student_id', null);
+
     const { data: booking, error: bookingError } = await supabase
       .from('bookings')
       .insert({
@@ -231,7 +237,8 @@ class BookingCanonicalService {
         date: params.startAt.toISOString(),
         start_at: params.startAt.toISOString(),
         end_at: params.endAt.toISOString(),
-        status_canonical: 'RESERVED',
+        status: 'CONFIRMED', // Campo antigo (enum só aceita CONFIRMED)
+        status_canonical: 'PAID', // Confirmado direto, sem aprovação
         cancellable_until: cancellableUntil.toISOString(),
         student_notes: params.studentNotes,
         professor_notes: params.professorNotes
@@ -243,18 +250,37 @@ class BookingCanonicalService {
       throw bookingError || new Error('Falha ao criar booking professor-led com aluno');
     }
 
-    await balanceService.lockProfessorHours(
+    // Professor agendando para aluno: consome horas do PROFESSOR
+    // (Professor paga pela aula do aluno)
+    const profBalance = await balanceService.getProfessorBalance(params.professorId, franqueadoraId);
+    
+    if (profBalance.available_hours < 1) {
+      throw new Error('Saldo de horas insuficiente');
+    }
+    
+    // Decrementar available_hours direto (já confirmado como PAID)
+    await balanceService.updateProfessorBalance(
       params.professorId,
       franqueadoraId,
+      {
+        available_hours: profBalance.available_hours - 1
+      }
+    );
+    
+    // Registrar transação de consumo
+    await balanceService.createHourTransaction(
+      params.professorId,
+      franqueadoraId,
+      'CONSUME',
       1,
-      booking.id,
-      cancellableUntil.toISOString(),
       {
         unitId: params.unitId,
         source: 'PROFESSOR',
+        bookingId: booking.id,
         metaJson: {
           booking_id: booking.id,
-          origin: 'professor_led'
+          origin: 'professor_led_booking',
+          student_id: params.studentId || null
         }
       }
     );
@@ -305,48 +331,38 @@ class BookingCanonicalService {
 
     const franqueadoraId = await fetchFranqueadoraIdFromUnit(booking.unit_id);
 
-    if (booking.student_id) {
-      await balanceService.unlockStudentClasses(
+    // Verificar quem fez o agendamento (source) para devolver créditos corretos
+    const hasStudent = Boolean(booking.student_id);
+    
+    if (hasStudent && booking.source === 'ALUNO') {
+      // ALUNO agendou: devolver créditos ao ALUNO e revogar horas do PROFESSOR
+      const balance = await balanceService.getStudentBalance(booking.student_id, franqueadoraId);
+      await balanceService.updateStudentBalance(
         booking.student_id,
         franqueadoraId,
-        1,
-        bookingId,
         {
-          unitId: booking.unit_id,
-          source: 'ALUNO',
-          metaJson: {
-            booking_id: bookingId,
-            actor: userId,
-            reason: 'booking_cancelled'
-          }
+          total_consumed: Math.max(0, balance.total_consumed - 1)
         }
       );
-    }
-
-    // Só desbloquear horas do professor se não for uma disponibilidade (AVAILABLE)
-    if (booking.status_canonical !== 'AVAILABLE') {
-      await balanceService.unlockProfessorHours(
-        booking.teacher_id,
+      
+      await balanceService.createStudentTransaction(
+        booking.student_id,
         franqueadoraId,
+        'REFUND',
         1,
-        bookingId,
         {
           unitId: booking.unit_id,
           source: 'SYSTEM',
+          bookingId: bookingId,
           metaJson: {
             booking_id: bookingId,
             actor: userId,
-            reason: 'booking_cancelled'
+            reason: 'booking_cancelled_refund_student'
           }
         }
       );
-    }
-
-    const cancellableUntil = booking.cancellable_until ? new Date(booking.cancellable_until) : null;
-    const currentTime = new Date();
-    const withinRefundWindow = cancellableUntil ? currentTime <= cancellableUntil : false;
-
-    if (booking.student_id && booking.source === 'ALUNO' && withinRefundWindow) {
+      
+      // Revogar horas do professor (ele não recebe pelas aulas canceladas)
       await balanceService.revokeProfessorHours(
         booking.teacher_id,
         franqueadoraId,
@@ -358,16 +374,48 @@ class BookingCanonicalService {
           metaJson: {
             booking_id: bookingId,
             actor: userId,
-            reason: 'booking_cancelled_refund'
+            reason: 'booking_cancelled'
+          }
+        }
+      );
+    } else if (hasStudent && booking.source === 'PROFESSOR') {
+      // PROFESSOR agendou para aluno: devolver horas ao PROFESSOR
+      const profBalance = await balanceService.getProfessorBalance(booking.teacher_id, franqueadoraId);
+      
+      // Incrementar available_hours de volta (refund)
+      await balanceService.updateProfessorBalance(
+        booking.teacher_id,
+        franqueadoraId,
+        {
+          available_hours: profBalance.available_hours + 1
+        }
+      );
+      
+      // Registrar transação de refund
+      await balanceService.createHourTransaction(
+        booking.teacher_id,
+        franqueadoraId,
+        'REFUND',
+        1,
+        {
+          unitId: booking.unit_id,
+          source: 'SYSTEM',
+          bookingId: bookingId,
+          metaJson: {
+            booking_id: bookingId,
+            actor: userId,
+            reason: 'booking_cancelled_refund_professor'
           }
         }
       );
     }
+    // Caso contrário: disponibilidade sem aluno - nenhum crédito afetado
 
     const now = new Date();
     const { data: updatedBooking, error: updateError } = await supabase
       .from('bookings')
       .update({
+        status: 'CANCELLED', // Campo antigo
         status_canonical: 'CANCELED',
         updated_at: now.toISOString()
       })

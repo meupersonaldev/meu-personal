@@ -205,6 +205,11 @@ router.delete('/:id', requireAuth, requireRole(['FRANQUEADORA', 'FRANQUIA']), as
 // GET /api/academies/:id/available-slots?date=YYYY-MM-DD
 router.get('/:id/available-slots', async (req, res) => {
   try {
+    // Desabilitar cache para sempre retornar dados atualizados
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    
     console.log('📍 GET /api/academies/:id/available-slots')
     const { id } = req.params
     const { date, teacher_id } = req.query as { date?: string; teacher_id?: string }
@@ -296,53 +301,68 @@ router.get('/:id/available-slots', async (req, res) => {
 
     const { data: bookings, error: bookingsError } = await supabase
       .from('bookings')
-      .select('id, date, status, teacher_id, student_id')
-      .eq('franchise_id', id)
+      .select('id, date, status, status_canonical, teacher_id, student_id')
+      .eq('unit_id', id)
       .gte('date', startISO)
       .lte('date', endISO)
+      .neq('status_canonical', 'CANCELED')
 
     if (bookingsError) throw bookingsError
     
-    console.log('📋 Reservas encontradas para este dia:', bookings?.length || 0)
-    if (bookings && bookings.length > 0) {
-      bookings.forEach(b => {
-        const t = new Date(b.date)
-        const hhmm = t.toISOString().substring(11, 16)
-        console.log(`  - ${hhmm}: ID=${b.id.substring(0, 8)}..., status=${b.status}, teacher=${b.teacher_id?.substring(0, 8)}...`)
-      })
-    }
 
     // Mapear ocupação por HH:MM (UTC)
-    // Contar: CONFIRMED, PENDING e BLOCKED do próprio professor (se teacher_id fornecido)
+    // Se teacher_id fornecido: bloquear horários onde o professor já tem agendamento
+    // Caso contrário: contar todos os agendamentos (capacidade geral)
     const occ: Record<string, number> = {}
+    const teacherOccupiedSlots = new Set<string>() // Horários ocupados pelo professor específico
+    
     for (const b of bookings || []) {
-      // Contar CONFIRMED e PENDING de qualquer professor
-      if (b.status === 'CONFIRMED' || b.status === 'PENDING') {
-        const t = new Date(b.date)
-        const hhmm = t.toISOString().substring(11, 16)
-        occ[hhmm] = (occ[hhmm] || 0) + 1
-      }
-      // Contar BLOCKED apenas do próprio professor (para não mostrar como disponível)
-      else if (b.status === 'BLOCKED' && teacher_id && b.teacher_id === teacher_id) {
-        const t = new Date(b.date)
-        const hhmm = t.toISOString().substring(11, 16)
-        occ[hhmm] = (occ[hhmm] || 0) + 999 // Marcar como totalmente ocupado
+      const t = new Date(b.date)
+      const hhmm = t.toISOString().substring(11, 16)
+      
+      // Se estamos buscando para um professor específico
+      if (teacher_id) {
+        // Bloquear horários onde ESTE professor já tem agendamento ativo ou bloqueio
+        if (b.teacher_id === teacher_id) {
+          if (b.status === 'CONFIRMED' || b.status === 'PENDING' || b.status === 'PAID' || b.status === 'BLOCKED') {
+            teacherOccupiedSlots.add(hhmm)
+          }
+        }
+      } else {
+        // Sem teacher_id: contar ocupação geral (capacidade da academia)
+        if (b.status === 'CONFIRMED' || b.status === 'PENDING' || b.status === 'PAID') {
+          occ[hhmm] = (occ[hhmm] || 0) + 1
+        }
       }
     }
-    console.log('🔢 Ocupação por horário (CONFIRMED + PENDING + BLOCKED do professor):', occ)
 
     const result = filteredSlots.map((s: any) => {
       // s.time vem como HH:MM:SS
       const hhmm = String(s.time).substring(0, 5)
-      const current = occ[hhmm] || 0
-      const max = s.max_capacity ?? 1
-      const remaining = Math.max(0, max - current)
+      
+      let isFree: boolean
+      let current: number
+      let remaining: number
+      
+      if (teacher_id) {
+        // Para professor específico: bloquear se ele já tem agendamento nesse horário
+        isFree = !teacherOccupiedSlots.has(hhmm)
+        current = teacherOccupiedSlots.has(hhmm) ? 1 : 0
+        remaining = isFree ? 1 : 0
+      } else {
+        // Para busca geral: usar capacidade da academia
+        current = occ[hhmm] || 0
+        const max = s.max_capacity ?? 1
+        remaining = Math.max(0, max - current)
+        isFree = remaining > 0
+      }
+      
       return {
         time: hhmm,
-        max_capacity: max,
+        max_capacity: s.max_capacity ?? 1,
         current_occupancy: current,
         remaining,
-        is_free: remaining > 0,
+        is_free: isFree,
         slot_duration: Math.max(15, academy?.class_duration_minutes ?? 60),
         slot_cost: Math.max(1, academy?.credits_per_class ?? 1)
       }
