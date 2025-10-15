@@ -40,6 +40,8 @@ interface Booking {
   status: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED' | 'RESERVED' | 'PAID' | 'DONE' | 'CANCELED' | 'BLOCKED' | 'AVAILABLE'
   notes?: string
   creditsCost: number
+  source?: 'ALUNO' | 'PROFESSOR'
+  hourlyRate?: number
 }
 
 interface Stats {
@@ -135,7 +137,7 @@ export default function ProfessorDashboardPage() {
 
   const pendingBookings = bookings.filter((b) => b.status === 'PENDING' || b.status === 'RESERVED')
   const confirmedBookings = bookings.filter((b) => b.status === 'CONFIRMED' || b.status === 'PAID')
-  const activeBookingsCount = confirmedBookings.length + pendingBookings.length
+  const activeBookingsCount = confirmedBookings.length // Removido pendentes
 
   const today = new Date()
   const formattedDate = today.toLocaleDateString('pt-BR', {
@@ -276,7 +278,7 @@ export default function ProfessorDashboardPage() {
                   </div>
                 </div>
                 <p className="text-xs text-gray-500 md:text-sm">
-                  {confirmedBookings.length} confirmada(s) · {pendingBookings.length} pendente(s)
+                  Aulas confirmadas
                 </p>
               </CardContent>
             </Card>
@@ -370,22 +372,50 @@ export default function ProfessorDashboardPage() {
                               </Badge>
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-gray-600">
-                              <div className="flex items-center gap-2">
-                                <Clock className="h-4 w-4 text-meu-primary" />
-                                <span className="font-medium">{fmtTime(booking.date)}</span>
+                            <div className="space-y-3">
+                              <div className="flex items-center gap-4 text-sm">
+                                <div className="flex items-center gap-2 text-gray-600">
+                                  <Clock className="h-4 w-4 text-meu-primary" />
+                                  <span className="font-medium">
+                                    {(() => {
+                                      const date = new Date(booking.date)
+                                      const hours = date.getUTCHours()
+                                      const minutes = date.getUTCMinutes()
+                                      return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`
+                                    })()}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 text-gray-600">
+                                  <Calendar className="h-4 w-4 text-meu-primary" />
+                                  <span>
+                                    {new Date(booking.date).toLocaleDateString('pt-BR', {
+                                      day: '2-digit',
+                                      month: 'short',
+                                      year: 'numeric'
+                                    })}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 text-gray-600">
+                                  <Activity className="h-4 w-4 text-meu-primary" />
+                                  <span>{booking.duration} min</span>
+                                </div>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <Calendar className="h-4 w-4 text-meu-primary" />
-                                <span>{fmtDate(booking.date)}</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Activity className="h-4 w-4 text-meu-primary" />
-                                <span>{booking.duration} min</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <DollarSign className="h-4 w-4 text-meu-primary" />
-                                <span>{booking.creditsCost} crédito(s)</span>
+                              
+                              <div className="flex items-center gap-2 text-sm flex-wrap">
+                                <span className="text-gray-500">Agendado por:</span>
+                                <span className="font-medium text-gray-900">
+                                  {booking.source === 'PROFESSOR' ? 'Você' : booking.studentName}
+                                </span>
+                                <span className="text-gray-300">|</span>
+                                <span className="text-gray-500">Crédito:</span>
+                                <span className={`font-medium ${booking.source === 'PROFESSOR' ? 'text-red-600' : 'text-green-600'}`}>
+                                  {booking.source === 'PROFESSOR' ? '-' : '+'}{booking.creditsCost || 1}
+                                </span>
+                                <span className="text-gray-300">|</span>
+                                <span className="text-gray-500">Valor/h:</span>
+                                <span className="font-semibold text-green-600">
+                                  {booking.hourlyRate ? `R$ ${booking.hourlyRate.toFixed(2)}` : '-'}
+                                </span>
                               </div>
                             </div>
 

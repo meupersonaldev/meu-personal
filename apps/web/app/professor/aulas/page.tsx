@@ -26,11 +26,13 @@ interface Booking {
   studentName: string
   date: string
   duration: number
-  status: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED' | 'AVAILABLE' | 'BLOCKED'
+  status: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED' | 'CANCELED' | 'PAID' | 'DONE' | 'RESERVED' | 'AVAILABLE' | 'BLOCKED'
   notes?: string
   creditsCost: number
   franchiseId?: string
   franchiseName?: string
+  source?: 'ALUNO' | 'PROFESSOR'
+  hourlyRate?: number
 }
 
 const statusConfig = {
@@ -39,17 +41,37 @@ const statusConfig = {
     color: 'bg-yellow-100 text-yellow-800',
     icon: Clock
   },
+  RESERVED: {
+    label: 'Reservada',
+    color: 'bg-yellow-100 text-yellow-800',
+    icon: Clock
+  },
   CONFIRMED: {
     label: 'Confirmada',
     color: 'bg-blue-100 text-blue-800',
-    icon: AlertCircle
+    icon: CheckCircle
+  },
+  PAID: {
+    label: 'Confirmada',
+    color: 'bg-blue-100 text-blue-800',
+    icon: CheckCircle
   },
   COMPLETED: {
     label: 'Concluída',
     color: 'bg-green-100 text-green-800',
     icon: CheckCircle
   },
+  DONE: {
+    label: 'Concluída',
+    color: 'bg-green-100 text-green-800',
+    icon: CheckCircle
+  },
   CANCELLED: {
+    label: 'Cancelada',
+    color: 'bg-red-100 text-red-800',
+    icon: XCircle
+  },
+  CANCELED: {
     label: 'Cancelada',
     color: 'bg-red-100 text-red-800',
     icon: XCircle
@@ -83,16 +105,22 @@ export default function ProfessorAulas() {
         setLoading(true)
         const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
         
-        const response = await fetch(`${API_URL}/api/bookings?teacher_id=${user.id}`, {
+        const timestamp = Date.now() // Cache buster
+        const response = await fetch(`${API_URL}/api/bookings?teacher_id=${user.id}&_t=${timestamp}`, {
           headers: {
-            Authorization: `Bearer ${token}`
+            Authorization: `Bearer ${token}`,
+            'Cache-Control': 'no-cache'
           },
           credentials: 'include'
         })
         
         if (response.ok) {
           const data = await response.json()
-          setBookings(data.bookings || [])
+          // Ordenar por data mais recente primeiro
+          const sortedBookings = (data.bookings || []).sort((a: Booking, b: Booking) => 
+            new Date(b.date).getTime() - new Date(a.date).getTime()
+          )
+          setBookings(sortedBookings)
         }
       } catch (error) {
       } finally {
@@ -104,7 +132,18 @@ export default function ProfessorAulas() {
   }, [user?.id, token])
 
   const aulasFiltradas = bookings.filter(booking => {
-    const matchStatus = filtroStatus === 'todos' || booking.status === filtroStatus
+    let matchStatus = false
+    if (filtroStatus === 'todos') {
+      matchStatus = true
+    } else if (filtroStatus === 'Pendente') {
+      matchStatus = booking.status === 'PENDING' || booking.status === 'RESERVED'
+    } else if (filtroStatus === 'Confirmada') {
+      matchStatus = booking.status === 'CONFIRMED' || booking.status === 'PAID'
+    } else if (filtroStatus === 'Concluída') {
+      matchStatus = booking.status === 'COMPLETED' || booking.status === 'DONE'
+    } else if (filtroStatus === 'Cancelada') {
+      matchStatus = booking.status === 'CANCELLED' || booking.status === 'CANCELED'
+    }
     const matchBusca = booking.studentName?.toLowerCase().includes(busca.toLowerCase())
     return matchStatus && matchBusca
   })
@@ -160,7 +199,7 @@ export default function ProfessorAulas() {
             </div>
           </div>
           <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 md:mx-0 md:flex-wrap md:overflow-visible md:px-0 md:pb-0">
-            {['todos', 'PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED'].map((status) => (
+            {['todos', 'Pendente', 'Confirmada', 'Concluída', 'Cancelada'].map((status) => (
               <button
                 key={status}
                 onClick={() => setFiltroStatus(status)}
@@ -170,9 +209,7 @@ export default function ProfessorAulas() {
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
               >
-                {status === 'todos'
-                  ? 'Todas'
-                  : statusConfig[status as keyof typeof statusConfig]?.label}
+                {status}
               </button>
             ))}
           </div>
@@ -194,8 +231,10 @@ export default function ProfessorAulas() {
             aulasFiltradas.map((booking) => {
               const config = statusConfig[booking.status] || statusConfig.PENDING
               const StatusIcon = config?.icon || Clock
-              const podeGerarQR = booking.status === 'CONFIRMED'
+              const podeGerarQR = booking.status === 'CONFIRMED' || booking.status === 'PAID'
               const lessonDate = new Date(booking.date)
+              const hours = lessonDate.getUTCHours()
+              const minutes = lessonDate.getUTCMinutes()
 
               return (
                 <div
@@ -219,28 +258,46 @@ export default function ProfessorAulas() {
                             {config.label}
                           </span>
                         </div>
-                        <div className="grid grid-cols-1 gap-2 text-sm text-gray-600 md:grid-cols-3">
-                          <div className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4 text-meu-primary" />
-                            {lessonDate.toLocaleDateString('pt-BR')}
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-4 text-sm">
+                            <div className="flex items-center gap-2 text-gray-600">
+                              <Calendar className="h-4 w-4 text-meu-primary" />
+                              {lessonDate.toLocaleDateString('pt-BR', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric'
+                              })}
+                            </div>
+                            <div className="flex items-center gap-2 text-gray-600">
+                              <Clock className="h-4 w-4 text-meu-primary" />
+                              {`${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`}
+                            </div>
+                            <div className="text-gray-600">
+                              {booking.duration} min
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Clock className="h-4 w-4 text-meu-primary" />
-                            {lessonDate.toLocaleTimeString('pt-BR', {
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })}
+                          <div className="flex items-center gap-2 text-sm flex-wrap">
+                            <span className="text-gray-500">Agendado por:</span>
+                            <span className="font-medium text-gray-900">
+                              {booking.source === 'PROFESSOR' ? 'Você' : booking.studentName}
+                            </span>
+                            <span className="text-gray-300">|</span>
+                            <span className="text-gray-500">Crédito:</span>
+                            <span className={`font-medium ${booking.source === 'PROFESSOR' ? 'text-red-600' : 'text-green-600'}`}>
+                              {booking.source === 'PROFESSOR' ? '-' : '+'}{booking.creditsCost || 1}
+                            </span>
+                            <span className="text-gray-300">|</span>
+                            <span className="text-gray-500">Valor/h:</span>
+                            <span className="font-semibold text-green-600">
+                              {booking.hourlyRate ? `R$ ${booking.hourlyRate.toFixed(2)}` : '-'}
+                            </span>
                           </div>
                           {booking.franchiseName && (
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 text-sm text-gray-600">
                               <MapPin className="h-4 w-4 text-meu-primary" />
                               {booking.franchiseName}
                             </div>
                           )}
-                        </div>
-                        <div className="flex flex-wrap gap-4 text-sm text-gray-500">
-                          <span>{booking.duration} minutos</span>
-                          <span>{booking.creditsCost} créditos</span>
                         </div>
                         {booking.notes && (
                           <p className="text-sm text-gray-600 italic">

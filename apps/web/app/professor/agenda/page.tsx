@@ -864,10 +864,6 @@ export default function ProfessorAgendaPage() {
                 <span className="font-medium">Disponível</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="h-4 w-4 rounded bg-yellow-500"></div>
-                <span className="font-medium">Pendente</span>
-              </div>
-              <div className="flex items-center gap-2">
                 <div className="h-4 w-4 rounded bg-blue-500"></div>
                 <span className="font-medium">Confirmada</span>
               </div>

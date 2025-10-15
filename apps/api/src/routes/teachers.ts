@@ -179,7 +179,6 @@ router.post('/:id/blocks/custom', requireAuth, async (req, res) => {
       
       // Se já tem reserva com aluno, pular este horário
       if (existingBookings && existingBookings.length > 0) {
-        console.log(`⚠️ Pulando ${hhmm} - já existe reserva com aluno`)
         continue
       }
       
@@ -519,11 +518,11 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
     }
 
     // Buscar estatísticas
-    const [bookingsData, transactionsData, subscriptionData, profileData] = await Promise.all([
+    const [bookingsData, transactionsData, subscriptionData, profileData, hourTransactionsData, studentsData] = await Promise.all([
       // Total de aulas
       supabase
         .from('bookings')
-        .select('id, status, status_canonical, date, credits_cost, student_id, duration')
+        .select('id, status, status_canonical, date, credits_cost, student_id, duration, teacher_id')
         .eq('teacher_id', id),
 
       // Transações
@@ -553,13 +552,46 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
         .from('teacher_profiles')
         .select('hourly_rate')
         .eq('user_id', id)
-        .single()
+        .single(),
+
+      // Transações de horas (para calcular horas ganhas da academia)
+      supabase
+        .from('hour_transactions')
+        .select('id, type, hours, created_at, meta_json')
+        .eq('professor_id', id)
+        .in('type', ['CONSUME']),
+
+      // Alunos do professor (para pegar hourly_rate)
+      // Precisamos buscar também o user_id correspondente
+      supabase
+        .from('teacher_students')
+        .select('id, email, hourly_rate')
+        .eq('teacher_id', id)
     ])
 
     const bookings = bookingsData.data || []
     const transactions = transactionsData.data || []
     const subscription = subscriptionData.data
     const profile = profileData.data
+    const hourTransactions = hourTransactionsData.data || []
+    const students = studentsData.data || []
+
+    // Criar mapa de hourly_rate por user_id (buscar user_id pelo email)
+    const studentRateMap = new Map<string, number>()
+    for (const student of students) {
+      if (student.email && student.hourly_rate) {
+        // Buscar user_id pelo email
+        const { data: user } = await supabase
+          .from('users')
+          .select('id')
+          .eq('email', student.email)
+          .single()
+        
+        if (user) {
+          studentRateMap.set(user.id, student.hourly_rate)
+        }
+      }
+    }
 
     // Normalizar status (status/status_canonical)
     const normalizedBookings = bookings.map((b: any) => ({
@@ -568,15 +600,33 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
     }))
 
     const completedBookings = normalizedBookings.filter((b: any) => b._status === 'COMPLETED')
-    const totalRevenue = completedBookings.reduce((sum: number, b: any) => {
+    
+    // Calcular faturamento total (academia + particular)
+    // 1. Horas ganhas da academia (todas as transações CONSUME)
+    const totalAcademyEarnings = hourTransactions.reduce((sum: number, t: any) => {
       const rate = profile?.hourly_rate || 0
-      const duration = Number(b.duration) || 60
-      return sum + (rate * (duration / 60))
+      return sum + (t.hours * rate)
     }, 0)
+    
+    // 2. Aulas particulares concluídas (COMPLETED com aluno * hourly_rate do aluno)
+    const totalPrivateEarnings = completedBookings
+      .filter((b: any) => b.student_id) // Tem aluno
+      .reduce((sum: number, b: any) => {
+        const studentRate = studentRateMap.get(b.student_id) || 0
+        return sum + studentRate
+      }, 0)
+    
+    const totalRevenue = totalAcademyEarnings + totalPrivateEarnings
 
     const totalCreditsUsed = normalizedBookings
       .filter((b: any) => b.student_id && !['CANCELED', 'BLOCKED', 'AVAILABLE'].includes(b._status))
       .reduce((sum: number, b: any) => sum + (b.credits_cost || 0), 0)
+
+    // Calcular horas ganhas (agendamentos que alunos fizeram com o professor)
+    // São as transações CONSUME (aulas realizadas pela academia)
+    const hoursEarned = hourTransactions
+      .filter((t: any) => t.type === 'CONSUME')
+      .reduce((sum: number, t: any) => sum + (t.hours || 0), 0)
 
     const stats = {
       total_bookings: normalizedBookings.length,
@@ -587,28 +637,75 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
       total_revenue: totalRevenue,
       total_credits_used: totalCreditsUsed,
       hourly_rate: profile?.hourly_rate || 0,
+      hours_earned: hoursEarned,
       current_subscription: subscription,
       last_booking_date: normalizedBookings.length > 0
         ? normalizedBookings.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())[0].date
         : null,
       join_date: teacher.created_at,
       monthly_earnings: {
-        current_month: completedBookings
-          .filter((b: any) => {
-            const bookingDate = new Date(b.date)
-            const now = new Date()
-            return bookingDate.getMonth() === now.getMonth() &&
-                   bookingDate.getFullYear() === now.getFullYear()
-          })
-          .reduce((sum: number, b: any) => {
-            const rate = profile?.hourly_rate || 0
-            const duration = Number(b.duration) || 60
-            return sum + (rate * (duration / 60))
-          }, 0)
+        current_month: (() => {
+          const now = new Date()
+          
+          // 1. Horas ganhas da academia (horas consumidas * hourly_rate do professor)
+          const academyEarnings = hourTransactions
+            .filter((t: any) => {
+              const txDate = new Date(t.created_at)
+              return txDate.getMonth() === now.getMonth() &&
+                     txDate.getFullYear() === now.getFullYear()
+            })
+            .reduce((sum: number, t: any) => {
+              const rate = profile?.hourly_rate || 0
+              return sum + (t.hours * rate)
+            }, 0)
+          
+          // 2. Aulas particulares concluídas (COMPLETED com aluno * hourly_rate do aluno)
+          const privateEarnings = completedBookings
+            .filter((b: any) => {
+              const bookingDate = new Date(b.date)
+              return b.student_id && // Tem aluno
+                     bookingDate.getMonth() === now.getMonth() &&
+                     bookingDate.getFullYear() === now.getFullYear()
+            })
+            .reduce((sum: number, b: any) => {
+              const studentRate = studentRateMap.get(b.student_id) || 0
+              return sum + studentRate
+            }, 0)
+          
+          return academyEarnings + privateEarnings
+        })()
       }
     }
 
     res.json(stats)
+  } catch (error) {
+    console.error('Erro ao processar requisição:', error)
+    res.status(500).json({ error: 'Erro interno do servidor' })
+  }
+})
+
+// GET /api/teachers/:id/transactions - Buscar transações do professor
+router.get('/:id/transactions', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params
+
+    if (!ensureTeacherScope(req, res, id)) {
+      return
+    }
+
+    // Buscar transações de horas
+    const { data: hourTransactions, error } = await supabase
+      .from('hour_transactions')
+      .select('id, type, hours, created_at, meta_json')
+      .eq('professor_id', id)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('Erro ao buscar transações:', error)
+      return res.status(500).json({ error: 'Erro ao buscar transações' })
+    }
+
+    res.json({ transactions: hourTransactions || [] })
   } catch (error) {
     console.error('Erro ao processar requisição:', error)
     res.status(500).json({ error: 'Erro interno do servidor' })

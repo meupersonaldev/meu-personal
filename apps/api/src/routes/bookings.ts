@@ -61,7 +61,9 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
       duration: booking.duration ?? 60,
       status: normalizeBookingStatus(booking.status, booking.status_canonical),
       notes: booking.notes || undefined,
-      creditsCost: booking.credits_cost ?? 0
+      creditsCost: booking.credits_cost ?? 0,
+      source: booking.source || undefined,
+      hourlyRate: booking.hourly_rate || undefined
     }
   }
 
@@ -197,7 +199,8 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
         status,
         status_canonical,
         notes,
-        credits_cost
+        credits_cost,
+        source
       `)
       .eq('teacher_id', teacherId)
       .order('date', { ascending: true })
@@ -259,11 +262,13 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
     let studentsMap: Record<string, { id: string; name?: string }> = {}
     let unitsMap: Record<string, { id: string; name?: string; city?: string; state?: string; address?: string | null }> = {}
     let academiesMap: Record<string, { id: string; name?: string; city?: string; state?: string; address?: string | null }> = {}
+    let studentRatesMap: Record<string, number> = {}
+    let professorRateMap: Record<string, number> = {}
 
     if (studentIds.length > 0) {
       const { data: studentsData } = await supabase
         .from('users')
-        .select('id, name')
+        .select('id, name, email')
         .in('id', studentIds)
 
       if (studentsData) {
@@ -271,8 +276,42 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
           acc[curr.id] = curr
           return acc
         }, {} as typeof studentsMap)
+        
+        // Buscar hourly_rate dos alunos na tabela teacher_students
+        const studentEmails = studentsData.map(s => s.email).filter(Boolean)
+        if (studentEmails.length > 0) {
+          const { data: teacherStudents } = await supabase
+            .from('teacher_students')
+            .select('email, hourly_rate')
+            .eq('teacher_id', teacherId)
+            .in('email', studentEmails)
+          
+          if (teacherStudents) {
+            // Criar mapa de email -> hourly_rate
+            const emailToRate = teacherStudents.reduce((acc: any, ts: any) => {
+              if (ts.hourly_rate) acc[ts.email] = ts.hourly_rate
+              return acc
+            }, {})
+            
+            // Mapear user_id -> hourly_rate
+            studentsData.forEach(student => {
+              if (student.email && emailToRate[student.email]) {
+                studentRatesMap[student.id] = emailToRate[student.email]
+              }
+            })
+          }
+        }
       }
     }
+    
+    // Buscar hourly_rate do professor
+    const { data: profProfile } = await supabase
+      .from('teacher_profiles')
+      .select('hourly_rate')
+      .eq('user_id', teacherId)
+      .single()
+    
+    const professorHourlyRate = profProfile?.hourly_rate || 0
 
     if (unitIds.length > 0) {
       const { data: unitsData } = await supabase
@@ -312,6 +351,16 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
         ? [unit.address, unit.city, unit.state]
         : [academy?.address, academy?.city, academy?.state]
 
+      // Determinar hourly_rate baseado no source
+      let hourlyRate = undefined
+      if (booking.source === 'PROFESSOR' && booking.student_id) {
+        // Professor agendou para aluno: usar hourly_rate do aluno
+        hourlyRate = studentRatesMap[booking.student_id]
+      } else if (booking.source === 'ALUNO') {
+        // Aluno agendou: usar hourly_rate do professor
+        hourlyRate = professorHourlyRate
+      }
+
       return {
         id: booking.id,
         studentId: booking.student_id || undefined,
@@ -324,7 +373,9 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
         duration: booking.duration ?? 60,
         status: normalizeBookingStatus(booking.status, booking.status_canonical),
         notes: booking.notes || undefined,
-        creditsCost: booking.credits_cost ?? 0
+        creditsCost: booking.credits_cost ?? 0,
+        source: booking.source || undefined,
+        hourlyRate
       }
     })
 
