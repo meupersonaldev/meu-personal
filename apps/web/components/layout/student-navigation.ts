@@ -41,13 +41,14 @@ export const STUDENT_NAV_ITEMS: StudentNavItem[] = [
     label: 'Comprar Créditos',
     icon: CreditCard,
     href: '/aluno/comprar'
-  },
-  {
-    id: 'historico',
-    label: 'Histórico de Aulas',
-    icon: History,
-    href: '/aluno/historico'
   }
+  // Histórico de Aulas removido temporariamente
+  // {
+  //   id: 'historico',
+  //   label: 'Histórico de Aulas',
+  //   icon: History,
+  //   href: '/aluno/historico'
+  // }
 ]
 
 export const STUDENT_QUICK_LINKS: StudentQuickLink[] = [
