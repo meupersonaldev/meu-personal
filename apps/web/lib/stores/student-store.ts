@@ -129,7 +129,16 @@ export const useStudentStore = create<StudentState>((set, get) => ({
       const queryString = params.toString()
       const url = `${API_BASE_URL}/api/teachers${queryString ? `?${queryString}` : ''}`
 
-      const response = await fetch(url)
+      const token = useAuthStore.getState().token
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
+      const response = await fetch(url, {
+        headers,
+        credentials: 'include'
+      })
 
       if (response.status === 304) {
         const { specialtyFilter } = get()

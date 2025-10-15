@@ -355,8 +355,16 @@ export default function ProfessorAulas() {
               <div className="flex justify-between">
                 <span className="text-gray-600">Data/Hora:</span>
                 <span className="font-medium">
-                  {new Date(aulaQRCode.date).toLocaleDateString('pt-BR')} às{' '}
-                  {new Date(aulaQRCode.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                  {(() => {
+                    const qrDate = new Date(aulaQRCode.date)
+                    const hours = qrDate.getUTCHours()
+                    const minutes = qrDate.getUTCMinutes()
+                    return `${qrDate.toLocaleDateString('pt-BR', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric'
+                    })} às ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`
+                  })()}
                 </span>
               </div>
               {aulaQRCode.franchiseName && (

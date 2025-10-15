@@ -370,11 +370,32 @@ const createTeacherSchema = z.object({
 // GET /api/teachers - Listar todos os professores
 router.get('/', requireAuth, async (req, res) => {
   try {
-    if (!ensureAdminScope(req, res)) {
-      return
+    // Permitir acesso para ADMIN e STUDENT
+    const user = req.user
+    if (!user || (user.role !== 'ADMIN' && user.role !== 'STUDENT')) {
+      return res.status(403).json({ error: 'Acesso negado' })
     }
 
     const { academy_id, city, state, unit_id } = req.query
+
+    // Se unit_id for fornecido, buscar professores vinculados à unidade
+    let teacherIds: string[] = []
+    if (unit_id) {
+      const { data: professorUnits } = await supabase
+        .from('professor_units')
+        .select('professor_id, active')
+        .eq('unit_id', unit_id)
+      
+      if (professorUnits) {
+        const activeProfessors = professorUnits.filter(pu => pu.active)
+        teacherIds = activeProfessors.map(pu => pu.professor_id)
+      }
+      
+      // Se não houver professores na unidade, retornar vazio
+      if (teacherIds.length === 0) {
+        return res.json([])
+      }
+    }
 
     let query = supabase
       .from('users')
@@ -411,9 +432,9 @@ router.get('/', requireAuth, async (req, res) => {
       query = query.eq('academy_teachers.academy_id', academy_id)
     }
 
-    // If unit_id is provided, filter by teachers available in that unit
-    if (unit_id) {
-      query = query.eq('academy_teachers.academy_id', unit_id)
+    // Se unit_id foi fornecido, filtrar pelos IDs dos professores
+    if (unit_id && teacherIds.length > 0) {
+      query = query.in('id', teacherIds)
     }
 
     const { data: teachers, error } = await query
