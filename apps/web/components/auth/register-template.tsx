@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react"
 import Image from "next/image"
@@ -167,7 +167,7 @@ export function RegisterTemplate({
         name: formData.name,
         email: formData.email,
         phone: formData.phone,
-        cpf: formData.cpf,
+        cpf: cleanCpf, // Enviar CPF sem formatação
         password: formData.password,
         gender: formData.gender as any,
         role: effectiveRole,
@@ -356,11 +356,30 @@ export function RegisterTemplate({
                 id="phone"
                 type="tel"
                 value={formData.phone}
-                onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                onChange={(e) => {
+                  let value = e.target.value.replace(/\D/g, '') // Remove não-números
+                  if (value.length <= 11) {
+                    if (value.length <= 2) {
+                      value = value
+                    } else if (value.length <= 6) {
+                      // (11) 1234
+                      value = value.replace(/(\d{2})(\d+)/, '($1) $2')
+                    } else if (value.length <= 10) {
+                      // (11) 1234-5678 (fixo)
+                      value = value.replace(/(\d{2})(\d{4})(\d+)/, '($1) $2-$3')
+                    } else {
+                      // (11) 91234-5678 (celular com 9º dígito)
+                      value = value.replace(/(\d{2})(\d{5})(\d+)/, '($1) $2-$3')
+                    }
+                  }
+                  setFormData(prev => ({ ...prev, phone: value }))
+                }}
                 className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-meu-primary focus:border-transparent"
-                placeholder="(00) 00000-0000"
+                placeholder="(11) 91234-5678"
+                maxLength={15}
                 required
               />
+              <p className="text-xs text-gray-500">Celular: (11) 91234-5678 | Fixo: (11) 1234-5678</p>
             </div>
 
             {/* Gender */}
@@ -404,7 +423,7 @@ export function RegisterTemplate({
     } else if (value.length <= 9) {
       value = value.replace(/(\d{3})(\d{3})(\d+)/, '$1.$2.$3')
     } else {
-      value = value.replace(/(\d{3})(\d{3})(\d{2})(\d+)/, '$1.$2.$3-$4')
+      value = value.replace(/(\d{3})(\d{3})(\d{3})(\d+)/, '$1.$2.$3-$4')
     }
   }
   setFormData(prev => ({ ...prev, cpf: value }))
@@ -517,11 +536,45 @@ export function RegisterTemplate({
                   id="cref"
                   type="text"
                   value={teacherCref}
-                  onChange={(e) => setTeacherCref(e.target.value)}
+                  onChange={(e) => {
+                    let value = e.target.value.toUpperCase()
+                    // Remove tudo exceto números, letras, hífen e barra
+                    value = value.replace(/[^0-9A-Z\-\/]/g, '')
+                    
+                    // Remove CREF do início se o usuário digitar
+                    if (value.startsWith('CREF')) {
+                      value = value.substring(4).trim()
+                    }
+                    
+                    // Formatar: 12345-G/SP
+                    // Extrair apenas números e letras
+                    const numbers = value.replace(/[^0-9]/g, '')
+                    const letters = value.replace(/[^A-Z]/g, '')
+                    
+                    if (numbers.length > 0) {
+                      let formatted = numbers.substring(0, 6) // Máx 6 dígitos
+                      
+                      if (letters.length > 0) {
+                        formatted += '-' + letters.charAt(0) // Primeira letra após o hífen
+                        
+                        if (letters.length > 1) {
+                          formatted += '/' + letters.substring(1, 3) // UF (2 letras)
+                        }
+                      } else if (numbers.length > 5) {
+                        formatted = numbers.substring(0, 5) + '-' + numbers.substring(5, 6)
+                      }
+                      
+                      value = formatted
+                    }
+                    
+                    setTeacherCref(value)
+                  }}
                   className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-meu-primary focus:border-transparent"
-                  placeholder="Ex.: CREF 123456-G/SP"
+                  placeholder="12345-G/SP"
+                  maxLength={13}
                   required
                 />
+                <p className="text-xs text-gray-500">Formato: 12345-G/SP (número-categoria/UF)</p>
               </div>
               
               <div className="space-y-2">
