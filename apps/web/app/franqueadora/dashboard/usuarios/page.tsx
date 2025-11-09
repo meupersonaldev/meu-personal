@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import {
@@ -31,7 +31,7 @@ import { toast } from 'sonner'
 import FranqueadoraGuard from '@/components/auth/franqueadora-guard'
 import { ImageModal, ApprovalModal } from '@/components/franqueadora/approval-modals'
 
-export default function UsuariosPage() {
+function UsuariosPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { franqueadora, isAuthenticated, isLoading, fetchUsers, token, ensureFranqueadoraId, academies, fetchAcademies } =
@@ -1246,5 +1246,20 @@ export default function UsuariosPage() {
           )}
       </div>
     </FranqueadoraGuard>
+  )
+}
+
+export default function UsuariosPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <RefreshCw className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-gray-600">Carregando...</p>
+        </div>
+      </div>
+    }>
+      <UsuariosPageContent />
+    </Suspense>
   )
 }
