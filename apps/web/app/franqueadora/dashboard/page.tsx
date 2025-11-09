@@ -33,13 +33,6 @@ export default function FranqueadoraDashboard() {
   useEffect(() => { setHydrated(true) }, [])
 
   useEffect(() => {
-    if (!hydrated) return
-    if (!isAuthenticated) {
-      router.replace('/franqueadora')
-    }
-  }, [router, isAuthenticated, hydrated])
-
-  useEffect(() => {
     if (hydrated && isAuthenticated) {
       fetchAcademies()
       fetchAnalytics()
@@ -55,14 +48,6 @@ export default function FranqueadoraDashboard() {
         </div>
       </div>
     )
-  }
-
-  if (!isAuthenticated) {
-    return null
-  }
-
-  if (!user) {
-    return null
   }
 
   const renderTabContent = () => {

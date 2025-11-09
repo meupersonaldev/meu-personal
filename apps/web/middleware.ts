@@ -50,12 +50,10 @@ export function middleware(request: NextRequest) {
     }
   }
 
-  if (isAuthRoute && authToken) {
+  if (isAuthRoute && authToken && !isFranqueadoraRoute) {
     let target = '/'
 
-    if (isFranqueadoraRoute) {
-      target = '/franqueadora/dashboard'
-    } else if (isProfessorAuth) {
+    if (isProfessorAuth) {
       target = '/professor/dashboard'
     } else if (isAlunoAuth) {
       target = '/aluno/inicio'

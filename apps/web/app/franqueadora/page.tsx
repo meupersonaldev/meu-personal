@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Eye, EyeOff, Loader2, ArrowLeft, Building, Crown, BarChart3, Users } from 'lucide-react'
@@ -12,7 +12,7 @@ import { useFranqueadoraStore } from '@/lib/stores/franqueadora-store'
 
 export default function FranqueadoraLoginPage() {
   const router = useRouter()
-  const { login } = useFranqueadoraStore()
+  const { login, isAuthenticated, logout } = useFranqueadoraStore()
   
   const [formData, setFormData] = useState({
     email: '',
@@ -20,6 +20,13 @@ export default function FranqueadoraLoginPage() {
   })
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+
+  // Se já está autenticado, redireciona para o dashboard
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.push('/franqueadora/dashboard')
+    }
+  }, [isAuthenticated, router])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -125,6 +132,22 @@ export default function FranqueadoraLoginPage() {
           </form>
 
           {/* Bloco removido: Credenciais de Demonstração */}
+
+          {/* Botão de Limpar Sessão */}
+          <div className="mt-4 text-center">
+            <button
+              type="button"
+              onClick={() => {
+                logout()
+                document.cookie = 'auth-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+                toast.success('Sessão limpa com sucesso')
+                window.location.reload()
+              }}
+              className="text-white/60 text-sm hover:text-white/90 underline"
+            >
+              Limpar sessão e tentar novamente
+            </button>
+          </div>
 
           {/* Footer */}
           <div className="mt-8 text-center">
