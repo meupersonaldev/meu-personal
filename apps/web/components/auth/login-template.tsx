@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { FormEvent, Suspense, useMemo, useState } from 'react'
 import Link from 'next/link'
@@ -41,7 +41,7 @@ interface LoginTemplateProps {
   backgroundImageUrl?: string
 }
 
-function LoginTemplateContent({ expectedRole, defaultRedirect, copy, backgroundImageUrl = 'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=2340&q=80' }: LoginTemplateProps) {
+function LoginTemplateContent({ expectedRole, defaultRedirect, copy, backgroundImageUrl = '/images/photo-1571019613454-1cb2f99b2d8b-bg.jpg' }: LoginTemplateProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirectParam = searchParams?.get('redirect') ?? null

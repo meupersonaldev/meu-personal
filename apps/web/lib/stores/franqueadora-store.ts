@@ -110,9 +110,13 @@ export interface User {
   email: string
   phone?: string
   cpf?: string
+  cref?: string
   role: 'TEACHER' | 'STUDENT' | 'ALUNO' | 'PROFESSOR'
   avatar_url?: string
   cref_card_url?: string | null
+  approval_status?: 'pending' | 'approved' | 'rejected'
+  approved_at?: string
+  approved_by?: string
   created_at: string
   updated_at: string
   last_login_at?: string
@@ -982,9 +986,13 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             email: c.user?.email || '',
             phone: c.user?.phone || '',
             cpf: c.user?.cpf || '',
+            cref: c.user?.cref || '',
             role: c.user?.role || 'STUDENT',
             avatar_url: c.user?.avatar_url,
             cref_card_url: c.user?.cref_card_url || null,
+            approval_status: c.user?.approval_status || 'pending',
+            approved_at: c.user?.approved_at,
+            approved_by: c.user?.approved_by,
             created_at: c.user?.created_at || new Date().toISOString(),
             updated_at: c.user?.updated_at || new Date().toISOString(),
             last_login_at: c.user?.last_login_at,

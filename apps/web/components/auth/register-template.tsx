@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react"
 import Image from "next/image"
@@ -79,7 +79,7 @@ export function RegisterTemplate({
   copy,
   successRedirect,
   extraFields,
-  backgroundImageUrl = 'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=2340&q=80',
+  backgroundImageUrl = '/images/photo-1571019613454-1cb2f99b2d8b-bg.jpg',
 }: RegisterTemplateProps) {
   const router = useRouter()
   const { register } = useAuthStore()
@@ -269,7 +269,7 @@ export function RegisterTemplate({
         <div className="relative z-10 flex flex-col justify-center px-16 text-white">
           <div className="mb-8">
             <Image
-              src="/images/logo.png"
+              src="/images/logo-full.png"
               alt="Meu Personal"
               width={64}
               height={64}

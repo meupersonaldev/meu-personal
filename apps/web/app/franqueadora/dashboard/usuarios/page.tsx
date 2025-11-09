@@ -16,7 +16,11 @@ import {
   ChevronDown,
   Eye,
   Download,
-  RefreshCw
+  RefreshCw,
+  CheckCircle,
+  XCircle,
+  Image as ImageIcon,
+  Clock
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -25,6 +29,7 @@ import { Badge } from '@/components/ui/badge'
 import { useFranqueadoraStore, User, UsersResponse } from '@/lib/stores/franqueadora-store'
 import { toast } from 'sonner'
 import FranqueadoraGuard from '@/components/auth/franqueadora-guard'
+import { ImageModal, ApprovalModal } from '@/components/franqueadora/approval-modals'
 
 export default function UsuariosPage() {
   const router = useRouter()
@@ -42,6 +47,10 @@ export default function UsuariosPage() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [showUserDetails, setShowUserDetails] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [showImageModal, setShowImageModal] = useState(false)
+  const [showApprovalModal, setShowApprovalModal] = useState(false)
+  const [approvalAction, setApprovalAction] = useState<'approve' | 'reject'>('approve')
+  const [approvalLoading, setApprovalLoading] = useState(false)
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 20,
@@ -89,6 +98,7 @@ export default function UsuariosPage() {
       })
 
       if (data) {
+        console.log('Dados recebidos:', data.data.map(u => ({ name: u.name, status: u.approval_status })))
         setUsersData({
           users: data.data,
           pagination: data.pagination
@@ -130,7 +140,89 @@ export default function UsuariosPage() {
     }
   }, [hydrated, isAuthenticated, academies, fetchAcademies])
 
-  
+  const handleApproveUser = async () => {
+    if (!selectedUser) return
+    
+    console.log('Aprovando usuário:', selectedUser.id, selectedUser.name)
+    setApprovalLoading(true)
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const response = await fetch(`${API_URL}/api/users/${selectedUser.id}/approve`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        }
+      })
+
+      console.log('Response status:', response.status)
+      const responseData = await response.json()
+      console.log('Response data:', responseData)
+
+      if (!response.ok) {
+        throw new Error(responseData.error || 'Erro ao aprovar usuário')
+      }
+
+      toast.success('Profissional aprovado com sucesso!')
+      setShowApprovalModal(false)
+      await fetchUsuarios() // Recarregar lista
+      console.log('Lista recarregada')
+    } catch (error) {
+      console.error('Error approving user:', error)
+      toast.error('Erro ao aprovar profissional')
+    } finally {
+      setApprovalLoading(false)
+    }
+  }
+
+  const handleRejectUser = async () => {
+    if (!selectedUser) return
+    
+    console.log('Reprovando usuário:', selectedUser.id, selectedUser.name)
+    setApprovalLoading(true)
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const response = await fetch(`${API_URL}/api/users/${selectedUser.id}/reject`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        }
+      })
+
+      console.log('Response status:', response.status)
+      const responseData = await response.json()
+      console.log('Response data:', responseData)
+
+      if (!response.ok) {
+        throw new Error(responseData.error || 'Erro ao reprovar usuário')
+      }
+
+      toast.success('Profissional reprovado')
+      setShowApprovalModal(false)
+      await fetchUsuarios() // Recarregar lista
+      console.log('Lista recarregada')
+    } catch (error) {
+      console.error('Error rejecting user:', error)
+      toast.error('Erro ao reprovar profissional')
+    } finally {
+      setApprovalLoading(false)
+    }
+  }
+
+  const getApprovalStatusBadge = (status?: string) => {
+    switch (status) {
+      case 'approved':
+        return <Badge className="bg-green-100 text-green-800">Aprovado</Badge>
+      case 'rejected':
+        return <Badge className="bg-red-100 text-red-800">Reprovado</Badge>
+      case 'pending':
+      default:
+        return <Badge className="bg-yellow-100 text-yellow-800">Pendente</Badge>
+    }
+  }
 
   const formatarCPF = (cpf?: string) => {
     if (!cpf) return '—'
@@ -270,8 +362,13 @@ export default function UsuariosPage() {
           email: c.user?.email || '',
           phone: c.user?.phone || '',
           cpf: c.user?.cpf || '',
+          cref: c.user?.cref || '',
           role: c.user?.role || 'STUDENT',
           avatar_url: c.user?.avatar_url,
+          cref_card_url: c.user?.cref_card_url,
+          approval_status: c.user?.approval_status || 'pending',
+          approved_at: c.user?.approved_at,
+          approved_by: c.user?.approved_by,
           created_at: c.user?.created_at || new Date().toISOString(),
           updated_at: c.user?.updated_at || new Date().toISOString(),
           last_login_at: c.user?.last_login_at,
@@ -569,17 +666,26 @@ export default function UsuariosPage() {
                       Usuário
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      CPF
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      CREF
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Tipo
                     </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status
+                    </th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Detalhes
+                      Ações
                     </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {loading ? (
                     <tr>
-                      <td colSpan={3} className="px-6 py-12 text-center">
+                      <td colSpan={6} className="px-6 py-12 text-center">
                         <div className="flex items-center justify-center">
                           <RefreshCw className="h-6 w-6 animate-spin text-meu-primary mr-2" />
                           <span className="text-gray-600">Carregando usuários...</span>
@@ -588,7 +694,7 @@ export default function UsuariosPage() {
                     </tr>
                   ) : usersData.users.length === 0 ? (
                     <tr>
-                      <td colSpan={3} className="px-6 py-12 text-center text-gray-500">
+                      <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
                         Nenhum usuário encontrado com os filtros selecionados.
                       </td>
                     </tr>
@@ -618,27 +724,112 @@ export default function UsuariosPage() {
                                 {usuario.name}
                               </div>
                               <div className="text-xs text-gray-500">
-                                Último acesso: {formatarData(usuario.last_login_at)}
+                                {usuario.email}
                               </div>
                             </div>
                           </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {formatarCPF(usuario.cpf)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {usuario.cref || '—'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <Badge className={getRoleColor(usuario.role)}>
                             {getRoleLabel(usuario.role)}
                           </Badge>
                         </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {getApprovalStatusBadge(usuario.approval_status)}
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedUser(usuario)
-                              setShowUserDetails(true)
-                            }}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
+                          <div className="flex items-center justify-end gap-3">
+                            <button
+                              onClick={() => {
+                                if (!usuario.cref_card_url) return
+                                setSelectedUser(usuario)
+                                setShowImageModal(true)
+                              }}
+                              disabled={!usuario.cref_card_url}
+                              className={`transition-colors ${
+                                usuario.cref_card_url
+                                  ? 'text-blue-600 hover:text-blue-800 cursor-pointer'
+                                  : 'text-gray-300 cursor-not-allowed'
+                              }`}
+                              title={usuario.cref_card_url ? 'Ver carteirinha CREF' : 'Sem carteirinha CREF'}
+                            >
+                              <ImageIcon className="h-5 w-5" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                const isTeacher = usuario.role === 'TEACHER' || usuario.role === 'PROFESSOR'
+                                const canApprove = isTeacher && (usuario.approval_status === 'pending' || usuario.approval_status === 'rejected')
+                                if (!canApprove) return
+                                setSelectedUser(usuario)
+                                setApprovalAction('approve')
+                                setShowApprovalModal(true)
+                              }}
+                              disabled={
+                                (usuario.role !== 'TEACHER' && usuario.role !== 'PROFESSOR') || 
+                                (usuario.approval_status !== 'pending' && usuario.approval_status !== 'rejected')
+                              }
+                              className={`transition-colors ${
+                                (usuario.role === 'TEACHER' || usuario.role === 'PROFESSOR') && 
+                                (usuario.approval_status === 'pending' || usuario.approval_status === 'rejected')
+                                  ? 'text-green-600 hover:text-green-800 cursor-pointer'
+                                  : 'text-gray-300 cursor-not-allowed'
+                              }`}
+                              title={
+                                usuario.role !== 'TEACHER' && usuario.role !== 'PROFESSOR'
+                                  ? 'Aprovação apenas para professores'
+                                  : usuario.approval_status === 'approved'
+                                  ? 'Já aprovado'
+                                  : 'Aprovar profissional'
+                              }
+                            >
+                              <CheckCircle className="h-5 w-5" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                const isTeacher = usuario.role === 'TEACHER' || usuario.role === 'PROFESSOR'
+                                const canReject = isTeacher && usuario.approval_status === 'pending'
+                                if (!canReject) return
+                                setSelectedUser(usuario)
+                                setApprovalAction('reject')
+                                setShowApprovalModal(true)
+                              }}
+                              disabled={
+                                (usuario.role !== 'TEACHER' && usuario.role !== 'PROFESSOR') || 
+                                usuario.approval_status !== 'pending'
+                              }
+                              className={`transition-colors ${
+                                (usuario.role === 'TEACHER' || usuario.role === 'PROFESSOR') && 
+                                usuario.approval_status === 'pending'
+                                  ? 'text-red-600 hover:text-red-800 cursor-pointer'
+                                  : 'text-gray-300 cursor-not-allowed'
+                              }`}
+                              title={
+                                usuario.role !== 'TEACHER' && usuario.role !== 'PROFESSOR'
+                                  ? 'Reprovação apenas para professores'
+                                  : usuario.approval_status === 'pending'
+                                  ? 'Reprovar profissional'
+                                  : 'Apenas professores pendentes podem ser reprovados'
+                              }
+                            >
+                              <XCircle className="h-5 w-5" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedUser(usuario)
+                                setShowUserDetails(true)
+                              }}
+                              className="text-gray-600 hover:text-gray-800 transition-colors"
+                              title="Ver detalhes"
+                            >
+                              <Eye className="h-5 w-5" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -1030,6 +1221,28 @@ export default function UsuariosPage() {
                 </div>
               </div>
             </div>
+          )}
+
+          {/* Modal de Imagem CREF */}
+          {selectedUser && (
+            <ImageModal
+              isOpen={showImageModal}
+              onClose={() => setShowImageModal(false)}
+              imageUrl={selectedUser.cref_card_url || ''}
+              userName={selectedUser.name}
+            />
+          )}
+
+          {/* Modal de Aprovação/Reprovação */}
+          {selectedUser && (
+            <ApprovalModal
+              isOpen={showApprovalModal}
+              onClose={() => setShowApprovalModal(false)}
+              onConfirm={approvalAction === 'approve' ? handleApproveUser : handleRejectUser}
+              user={selectedUser}
+              action={approvalAction}
+              loading={approvalLoading}
+            />
           )}
       </div>
     </FranqueadoraGuard>

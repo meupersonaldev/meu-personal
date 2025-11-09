@@ -305,5 +305,65 @@ router.post('/:id/cref-card', requireAuth, upload.single('file'), async (req, re
   }
 })
 
+// PUT /api/users/:id/approve - Aprovar usuário (professor)
+router.put('/:id/approve', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params
+    const user = (req as any).user
+    const isAdmin = ['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN', 'FRANCHISE_ADMIN'].includes(user?.role)
+    
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Apenas administradores podem aprovar usuários' })
+    }
+
+    const { error } = await supabase
+      .from('users')
+      .update({
+        approval_status: 'approved',
+        approved_at: new Date().toISOString(),
+        approved_by: user.userId,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+
+    if (error) throw error
+
+    res.json({ message: 'Usuário aprovado com sucesso' })
+  } catch (error: any) {
+    console.error('Error approving user:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// PUT /api/users/:id/reject - Reprovar usuário (professor)
+router.put('/:id/reject', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params
+    const user = (req as any).user
+    const isAdmin = ['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN', 'FRANCHISE_ADMIN'].includes(user?.role)
+    
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Apenas administradores podem reprovar usuários' })
+    }
+
+    const { error } = await supabase
+      .from('users')
+      .update({
+        approval_status: 'rejected',
+        approved_at: new Date().toISOString(),
+        approved_by: user.userId,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+
+    if (error) throw error
+
+    res.json({ message: 'Usuário reprovado' })
+  } catch (error: any) {
+    console.error('Error rejecting user:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
 export default router
 

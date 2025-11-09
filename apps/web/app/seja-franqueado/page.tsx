@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -139,7 +139,7 @@ export default function SejaFranqueadoPage() {
             <div className="relative">
               <div className="relative w-full h-[500px] bg-gradient-to-br from-meu-primary to-meu-primary-dark rounded-3xl overflow-hidden border-2 border-meu-accent/20">
                 <Image
-                  src="https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=800&h=600&fit=crop"
+                  src="/images/photo-1571019613454-1cb2f99b2d8b.jpg"
                   alt="Academia moderna"
                   fill
                   className="object-cover opacity-80"
@@ -260,7 +260,7 @@ export default function SejaFranqueadoPage() {
             <div className="relative">
               <div className="w-full h-[400px] bg-gradient-to-br from-meu-primary-dark to-meu-primary rounded-3xl overflow-hidden border-2 border-meu-cyan/20">
                 <Image
-                  src="https://images.unsplash.com/photo-1540497077202-7c8a3999166f?w=800&h=600&fit=crop"
+                  src="/images/photo-1540497077202-7c8a3999166f.jpg"
                   alt="Treinamento franquia"
                   fill
                   className="object-cover opacity-80"

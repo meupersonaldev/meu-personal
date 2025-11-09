@@ -50,18 +50,8 @@ export function middleware(request: NextRequest) {
     }
   }
 
-  if (isAuthRoute && authToken && !isFranqueadoraRoute) {
-    let target = '/'
-
-    if (isProfessorAuth) {
-      target = '/professor/dashboard'
-    } else if (isAlunoAuth) {
-      target = '/aluno/inicio'
-    }
-
-    if (pathname !== target) {
-      return NextResponse.redirect(new URL(target, request.url))
-    }
+  if (isAuthRoute && authToken && !isFranqueadoraRoute && !isProfessorAuth && !isAlunoAuth) {
+    return NextResponse.redirect(new URL('/', request.url))
   }
 
   return NextResponse.next()

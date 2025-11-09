@@ -1,4 +1,4 @@
-import Link from 'next/link'
+﻿import Link from 'next/link'
 import Image from 'next/image'
 import { ArrowLeft, GraduationCap, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -28,7 +28,7 @@ export default function LoginSelectionPage() {
           className="absolute inset-0 bg-cover bg-center"
           style={{
             backgroundImage:
-              "url(https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=2340&q=80)"
+              "url(/images/photo-1571019613454-1cb2f99b2d8b-bg.jpg)"
           }}
         ></div>
         <div className="absolute inset-0 bg-gradient-to-br from-meu-primary/90 to-meu-primary-dark/80" />

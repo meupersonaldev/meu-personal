@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -214,7 +214,7 @@ export default function Home() {
                 <div className="absolute -inset-1 bg-gradient-to-r from-meu-accent via-meu-cyan to-meu-accent rounded-3xl blur-xl opacity-50 group-hover:opacity-75 transition duration-1000"></div>
                 <div className="relative h-[280px] sm:h-[360px] lg:h-[440px] bg-gradient-to-br from-meu-primary to-meu-primary-dark rounded-3xl overflow-hidden shadow-2xl">
                   <Image
-                    src="https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=800&h=1000&fit=crop"
+                    src="/images/photo-1534438327276-14e5300c3a48.jpg"
                     alt="Personal Training"
                     fill
                     className="object-cover opacity-90 group-hover:scale-105 transition-transform duration-700"
@@ -315,7 +315,7 @@ export default function Home() {
             <div className="relative">
               <div className="relative w-full h-[400px] sm:h-[500px] bg-gradient-to-br from-meu-primary to-meu-primary-dark rounded-3xl overflow-hidden border border-meu-accent/20">
                 <Image 
-                  src="https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?w=800&h=600&fit=crop" 
+                  src="/images/photo-1571019614242-c5c5dee9f50b.jpg" 
                   alt="Aluno treinando" 
                   fill
                   className="object-cover opacity-80"
@@ -334,7 +334,7 @@ export default function Home() {
             <div className="order-last lg:order-first relative">
               <div className="relative w-full h-[400px] sm:h-[500px] bg-gradient-to-br from-meu-primary to-meu-primary-dark rounded-3xl overflow-hidden border border-meu-cyan/20">
                 <Image 
-                  src="https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=800&h=600&fit=crop" 
+                  src="/images/photo-1571019613454-1cb2f99b2d8b.jpg" 
                   alt="Personal trainer" 
                   fill
                   className="object-cover opacity-80"
@@ -455,7 +455,7 @@ export default function Home() {
             <div className="relative">
               <div className="relative w-full h-[400px] sm:h-[500px] bg-gradient-to-br from-meu-primary to-meu-primary-dark rounded-3xl overflow-hidden border border-meu-accent/20">
                 <Image 
-                  src="https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=800&h=600&fit=crop" 
+                  src="/images/photo-1534438327276-14e5300c3a48-600.jpg" 
                   alt="Academia franquia" 
                   fill
                   className="object-cover opacity-80"
@@ -519,7 +519,7 @@ export default function Home() {
         {/* Background Image */}
         <div className="absolute inset-0 opacity-10">
           <Image
-            src="https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=1920&h=1080&fit=crop"
+            src="/images/photo-1571019613454-1cb2f99b2d8b-1920.jpg"
             alt="Gym background"
             fill
             className="object-cover"

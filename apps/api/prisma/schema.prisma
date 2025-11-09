@@ -15,6 +15,12 @@ enum Role {
   FRANCHISE_ADMIN
 }
 
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum BookingStatus {
   PENDING
   CONFIRMED
@@ -29,24 +35,32 @@ enum TransactionType {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  passwordHash  String?   @map("password_hash")
-  password      String?   @deprecated("Use password_hash instead")
-  name          String
-  phone         String?
-  role          Role      @default(STUDENT)
-  credits       Int       @default(0)
-  isActive      Boolean   @default(true) @map("is_active")
-  avatarUrl     String?   @map("avatar_url")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  id              String          @id @default(cuid())
+  email           String          @unique
+  passwordHash    String?         @map("password_hash")
+  password        String?         @deprecated("Use password_hash instead")
+  name            String
+  phone           String?
+  cpf             String?
+  cref            String?
+  crefCardUrl     String?         @map("cref_card_url")
+  role            Role            @default(STUDENT)
+  credits         Int             @default(0)
+  isActive        Boolean         @default(true) @map("is_active")
+  avatarUrl       String?         @map("avatar_url")
+  approvalStatus  ApprovalStatus  @default(PENDING) @map("approval_status")
+  approvedAt      DateTime?       @map("approved_at")
+  approvedBy      String?         @map("approved_by")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
 
-  teacherProfile TeacherProfile?
-  studentBookings Booking[] @relation("StudentBookings")
-  teacherBookings Booking[] @relation("TeacherBookings")
+  teacherProfile  TeacherProfile?
+  studentBookings Booking[]       @relation("StudentBookings")
+  teacherBookings Booking[]       @relation("TeacherBookings")
   transactions    Transaction[]
   reviews         Review[]
+  approver        User?           @relation("UserApprovals", fields: [approvedBy], references: [id])
+  approvedUsers   User[]          @relation("UserApprovals")
   
   @@map("users")
 }
