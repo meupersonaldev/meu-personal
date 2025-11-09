@@ -21,6 +21,14 @@ enum ApprovalStatus {
   REJECTED
 }
 
+enum Gender {
+  MALE
+  FEMALE
+  NON_BINARY
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
 enum BookingStatus {
   PENDING
   CONFIRMED
@@ -44,6 +52,7 @@ model User {
   cpf             String?
   cref            String?
   crefCardUrl     String?         @map("cref_card_url")
+  gender          Gender?
   role            Role            @default(STUDENT)
   credits         Int             @default(0)
   isActive        Boolean         @default(true) @map("is_active")

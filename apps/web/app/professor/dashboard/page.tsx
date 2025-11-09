@@ -7,6 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import ProfessorLayout from '@/components/layout/professor-layout'
+import { ApprovalBanner } from '@/components/teacher/approval-banner'
+import { ApprovalBlock } from '@/components/teacher/approval-block'
 import {
   Clock,
   Calendar,
@@ -200,17 +202,14 @@ export default function ProfessorDashboardPage() {
       </div>
     )
   } else {
+    const isNotApproved = user.approval_status !== 'approved'
+    
     content = (
       <div className="space-y-6 md:space-y-8">
-        {needsApproval && (
-          <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
-            <div className="text-amber-800 text-sm">
-              <p className="font-semibold">Sua conta de professor está em análise</p>
-              <p>Uma franqueadora precisa aprovar seu cadastro. Enquanto isso, algumas funcionalidades podem estar limitadas.</p>
-            </div>
-          </div>
-        )}
+        <ApprovalBanner 
+          approvalStatus={user.approval_status} 
+          userName={user.name}
+        />
         <section className="space-y-2 md:space-y-3">
           <h1 className="text-2xl md:text-4xl font-bold text-gray-900">
             Olá, {firstName} 👋
@@ -220,7 +219,16 @@ export default function ProfessorDashboardPage() {
           </p>
         </section>
 
-        <section>
+        <section className={isNotApproved ? 'relative' : ''}>
+          {isNotApproved && (
+            <ApprovalBlock 
+              title={user.approval_status === 'rejected' ? 'Acesso Negado' : 'Estatísticas Bloqueadas'}
+              message={user.approval_status === 'rejected' 
+                ? 'Seu cadastro foi reprovado. Entre em contato com a administração para mais informações.'
+                : 'Suas estatísticas estarão disponíveis após a aprovação do seu cadastro pela administração.'}
+              approvalStatus={user.approval_status}
+            />
+          )}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 md:gap-4">
             <Card className="border border-gray-200 shadow-sm transition-all hover:shadow-lg">
               <CardContent className="p-4 md:p-6">
@@ -323,7 +331,16 @@ export default function ProfessorDashboardPage() {
           </div>
         </section>
 
-        <section>
+        <section className={isNotApproved ? 'relative' : ''}>
+          {isNotApproved && (
+            <ApprovalBlock 
+              title={user.approval_status === 'rejected' ? 'Acesso Negado' : 'Agendamentos Bloqueados'}
+              message={user.approval_status === 'rejected'
+                ? 'Seu cadastro foi reprovado. Entre em contato com a administração para mais informações.'
+                : 'Você poderá visualizar e gerenciar seus agendamentos após a aprovação do seu cadastro.'}
+              approvalStatus={user.approval_status}
+            />
+          )}
           <Card className="border border-gray-200 bg-white shadow-sm">
             <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>

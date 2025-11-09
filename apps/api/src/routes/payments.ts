@@ -2,6 +2,8 @@ import express from 'express'
 import { z } from 'zod'
 import { supabase } from '../lib/supabase'
 import { asaasService } from '../services/asaas.service'
+import { requireAuth } from '../middleware/auth'
+import { requireApprovedTeacher } from '../middleware/approval'
 
 const router = express.Router()
 
@@ -181,7 +183,7 @@ router.post('/student/purchase-package', async (req, res) => {
  * 1. Professor paga → Dinheiro vai 100% para franquia
  * 2. Professor recebe horas no banco de horas dele
  */
-router.post('/teacher/purchase-hours', async (req, res) => {
+router.post('/teacher/purchase-hours', requireAuth, requireApprovedTeacher, async (req, res) => {
   try {
     const data = teacherHoursPurchaseSchema.parse(req.body)
 

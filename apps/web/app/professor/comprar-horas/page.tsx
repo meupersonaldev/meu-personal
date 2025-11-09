@@ -10,6 +10,9 @@ import { useAuthStore } from '@/lib/stores/auth-store'
 import { useTeacherAcademies } from '@/lib/hooks/useTeacherAcademies'
 import ProfessorLayout from '@/components/layout/professor-layout'
 import { API_BASE_URL } from '@/lib/api'
+import { useTeacherApproval } from '@/hooks/use-teacher-approval'
+import { ApprovalBanner } from '@/components/teacher/approval-banner'
+import { ApprovalBlock } from '@/components/teacher/approval-block'
 
 interface HoursPackage {
   id: string
@@ -23,6 +26,7 @@ interface HoursPackage {
 
 export default function ComprarHorasPage() {
   const { user } = useAuthStore()
+  const { isNotApproved, approvalStatus } = useTeacherApproval()
   const { academies, loading: loadingAcademies } = useTeacherAcademies()
   const [packages, setPackages] = useState<HoursPackage[]>([])
   const [selectedPackage, setSelectedPackage] = useState<HoursPackage | null>(null)
@@ -65,6 +69,12 @@ export default function ComprarHorasPage() {
 
   const handlePurchase = async () => {
     if (!selectedPackage || !user?.id) return
+
+    // Verificar aprovação antes de permitir compra
+    if (isNotApproved) {
+      toast.error('Seu cadastro precisa ser aprovado antes de comprar horas. Aguarde a análise da administração.')
+      return
+    }
 
     setLoading(true)
 
@@ -166,6 +176,27 @@ export default function ComprarHorasPage() {
     )
   }
 
+  // Verificar aprovação ANTES de verificar unidades
+  if (isNotApproved) {
+    return (
+      <ProfessorLayout>
+        <div className="min-h-screen bg-gray-50 py-12 px-4">
+          <div className="max-w-6xl mx-auto">
+            <ApprovalBanner approvalStatus={approvalStatus} userName={user?.name} />
+            <ApprovalBlock 
+              title={approvalStatus === 'rejected' ? 'Acesso Negado' : 'Compra de Horas Bloqueada'}
+              message={approvalStatus === 'rejected'
+                ? 'Seu cadastro foi reprovado. Entre em contato com a administração para mais informações.'
+                : 'Você poderá comprar pacotes de horas após a aprovação do seu cadastro pela administração.'}
+              fullPage
+              approvalStatus={approvalStatus}
+            />
+          </div>
+        </div>
+      </ProfessorLayout>
+    )
+  }
+
   if (academies.length === 0) {
     return (
       <ProfessorLayout>
@@ -188,16 +219,16 @@ export default function ComprarHorasPage() {
   return (
     <ProfessorLayout>
       <div className="min-h-screen bg-gray-50 py-12 px-4">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            Comprar Banco de Horas
-          </h1>
-          <p className="text-lg text-gray-600">
-            Adquira horas para dar aulas e expandir seu negócio
-          </p>
-        </div>
+        <div className="max-w-6xl mx-auto">
+          {/* Header */}
+          <div className="text-center mb-12">
+                <h1 className="text-4xl font-bold text-gray-900 mb-4">
+                  Comprar Banco de Horas
+                </h1>
+                <p className="text-lg text-gray-600">
+                  Adquira horas para dar aulas e expandir seu negócio
+                </p>
+              </div>
 
         {/* Steps Indicator */}
         <div className="flex items-center justify-center mb-12">
@@ -293,8 +324,20 @@ export default function ComprarHorasPage() {
             {selectedPackage && (
               <div className="mt-8 text-center">
                 <Button
-                  onClick={() => setStep('payment')}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-12 py-4 text-lg"
+                  onClick={() => {
+                    if (isNotApproved) {
+                      toast.error('Seu cadastro precisa ser aprovado antes de comprar horas.')
+                      return
+                    }
+                    setStep('payment')
+                  }}
+                  disabled={isNotApproved}
+                  className={`px-12 py-4 text-lg ${
+                    isNotApproved 
+                      ? 'bg-gray-400 cursor-not-allowed' 
+                      : 'bg-blue-600 hover:bg-blue-700'
+                  } text-white`}
+                  title={isNotApproved ? 'Aguardando aprovação do cadastro' : ''}
                 >
                   Continuar para Pagamento
                 </Button>
@@ -379,8 +422,13 @@ export default function ComprarHorasPage() {
                 </Button>
                 <Button
                   onClick={handlePurchase}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
-                  disabled={loading}
+                  className={`flex-1 text-white ${
+                    isNotApproved 
+                      ? 'bg-gray-400 cursor-not-allowed' 
+                      : 'bg-blue-600 hover:bg-blue-700'
+                  }`}
+                  disabled={loading || isNotApproved}
+                  title={isNotApproved ? 'Aguardando aprovação do cadastro' : ''}
                 >
                   {loading ? (
                     <>
@@ -478,7 +526,8 @@ export default function ComprarHorasPage() {
           </div>
         )}
       </div>
-      </div>
+    </div>
+      
     {showCpfModal && (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
         <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl">

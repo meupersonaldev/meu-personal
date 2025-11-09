@@ -91,7 +91,7 @@ router.post('/login', auditAuthEvent('LOGIN'), async (req, res) => {
     // Buscar usuário no Supabase (inclui campos de senha)
     const { data: users, error: userError } = await supabase
       .from('users')
-      .select('id, name, email, phone, role, credits, avatar_url, is_active, password_hash, password')
+      .select('id, name, email, phone, role, credits, avatar_url, is_active, password_hash, password, approval_status')
       .eq('email', email)
       .eq('is_active', true)
       .single()
@@ -169,7 +169,8 @@ router.post('/login', auditAuthEvent('LOGIN'), async (req, res) => {
         role: users.role,
         credits: users.credits,
         avatarUrl: users.avatar_url,
-        isActive: users.is_active
+        isActive: users.is_active,
+        approval_status: users.approval_status
       }
     })
 
@@ -190,6 +191,7 @@ router.post('/login', auditAuthEvent('LOGIN'), async (req, res) => {
 // POST /api/auth/register
 router.post('/register', auditSensitiveOperation('CREATE', 'users'), async (req, res) => {
   try {
+    console.log('JWT_SECRET configurado:', process.env.JWT_SECRET ? `Sim (${process.env.JWT_SECRET.length} chars)` : 'Não')
     const userData = registerSchema.parse(req.body)
   if (userData.role === 'TEACHER') {
     if (!userData.cref || !userData.cref.trim()) {
@@ -312,8 +314,9 @@ router.post('/register', auditSensitiveOperation('CREATE', 'users'), async (req,
       }
     }
 
-    // SEGURANÇA CRÍTICA: Validar secret forte e obrigatório
-    const jwtSecret = process.env.JWT_SECRET
+    // SEGURANÇA CRÍTICA: Validar secret forte (exigente em produção). Fallback em dev.
+    const isProd = process.env.NODE_ENV === 'production'
+    const jwtSecret = process.env.JWT_SECRET || (!isProd ? 'dev-insecure-jwt-secret-please-set-env-32chars-123456' : '')
     if (!jwtSecret || jwtSecret.length < 32) {
       throw new Error('JWT_SECRET deve ter pelo menos 32 caracteres para segurança')
     }
@@ -409,7 +412,8 @@ router.get('/me', async (req, res) => {
         role: user.role,
         credits: user.credits,
         avatarUrl: user.avatar_url,
-        isActive: user.is_active
+        isActive: user.is_active,
+        approval_status: user.approval_status
       }
     })
 

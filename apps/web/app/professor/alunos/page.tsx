@@ -19,6 +19,9 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import ConfirmDialog from '@/components/ui/confirm-dialog'
+import { useTeacherApproval } from '@/hooks/use-teacher-approval'
+import { ApprovalBanner } from '@/components/teacher/approval-banner'
+import { ApprovalBlock } from '@/components/teacher/approval-block'
 
 interface Student {
   id: string
@@ -32,6 +35,7 @@ interface Student {
 
 export default function AlunosPage() {
   const { user, token } = useAuthStore()
+  const { isNotApproved, approvalStatus } = useTeacherApproval()
   const [students, setStudents] = useState<Student[]>([])
   const [loading, setLoading] = useState(true)
   const [teacherBio, setTeacherBio] = useState<string>('')
@@ -250,6 +254,19 @@ export default function AlunosPage() {
   return (
     <ProfessorLayout>
       <div className="p-6 space-y-6">
+        <ApprovalBanner approvalStatus={approvalStatus} userName={user?.name} />
+        
+        {isNotApproved ? (
+          <ApprovalBlock 
+            title={approvalStatus === 'rejected' ? 'Acesso Negado' : 'Cadastro de Alunos Bloqueado'}
+            message={approvalStatus === 'rejected'
+              ? 'Seu cadastro foi reprovado. Entre em contato com a administração para mais informações.'
+              : 'Você poderá cadastrar e gerenciar seus alunos após a aprovação do seu cadastro pela administração.'}
+            fullPage
+            approvalStatus={approvalStatus}
+          />
+        ) : (
+          <>
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -650,6 +667,8 @@ export default function AlunosPage() {
           cancelText="Cancelar"
           type="danger"
         />
+          </>
+        )}
       </div>
     </ProfessorLayout>
   )

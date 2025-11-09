@@ -5,6 +5,7 @@ import { addAcademyToContact } from '../services/franqueadora-contacts.service'
 import { createNotification, createUserNotification } from './notifications'
 import { bookingCanonicalService } from '../services/booking-canonical.service'
 import { requireAuth, requireRole } from '../middleware/auth'
+import { requireApprovedTeacher } from '../middleware/approval'
 import { createUserRateLimit, rateLimitConfig } from '../middleware/rateLimit'
 import { asyncErrorHandler } from '../middleware/errorHandler'
 import { normalizeBookingStatus } from '../utils/booking-status'
@@ -516,7 +517,7 @@ router.get('/:id', requireAuth, asyncErrorHandler(async (req, res) => {
 }))
 
 // POST /api/bookings - Criar novo agendamento (endpoint canônico)
-router.post('/', requireAuth, requireRole(['STUDENT', 'ALUNO', 'TEACHER', 'PROFESSOR', 'FRANQUIA', 'FRANQUEADORA']), asyncErrorHandler(async (req, res) => {
+router.post('/', requireAuth, requireRole(['STUDENT', 'ALUNO', 'TEACHER', 'PROFESSOR', 'FRANQUIA', 'FRANQUEADORA']), requireApprovedTeacher, asyncErrorHandler(async (req, res) => {
   const bookingData = createBookingSchema.parse(req.body)
   if (bookingData.studentId === null) {
     bookingData.studentId = undefined

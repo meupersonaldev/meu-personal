@@ -10,6 +10,7 @@ export interface User {
   phone?: string
   role: UserRole
   avatar_url?: string
+  approval_status?: 'pending' | 'approved' | 'rejected'
 }
 
 interface AuthState {
@@ -66,6 +67,7 @@ export const useAuthStore = create<AuthState>()(
                 phone: user.phone,
                 role: user.role,
                 avatar_url: user.avatarUrl ?? user.avatar_url,
+                approval_status: user.approval_status,
               },
               isAuthenticated: true,
               isLoading: false,
@@ -106,7 +108,8 @@ export const useAuthStore = create<AuthState>()(
                 email: data.user.email,
                 phone: data.user.phone,
                 role: data.user.role,
-                avatar_url: data.user.avatarUrl
+                avatar_url: data.user.avatarUrl,
+                approval_status: data.user.approval_status,
               },
               token: data.token || null,
               isAuthenticated: true
@@ -167,7 +170,8 @@ export const useAuthStore = create<AuthState>()(
                 email: data.user.email,
                 phone: data.user.phone,
                 role: data.user.role,
-                avatar_url: data.user.avatarUrl
+                avatar_url: data.user.avatarUrl,
+                approval_status: data.user.approval_status,
               },
               token: data.token || null,
               isAuthenticated: true
@@ -235,6 +239,7 @@ export const useAuthStore = create<AuthState>()(
                 ...currentUser,
                 ...user,
                 avatar_url: user.avatarUrl ?? user.avatar_url,
+                approval_status: user.approval_status,
               }
             })
           }

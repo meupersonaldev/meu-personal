@@ -4,6 +4,9 @@ import { useState, useEffect } from 'react'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { Button } from '@/components/ui/button'
 import ProfessorLayout from '@/components/layout/professor-layout'
+import { useTeacherApproval } from '@/hooks/use-teacher-approval'
+import { ApprovalBanner } from '@/components/teacher/approval-banner'
+import { ApprovalBlock } from '@/components/teacher/approval-block'
 import { 
   CreditCard,
   DollarSign,
@@ -39,6 +42,7 @@ interface Transaction {
 
 export default function ProfessorCarteira() {
   const { user, token } = useAuthStore()
+  const { isNotApproved, approvalStatus } = useTeacherApproval()
   const [stats, setStats] = useState<Stats | null>(null)
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [completedLessonsCount, setCompletedLessonsCount] = useState(0)
@@ -186,6 +190,19 @@ export default function ProfessorCarteira() {
   return (
     <ProfessorLayout>
       <div className="p-6 space-y-8">
+        <ApprovalBanner approvalStatus={approvalStatus} userName={user?.name} />
+        
+        {isNotApproved ? (
+          <ApprovalBlock 
+            title={approvalStatus === 'rejected' ? 'Acesso Negado' : 'Carteira Bloqueada'}
+            message={approvalStatus === 'rejected'
+              ? 'Seu cadastro foi reprovado. Entre em contato com a administração para mais informações.'
+              : 'Você poderá visualizar seu saldo e transações após a aprovação do seu cadastro pela administração.'}
+            fullPage
+            approvalStatus={approvalStatus}
+          />
+        ) : (
+          <>
         {/* Header */}
         <div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Carteira</h1>
@@ -348,6 +365,8 @@ export default function ProfessorCarteira() {
             Continue realizando aulas para aumentar seus ganhos!
           </p>
         </div>
+          </>
+        )}
       </div>
     </ProfessorLayout>
   )
