@@ -37,7 +37,22 @@
       "mcp__supabase__get_logs",
       "Bash(npx shadcn@latest add:*)",
       "Bash(npm run build:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(if not exist \"apps\\web\\app\\privacidade\" mkdir appswebappprivacidade)",
+      "Bash(if not exist \"apps\\web\\app\\termos\" mkdir appswebapptermos)",
+      "Bash(if not exist \"apps\\web\\app\\cookies\" mkdir appswebappcookies)",
+      "Bash(mkdir:*)",
+      "Bash(dir:*)",
+      "mcp__supabase__get_project_url",
+      "WebSearch",
+      "Bash(claude mcp list:*)",
+      "Bash(claude mcp get:*)",
+      "Bash(claude mcp remove:*)",
+      "Bash(claude mcp add:*)",
+      "Bash(npx @supabase/mcp-server-supabase@latest:*)",
+      "Bash(set:*)",
+      "mcp__supabase__get_publishable_keys",
+      "mcp__supabase__generate_typescript_types"
     ],
     "deny": [],
     "ask": []

@@ -53,6 +53,14 @@ class BookingCanonicalService {
         if (availableClasses < 1) {
             throw new Error('Saldo insuficiente de aulas');
         }
+        await supabase_1.supabase
+            .from('bookings')
+            .delete()
+            .eq('teacher_id', params.professorId)
+            .eq('unit_id', params.unitId)
+            .eq('start_at', params.startAt.toISOString())
+            .eq('status_canonical', 'AVAILABLE')
+            .is('student_id', null);
         const { data: booking, error: bookingError } = await supabase_1.supabase
             .from('bookings')
             .insert({
@@ -63,7 +71,8 @@ class BookingCanonicalService {
             date: params.startAt.toISOString(),
             start_at: params.startAt.toISOString(),
             end_at: params.endAt.toISOString(),
-            status_canonical: 'RESERVED',
+            status: 'CONFIRMED',
+            status_canonical: 'PAID',
             cancellable_until: cancellableUntil.toISOString(),
             student_notes: params.studentNotes,
             professor_notes: params.professorNotes
@@ -73,7 +82,7 @@ class BookingCanonicalService {
         if (bookingError || !booking) {
             throw bookingError || new Error('Falha ao criar booking');
         }
-        await balance_service_1.balanceService.lockStudentClasses(params.studentId, franqueadoraId, 1, booking.id, cancellableUntil.toISOString(), {
+        await balance_service_1.balanceService.consumeStudentClasses(params.studentId, franqueadoraId, 1, booking.id, {
             unitId: params.unitId,
             source: 'ALUNO',
             metaJson: {
@@ -88,14 +97,6 @@ class BookingCanonicalService {
             metaJson: {
                 booking_id: booking.id,
                 origin: 'student_booking_reward'
-            }
-        });
-        await balance_service_1.balanceService.lockProfessorHours(params.professorId, franqueadoraId, 1, booking.id, cancellableUntil.toISOString(), {
-            unitId: params.unitId,
-            source: 'SYSTEM',
-            metaJson: {
-                booking_id: booking.id,
-                origin: 'student_led'
             }
         });
         await this.createOrUpdateStudentUnit(params.studentId, params.unitId, booking.id);
@@ -133,6 +134,14 @@ class BookingCanonicalService {
         if (availableHours < 1) {
             throw new Error('Saldo de horas insuficiente');
         }
+        await supabase_1.supabase
+            .from('bookings')
+            .delete()
+            .eq('teacher_id', params.professorId)
+            .eq('unit_id', params.unitId)
+            .eq('start_at', params.startAt.toISOString())
+            .eq('status_canonical', 'AVAILABLE')
+            .is('student_id', null);
         const { data: booking, error: bookingError } = await supabase_1.supabase
             .from('bookings')
             .insert({
@@ -143,7 +152,8 @@ class BookingCanonicalService {
             date: params.startAt.toISOString(),
             start_at: params.startAt.toISOString(),
             end_at: params.endAt.toISOString(),
-            status_canonical: 'RESERVED',
+            status: 'CONFIRMED',
+            status_canonical: 'PAID',
             cancellable_until: cancellableUntil.toISOString(),
             student_notes: params.studentNotes,
             professor_notes: params.professorNotes
@@ -151,14 +161,23 @@ class BookingCanonicalService {
             .select()
             .single();
         if (bookingError || !booking) {
-            throw bookingError || new Error('Falha ao criar booking professor-led');
+            throw bookingError || new Error('Falha ao criar booking professor-led com aluno');
         }
-        await balance_service_1.balanceService.lockProfessorHours(params.professorId, franqueadoraId, 1, booking.id, cancellableUntil.toISOString(), {
+        const profBalance = await balance_service_1.balanceService.getProfessorBalance(params.professorId, franqueadoraId);
+        if (profBalance.available_hours < 1) {
+            throw new Error('Saldo de horas insuficiente');
+        }
+        await balance_service_1.balanceService.updateProfessorBalance(params.professorId, franqueadoraId, {
+            available_hours: profBalance.available_hours - 1
+        });
+        await balance_service_1.balanceService.createHourTransaction(params.professorId, franqueadoraId, 'CONSUME', 1, {
             unitId: params.unitId,
             source: 'PROFESSOR',
+            bookingId: booking.id,
             metaJson: {
                 booking_id: booking.id,
-                origin: 'professor_led'
+                origin: 'professor_led_booking',
+                student_id: params.studentId || null
             }
         });
         if (params.studentId) {
@@ -196,10 +215,25 @@ class BookingCanonicalService {
             return booking;
         }
         const franqueadoraId = await fetchFranqueadoraIdFromUnit(booking.unit_id);
-        if (booking.student_id) {
-            await balance_service_1.balanceService.unlockStudentClasses(booking.student_id, franqueadoraId, 1, bookingId, {
+        const hasStudent = Boolean(booking.student_id);
+        if (hasStudent && booking.source === 'ALUNO') {
+            const balance = await balance_service_1.balanceService.getStudentBalance(booking.student_id, franqueadoraId);
+            await balance_service_1.balanceService.updateStudentBalance(booking.student_id, franqueadoraId, {
+                total_consumed: Math.max(0, balance.total_consumed - 1)
+            });
+            await balance_service_1.balanceService.createStudentTransaction(booking.student_id, franqueadoraId, 'REFUND', 1, {
                 unitId: booking.unit_id,
-                source: 'ALUNO',
+                source: 'SYSTEM',
+                bookingId: bookingId,
+                metaJson: {
+                    booking_id: bookingId,
+                    actor: userId,
+                    reason: 'booking_cancelled_refund_student'
+                }
+            });
+            await balance_service_1.balanceService.revokeProfessorHours(booking.teacher_id, franqueadoraId, 1, bookingId, {
+                unitId: booking.unit_id,
+                source: 'SYSTEM',
                 metaJson: {
                     booking_id: bookingId,
                     actor: userId,
@@ -207,26 +241,19 @@ class BookingCanonicalService {
                 }
             });
         }
-        await balance_service_1.balanceService.unlockProfessorHours(booking.teacher_id, franqueadoraId, 1, bookingId, {
-            unitId: booking.unit_id,
-            source: 'SYSTEM',
-            metaJson: {
-                booking_id: bookingId,
-                actor: userId,
-                reason: 'booking_cancelled'
-            }
-        });
-        const cancellableUntil = booking.cancellable_until ? new Date(booking.cancellable_until) : null;
-        const currentTime = new Date();
-        const withinRefundWindow = cancellableUntil ? currentTime <= cancellableUntil : false;
-        if (booking.student_id && booking.source === 'ALUNO' && withinRefundWindow) {
-            await balance_service_1.balanceService.revokeProfessorHours(booking.teacher_id, franqueadoraId, 1, bookingId, {
+        else if (hasStudent && booking.source === 'PROFESSOR') {
+            const profBalance = await balance_service_1.balanceService.getProfessorBalance(booking.teacher_id, franqueadoraId);
+            await balance_service_1.balanceService.updateProfessorBalance(booking.teacher_id, franqueadoraId, {
+                available_hours: profBalance.available_hours + 1
+            });
+            await balance_service_1.balanceService.createHourTransaction(booking.teacher_id, franqueadoraId, 'REFUND', 1, {
                 unitId: booking.unit_id,
                 source: 'SYSTEM',
+                bookingId: bookingId,
                 metaJson: {
                     booking_id: bookingId,
                     actor: userId,
-                    reason: 'booking_cancelled_refund'
+                    reason: 'booking_cancelled_refund_professor'
                 }
             });
         }
@@ -234,6 +261,7 @@ class BookingCanonicalService {
         const { data: updatedBooking, error: updateError } = await supabase_1.supabase
             .from('bookings')
             .update({
+            status: 'CANCELLED',
             status_canonical: 'CANCELED',
             updated_at: now.toISOString()
         })

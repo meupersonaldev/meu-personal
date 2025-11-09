@@ -183,6 +183,9 @@ router.delete('/:id', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEADORA
 });
 router.get('/:id/available-slots', async (req, res) => {
     try {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
         console.log('📍 GET /api/academies/:id/available-slots');
         const { id } = req.params;
         const { date, teacher_id } = req.query;
@@ -259,45 +262,53 @@ router.get('/:id/available-slots', async (req, res) => {
         const endISO = new Date(`${date}T23:59:59Z`).toISOString();
         const { data: bookings, error: bookingsError } = await supabase_1.supabase
             .from('bookings')
-            .select('id, date, status, teacher_id, student_id')
-            .eq('franchise_id', id)
+            .select('id, date, status, status_canonical, teacher_id, student_id')
+            .eq('unit_id', id)
             .gte('date', startISO)
-            .lte('date', endISO);
+            .lte('date', endISO)
+            .neq('status_canonical', 'CANCELED');
         if (bookingsError)
             throw bookingsError;
-        console.log('📋 Reservas encontradas para este dia:', bookings?.length || 0);
-        if (bookings && bookings.length > 0) {
-            bookings.forEach(b => {
-                const t = new Date(b.date);
-                const hhmm = t.toISOString().substring(11, 16);
-                console.log(`  - ${hhmm}: ID=${b.id.substring(0, 8)}..., status=${b.status}, teacher=${b.teacher_id?.substring(0, 8)}...`);
-            });
-        }
         const occ = {};
+        const teacherOccupiedSlots = new Set();
         for (const b of bookings || []) {
-            if (b.status === 'CONFIRMED' || b.status === 'PENDING') {
-                const t = new Date(b.date);
-                const hhmm = t.toISOString().substring(11, 16);
-                occ[hhmm] = (occ[hhmm] || 0) + 1;
+            const t = new Date(b.date);
+            const hhmm = t.toISOString().substring(11, 16);
+            if (teacher_id) {
+                if (b.teacher_id === teacher_id) {
+                    if (b.status === 'CONFIRMED' || b.status === 'PENDING' || b.status === 'PAID' || b.status === 'BLOCKED') {
+                        teacherOccupiedSlots.add(hhmm);
+                    }
+                }
             }
-            else if (b.status === 'BLOCKED' && teacher_id && b.teacher_id === teacher_id) {
-                const t = new Date(b.date);
-                const hhmm = t.toISOString().substring(11, 16);
-                occ[hhmm] = (occ[hhmm] || 0) + 999;
+            else {
+                if (b.status === 'CONFIRMED' || b.status === 'PENDING' || b.status === 'PAID') {
+                    occ[hhmm] = (occ[hhmm] || 0) + 1;
+                }
             }
         }
-        console.log('🔢 Ocupação por horário (CONFIRMED + PENDING + BLOCKED do professor):', occ);
         const result = filteredSlots.map((s) => {
             const hhmm = String(s.time).substring(0, 5);
-            const current = occ[hhmm] || 0;
-            const max = s.max_capacity ?? 1;
-            const remaining = Math.max(0, max - current);
+            let isFree;
+            let current;
+            let remaining;
+            if (teacher_id) {
+                isFree = !teacherOccupiedSlots.has(hhmm);
+                current = teacherOccupiedSlots.has(hhmm) ? 1 : 0;
+                remaining = isFree ? 1 : 0;
+            }
+            else {
+                current = occ[hhmm] || 0;
+                const max = s.max_capacity ?? 1;
+                remaining = Math.max(0, max - current);
+                isFree = remaining > 0;
+            }
             return {
                 time: hhmm,
-                max_capacity: max,
+                max_capacity: s.max_capacity ?? 1,
                 current_occupancy: current,
                 remaining,
-                is_free: remaining > 0,
+                is_free: isFree,
                 slot_duration: Math.max(15, academy?.class_duration_minutes ?? 60),
                 slot_cost: Math.max(1, academy?.credits_per_class ?? 1)
             };

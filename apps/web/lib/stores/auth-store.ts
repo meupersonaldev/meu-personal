@@ -22,8 +22,9 @@ interface AuthState {
     name: string
     email: string
     password: string
-    phone?: string
+    phone: string
     cpf: string
+    gender: 'MALE' | 'FEMALE' | 'NON_BINARY' | 'OTHER' | 'PREFER_NOT_TO_SAY'
     role: UserRole
     teacher?: { cref?: string; specialties?: string[] }
   }) => Promise<boolean>
@@ -142,6 +143,7 @@ export const useAuthStore = create<AuthState>()(
               password: userData.password,
               phone: userData.phone,
               cpf: userData.cpf,
+              gender: userData.gender,
               role: userData.role,
               // dados profissionais (apenas para TEACHER)
               cref: userData.teacher?.cref,

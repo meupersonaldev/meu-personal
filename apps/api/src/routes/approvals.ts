@@ -158,15 +158,28 @@ router.put('/:id', async (req, res) => {
     if (status === 'approved') {
       try {
         if (request.type === 'teacher_registration') {
-          // Criar perfil de professor
-          await supabase
+          // Ativar perfil do professor (criar se não existir)
+          const { data: existingProfile } = await supabase
             .from('teacher_profiles')
-            .insert({
-              user_id: request.user_id,
-              specialties: request.requested_data.specialties || [],
-              hourly_rate: request.requested_data.hourly_rate || 80.00,
-              is_available: true
-            })
+            .select('id')
+            .eq('user_id', request.user_id)
+            .maybeSingle()
+
+          if (existingProfile) {
+            await supabase
+              .from('teacher_profiles')
+              .update({ is_available: true, updated_at: new Date().toISOString() })
+              .eq('id', existingProfile.id)
+          } else {
+            await supabase
+              .from('teacher_profiles')
+              .insert({
+                user_id: request.user_id,
+                specialties: request.requested_data?.specialties || [],
+                hourly_rate: request.requested_data?.hourly_rate || 80.0,
+                is_available: true
+              })
+          }
 
           // Buscar admin da franquia para notificar
           const { data: franchiseAdmin } = await supabase

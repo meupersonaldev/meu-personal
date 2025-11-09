@@ -39,6 +39,17 @@ export default function AgendamentosGestaoPage() {
     bookingId: null
   })
 
+  const cancelFreeUntilLabel = (() => {
+    if (!cancelConfirm.bookingId) return null
+    const b = bookings.find(bk => bk.id === cancelConfirm.bookingId)
+    if (!b) return null
+    const cutoffIso = (b as any).cancellableUntil || new Date(new Date(b.date).getTime() - 4 * 60 * 60 * 1000).toISOString()
+    const cutoff = new Date(cutoffIso)
+    const date = cutoff.toLocaleDateString('pt-BR')
+    const time = cutoff.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    return `${date} ${time}`
+  })()
+
   // Aguardar hidratação do estado
   useEffect(() => {
     setIsHydrated(true)
@@ -415,6 +426,7 @@ export default function AgendamentosGestaoPage() {
                 <p>• Aulas podem ser agendadas diretamente pelos alunos nos horários disponíveis dos professores</p>
                 <p>• Aulas podem ser agendadas diretamente pelo professor nos horários disponíveis da academia</p>
                 <p>• Você pode cancelar aulas confirmadas se necessário</p>
+                <p>• Regra de cancelamento: gratuito até 4 horas antes; dentro das 4 horas, 1 crédito do aluno é consumido</p>
                 <p>• Marque aulas como concluídas após a realização se necessário</p>
                 <p>• Use os filtros para visualizar agendamentos por status</p>
               </div>
@@ -523,7 +535,7 @@ export default function AgendamentosGestaoPage() {
           onClose={() => setCancelConfirm({ isOpen: false, bookingId: null })}
           onConfirm={confirmCancel}
           title="Cancelar Agendamento"
-          description="Tem certeza que deseja cancelar este agendamento? Esta ação não poderá ser desfeita."
+          description={`Cancelamento gratuito até ${cancelFreeUntilLabel || '4 horas antes do horário agendado'}. Após esse prazo, 1 crédito do aluno será consumido. Tem certeza que deseja cancelar?`}
           confirmText="Cancelar Agendamento"
           cancelText="Voltar"
           type="warning"

@@ -26,11 +26,13 @@ export default function AgendarPage() {
   const { token, isAuthenticated } = useAuthStore()
 
   const today = useMemo(() => new Date().toISOString().slice(0, 10), [])
-  const [date, setDate] = useState<string>(today)
+  const initialDate = useMemo(() => searchParams.get('date') || today, [searchParams, today])
+  const [date, setDate] = useState<string>(initialDate)
   const [slots, setSlots] = useState<Slot[]>([])
   const [loading, setLoading] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [errorCode, setErrorCode] = useState<string | null>(null)
 
   useEffect(() => {
     const load = async () => {
@@ -97,14 +99,22 @@ export default function AgendarPage() {
 
       const json = await resp.json().catch(() => ({}))
       if (!resp.ok) {
-        throw new Error(json?.error || json?.message || 'Erro ao criar agendamento')
+        const serverMsg = typeof json?.message === 'string' ? json.message : null
+        const serverErr = typeof json?.error === 'string' ? json.error : null
+        const msg = serverMsg || serverErr || 'Erro ao criar agendamento'
+        throw new Error(msg)
       }
 
       setSuccess('Agendamento criado com sucesso!')
       // Pequeno delay para feedback antes de redirecionar
       setTimeout(() => router.push('/aluno/inicio'), 900)
     } catch (e: any) {
-      setError(e?.message || 'Erro ao criar agendamento')
+      const msg: string = e?.message || 'Erro ao criar agendamento'
+      setErrorCode(/saldo insuficiente/i.test(msg) ? 'INSUFFICIENT_CREDITS' : null)
+      setError(/saldo insuficiente/i.test(msg)
+        ? 'Você não possui créditos suficientes para agendar esta aula.'
+        : msg
+      )
     }
   }
 
@@ -113,6 +123,11 @@ export default function AgendarPage() {
       <div className="flex items-center gap-2">
         <CalendarIcon className="h-5 w-5 text-meu-primary" />
         <h1 className="text-xl md:text-2xl font-bold">Agendar Aula</h1>
+      </div>
+
+      {/* Aviso regra de cancelamento (4h) */}
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+        Lembrete: cancelamento gratuito até 4 horas antes do horário agendado. Após esse prazo, 1 crédito será consumido.
       </div>
 
       {/* Filtros básicos */}
@@ -143,9 +158,21 @@ export default function AgendarPage() {
               <Loader2 className="h-6 w-6 animate-spin text-meu-primary" />
             </div>
           ) : error ? (
-            <div className="flex items-center gap-2 text-red-600">
-              <AlertCircle className="h-5 w-5" />
-              <span>{error}</span>
+            <div>
+              <div className="flex items-center gap-2 text-red-600">
+                <AlertCircle className="h-5 w-5" />
+                <span>{error}</span>
+              </div>
+              {errorCode === 'INSUFFICIENT_CREDITS' && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button variant="outline" onClick={() => router.push('/aluno/comprar')}>
+                    Comprar créditos
+                  </Button>
+                  <Button variant="ghost" onClick={() => router.back()}>
+                    Voltar
+                  </Button>
+                </div>
+              )}
             </div>
           ) : success ? (
             <div className="flex items-center gap-2 text-green-700">

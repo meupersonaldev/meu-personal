@@ -16,6 +16,8 @@ export type Database = {
           name: string
           phone: string | null
           role: 'STUDENT' | 'TEACHER'
+          cref_card_url?: string | null
+          gender?: 'MALE' | 'FEMALE' | 'NON_BINARY' | 'OTHER' | 'PREFER_NOT_TO_SAY' | 'UNSPECIFIED'
           credits: number
           avatar_url: string | null
           is_active: boolean
@@ -28,6 +30,8 @@ export type Database = {
           name: string
           phone?: string | null
           role?: 'STUDENT' | 'TEACHER'
+          cref_card_url?: string | null
+          gender?: 'MALE' | 'FEMALE' | 'NON_BINARY' | 'OTHER' | 'PREFER_NOT_TO_SAY' | 'UNSPECIFIED'
           credits?: number
           avatar_url?: string | null
           is_active?: boolean
@@ -40,6 +44,8 @@ export type Database = {
           name?: string
           phone?: string | null
           role?: 'STUDENT' | 'TEACHER'
+          cref_card_url?: string | null
+          gender?: 'MALE' | 'FEMALE' | 'NON_BINARY' | 'OTHER' | 'PREFER_NOT_TO_SAY' | 'UNSPECIFIED'
           credits?: number
           avatar_url?: string | null
           is_active?: boolean

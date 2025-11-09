@@ -12,6 +12,8 @@ export interface Teacher {
   credits: number
   is_active: boolean
   created_at: string
+  rating_avg?: number
+  rating_count?: number
   teacher_profiles: Array<{
     id: string
     bio: string | null

@@ -7,7 +7,7 @@ import dotenv from 'dotenv'
 import path from 'path'
 
 // SEGURANÇA CRÍTICA: Importar middlewares de segurança
-import { authRateLimit, apiRateLimit, uploadRateLimit } from './middleware/rateLimit'
+import { authRateLimit, apiRateLimit } from './middleware/rateLimit'
 import { errorHandler, notFoundHandler } from './middleware/errorHandler'
 import { auditMiddleware } from './middleware/audit'
 
@@ -132,7 +132,6 @@ import financialRoutes from './routes/financial'
 import paymentsRoutes from './routes/payments'
 import calendarRoutes from './routes/calendar'
 import timeSlotsRoutes from './routes/time-slots'
-import uploadRoutes from './routes/upload'
 import franqueadoraRoutes from './routes/franqueadora'
 import adminRoutes from './routes/admin'
 import packagesRoutes from './routes/packages'
@@ -144,8 +143,6 @@ import studentUnitsRoutes from './routes/student-units'
 import franchisorPoliciesRoutes from './routes/franchisor-policies'
 import { bookingScheduler } from './jobs/booking-scheduler'
 
-// Servir arquivos estáticos de uploads
-app.use('/uploads', express.static('uploads'))
 // SEGURANÇA CRÍTICA: Rate limit específico para auth (mais restritivo)
 app.use('/api/auth', authRateLimit, authRoutes)
 app.use('/api/users', usersRoutes)
@@ -163,8 +160,8 @@ app.use('/api/teachers', teachersRoutes)
 app.use('/api/teachers', teacherPreferencesRoutes)
 app.use('/api/teachers', teacherStudentsRoutes)
 app.use('/api/student-units', studentUnitsRoutes)
-// SEGURANÇA CRÍTICA: Rate limit específico para uploads
-app.use('/api', uploadRateLimit, uploadRoutes)
+// Webhooks (pagamentos, etc)
+app.use('/api/webhooks', webhooksRoutes)
 app.use('/api/franqueadora', franqueadoraRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/franchisor/policies', franchisorPoliciesRoutes)

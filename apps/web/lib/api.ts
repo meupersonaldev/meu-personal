@@ -46,6 +46,7 @@ export const authAPI = {
     password: string
     phone?: string
     cpf?: string
+    gender?: 'MALE' | 'FEMALE' | 'NON_BINARY' | 'OTHER' | 'PREFER_NOT_TO_SAY'
     role?: 'STUDENT' | 'TEACHER'
   }) {
     return apiRequest('/api/auth/register', {

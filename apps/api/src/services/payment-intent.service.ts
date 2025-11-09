@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { CustomError } from '../middleware/errorHandler';
-import { asaasService } from './asaas.service';
+import { getPaymentProvider } from './payments/provider';
 import { balanceService } from './balance.service';
 
 export interface PaymentIntent {
@@ -49,7 +49,8 @@ class PaymentIntentService {
 
     if (intentError) throw intentError;
 
-    // 2. Gerar checkout no Asaas
+    // 2. Gerar checkout no provedor de pagamentos
+    const provider = getPaymentProvider();
     const user = await this.getUser(params.actorUserId);
     if (!user) throw new Error('Usuário não encontrado');
 
@@ -62,7 +63,7 @@ class PaymentIntentService {
           throw new CustomError('CPF obrigatório para pagamento', 400, true, 'BUSINESS_RULE_VIOLATION');
         }
       }
-      const customerResult = await asaasService.createCustomer({
+      const customerResult = await provider.createCustomer({
         name: user.name,
         email: user.email,
         cpfCnpj: (user.cpf || '').replace(/\D/g, '') || '00000000000',
@@ -71,15 +72,15 @@ class PaymentIntentService {
 
       if (!customerResult.success) {
         const message = Array.isArray(customerResult.error)
-          ? (customerResult.error[0]?.description || 'Erro ao criar cliente no Asaas')
-          : (customerResult.error || 'Erro ao criar cliente no Asaas');
+          ? (customerResult.error[0]?.description || 'Erro ao criar cliente no provedor de pagamento')
+          : (customerResult.error || 'Erro ao criar cliente no provedor de pagamento');
         const isCpfError = typeof message === 'string' && message.toLowerCase().includes('cpf');
         throw new CustomError(
           message,
           isCpfError ? 400 : 502,
           true,
           isCpfError ? 'BUSINESS_RULE_VIOLATION' : 'EXTERNAL_PROVIDER_ERROR',
-          { provider: 'ASAAS', step: 'createCustomer' }
+          { provider: process.env.PAYMENT_PROVIDER || 'ASAAS', step: 'createCustomer' }
         );
       }
 
@@ -92,15 +93,20 @@ class PaymentIntentService {
         .eq('id', user.id);
     }
 
-    // Criar pagamento no Asaas
+    // Criar pagamento
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     const dueDate = tomorrow.toISOString().split('T')[0];
 
-    const paymentResult = await asaasService.createPayment({
+    const requestedMethod = String((params.metadata as any)?.payment_method || 'PIX').toUpperCase();
+    const billingType = (['PIX','BOLETO','CREDIT_CARD'] as const).includes(requestedMethod as any)
+      ? (requestedMethod as 'PIX' | 'BOLETO' | 'CREDIT_CARD')
+      : 'PIX';
+
+    const paymentResult = await provider.createPayment({
       customer: asaasCustomerId,
-      billingType: 'PIX', // Default, pode ser parametrizado
-      value: params.amountCents / 100, // Converter cents para reais
+      billingType,
+      value: params.amountCents / 100,
       dueDate: dueDate,
       description: this.getPaymentDescription(params.type, params.metadata),
       externalReference: `${params.type}_${intent.id}_${Date.now()}`
@@ -111,7 +117,7 @@ class PaymentIntentService {
     }
 
     // 3. Atualizar PaymentIntent com provider_id e checkout_url
-    const linkResult = await asaasService.generatePaymentLink(paymentResult.data.id);
+    const linkResult = await provider.generatePaymentLink(paymentResult.data.id);
     const paymentLink = linkResult.success ? linkResult.data : {
       paymentUrl: paymentResult.data.invoiceUrl,
       bankSlipUrl: paymentResult.data.bankSlipUrl,
@@ -125,7 +131,7 @@ class PaymentIntentService {
         payload_json: {
           ...params.metadata,
           asaas_payment_id: paymentResult.data.id,
-          billing_type: 'PIX',
+          billing_type: billingType,
           franqueadora_id: params.franqueadoraId,
           unit_id: params.unitId || null
         }

@@ -69,6 +69,7 @@ type FormState = {
   password: string
   confirmPassword: string
   role: AccessibleRole
+  gender: 'MALE' | 'FEMALE' | 'NON_BINARY' | 'OTHER' | 'PREFER_NOT_TO_SAY' | ''
 }
 
 export function RegisterTemplate({
@@ -90,12 +91,14 @@ export function RegisterTemplate({
     password: "",
     confirmPassword: "",
     role: lockedRole ?? initialRole,
+    gender: "",
   })
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [teacherCref, setTeacherCref] = useState('')
-  const [teacherSpecialties, setTeacherSpecialties] = useState('')
+  
+  const [crefCardFile, setCrefCardFile] = useState<File | null>(null)
 
   useEffect(() => {
     if (!lockedRole) return
@@ -126,6 +129,11 @@ export function RegisterTemplate({
       return
     }
 
+    if (!formData.gender) {
+      toast.error('Selecione seu gênero')
+      return
+    }
+
     // Validar CPF
     const cleanCpf = formData.cpf.replace(/\D/g, '')
     if (cleanCpf.length !== 11) {
@@ -137,17 +145,13 @@ export function RegisterTemplate({
 
     try {
       if (effectiveRole === 'TEACHER') {
-        const specialtiesArr = teacherSpecialties
-          .split(',')
-          .map((s) => s.trim())
-          .filter((s) => s.length > 0)
         if (!teacherCref.trim()) {
           toast.error('CREF é obrigatório para professores')
           setIsLoading(false)
           return
         }
-        if (specialtiesArr.length === 0) {
-          toast.error('Informe ao menos uma especialidade')
+        if (!crefCardFile) {
+          toast.error('Envie a carteirinha (CREF) para continuar')
           setIsLoading(false)
           return
         }
@@ -156,10 +160,6 @@ export function RegisterTemplate({
         ? {
             teacher: {
               cref: teacherCref.trim() || undefined,
-              specialties: teacherSpecialties
-                .split(',')
-                .map((s) => s.trim())
-                .filter((s) => s.length > 0),
             },
           }
         : {}
@@ -169,12 +169,38 @@ export function RegisterTemplate({
         phone: formData.phone,
         cpf: formData.cpf,
         password: formData.password,
+        gender: formData.gender as any,
         role: effectiveRole,
         ...(teacherPayload as any),
       })
 
       if (!success) {
         toast.error("Erro ao criar conta. Tente novamente.")
+        return
+      }
+
+      // Upload opcional da carteirinha, se informado e usuário autenticado
+      try {
+        const { user, token } = useAuthStore.getState()
+        if (user?.id && token && crefCardFile) {
+          const form = new FormData()
+          form.append('file', crefCardFile)
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const resp = await fetch(`${API_URL}/api/users/${user.id}/cref-card`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+            body: form
+          })
+          if (!resp.ok) {
+            const data = await resp.json().catch(() => ({}))
+            toast.error(data?.error || 'Falha ao enviar carteirinha. Tente novamente.')
+            setIsLoading(false)
+            return
+          }
+        }
+      } catch (e) {
+        toast.error('Erro ao enviar carteirinha. Tente novamente.')
+        setIsLoading(false)
         return
       }
 
@@ -196,6 +222,8 @@ export function RegisterTemplate({
       setIsLoading(false)
     }
   }
+
+  // Validação automática do CREF removida (MVP com aprovação manual da franqueadora)
 
   const renderFeatures = () => {
     if (!copy.features?.length) return null
@@ -335,6 +363,28 @@ export function RegisterTemplate({
               />
             </div>
 
+            {/* Gender */}
+            <div className="space-y-2">
+              <label htmlFor="gender" className="block text-sm font-medium text-gray-700">
+                Gênero
+              </label>
+              <select
+                id="gender"
+                value={formData.gender}
+                onChange={(e) => setFormData(prev => ({ ...prev, gender: e.target.value as any }))}
+                className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-meu-primary focus:border-transparent bg-white"
+                required
+              >
+                <option value="" disabled>Selecione</option>
+                <option value="MALE">Masculino</option>
+                <option value="FEMALE">Feminino</option>
+                <option value="NON_BINARY">Não binário</option>
+                <option value="OTHER">Outro</option>
+                <option value="PREFER_NOT_TO_SAY">Prefiro não informar</option>
+              </select>
+              <p className="text-xs text-gray-500">Informação interna para perfil e estatísticas</p>
+            </div>
+
             {/* CPF */}
             <div className="space-y-2">
               <label htmlFor="cpf" className="block text-sm font-medium text-gray-700">
@@ -457,7 +507,7 @@ export function RegisterTemplate({
           {effectiveRole === 'TEACHER' && (
             <div className="space-y-5">
               <div className="rounded-lg border border-dashed border-meu-primary/30 bg-white p-4 text-sm text-meu-primary-dark">
-                Preencha suas informações profissionais para ser encontrado pelos alunos. CREF e especialidades são obrigatórios.
+                Preencha suas informações profissionais. CREF e a carteirinha são obrigatórios; você poderá cadastrar suas especialidades depois no painel/admin.
               </div>
               <div className="space-y-2">
                 <label htmlFor="cref" className="block text-sm font-medium text-gray-700">
@@ -473,27 +523,29 @@ export function RegisterTemplate({
                   required
                 />
               </div>
+              
               <div className="space-y-2">
-                <label htmlFor="specialties" className="block text-sm font-medium text-gray-700">
-                  Especialidades (separadas por vírgula)
+                <label htmlFor="crefCard" className="block text-sm font-medium text-gray-700">
+                  Upload da carteirinha (obrigatório)
                 </label>
-                <Input
-                  id="specialties"
-                  type="text"
-                  value={teacherSpecialties}
-                  onChange={(e) => setTeacherSpecialties(e.target.value)}
-                  className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-meu-primary focus:border-transparent"
-                  placeholder="Ex.: Musculação, Funcional, HIIT"
+                <input
+                  id="crefCard"
+                  type="file"
+                  accept="image/*,application/pdf"
+                  onChange={(e) => setCrefCardFile(e.target.files?.[0] || null)}
+                  className="w-full border border-gray-300 rounded-lg p-2 file:mr-3 file:px-3 file:py-2 file:border-0 file:bg-meu-primary/10 file:text-meu-primary file:rounded-md"
                   required
                 />
+                <p className="text-xs text-gray-500">Aceitamos imagens (JPG, PNG, WEBP) ou PDF. Máx 8MB.</p>
               </div>
+              {/* Validação automática do CREF removida; aprovação será feita pela franqueadora */}
             </div>
           )}
 
             {/* Submit Button */}
             <Button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || (formData.role === 'TEACHER' && !crefCardFile)}
               className="w-full bg-meu-primary hover:bg-meu-primary-dark text-white font-semibold py-3 px-4 rounded-lg transition-colors duration-200"
             >
               {isLoading ? (

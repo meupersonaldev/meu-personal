@@ -228,7 +228,7 @@ export default function ComprarHorasPage() {
                   <h3 className="font-semibold text-blue-900 mb-2">Como funciona o Banco de Horas?</h3>
                   <ul className="text-sm text-blue-800 space-y-1">
                     <li>• Compre horas e use quando quiser dar aulas</li>
-                    <li>• Quando um aluno escolher você, você GANHA 1h de brinde da franquia</li>
+                    <li>• Suas horas são debitadas quando as aulas são concluídas</li>
                     <li>• Suas horas não expiram durante o período de validade</li>
                     <li>• Quanto mais horas, melhor o custo-benefício</li>
                   </ul>

@@ -331,53 +331,51 @@ class BookingCanonicalService {
 
     const franqueadoraId = await fetchFranqueadoraIdFromUnit(booking.unit_id);
 
-    // Verificar quem fez o agendamento (source) para devolver créditos corretos
+    // Verificar quem fez o agendamento (source) para aplicar política de cancelamento
     const hasStudent = Boolean(booking.student_id);
     
     if (hasStudent && booking.source === 'ALUNO') {
-      // ALUNO agendou: devolver créditos ao ALUNO e revogar horas do PROFESSOR
-      const balance = await balanceService.getStudentBalance(booking.student_id, franqueadoraId);
-      await balanceService.updateStudentBalance(
-        booking.student_id,
-        franqueadoraId,
-        {
-          total_consumed: Math.max(0, balance.total_consumed - 1)
-        }
-      );
-      
-      await balanceService.createStudentTransaction(
-        booking.student_id,
-        franqueadoraId,
-        'REFUND',
-        1,
-        {
-          unitId: booking.unit_id,
-          source: 'SYSTEM',
-          bookingId: bookingId,
-          metaJson: {
-            booking_id: bookingId,
-            actor: userId,
-            reason: 'booking_cancelled_refund_student'
+      // Regra 4h: cancelamento gratuito até 4h antes; dentro da janela, crédito do aluno é consumido.
+      const nowUtc = new Date();
+      const cutoff = booking.cancellable_until ? new Date(booking.cancellable_until) : new Date(new Date(booking.start_at || booking.date).getTime() - 4 * 60 * 60 * 1000);
+      const freeCancel = nowUtc <= cutoff;
+
+      if (freeCancel) {
+        // Sem débito de crédito do aluno; reverter a hora do professor (ele não recebe)
+        await balanceService.revokeProfessorHours(
+          booking.teacher_id,
+          franqueadoraId,
+          1,
+          bookingId,
+          {
+            unitId: booking.unit_id,
+            source: 'SYSTEM',
+            metaJson: {
+              booking_id: bookingId,
+              actor: userId,
+              reason: 'booking_cancelled_before_4h'
+            }
           }
-        }
-      );
-      
-      // Revogar horas do professor (ele não recebe pelas aulas canceladas)
-      await balanceService.revokeProfessorHours(
-        booking.teacher_id,
-        franqueadoraId,
-        1,
-        bookingId,
-        {
-          unitId: booking.unit_id,
-          source: 'SYSTEM',
-          metaJson: {
-            booking_id: bookingId,
-            actor: userId,
-            reason: 'booking_cancelled'
+        );
+      } else {
+        // Cancelamento tardio: consumir 1 crédito do aluno
+        await balanceService.consumeStudentClasses(
+          booking.student_id,
+          franqueadoraId,
+          1,
+          bookingId,
+          {
+            unitId: booking.unit_id,
+            source: 'ALUNO',
+            metaJson: {
+              booking_id: bookingId,
+              actor: userId,
+              reason: 'booking_late_cancel_after_4h'
+            }
           }
-        }
-      );
+        );
+        // Professor mantém a hora que recebeu no agendamento
+      }
     } else if (hasStudent && booking.source === 'PROFESSOR') {
       // PROFESSOR agendou para aluno: devolver horas ao PROFESSOR
       const profBalance = await balanceService.getProfessorBalance(booking.teacher_id, franqueadoraId);
@@ -445,39 +443,9 @@ class BookingCanonicalService {
       return booking;
     }
 
-    const franqueadoraId = await fetchFranqueadoraIdFromUnit(booking.unit_id);
-
-    if (booking.student_id) {
-      await balanceService.consumeStudentClasses(
-        booking.student_id,
-        franqueadoraId,
-        1,
-        bookingId,
-        {
-          unitId: booking.unit_id,
-          source: 'ALUNO',
-          metaJson: {
-            booking_id: bookingId,
-            reason: 'booking_confirmed'
-          }
-        }
-      );
-    }
-
-    await balanceService.consumeProfessorHours(
-      booking.teacher_id,
-      franqueadoraId,
-      1,
-      bookingId,
-      {
-        unitId: booking.unit_id,
-        source: 'SYSTEM',
-        metaJson: {
-          booking_id: bookingId,
-          reason: 'booking_confirmed'
-        }
-      }
-    );
+    // Confirmação não altera saldos: 
+    // - Em aluno-led, o professor já recebeu 1h no agendamento e o aluno só consome em DONE ou late-cancel.
+    // - Em professor-led, a hora foi debitada na criação e o aluno não consome aqui.
 
     const now = new Date();
     const { data: updatedBooking, error: updateError } = await supabase
@@ -527,20 +495,9 @@ class BookingCanonicalService {
       );
     }
 
-    await balanceService.consumeProfessorHours(
-      booking.teacher_id,
-      franqueadoraId,
-      1,
-      bookingId,
-      {
-        unitId: booking.unit_id,
-        source: 'SYSTEM',
-        metaJson: {
-          booking_id: bookingId,
-          reason: 'booking_completed'
-        }
-      }
-    );
+    // Observação: para agendamentos aluno-led, o professor já recebeu 1h (pagamento) no ato do agendamento.
+    // Para agendamentos professor-led, a hora foi consumida na criação do booking.
+    // Portanto, não há consumo adicional de horas do professor na conclusão.
 
     const now = new Date();
     const { data: updatedBooking, error: updateError } = await supabase

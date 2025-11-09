@@ -148,7 +148,8 @@ router.post('/', async (req, res) => {
       phone,
       academy_id,
       plan_id,
-      avatar_url
+      avatar_url,
+      credits
     } = req.body
 
     // Validação básica
@@ -180,6 +181,7 @@ router.post('/', async (req, res) => {
         phone,
         role: 'STUDENT',
         avatar_url,
+        credits: credits ?? 0,
         is_active: true
       })
       .select()
@@ -256,7 +258,8 @@ router.put('/:id', async (req, res) => {
       is_active,
       academy_id,
       plan_id,
-      status
+      status,
+      credits
     } = req.body
 
     // Verificar se aluno existe
@@ -294,6 +297,7 @@ router.put('/:id', async (req, res) => {
     if (phone !== undefined) userUpdates.phone = phone
     if (avatar_url !== undefined) userUpdates.avatar_url = avatar_url
     if (is_active !== undefined) userUpdates.is_active = is_active
+    if (credits !== undefined) userUpdates.credits = credits
 
     if (Object.keys(userUpdates).length > 0) {
       userUpdates.updated_at = new Date().toISOString()

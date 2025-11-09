@@ -20,8 +20,9 @@ export function MobileNav() {
       return [
         { href: '/aluno/inicio', label: 'Início', icon: Home },
         { href: '/aluno/buscar', label: 'Buscar', icon: Search },
-        { href: '/aluno/aulas', label: 'Aulas', icon: Calendar },
+        { href: '/aluno/dashboard?section=aulas', label: 'Aulas', icon: Calendar },
         { href: '/aluno/perfil', label: 'Perfil', icon: User },
+        { href: '/aluno/dashboard?section=config', label: 'Configurações', icon: Settings },
       ]
     }
     

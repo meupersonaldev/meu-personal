@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import {
   Search,
@@ -28,6 +28,7 @@ import FranqueadoraGuard from '@/components/auth/franqueadora-guard'
 
 export default function UsuariosPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { franqueadora, isAuthenticated, isLoading, fetchUsers, token, ensureFranqueadoraId, academies, fetchAcademies } =
     useFranqueadoraStore()
 
@@ -105,6 +106,22 @@ export default function UsuariosPage() {
       fetchUsuarios()
     }
   }, [hydrated, isAuthenticated, fetchUsuarios])
+
+  // Deep-link: abrir detalhes do usuário via ?user_id=
+  useEffect(() => {
+    if (!hydrated || !isAuthenticated) return
+    const userId = searchParams?.get('user_id')
+    if (!userId) return
+    // se já temos a lista carregada, tentar abrir o modal
+    const tryOpen = () => {
+      const u = usersData.users.find(u => u.id === userId)
+      if (u) {
+        setSelectedUser(u)
+        setShowUserDetails(true)
+      }
+    }
+    tryOpen()
+  }, [hydrated, isAuthenticated, searchParams, usersData.users])
 
   useEffect(() => {
     if (!hydrated || !isAuthenticated) return
@@ -816,6 +833,16 @@ export default function UsuariosPage() {
                           </div>
                         ))}
                       </div>
+                      {selectedUser.cref_card_url && (
+                        <div className="mt-3">
+                          <Button
+                            variant="outline"
+                            onClick={() => window.open(selectedUser.cref_card_url!, '_blank')}
+                          >
+                            Ver carteirinha CREF
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   )}
 

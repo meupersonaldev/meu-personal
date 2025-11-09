@@ -10,9 +10,9 @@ const auth_1 = require("../middleware/auth");
 const booking_status_1 = require("../utils/booking-status");
 const router = express_1.default.Router();
 const ADMIN_ROLES = ['FRANQUEADORA', 'FRANQUIA', 'SUPER_ADMIN', 'ADMIN'];
-const TEACHER_ROLES = ['TEACHER', 'PROFESSOR'];
-const hasAdminAccess = (user) => Boolean(user && ADMIN_ROLES.includes(user.role));
-const hasTeacherSelfAccess = (user, teacherId) => Boolean(user && teacherId && TEACHER_ROLES.includes(user.role) && user.userId === teacherId);
+const TEACHER_ROLES = ['TEACHER'];
+const hasAdminAccess = (user) => Boolean(user?.role && ADMIN_ROLES.includes(user.role));
+const hasTeacherSelfAccess = (user, teacherId) => Boolean(user && teacherId && user.role && TEACHER_ROLES.includes(user.role) && user.userId === teacherId);
 const ensureTeacherScope = (req, res, teacherId) => {
     const user = req.user;
     if (!user || (!hasAdminAccess(user) && !hasTeacherSelfAccess(user, teacherId))) {
@@ -40,8 +40,8 @@ router.get('/:id/hours', auth_1.requireAuth, async (req, res) => {
     try {
         const { id } = req.params;
         const user = req.user;
-        const isAdmin = ['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN'].includes(user.role);
-        if (!isAdmin && user.userId !== id) {
+        const isAdmin = user?.role && ['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN'].includes(user.role);
+        if (!isAdmin && user?.userId !== id) {
             return res.status(403).json({ error: 'Forbidden' });
         }
         const { data, error } = await supabase_1.supabase
@@ -130,7 +130,6 @@ router.post('/:id/blocks/custom', auth_1.requireAuth, async (req, res) => {
                 .not('student_id', 'is', null)
                 .neq('status', 'CANCELLED');
             if (existingBookings && existingBookings.length > 0) {
-                console.log(`⚠️ Pulando ${hhmm} - já existe reserva com aluno`);
                 continue;
             }
             toBlock.push({ date: d.toISOString(), duration: 60 });
@@ -296,10 +295,25 @@ const createTeacherSchema = zod_1.z.object({
 });
 router.get('/', auth_1.requireAuth, async (req, res) => {
     try {
-        if (!ensureAdminScope(req, res)) {
-            return;
+        const user = req.user;
+        if (!user || (user.role !== 'ADMIN' && user.role !== 'STUDENT')) {
+            return res.status(403).json({ error: 'Acesso negado' });
         }
         const { academy_id, city, state, unit_id } = req.query;
+        let teacherIds = [];
+        if (unit_id) {
+            const { data: professorUnits } = await supabase_1.supabase
+                .from('professor_units')
+                .select('professor_id, active')
+                .eq('unit_id', unit_id);
+            if (professorUnits) {
+                const activeProfessors = professorUnits.filter(pu => pu.active);
+                teacherIds = activeProfessors.map(pu => pu.professor_id);
+            }
+            if (teacherIds.length === 0) {
+                return res.json([]);
+            }
+        }
         let query = supabase_1.supabase
             .from('users')
             .select(`
@@ -326,15 +340,15 @@ router.get('/', auth_1.requireAuth, async (req, res) => {
           commission_rate
         )
       `)
-            .in('role', ['TEACHER', 'PROFESSOR'])
+            .eq('role', 'TEACHER')
             .eq('is_active', true)
             .eq('academy_teachers.status', 'active')
             .order('created_at', { ascending: false });
         if (academy_id) {
             query = query.eq('academy_teachers.academy_id', academy_id);
         }
-        if (unit_id) {
-            query = query.eq('academy_teachers.academy_id', unit_id);
+        if (unit_id && teacherIds.length > 0) {
+            query = query.in('id', teacherIds);
         }
         const { data: teachers, error } = await query;
         if (error) {
@@ -402,15 +416,15 @@ router.get('/:id/stats', auth_1.requireAuth, async (req, res) => {
             .from('users')
             .select('id, created_at')
             .eq('id', id)
-            .in('role', ['TEACHER', 'PROFESSOR'])
+            .eq('role', 'TEACHER')
             .single();
         if (!teacher) {
             return res.status(404).json({ error: 'Professor não encontrado' });
         }
-        const [bookingsData, transactionsData, subscriptionData, profileData] = await Promise.all([
+        const [bookingsData, transactionsData, subscriptionData, profileData, hourTransactionsData, studentsData] = await Promise.all([
             supabase_1.supabase
                 .from('bookings')
-                .select('id, status, status_canonical, date, credits_cost, student_id, duration')
+                .select('id, status, status_canonical, date, credits_cost, student_id, duration, teacher_id')
                 .eq('teacher_id', id),
             supabase_1.supabase
                 .from('transactions')
@@ -434,25 +448,58 @@ router.get('/:id/stats', auth_1.requireAuth, async (req, res) => {
                 .from('teacher_profiles')
                 .select('hourly_rate')
                 .eq('user_id', id)
-                .single()
+                .single(),
+            supabase_1.supabase
+                .from('hour_transactions')
+                .select('id, type, hours, created_at, meta_json')
+                .eq('professor_id', id)
+                .in('type', ['CONSUME']),
+            supabase_1.supabase
+                .from('teacher_students')
+                .select('id, email, hourly_rate')
+                .eq('teacher_id', id)
         ]);
         const bookings = bookingsData.data || [];
         const transactions = transactionsData.data || [];
         const subscription = subscriptionData.data;
         const profile = profileData.data;
+        const hourTransactions = hourTransactionsData.data || [];
+        const students = studentsData.data || [];
+        const studentRateMap = new Map();
+        for (const student of students) {
+            if (student.email && student.hourly_rate) {
+                const { data: user } = await supabase_1.supabase
+                    .from('users')
+                    .select('id')
+                    .eq('email', student.email)
+                    .single();
+                if (user) {
+                    studentRateMap.set(user.id, student.hourly_rate);
+                }
+            }
+        }
         const normalizedBookings = bookings.map((b) => ({
             ...b,
             _status: (0, booking_status_1.normalizeBookingStatus)(b.status, b.status_canonical)
         }));
         const completedBookings = normalizedBookings.filter((b) => b._status === 'COMPLETED');
-        const totalRevenue = completedBookings.reduce((sum, b) => {
+        const totalAcademyEarnings = hourTransactions.reduce((sum, t) => {
             const rate = profile?.hourly_rate || 0;
-            const duration = Number(b.duration) || 60;
-            return sum + (rate * (duration / 60));
+            return sum + (t.hours * rate);
         }, 0);
+        const totalPrivateEarnings = completedBookings
+            .filter((b) => b.student_id)
+            .reduce((sum, b) => {
+            const studentRate = studentRateMap.get(b.student_id) || 0;
+            return sum + studentRate;
+        }, 0);
+        const totalRevenue = totalAcademyEarnings + totalPrivateEarnings;
         const totalCreditsUsed = normalizedBookings
             .filter((b) => b.student_id && !['CANCELED', 'BLOCKED', 'AVAILABLE'].includes(b._status))
             .reduce((sum, b) => sum + (b.credits_cost || 0), 0);
+        const hoursEarned = hourTransactions
+            .filter((t) => t.type === 'CONSUME')
+            .reduce((sum, t) => sum + (t.hours || 0), 0);
         const stats = {
             total_bookings: normalizedBookings.length,
             completed_bookings: completedBookings.length,
@@ -462,27 +509,63 @@ router.get('/:id/stats', auth_1.requireAuth, async (req, res) => {
             total_revenue: totalRevenue,
             total_credits_used: totalCreditsUsed,
             hourly_rate: profile?.hourly_rate || 0,
+            hours_earned: hoursEarned,
             current_subscription: subscription,
             last_booking_date: normalizedBookings.length > 0
                 ? normalizedBookings.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0].date
                 : null,
             join_date: teacher.created_at,
             monthly_earnings: {
-                current_month: completedBookings
-                    .filter((b) => {
-                    const bookingDate = new Date(b.date);
+                current_month: (() => {
                     const now = new Date();
-                    return bookingDate.getMonth() === now.getMonth() &&
-                        bookingDate.getFullYear() === now.getFullYear();
-                })
-                    .reduce((sum, b) => {
-                    const rate = profile?.hourly_rate || 0;
-                    const duration = Number(b.duration) || 60;
-                    return sum + (rate * (duration / 60));
-                }, 0)
+                    const academyEarnings = hourTransactions
+                        .filter((t) => {
+                        const txDate = new Date(t.created_at);
+                        return txDate.getMonth() === now.getMonth() &&
+                            txDate.getFullYear() === now.getFullYear();
+                    })
+                        .reduce((sum, t) => {
+                        const rate = profile?.hourly_rate || 0;
+                        return sum + (t.hours * rate);
+                    }, 0);
+                    const privateEarnings = completedBookings
+                        .filter((b) => {
+                        const bookingDate = new Date(b.date);
+                        return b.student_id &&
+                            bookingDate.getMonth() === now.getMonth() &&
+                            bookingDate.getFullYear() === now.getFullYear();
+                    })
+                        .reduce((sum, b) => {
+                        const studentRate = studentRateMap.get(b.student_id) || 0;
+                        return sum + studentRate;
+                    }, 0);
+                    return academyEarnings + privateEarnings;
+                })()
             }
         };
         res.json(stats);
+    }
+    catch (error) {
+        console.error('Erro ao processar requisição:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    }
+});
+router.get('/:id/transactions', auth_1.requireAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!ensureTeacherScope(req, res, id)) {
+            return;
+        }
+        const { data: hourTransactions, error } = await supabase_1.supabase
+            .from('hour_transactions')
+            .select('id, type, hours, created_at, meta_json')
+            .eq('professor_id', id)
+            .order('created_at', { ascending: false });
+        if (error) {
+            console.error('Erro ao buscar transações:', error);
+            return res.status(500).json({ error: 'Erro ao buscar transações' });
+        }
+        res.json({ transactions: hourTransactions || [] });
     }
     catch (error) {
         console.error('Erro ao processar requisição:', error);
@@ -512,7 +595,7 @@ router.get('/:id', auth_1.requireAuth, async (req, res) => {
         )
       `)
             .eq('id', id)
-            .in('role', ['TEACHER', 'PROFESSOR'])
+            .eq('role', 'TEACHER')
             .single();
         if (error) {
             if (error.code === 'PGRST116') {
@@ -568,7 +651,7 @@ router.put('/:id', auth_1.requireAuth, async (req, res) => {
             .from('users')
             .select('id')
             .eq('id', id)
-            .in('role', ['TEACHER', 'PROFESSOR'])
+            .eq('role', 'TEACHER')
             .single();
         if (teacherError || !teacher) {
             return res.status(404).json({ message: 'Professor não encontrado' });
@@ -726,7 +809,7 @@ router.delete('/:id', auth_1.requireAuth, async (req, res) => {
             .from('users')
             .select('id')
             .eq('id', id)
-            .in('role', ['TEACHER', 'PROFESSOR'])
+            .eq('role', 'TEACHER')
             .single();
         if (!existingTeacher) {
             return res.status(404).json({ error: 'Professor não encontrado' });

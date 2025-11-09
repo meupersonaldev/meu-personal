@@ -5,6 +5,7 @@ export const FRANQUEADORA_CONTACTS_USER_FIELDS = [
   'phone',
   'cpf',
   'role',
+  'cref_card_url',
   'is_active',
   'credits',
   'created_at',

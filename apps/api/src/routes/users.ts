@@ -14,9 +14,9 @@ const router = Router()
 const storage = multer.memoryStorage()
 const upload = multer({
   storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  limits: { fileSize: 8 * 1024 * 1024 }, // 8MB
   fileFilter: (req, file, cb) => {
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp']
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp', 'application/pdf']
     if (allowedTypes.includes(file.mimetype)) {
       cb(null, true)
     } else {
@@ -57,21 +57,24 @@ router.get('/:id', requireAuth, async (req, res) => {
 router.put('/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params
-    const { name, email, phone, bio } = req.body
+    const { name, email, phone, bio, gender } = req.body as { name?: string; email?: string; phone?: string; bio?: string; gender?: string }
     const user = (req as any).user
     const isAdmin = ['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN'].includes(user?.role)
     if (!isAdmin && user?.userId !== id) {
       return res.status(403).json({ error: 'Forbidden' })
     }
 
+    const updates: any = {
+      name,
+      email,
+      phone,
+      updated_at: new Date().toISOString()
+    }
+    if (typeof gender === 'string') updates.gender = gender
+
     const { data, error } = await supabase
       .from('users')
-      .update({
-        name,
-        email,
-        phone,
-        updated_at: new Date().toISOString()
-      })
+      .update(updates)
       .eq('id', id)
       .select()
       .single()
@@ -105,7 +108,7 @@ router.put('/:id', requireAuth, async (req, res) => {
 router.patch('/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params
-    const { name, email, cpf } = req.body
+    const { name, email, cpf, gender } = req.body as { name?: string; email?: string; cpf?: string; gender?: string }
     const user = (req as any).user
     const isAdmin = ['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN'].includes(user?.role)
     if (!isAdmin && user?.userId !== id) {
@@ -115,6 +118,7 @@ router.patch('/:id', requireAuth, async (req, res) => {
     const updateData: any = { updated_at: new Date().toISOString() }
     if (name !== undefined) updateData.name = name
     if (email !== undefined) updateData.email = email
+    if (gender !== undefined) updateData.gender = gender
     if (cpf !== undefined) {
       const cpfSanitized = String(cpf).replace(/\D/g, '')
       if (process.env.ASAAS_ENV === 'production' && cpfSanitized.length < 11) {
@@ -249,6 +253,54 @@ router.post('/:id/avatar', requireAuth, upload.single('avatar'), async (req, res
     res.json({ avatar_url: publicUrl })
   } catch (error: any) {
     console.error('Error uploading avatar:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// POST /api/users/:id/cref-card - Upload de carteirinha CREF
+router.post('/:id/cref-card', requireAuth, upload.single('file'), async (req, res) => {
+  try {
+    const { id } = req.params
+    const file = req.file
+    const user = (req as any).user
+    // Apenas o próprio usuário pode enviar seu documento
+    if (user?.userId !== id) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+
+    if (!file) {
+      return res.status(400).json({ error: 'Nenhum arquivo enviado' })
+    }
+
+    // Gerar nome único
+    const fileExt = path.extname(file.originalname)
+    const fileName = `${id}-${randomUUID()}${fileExt}`
+    const filePath = `cref-cards/${fileName}`
+
+    // Upload no bucket existente (avatars) dentro de subpasta cref-cards
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(filePath, file.buffer, {
+        contentType: file.mimetype,
+        upsert: true
+      })
+
+    if (uploadError) throw uploadError
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('avatars')
+      .getPublicUrl(filePath)
+
+    const { error: updateError } = await supabase
+      .from('users')
+      .update({ cref_card_url: publicUrl, updated_at: new Date().toISOString() })
+      .eq('id', id)
+
+    if (updateError) throw updateError
+
+    res.json({ cref_card_url: publicUrl })
+  } catch (error: any) {
+    console.error('Error uploading cref card:', error)
     res.status(500).json({ error: error.message })
   }
 })

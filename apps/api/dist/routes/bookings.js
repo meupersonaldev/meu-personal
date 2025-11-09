@@ -55,7 +55,9 @@ router.get('/', auth_1.requireAuth, (0, errorHandler_1.asyncErrorHandler)(async 
             duration: booking.duration ?? 60,
             status: (0, booking_status_1.normalizeBookingStatus)(booking.status, booking.status_canonical),
             notes: booking.notes || undefined,
-            creditsCost: booking.credits_cost ?? 0
+            creditsCost: booking.credits_cost ?? 0,
+            source: booking.source || undefined,
+            hourlyRate: booking.hourly_rate || undefined
         };
     };
     if (!unitId && !teacherId && !studentId) {
@@ -169,7 +171,8 @@ router.get('/', auth_1.requireAuth, (0, errorHandler_1.asyncErrorHandler)(async 
         status,
         status_canonical,
         notes,
-        credits_cost
+        credits_cost,
+        source
       `)
             .eq('teacher_id', teacherId)
             .order('date', { ascending: true });
@@ -210,18 +213,46 @@ router.get('/', auth_1.requireAuth, (0, errorHandler_1.asyncErrorHandler)(async 
         let studentsMap = {};
         let unitsMap = {};
         let academiesMap = {};
+        let studentRatesMap = {};
+        let professorRateMap = {};
         if (studentIds.length > 0) {
             const { data: studentsData } = await supabase_1.supabase
                 .from('users')
-                .select('id, name')
+                .select('id, name, email')
                 .in('id', studentIds);
             if (studentsData) {
                 studentsMap = studentsData.reduce((acc, curr) => {
                     acc[curr.id] = curr;
                     return acc;
                 }, {});
+                const studentEmails = studentsData.map(s => s.email).filter(Boolean);
+                if (studentEmails.length > 0) {
+                    const { data: teacherStudents } = await supabase_1.supabase
+                        .from('teacher_students')
+                        .select('email, hourly_rate')
+                        .eq('teacher_id', teacherId)
+                        .in('email', studentEmails);
+                    if (teacherStudents) {
+                        const emailToRate = teacherStudents.reduce((acc, ts) => {
+                            if (ts.hourly_rate)
+                                acc[ts.email] = ts.hourly_rate;
+                            return acc;
+                        }, {});
+                        studentsData.forEach(student => {
+                            if (student.email && emailToRate[student.email]) {
+                                studentRatesMap[student.id] = emailToRate[student.email];
+                            }
+                        });
+                    }
+                }
             }
         }
+        const { data: profProfile } = await supabase_1.supabase
+            .from('teacher_profiles')
+            .select('hourly_rate')
+            .eq('user_id', teacherId)
+            .single();
+        const professorHourlyRate = profProfile?.hourly_rate || 0;
         if (unitIds.length > 0) {
             const { data: unitsData } = await supabase_1.supabase
                 .from('units')
@@ -254,6 +285,13 @@ router.get('/', auth_1.requireAuth, (0, errorHandler_1.asyncErrorHandler)(async 
             const franchiseAddressParts = unit?.id
                 ? [unit.address, unit.city, unit.state]
                 : [academy?.address, academy?.city, academy?.state];
+            let hourlyRate = undefined;
+            if (booking.source === 'PROFESSOR' && booking.student_id) {
+                hourlyRate = studentRatesMap[booking.student_id];
+            }
+            else if (booking.source === 'ALUNO') {
+                hourlyRate = professorHourlyRate;
+            }
             return {
                 id: booking.id,
                 studentId: booking.student_id || undefined,
@@ -266,7 +304,9 @@ router.get('/', auth_1.requireAuth, (0, errorHandler_1.asyncErrorHandler)(async 
                 duration: booking.duration ?? 60,
                 status: (0, booking_status_1.normalizeBookingStatus)(booking.status, booking.status_canonical),
                 notes: booking.notes || undefined,
-                creditsCost: booking.credits_cost ?? 0
+                creditsCost: booking.credits_cost ?? 0,
+                source: booking.source || undefined,
+                hourlyRate
             };
         });
         return res.json({ bookings });
@@ -441,7 +481,7 @@ router.patch('/:id', auth_1.requireAuth, (0, errorHandler_1.asyncErrorHandler)(a
         return res.status(404).json({ error: 'Agendamento não encontrado' });
     }
     const hasPermission = booking.student_id === user.userId ||
-        booking.professor_id === user.userId ||
+        booking.teacher_id === user.userId ||
         ['FRANQUIA', 'FRANQUEADORA', 'ADMIN'].includes(user.role);
     if (!hasPermission) {
         return res.status(403).json({ error: 'Acesso não autorizado' });
@@ -483,10 +523,37 @@ router.delete('/:id', auth_1.requireAuth, (0, errorHandler_1.asyncErrorHandler)(
         return res.status(404).json({ error: 'Agendamento não encontrado' });
     }
     const hasPermission = booking.student_id === user.userId ||
-        booking.professor_id === user.userId ||
-        ['FRANQUIA', 'FRANQUEADORA', 'ADMIN'].includes(user.role);
+        booking.teacher_id === user.userId ||
+        ['FRANQUIA', 'FRANQUEADORA', 'ADMIN', 'TEACHER', 'PROFESSOR'].includes(user.role);
     if (!hasPermission) {
         return res.status(403).json({ error: 'Acesso não autorizado' });
+    }
+    console.log('🚀 CÓDIGO ATUALIZADO - VERSÃO NOVA RODANDO!');
+    const isAvailabilitySlot = !booking.student_id &&
+        ['AVAILABLE', 'RESERVED', 'CANCELED', 'BLOCKED'].includes(booking.status_canonical);
+    console.log('🔍 DEBUG DELETE:', {
+        id,
+        status_canonical: booking.status_canonical,
+        student_id: booking.student_id,
+        hasNoStudent: !booking.student_id,
+        isAvailabilitySlot,
+        willDelete: isAvailabilitySlot
+    });
+    if (isAvailabilitySlot) {
+        console.log('✅ DELETANDO disponibilidade do banco...');
+        const { error: deleteError } = await supabase_1.supabase
+            .from('bookings')
+            .delete()
+            .eq('id', id);
+        if (deleteError) {
+            console.log('❌ Erro ao deletar:', deleteError);
+            return res.status(500).json({ error: 'Erro ao remover disponibilidade' });
+        }
+        console.log('✅ Disponibilidade DELETADA com sucesso!');
+        return res.json({
+            message: 'Disponibilidade removida com sucesso',
+            status: 'DELETED'
+        });
     }
     await booking_canonical_service_1.bookingCanonicalService.cancelBooking(id, user.userId);
     res.json({

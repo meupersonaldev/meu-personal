@@ -442,7 +442,7 @@ export default function StudentDashboardPage() {
             variant="outline"
             size="lg"
             className="border-2 border-meu-primary text-meu-primary hover:bg-meu-primary hover:text-white"
-            onClick={() => router.push('/aluno/agendamentos')}
+            onClick={() => router.push('/aluno/aulas')}
           >
             <Calendar className="mr-2 h-5 w-5" />
             Ver Minhas Aulas Agendadas

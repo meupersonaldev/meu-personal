@@ -1,7 +1,7 @@
 import express from 'express'
 import { supabase } from '../lib/supabase'
-import { asaasService } from '../services/asaas.service'
 import { paymentIntentService } from '../services/payment-intent.service'
+import { getPaymentProvider } from '../services/payments/provider'
 import { createNotification, createUserNotification } from './notifications'
 
 const router = express.Router()
@@ -41,34 +41,14 @@ router.post('/asaas', async (req, res) => {
       }
     }
 
-    // Processar diferentes tipos de eventos
-    switch (event.event) {
-      case 'PAYMENT_CONFIRMED':
-      case 'PAYMENT_RECEIVED':
-        // Usar o novo PaymentIntentService para processar o pagamento
-        await paymentIntentService.processWebhook(
-          event.payment.id,
-          event.payment.status || 'CONFIRMED'
-        )
-        break
+    // Processar eventos via provider
+    const provider = getPaymentProvider()
+    const parsed = provider.parseWebhook ? provider.parseWebhook(event) : { providerId: event?.payment?.id || null, status: event?.payment?.status || null }
 
-      case 'PAYMENT_OVERDUE':
-        await paymentIntentService.processWebhook(
-          event.payment.id,
-          'OVERDUE'
-        )
-        break
-
-      case 'PAYMENT_DELETED':
-      case 'PAYMENT_REFUNDED':
-        await paymentIntentService.processWebhook(
-          event.payment.id,
-          'CANCELED'
-        )
-        break
-
-      default:
-        console.log('Evento não tratado:', event.event)
+    if (parsed.providerId && parsed.status) {
+      await paymentIntentService.processWebhook(parsed.providerId, parsed.status)
+    } else {
+      console.log('Evento não tratado:', event?.event)
     }
 
     res.status(200).json({ received: true })

@@ -112,6 +112,7 @@ export interface User {
   cpf?: string
   role: 'TEACHER' | 'STUDENT' | 'ALUNO' | 'PROFESSOR'
   avatar_url?: string
+  cref_card_url?: string | null
   created_at: string
   updated_at: string
   last_login_at?: string
@@ -983,6 +984,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             cpf: c.user?.cpf || '',
             role: c.user?.role || 'STUDENT',
             avatar_url: c.user?.avatar_url,
+            cref_card_url: c.user?.cref_card_url || null,
             created_at: c.user?.created_at || new Date().toISOString(),
             updated_at: c.user?.updated_at || new Date().toISOString(),
             last_login_at: c.user?.last_login_at,

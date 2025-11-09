@@ -1,11 +1,12 @@
 'use client'
 
 import { useEffect } from 'react'
-import { Bell, Check, CheckCircle, Users, GraduationCap, CreditCard, Clock, AlertCircle } from 'lucide-react'
+import { Bell, Check, CheckCircle, Users, GraduationCap, CreditCard, Clock, AlertCircle, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { useFranquiaStore, Notification } from '@/lib/stores/franquia-store'
+import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
 
 export default function NotificationsPage() {
@@ -62,6 +63,26 @@ export default function NotificationsPage() {
       fetchNotifications()
     } else {
       toast.error('Erro ao rejeitar solicitação')
+    }
+  }
+
+  const handleOpenCrefCard = async (userId?: string) => {
+    if (!userId) return
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('cref_card_url, name')
+        .eq('id', userId)
+        .maybeSingle()
+      if (error) throw error
+      const url = data?.cref_card_url
+      if (url) {
+        window.open(url, '_blank', 'noopener,noreferrer')
+      } else {
+        toast.info('Este professor ainda não enviou a carteirinha.')
+      }
+    } catch {
+      toast.error('Não foi possível abrir a carteirinha')
     }
   }
 
@@ -226,6 +247,32 @@ export default function NotificationsPage() {
                         <AlertCircle className="h-4 w-4 mr-1" />
                         Rejeitar
                       </Button>
+                      {notification.type === 'teacher_approval_needed' && (
+                        <>
+                          <Button
+                            onClick={() => handleOpenCrefCard(notification.data.user_id)}
+                            size="sm"
+                            variant="outline"
+                            className="hover:bg-gray-50"
+                          >
+                            <FileText className="h-4 w-4 mr-1" />
+                            Ver carteirinha
+                          </Button>
+                          <Button
+                            onClick={() => {
+                              const userId = notification.data.user_id
+                              if (userId) {
+                                window.open(`/franqueadora/dashboard/usuarios?user_id=${userId}`, '_blank')
+                              }
+                            }}
+                            size="sm"
+                            variant="ghost"
+                            className="text-blue-700 hover:text-blue-800 hover:bg-blue-50"
+                          >
+                            Abrir no painel (franqueadora)
+                          </Button>
+                        </>
+                      )}
                     </div>
                   )}
 

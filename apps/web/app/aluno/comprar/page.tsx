@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { CreditCard, Barcode, QrCode, Check, Loader2, Gift } from 'lucide-react'
+import { CreditCard, Barcode, QrCode, Check, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -19,13 +19,6 @@ interface Plan {
   features: string[]
 }
 
-interface Teacher {
-  id: string
-  name: string
-  avatar_url?: string
-  specialties: string[]
-}
-
 export default function ComprarCreditosPage() {
   const { token, user } = useAuthStore()
   const {
@@ -38,13 +31,11 @@ export default function ComprarCreditosPage() {
     fetchActiveUnit: state.fetchActiveUnit
   }))
   const [plans, setPlans] = useState<Plan[]>([])
-  const [teachers, setTeachers] = useState<Teacher[]>([])
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null)
-  const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<'PIX' | 'BOLETO' | 'CREDIT_CARD'>('PIX')
   const [loading, setLoading] = useState(false)
   const [paymentData, setPaymentData] = useState<any>(null)
-  const [step, setStep] = useState<'select-plan' | 'select-teacher' | 'payment' | 'success'>('select-plan')
+  const [step, setStep] = useState<'select-plan' | 'payment' | 'success'>('select-plan')
   const [showCpfModal, setShowCpfModal] = useState(false)
   const [cpfInput, setCpfInput] = useState('')
   const [cpfSaving, setCpfSaving] = useState(false)
@@ -96,28 +87,8 @@ export default function ComprarCreditosPage() {
       .catch(() => toast.error('Erro ao carregar planos'))
   }, [token, activeUnit?.unit_id])
 
-  // Carregar professores
-  useEffect(() => {
-    if (step === 'select-teacher') {
-      const params = new URLSearchParams({ available: 'true' })
-      if (activeUnit?.unit_id) {
-        params.append('unit_id', activeUnit.unit_id)
-      }
-
-      fetch(`${API_BASE_URL}/api/teachers?${params.toString()}`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        })
-        .then(res => {
-          if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
-          return res.json()
-        })
-        .then(data => setTeachers(data.teachers || []))
-        .catch(() => toast.error('Erro ao carregar professores'))
-    }
-  }, [step, token, activeUnit?.unit_id])
-
   const handlePurchase = async () => {
-    if (!selectedPlan || !selectedTeacher) return
+    if (!selectedPlan) return
 
     setLoading(true)
 
@@ -237,16 +208,9 @@ export default function ComprarCreditosPage() {
               <span className="ml-2 font-medium">Escolher Plano</span>
             </div>
             <div className="w-16 h-0.5 bg-gray-300"></div>
-            <div className={`flex items-center ${step === 'select-teacher' ? 'text-blue-600' : 'text-gray-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step === 'select-teacher' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>
-                2
-              </div>
-              <span className="ml-2 font-medium">Escolher Professor</span>
-            </div>
-            <div className="w-16 h-0.5 bg-gray-300"></div>
             <div className={`flex items-center ${step === 'payment' || step === 'success' ? 'text-blue-600' : 'text-gray-400'}`}>
               <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step === 'payment' || step === 'success' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>
-                3
+                2
               </div>
               <span className="ml-2 font-medium">Pagamento</span>
             </div>
@@ -308,7 +272,7 @@ export default function ComprarCreditosPage() {
         {step === 'select-plan' && selectedPlan && (
           <div className="mt-8 text-center">
             <Button
-              onClick={() => setStep('select-teacher')}
+              onClick={() => setStep('payment')}
               className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 text-lg"
             >
               Continuar
@@ -316,80 +280,8 @@ export default function ComprarCreditosPage() {
           </div>
         )}
 
-        {/* Step 2: Selecionar Professor */}
-        {step === 'select-teacher' && (
-          <>
-            <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3">
-              <Gift className="h-5 w-5 text-amber-600 mt-0.5" />
-              <div>
-                <h4 className="font-semibold text-amber-900 mb-1">Professor ganha 1h de brinde!</h4>
-                <p className="text-sm text-amber-800">
-                  O professor que você escolher receberá 1 hora grátis como presente da academia. 
-                  Ele poderá usar essa hora como quiser!
-                </p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {teachers.map((teacher) => (
-                <Card
-                  key={teacher.id}
-                  className={`p-6 cursor-pointer transition-all hover:shadow-xl ${
-                    selectedTeacher?.id === teacher.id ? 'ring-2 ring-blue-600 shadow-xl' : ''
-                  }`}
-                  onClick={() => setSelectedTeacher(teacher)}
-                >
-                  <div className="flex items-center mb-4">
-                    <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center text-2xl font-bold text-gray-600">
-                      {teacher.name.charAt(0)}
-                    </div>
-                    <div className="ml-4">
-                      <h3 className="font-bold text-gray-900">{teacher.name}</h3>
-                      <div className="flex items-center text-sm text-gray-600">
-                        Disponível para novos alunos
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    {teacher.specialties.map((specialty, idx) => (
-                      <Badge key={idx} variant="outline" className="text-xs">
-                        {specialty}
-                      </Badge>
-                    ))}
-                  </div>
-
-                  {selectedTeacher?.id === teacher.id && (
-                    <Badge className="w-full mt-4 bg-blue-600 text-white justify-center">
-                      Selecionado
-                    </Badge>
-                  )}
-                </Card>
-              ))}
-            </div>
-
-            <div className="mt-8 flex justify-center gap-4">
-              <Button
-                onClick={() => setStep('select-plan')}
-                variant="outline"
-                className="px-8 py-3"
-              >
-                Voltar
-              </Button>
-              {selectedTeacher && (
-                <Button
-                  onClick={() => setStep('payment')}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3"
-                >
-                  Continuar para Pagamento
-                </Button>
-              )}
-            </div>
-          </>
-        )}
-
         {/* Step 3: Pagamento */}
-        {step === 'payment' && selectedPlan && selectedTeacher && (
+        {step === 'payment' && selectedPlan && (
           <div className="max-w-2xl mx-auto">
             <Card className="p-8">
               <h2 className="text-2xl font-bold text-gray-900 mb-6">Resumo da Compra</h2>
@@ -402,10 +294,6 @@ export default function ComprarCreditosPage() {
                 <div className="flex justify-between">
                   <span className="text-gray-600">Créditos:</span>
                   <span className="font-semibold">{selectedPlan.credits_included} aulas</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Professor escolhido:</span>
-                  <span className="font-semibold">{selectedTeacher.name}</span>
                 </div>
                 <div className="flex justify-between text-lg font-bold pt-4 border-t">
                   <span>Total:</span>
@@ -448,7 +336,7 @@ export default function ComprarCreditosPage() {
 
               <div className="flex gap-4">
                 <Button
-                  onClick={() => setStep('select-teacher')}
+                  onClick={() => setStep('select-plan')}
                   variant="outline"
                   className="flex-1"
                   disabled={loading}
@@ -533,8 +421,8 @@ export default function ComprarCreditosPage() {
               )}
 
               <p className="text-sm text-gray-600 mb-6">
-                Após a confirmação do pagamento, seus créditos serão liberados automaticamente
-                e o professor receberá 1h de brinde!
+                Após a confirmação do pagamento, seus créditos serão liberados automaticamente.
+                Em seguida, você poderá agendar suas aulas normalmente.
               </p>
 
               <Button

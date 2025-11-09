@@ -64,6 +64,7 @@ export default function ProfessorDashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [needsApproval, setNeedsApproval] = useState<boolean>(false)
 
   useEffect(() => {
     if (!user?.id) return
@@ -119,6 +120,15 @@ export default function ProfessorDashboardPage() {
         } else if (statsResponse.status === 401) {
           throw new Error('Unauthorized')
         }
+
+        // Checar aprovação (usa is_available do profile)
+        try {
+          const availResp = await fetch(`${API_URL}/api/teachers/${user.id}/availability`, requestInit)
+          if (availResp.ok) {
+            const avail = await availResp.json().catch(() => null)
+            setNeedsApproval(avail?.is_available === false)
+          }
+        } catch {}
       } catch (err) {
         if (err instanceof Error && err.message === 'Unauthorized') {
           setError('Sessão expirada. Faça login novamente.')
@@ -192,6 +202,15 @@ export default function ProfessorDashboardPage() {
   } else {
     content = (
       <div className="space-y-6 md:space-y-8">
+        {needsApproval && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
+            <div className="text-amber-800 text-sm">
+              <p className="font-semibold">Sua conta de professor está em análise</p>
+              <p>Uma franqueadora precisa aprovar seu cadastro. Enquanto isso, algumas funcionalidades podem estar limitadas.</p>
+            </div>
+          </div>
+        )}
         <section className="space-y-2 md:space-y-3">
           <h1 className="text-2xl md:text-4xl font-bold text-gray-900">
             Olá, {firstName} 👋

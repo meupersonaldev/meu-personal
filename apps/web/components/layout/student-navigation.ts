@@ -6,7 +6,9 @@ import {
   CreditCard,
   QrCode,
   Clock,
-  History
+  History,
+  Settings,
+  Calendar
 } from 'lucide-react'
 
 export interface StudentNavItem {
@@ -32,8 +34,8 @@ export const STUDENT_NAV_ITEMS: StudentNavItem[] = [
   },
   {
     id: 'professores',
-    label: 'Professores',
-    icon: Users,
+    label: 'Agendar Aula',
+    icon: Calendar,
     href: '/aluno/professores'
   },
   {
@@ -41,6 +43,12 @@ export const STUDENT_NAV_ITEMS: StudentNavItem[] = [
     label: 'Comprar Créditos',
     icon: CreditCard,
     href: '/aluno/comprar'
+  },
+  {
+    id: 'config',
+    label: 'Configurações',
+    icon: Settings,
+    href: '/aluno/dashboard?section=config'
   }
   // Histórico de Aulas removido temporariamente
   // {

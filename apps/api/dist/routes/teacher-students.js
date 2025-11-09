@@ -53,7 +53,7 @@ router.get('/:teacherId/students', auth_1.requireAuth, async (req, res) => {
 router.post('/:teacherId/students', auth_1.requireAuth, async (req, res) => {
     try {
         const { teacherId } = req.params;
-        const { name, email, phone, notes, academy_id } = req.body;
+        const { name, email, phone, notes, academy_id, hourly_rate } = req.body;
         if (!ensureTeacherStudentAccess(req, res, teacherId)) {
             return;
         }
@@ -79,7 +79,8 @@ router.post('/:teacherId/students', auth_1.requireAuth, async (req, res) => {
                 name,
                 email,
                 phone,
-                notes
+                notes,
+                hourly_rate: hourly_rate || null
             })
                 .select()
                 .single();
@@ -154,13 +155,13 @@ router.post('/:teacherId/students', auth_1.requireAuth, async (req, res) => {
 router.put('/:teacherId/students/:studentId', auth_1.requireAuth, async (req, res) => {
     try {
         const { teacherId, studentId } = req.params;
-        const { name, email, phone, notes } = req.body;
+        const { name, email, phone, notes, hourly_rate } = req.body;
         if (!ensureTeacherStudentAccess(req, res, teacherId)) {
             return;
         }
         const { data, error } = await supabase_1.supabase
             .from('teacher_students')
-            .update({ name, email, phone, notes, updated_at: new Date().toISOString() })
+            .update({ name, email, phone, notes, hourly_rate: hourly_rate || null, updated_at: new Date().toISOString() })
             .eq('id', studentId)
             .eq('teacher_id', teacherId)
             .select()

@@ -40,9 +40,7 @@ RUN npm prune --omit=dev && npm cache clean --force
 
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
-COPY --from=builder /app/apps/api/uploads ./apps/api/uploads
 
-RUN chown -R nodejs:nodejs apps/api/uploads
 
 WORKDIR /app/apps/api
 

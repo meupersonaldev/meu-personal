@@ -22,7 +22,8 @@ import {
   Mail,
   Phone,
   Calendar,
-  MapPin
+  MapPin,
+  Star
 } from 'lucide-react'
 import { useFranquiaStore } from '@/lib/stores/franquia-store'
 import { toast } from 'sonner'
@@ -88,7 +89,6 @@ export default function ProfessoresPage() {
     email: '',
     phone: '',
     bio: '',
-    specialties: '',
     hourly_rate: '',
     avatar_url: ''
   })
@@ -151,7 +151,7 @@ export default function ProfessoresPage() {
         name: formData.name,
         email: formData.email,
         phone: formData.phone || '',
-        specialties: formData.specialties ? formData.specialties.split(',').map(s => s.trim()) : [],
+        specialties: [],
         status: 'active' as const,
         created_at: new Date().toISOString()
       }
@@ -165,7 +165,6 @@ export default function ProfessoresPage() {
           email: '',
           phone: '',
           bio: '',
-          specialties: '',
           hourly_rate: '',
           avatar_url: ''
         })
@@ -339,6 +338,22 @@ export default function ProfessoresPage() {
                               R$ {profile.hourly_rate}/hora
                             </Badge>
                           )}
+                          {/* Rating médio (cache) */}
+                          {typeof (profile as any)?.rating_avg !== 'undefined' && (
+                            <span className="inline-flex items-center gap-1 text-xs text-gray-700">
+                              {Array.from({ length: 5 }).map((_, i) => {
+                                const idx = i + 1
+                                const filled = idx <= Math.round((profile as any).rating_avg || 0)
+                                return (
+                                  <Star key={idx} className={`h-3.5 w-3.5 ${filled ? 'text-amber-500 fill-current' : 'text-gray-300'}`} />
+                                )
+                              })}
+                              <span className="ml-1">
+                                {Number((profile as any).rating_avg || 0).toFixed(1)}
+                                {` (${Number((profile as any).rating_count || 0)})`}
+                              </span>
+                            </span>
+                          )}
                         </div>
                         {profile?.specialties && profile.specialties.length > 0 && (
                           <div className="flex gap-1 mt-2">
@@ -457,15 +472,7 @@ export default function ProfessoresPage() {
                 />
               </div>
 
-              <div>
-                <Label htmlFor="specialties">Especialidades (separadas por vírgula)</Label>
-                <Input
-                  id="specialties"
-                  value={formData.specialties}
-                  onChange={(e) => setFormData({...formData, specialties: e.target.value})}
-                  placeholder="Ex: Musculação, Crossfit, Personal Training"
-                />
-              </div>
+              {/* Campo de especialidades removido no MVP; professor pode preencher depois no próprio painel */}
 
               <div>
                 <Label htmlFor="hourly_rate">Valor por Hora (R$)</Label>
@@ -534,6 +541,23 @@ export default function ProfessoresPage() {
                         <DollarSign className="h-3 w-3 mr-1" />
                         R$ {selectedTeacher.teacher_profiles[0].hourly_rate}/hora
                       </Badge>
+                    )}
+                    {/* Rating médio (cache) no cabeçalho */}
+                    {typeof selectedTeacher.teacher_profiles?.[0]?.rating_avg !== 'undefined' && (
+                      <span className="inline-flex items-center gap-1 text-xs text-gray-700">
+                        {Array.from({ length: 5 }).map((_, i) => {
+                          const idx = i + 1
+                          const avg = Number(selectedTeacher.teacher_profiles?.[0]?.rating_avg || 0)
+                          const filled = idx <= Math.round(avg)
+                          return (
+                            <Star key={idx} className={`h-4 w-4 ${filled ? 'text-amber-500 fill-current' : 'text-gray-300'}`} />
+                          )
+                        })}
+                        <span className="ml-1">
+                          {Number(selectedTeacher.teacher_profiles?.[0]?.rating_avg || 0).toFixed(1)}
+                          {` (${Number(selectedTeacher.teacher_profiles?.[0]?.rating_count || 0)})`}
+                        </span>
+                      </span>
                     )}
                   </div>
                 </div>

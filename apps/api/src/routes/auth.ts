@@ -1,5 +1,7 @@
 import express from 'express'
 import bcrypt from 'bcryptjs'
+import { createHash } from 'crypto'
+import * as https from 'https'
 import jwt, { type Secret, type SignOptions } from 'jsonwebtoken'
 import type { StringValue } from 'ms'
 import { z } from 'zod'
@@ -11,6 +13,44 @@ import { auditService } from '../services/audit.service'
 
 const router = express.Router()
 
+async function isPasswordPwned(password: string): Promise<boolean> {
+  const sha1 = createHash('sha1').update(password).digest('hex').toUpperCase()
+  const prefix = sha1.slice(0, 5)
+  const suffix = sha1.slice(5)
+  try {
+    const text: string = await new Promise((resolve, reject) => {
+      const req = https.request(
+        `https://api.pwnedpasswords.com/range/${prefix}`,
+        { method: 'GET', headers: { 'Add-Padding': 'true' } },
+        (res) => {
+          let data = ''
+          res.on('data', (chunk) => { data += chunk })
+          res.on('end', () => resolve(data))
+        }
+      )
+      req.on('error', reject)
+      req.end()
+    })
+    const lines = text.split('\n')
+    for (const line of lines) {
+      const [h, count] = line.trim().split(':')
+      if (h === suffix && Number(count) > 0) return true
+    }
+    return false
+  } catch {
+    return false
+  }
+}
+
+function isStrongPassword(password: string): boolean {
+  if (!password || password.length < 12) return false
+  const hasLower = /[a-z]/.test(password)
+  const hasUpper = /[A-Z]/.test(password)
+  const hasDigit = /\d/.test(password)
+  const hasSymbol = /[^A-Za-z0-9]/.test(password)
+  return hasLower && hasUpper && hasDigit && hasSymbol
+}
+
 function normalizeCref(v?: string | null) {
   if (!v) return v as any
   return v.toUpperCase().replace(/\s+/g, ' ').trim()
@@ -19,15 +59,16 @@ function normalizeCref(v?: string | null) {
 // Schemas de validação
 const loginSchema = z.object({
   email: z.string().email('Email inválido'),
-  password: z.string().min(6, 'Senha deve ter pelo menos 6 caracteres')
+  password: z.string().min(1, 'Senha é obrigatória')
 })
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Nome deve ter pelo menos 2 caracteres'),
   email: z.string().email('Email inválido'),
-  password: z.string().min(6, 'Senha deve ter pelo menos 6 caracteres'),
-  phone: z.string().optional(),
+  password: z.string().min(12, 'Senha deve ter pelo menos 12 caracteres'),
+  phone: z.string().min(8, 'Telefone é obrigatório'),
   cpf: z.string().min(11, 'CPF deve ter 11 dígitos').max(14, 'CPF inválido'),
+  gender: z.enum(['MALE', 'FEMALE', 'NON_BINARY', 'OTHER', 'PREFER_NOT_TO_SAY']),
   role: z.enum(['STUDENT', 'TEACHER']).default('STUDENT'),
   cref: z.string().optional(),
   specialties: z.array(z.string()).optional()
@@ -150,13 +191,16 @@ router.post('/login', auditAuthEvent('LOGIN'), async (req, res) => {
 router.post('/register', auditSensitiveOperation('CREATE', 'users'), async (req, res) => {
   try {
     const userData = registerSchema.parse(req.body)
-    if (userData.role === 'TEACHER') {
-      if (!userData.cref || !userData.cref.trim()) {
-        return res.status(400).json({ message: 'CREF é obrigatório para professores' })
-      }
-      if (!userData.specialties || userData.specialties.length === 0) {
-        return res.status(400).json({ message: 'Informe ao menos uma especialidade' })
-      }
+  if (userData.role === 'TEACHER') {
+    if (!userData.cref || !userData.cref.trim()) {
+      return res.status(400).json({ message: 'CREF é obrigatório para professores' })
+    }
+  }
+    if (!isStrongPassword(userData.password)) {
+      return res.status(400).json({ message: 'Senha fraca. Mínimo 12 caracteres, com dígito, minúscula, maiúscula e símbolo.' })
+    }
+    if (await isPasswordPwned(userData.password)) {
+      return res.status(400).json({ message: 'Senha vazada ou muito comum. Escolha outra senha.' })
     }
     const sanitizedCpf = userData.cpf.replace(/\D/g, '')
 
@@ -206,6 +250,7 @@ router.post('/register', auditSensitiveOperation('CREATE', 'users'), async (req,
       credits: userData.role === 'STUDENT' ? 5 : 0, // Créditos de boas-vindas
       is_active: true,
       password_hash: passwordHash,
+      gender: userData.gender,
       franchisor_id: franqueadora?.id || null, // Vincular à franqueadora principal
       franchise_id: null // Franquia definida apenas por vínculo operacional
     }
@@ -230,7 +275,7 @@ router.post('/register', auditSensitiveOperation('CREATE', 'users'), async (req,
     } catch (contactError) {
       console.warn('Falha ao sincronizar contato da franqueadora:', contactError)
     }
-    // Se for professor, criar perfil de professor
+    // Se for professor, criar perfil de professor e abrir approval request
     if (userData.role === 'TEACHER') {
       const crefNormalized = normalizeCref(userData.cref || '')
       const { error: profileError } = await supabase
@@ -251,6 +296,19 @@ router.post('/register', auditSensitiveOperation('CREATE', 'users'), async (req,
         }
         console.error('Erro ao criar perfil de professor:', profileError)
         return res.status(500).json({ message: 'Erro ao criar perfil de professor' })
+      }
+
+      // Criar approval request pendente para franqueadora
+      try {
+        await supabase
+          .from('approval_requests')
+          .insert({
+            type: 'teacher_registration',
+            user_id: createdUser.id,
+            requested_data: { cref: crefNormalized || null }
+          })
+      } catch (e) {
+        console.warn('Falha ao criar approval_request de professor:', e)
       }
     }
 
@@ -287,6 +345,7 @@ router.post('/register', auditSensitiveOperation('CREATE', 'users'), async (req,
         email: createdUser.email,
         phone: createdUser.phone,
         role: createdUser.role,
+        gender: createdUser.gender,
         credits: createdUser.credits,
         avatarUrl: createdUser.avatar_url,
         isActive: createdUser.is_active
@@ -457,7 +516,7 @@ router.post('/forgot-password', async (req, res) => {
 router.post('/reset-password', auditSensitiveOperation('SENSITIVE_CHANGE', 'users'), async (req, res) => {
   try {
     const { password, token } = z.object({
-      password: z.string().min(6, 'Senha deve ter pelo menos 6 caracteres'),
+      password: z.string().min(12, 'Senha deve ter pelo menos 12 caracteres'),
       token: z.string().min(1, 'Token é obrigatório')
     }).parse(req.body)
 
@@ -491,6 +550,13 @@ router.post('/reset-password', auditSensitiveOperation('SENSITIVE_CHANGE', 'user
     const isValidToken = await bcrypt.compare(token, user.reset_token_hash)
     if (!isValidToken) {
       return res.status(401).json({ message: 'Token inválido' })
+    }
+
+    if (!isStrongPassword(password)) {
+      return res.status(400).json({ message: 'Senha fraca. Mínimo 12 caracteres, com dígito, minúscula, maiúscula e símbolo.' })
+    }
+    if (await isPasswordPwned(password)) {
+      return res.status(400).json({ message: 'Senha vazada ou muito comum. Escolha outra senha.' })
     }
 
     // Hash da nova senha

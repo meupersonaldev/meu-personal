@@ -5,6 +5,7 @@ import { addAcademyToContact } from '../services/franqueadora-contacts.service'
 import { createNotification, createUserNotification } from './notifications'
 import { bookingCanonicalService } from '../services/booking-canonical.service'
 import { requireAuth, requireRole } from '../middleware/auth'
+import { createUserRateLimit, rateLimitConfig } from '../middleware/rateLimit'
 import { asyncErrorHandler } from '../middleware/errorHandler'
 import { normalizeBookingStatus } from '../utils/booking-status'
 
@@ -48,6 +49,10 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
       ? [unit.address, unit.city, unit.state]
       : [academy.city, academy.state]
 
+    // Determinar limite de cancelamento (fallback: 4h antes de date)
+    const startIso = booking.start_at || booking.date
+    const fallbackCutoff = startIso ? new Date(new Date(startIso).getTime() - 4 * 60 * 60 * 1000).toISOString() : undefined
+
     return {
       id: booking.id,
       studentId: booking.student_id || undefined,
@@ -63,7 +68,8 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
       notes: booking.notes || undefined,
       creditsCost: booking.credits_cost ?? 0,
       source: booking.source || undefined,
-      hourlyRate: booking.hourly_rate || undefined
+      hourlyRate: booking.hourly_rate || undefined,
+      cancellableUntil: booking.cancellable_until || fallbackCutoff
     }
   }
 
@@ -90,7 +96,8 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
         status,
         status_canonical,
         notes,
-        credits_cost
+        credits_cost,
+        cancellable_until
       `)
       .eq('student_id', studentId)
       .order('date', { ascending: true })
@@ -173,7 +180,8 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
         duration: booking.duration ?? 60,
         status: normalizeBookingStatus(booking.status, booking.status_canonical),
         notes: booking.notes || undefined,
-        creditsCost: booking.credits_cost ?? 0
+        creditsCost: booking.credits_cost ?? 0,
+        cancellableUntil: booking.cancellable_until || (booking.date ? new Date(new Date(booking.date).getTime() - 4 * 60 * 60 * 1000).toISOString() : undefined)
       }
     })
 
@@ -200,7 +208,8 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
         status_canonical,
         notes,
         credits_cost,
-        source
+        source,
+        cancellable_until
       `)
       .eq('teacher_id', teacherId)
       .order('date', { ascending: true })
@@ -375,7 +384,8 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
         notes: booking.notes || undefined,
         creditsCost: booking.credits_cost ?? 0,
         source: booking.source || undefined,
-        hourlyRate
+        hourlyRate,
+        cancellableUntil: booking.cancellable_until || (booking.date ? new Date(new Date(booking.date).getTime() - 4 * 60 * 60 * 1000).toISOString() : undefined)
       }
     })
 
@@ -421,6 +431,7 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
       status_canonical,
       notes,
       credits_cost,
+      cancellable_until,
       student:users!bookings_student_id_fkey (id, name),
       teacher:users!bookings_teacher_id_fkey (id, name),
       unit:units!bookings_unit_id_fk (id, name, city, state, address),
@@ -713,5 +724,123 @@ router.delete('/:id', requireAuth, asyncErrorHandler(async (req, res) => {
   })
 }))
 
-export default router
+// GET /api/bookings/:id/rating - Buscar avaliação de um agendamento (se existir)
+router.get('/:id/rating', requireAuth, asyncErrorHandler(async (req, res) => {
+  const { id } = req.params
+  const user = req.user
 
+  // Buscar booking para validar acesso
+  const { data: booking, error: getError } = await supabase
+    .from('bookings')
+    .select('id, student_id, teacher_id')
+    .eq('id', id)
+    .single()
+
+  if (getError || !booking) {
+    return res.status(404).json({ error: 'Agendamento não encontrado' })
+  }
+
+  if (booking.student_id !== user.userId && booking.teacher_id !== user.userId && !['ADMIN','FRANQUEADORA','FRANQUIA'].includes(user.role)) {
+    return res.status(403).json({ error: 'Acesso não autorizado' })
+  }
+
+  const { data: ratingRow } = await supabase
+    .from('teacher_ratings')
+    .select('*')
+    .eq('booking_id', id)
+    .single()
+
+  if (!ratingRow) return res.json({ rating: null })
+  return res.json({ rating: ratingRow })
+}))
+
+// POST /api/bookings/:id/rating - Avaliar um agendamento concluído
+router.post('/:id/rating', requireAuth, createUserRateLimit(rateLimitConfig.ratings), asyncErrorHandler(async (req, res) => {
+  const { id } = req.params
+  const user = req.user
+
+  // Validar payload
+  const ratingSchema = z.object({
+    rating: z.number().int().min(1).max(5),
+    comment: z.string().max(1000).optional()
+  })
+  const { rating, comment } = ratingSchema.parse(req.body)
+
+  // Buscar booking e validar permissões/estado
+  const { data: booking, error: getError } = await supabase
+    .from('bookings')
+    .select('id, student_id, teacher_id, status, status_canonical, date')
+    .eq('id', id)
+    .single()
+
+  if (getError || !booking) {
+    return res.status(404).json({ error: 'Agendamento não encontrado' })
+  }
+
+  if (booking.student_id !== user.userId) {
+    return res.status(403).json({ error: 'Você não pode avaliar este agendamento' })
+  }
+
+  const normalized = normalizeBookingStatus(booking.status, booking.status_canonical)
+  if (normalized !== 'COMPLETED') {
+    return res.status(400).json({ error: 'A avaliação só é permitida para aulas concluídas' })
+  }
+
+  if (!booking.teacher_id) {
+    return res.status(400).json({ error: 'Agendamento sem professor associado' })
+  }
+
+  // Upsert por booking_id (permite editar avaliação)
+  const payload: any = {
+    teacher_id: booking.teacher_id,
+    student_id: booking.student_id,
+    booking_id: booking.id,
+    rating,
+    comment: comment ?? null
+  }
+
+  const { data: upserted, error: upsertError } = await supabase
+    .from('teacher_ratings')
+    .upsert([payload], { onConflict: 'booking_id' })
+    .select()
+    .single()
+
+  if (upsertError) {
+    console.error('Erro ao salvar avaliação:', upsertError)
+    return res.status(500).json({ error: 'Erro ao salvar avaliação' })
+  }
+
+  // Agregar média e contagem do professor
+  const { data: ratingsRows, error: aggError } = await supabase
+    .from('teacher_ratings')
+    .select('rating')
+    .eq('teacher_id', booking.teacher_id)
+
+  if (aggError) {
+    console.error('Erro ao calcular média de avaliações:', aggError)
+  }
+  const rows = ratingsRows || []
+  const count = rows.length
+  const avg = count ? Number((rows.reduce((s: number, r: any) => s + (Number(r.rating) || 0), 0) / count).toFixed(2)) : 0
+
+  // Atualizar cache em teacher_profiles
+  try {
+    await supabase
+      .from('teacher_profiles')
+      .update({
+        rating_avg: avg,
+        rating_count: count,
+        updated_at: new Date().toISOString()
+      })
+      .eq('user_id', booking.teacher_id)
+  } catch (e) {
+    console.warn('Falha ao atualizar cache de rating em teacher_profiles:', e)
+  }
+
+  res.json({
+    rating: upserted,
+    teacher_summary: { avg, count }
+  })
+}))
+
+export default router

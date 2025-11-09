@@ -25,11 +25,10 @@ export const rateLimitConfig = {
     maxRequests: 1000, // máximo 1000 requisições (aumentado de 100)
     message: 'Muitas requisições. Tente novamente em alguns minutos.'
   },
-  // Upload de arquivos - muito restritivo
-  upload: {
-    windowMs: 60 * 60 * 1000, // 1 hora
-    maxRequests: 100, // máximo 100 uploads (aumentado de 10)
-    message: 'Muitos uploads. Tente novamente em 1 hora.'
+  ratings: {
+    windowMs: 60 * 1000,
+    maxRequests: 6,
+    message: 'Muitas avaliações enviadas. Tente novamente em instantes.'
   }
 }
 
@@ -63,7 +62,6 @@ function cleanupExpiredEntries(now: number): void {
 // Rate limits específicos
 export const authRateLimit = createRateLimit(rateLimitConfig.auth)
 export const apiRateLimit = createRateLimit(rateLimitConfig.api)
-export const uploadRateLimit = createRateLimit(rateLimitConfig.upload)
 
 // Middleware para whitelist de IPs (se necessário)
 export const createWhitelist = (allowedIPs: string[]) => {
@@ -100,7 +98,20 @@ export const createBlacklist = (blockedIPs: string[]) => {
 // Rate limit baseado em usuário (para endpoints autenticados)
 export const createUserRateLimit = (config: typeof rateLimitConfig.api) => {
   return (req: Request & { user?: any }, res: Response, next: NextFunction) => {
-    // RATE LIMIT DESABILITADO TEMPORARIAMENTE
-    return next()
+    const now = Date.now()
+    cleanupExpiredEntries(now)
+    const uid = req.user?.userId
+    if (!uid) return next()
+    const key = `user:${uid}:ratings:${config.windowMs}`
+    const entry = store[key]
+    if (!entry || now > entry.resetTime) {
+      store[key] = { count: 1, resetTime: now + config.windowMs }
+      return next()
+    }
+    if (entry.count >= config.maxRequests) {
+      return res.status(429).json({ message: config.message })
+    }
+    entry.count += 1
+    next()
   }
 }

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createUserRateLimit = exports.createBlacklist = exports.createWhitelist = exports.uploadRateLimit = exports.apiRateLimit = exports.authRateLimit = exports.createRateLimit = exports.rateLimitConfig = void 0;
+exports.createUserRateLimit = exports.createBlacklist = exports.createWhitelist = exports.apiRateLimit = exports.authRateLimit = exports.createRateLimit = exports.rateLimitConfig = void 0;
 const store = {};
 exports.rateLimitConfig = {
     auth: {
@@ -12,11 +12,6 @@ exports.rateLimitConfig = {
         windowMs: 15 * 60 * 1000,
         maxRequests: 1000,
         message: 'Muitas requisições. Tente novamente em alguns minutos.'
-    },
-    upload: {
-        windowMs: 60 * 60 * 1000,
-        maxRequests: 100,
-        message: 'Muitos uploads. Tente novamente em 1 hora.'
     }
 };
 const createRateLimit = (config) => {
@@ -41,7 +36,6 @@ function cleanupExpiredEntries(now) {
 }
 exports.authRateLimit = (0, exports.createRateLimit)(exports.rateLimitConfig.auth);
 exports.apiRateLimit = (0, exports.createRateLimit)(exports.rateLimitConfig.api);
-exports.uploadRateLimit = (0, exports.createRateLimit)(exports.rateLimitConfig.upload);
 const createWhitelist = (allowedIPs) => {
     return (req, res, next) => {
         const ip = getClientIP(req);

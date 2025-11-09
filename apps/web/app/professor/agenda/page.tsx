@@ -1294,6 +1294,18 @@ export default function ProfessorAgendaPage() {
                           </Button>
                         </div>
                       )}
+
+                      {(selectedBooking.status === 'PENDING' || isConfirmedStatus(selectedBooking.status)) && (() => {
+                        const cutoffIso = (selectedBooking as any).cancellableUntil || new Date(new Date(selectedBooking.date).getTime() - 4 * 60 * 60 * 1000).toISOString()
+                        const cutoff = new Date(cutoffIso)
+                        const date = cutoff.toLocaleDateString('pt-BR')
+                        const time = cutoff.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                        return (
+                          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
+                            Cancelamento gratuito até <strong>{date} {time}</strong>. Após esse prazo, o crédito do aluno é consumido.
+                          </div>
+                        )
+                      })()}
                       
                       {/* Botão para AVAILABLE */}
                       {selectedBooking.status === 'AVAILABLE' && (

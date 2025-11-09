@@ -150,6 +150,7 @@ interface FranquiaState {
   franquiaUser: FranquiaUser | null
   academy: Academy | null
   isAuthenticated: boolean
+  sessionChecked: boolean
 
   // Data
   teachers: Teacher[]
@@ -231,6 +232,7 @@ export const useFranquiaStore = create<FranquiaState>()(
       franquiaUser: null,
       academy: null,
       isAuthenticated: false,
+      sessionChecked: true,
       teachers: [],
       students: [],
       plans: [],
@@ -409,99 +411,20 @@ export const useFranquiaStore = create<FranquiaState>()(
           if (!academy) {
             return
           }
-
-          // Buscar professores vinculados à academia com status active
-          const { data, error } = await supabase
-            .from('academy_teachers')
-            .select(`
-              *,
-              users:teacher_id (
-                id,
-                name,
-                email,
-                phone,
-                avatar_url,
-                is_active,
-                created_at,
-                role
-              )
-            `)
-            .eq('academy_id', academy.id)
-            .eq('status', 'active')
-
-
-          if (error) {
+          // Buscar via API Express (com Auth)
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          let token: string | null = null
+          try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
+          const resp = await fetch(`${API_URL}/api/teachers/by-academy?academy_id=${academy.id}` , {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+          })
+          if (!resp.ok) {
             set({ teachers: [] })
             return
           }
-
-          // Se não há dados, definir array vazio
-          if (!data || data.length === 0) {
-            set({ teachers: [] })
-            return
-          }
-
-          // Para cada professor, buscar TODOS os vínculos e dados completos
-          const teachersWithFullData = await Promise.all(
-            data
-              .filter(item => item.users)
-              .map(async (item) => {
-                const user = item.users as any
-                const teacherId = user.id
-
-                // Buscar todos os vínculos do professor (todas as academias)
-                const { data: allAcademyTeachers } = await supabase
-                  .from('academy_teachers')
-                  .select(`
-                    *,
-                    academies:academy_id (
-                      id,
-                      name,
-                      city,
-                      state
-                    )
-                  `)
-                  .eq('teacher_id', teacherId)
-
-
-                // Buscar perfil completo
-                const { data: profile } = await supabase
-                  .from('teacher_profiles')
-                  .select('*')
-                  .eq('user_id', teacherId)
-                  .single()
-
-                // Buscar assinaturas
-                const { data: subscriptions } = await supabase
-                  .from('teacher_subscriptions')
-                  .select(`
-                    *,
-                    teacher_plans (
-                      name,
-                      price,
-                      features
-                    )
-                  `)
-                  .eq('teacher_id', teacherId)
-
-                return {
-                  id: user.id,
-                  name: user.name || 'Professor',
-                  email: user.email || '',
-                  phone: user.phone || '',
-                  avatar_url: user.avatar_url,
-                  is_active: user.is_active,
-                  created_at: user.created_at,
-                  specialties: profile?.specialties || [],
-                  status: item.status || 'active',
-                  teacher_profiles: profile ? [profile] : [],
-                  academy_teachers: allAcademyTeachers || [],
-                  teacher_subscriptions: subscriptions || []
-                }
-              })
-          )
-
-          set({ teachers: teachersWithFullData })
+          const payload = await resp.json()
+          const teachers = Array.isArray(payload?.teachers) ? payload.teachers : []
+          set({ teachers })
         } catch (error) {
         }
       },
@@ -510,42 +433,44 @@ export const useFranquiaStore = create<FranquiaState>()(
         try {
           const { academy } = get()
           if (!academy) return false
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          let token: string | null = null
+          try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
 
-          // 1. Criar usuário
-          const { data: userData, error: userError } = await supabase
-            .from('users')
-            .insert({
+          // Criar professor via API
+          const resp = await fetch(`${API_URL}/api/teachers`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {})
+            },
+            body: JSON.stringify({
               name: teacherData.name,
               email: teacherData.email,
               phone: teacherData.phone,
-              role: 'TEACHER',
-              credits: 0
-            })
-            .select()
-            .single()
-
-          if (userError) throw userError
-
-          // 2. Criar perfil de professor
-          await supabase
-            .from('teacher_profiles')
-            .insert({
-              user_id: userData.id,
-              specialties: teacherData.specialties,
-              hourly_rate: 80.00,
-              is_available: true
-            })
-
-          // 3. Vincular à academia
-          await supabase
-            .from('academy_teachers')
-            .insert({
-              teacher_id: userData.id,
               academy_id: academy.id,
-              status: teacherData.status
+              specialties: teacherData.specialties,
+              hourly_rate: 80,
+              commission_rate: 0.7
             })
+          })
 
-          // Recarregar lista
+          if (!resp.ok) return false
+
+          const created = await resp.json()
+
+          // Se status desejado for diferente de 'active', atualizar vínculo
+          if (teacherData.status && teacherData.status !== 'active' && created?.id) {
+            await fetch(`${API_URL}/api/teachers/${created.id}/academy-link`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {})
+              },
+              body: JSON.stringify({ academy_id: academy.id, status: teacherData.status })
+            })
+          }
+
           await get().fetchTeachers()
           return true
         } catch (error) {
@@ -555,43 +480,43 @@ export const useFranquiaStore = create<FranquiaState>()(
 
       updateTeacher: async (id, updates) => {
         try {
-          // Atualizar dados do usuário
-          if (updates.name || updates.email || updates.phone) {
-            await supabase
-              .from('users')
-              .update({
-                name: updates.name,
-                email: updates.email,
-                phone: updates.phone
-              })
-              .eq('id', id)
+          const { academy } = get()
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          let token: string | null = null
+          try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
+
+          // Atualizar perfil/dados básicos
+          const body: any = {}
+          if (updates.name !== undefined) body.name = updates.name
+          if (updates.email !== undefined) body.email = updates.email
+          if (updates.phone !== undefined) body.phone = updates.phone
+          if (updates.specialties !== undefined) body.specialties = updates.specialties
+
+          if (Object.keys(body).length > 0) {
+            const resp = await fetch(`${API_URL}/api/teachers/${id}`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {})
+              },
+              body: JSON.stringify(body)
+            })
+            if (!resp.ok) return false
           }
 
-          // Atualizar perfil do professor
-          if (updates.specialties) {
-            await supabase
-              .from('teacher_profiles')
-              .update({
-                specialties: updates.specialties
-              })
-              .eq('user_id', id)
+          // Atualizar vínculo com academia (status/comissão)
+          if (academy && (updates as any).status !== undefined) {
+            const resp2 = await fetch(`${API_URL}/api/teachers/${id}/academy-link`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {})
+              },
+              body: JSON.stringify({ academy_id: academy.id, status: (updates as any).status })
+            })
+            if (!resp2.ok) return false
           }
 
-          // Atualizar vínculo com academia
-          if (updates.status) {
-            const { academy } = get()
-            if (academy) {
-              await supabase
-                .from('academy_teachers')
-                .update({
-                  status: updates.status
-                })
-                .eq('teacher_id', id)
-                .eq('academy_id', academy.id)
-            }
-          }
-
-          // Recarregar lista
           await get().fetchTeachers()
           return true
         } catch (error) {
@@ -601,29 +526,14 @@ export const useFranquiaStore = create<FranquiaState>()(
 
       deleteTeacher: async (id) => {
         try {
-          const { academy } = get()
-          if (!academy) return false
-
-          // Remover vínculo com academia (hard delete)
-          await supabase
-            .from('academy_teachers')
-            .delete()
-            .eq('teacher_id', id)
-            .eq('academy_id', academy.id)
-
-          // Deletar perfil de professor
-          await supabase
-            .from('teacher_profiles')
-            .delete()
-            .eq('user_id', id)
-
-          // Deletar usuário
-          await supabase
-            .from('users')
-            .delete()
-            .eq('id', id)
-
-          // Recarregar lista
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          let token: string | null = null
+          try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
+          const resp = await fetch(`${API_URL}/api/teachers/${id}`, {
+            method: 'DELETE',
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+          })
+          if (!resp.ok) return false
           await get().fetchTeachers()
           return true
         } catch (error) {
@@ -636,30 +546,26 @@ export const useFranquiaStore = create<FranquiaState>()(
         try {
           const { academy } = get()
           if (!academy) return
-
-          const { data, error } = await supabase
-            .from('academy_students')
-            .select(`
-              *,
-              users!academy_students_student_id_fkey(*)
-            `)
-            .eq('academy_id', academy.id)
-
-          if (error) throw error
-
-          const students: Student[] = data.map(item => ({
-            id: item.users.id,
-            name: item.users.name,
-            email: item.users.email,
-            phone: item.users.phone,
-            credits: item.users.credits,
-            status: item.status,
-            join_date: item.join_date,
-            last_activity: item.last_activity,
-            planId: item.plan_id,
-            plan_id: item.plan_id
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          let token: string | null = null
+          try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
+          const resp = await fetch(`${API_URL}/api/students?academy_id=${academy.id}`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+          })
+          if (!resp.ok) { set({ students: [] }); return }
+          const rows = await resp.json()
+          const students: Student[] = (rows || []).map((u: any) => ({
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            phone: u.phone,
+            credits: u.credits,
+            status: u.academy_students?.status || 'active',
+            join_date: u.academy_students?.join_date || u.created_at,
+            last_activity: u.academy_students?.last_activity || u.updated_at,
+            planId: u.academy_students?.plan_id,
+            plan_id: u.academy_students?.plan_id
           }))
-
           set({ students })
         } catch (error) {
         }
@@ -669,33 +575,26 @@ export const useFranquiaStore = create<FranquiaState>()(
         try {
           const { academy } = get()
           if (!academy) return false
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          let token: string | null = null
+          try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
 
-          // 1. Criar usuário
-          const { data: userData, error: userError } = await supabase
-            .from('users')
-            .insert({
+          const resp = await fetch(`${API_URL}/api/students`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {})
+            },
+            body: JSON.stringify({
               name: studentData.name,
               email: studentData.email,
               phone: studentData.phone,
-              role: 'STUDENT',
+              academy_id: academy.id,
+              plan_id: studentData.plan_id,
               credits: studentData.credits
             })
-            .select()
-            .single()
-
-          if (userError) throw userError
-
-          // 2. Vincular à academia
-          await supabase
-            .from('academy_students')
-            .insert({
-              student_id: userData.id,
-              academy_id: academy.id,
-              status: studentData.status,
-              plan_id: studentData.plan_id
-            })
-
-          // Recarregar lista
+          })
+          if (!resp.ok) return false
           await get().fetchStudents()
           return true
         } catch (error) {
@@ -705,32 +604,30 @@ export const useFranquiaStore = create<FranquiaState>()(
 
       updateStudent: async (id, updates) => {
         try {
-          // Atualizar dados do usuário
-          if (updates.name || updates.email || updates.phone || updates.credits !== undefined) {
-            await supabase
-              .from('users')
-              .update({
-                name: updates.name,
-                email: updates.email,
-                phone: updates.phone,
-                credits: updates.credits
-              })
-              .eq('id', id)
-          }
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          let token: string | null = null
+          try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
 
-          // Atualizar vínculo com academia
-          if (updates.status || updates.plan_id) {
-            await supabase
-              .from('academy_students')
-              .update({
-                status: updates.status,
-                plan_id: updates.plan_id,
-                last_activity: new Date().toISOString()
-              })
-              .eq('student_id', id)
-          }
+          const body: any = {}
+          if (updates.name !== undefined) body.name = updates.name
+          if (updates.email !== undefined) body.email = updates.email
+          if (updates.phone !== undefined) body.phone = updates.phone
+          if ((updates as any).avatar_url !== undefined) body.avatar_url = (updates as any).avatar_url
+          if ((updates as any).is_active !== undefined) body.is_active = (updates as any).is_active
+          if (updates.plan_id !== undefined) body.plan_id = updates.plan_id
+          if ((updates as any).academy_id !== undefined) body.academy_id = (updates as any).academy_id
+          if (updates.status !== undefined) body.status = updates.status
+          if (updates.credits !== undefined) body.credits = updates.credits
 
-          // Recarregar lista
+          const resp = await fetch(`${API_URL}/api/students/${id}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {})
+            },
+            body: JSON.stringify(body)
+          })
+          if (!resp.ok) return false
           await get().fetchStudents()
           return true
         } catch (error) {
@@ -740,23 +637,14 @@ export const useFranquiaStore = create<FranquiaState>()(
 
       deleteStudent: async (id) => {
         try {
-          const { academy } = get()
-          if (!academy) return false
-
-          // Remover vínculo com academia (hard delete)
-          await supabase
-            .from('academy_students')
-            .delete()
-            .eq('student_id', id)
-            .eq('academy_id', academy.id)
-
-          // Deletar usuário
-          await supabase
-            .from('users')
-            .delete()
-            .eq('id', id)
-
-          // Recarregar lista
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          let token: string | null = null
+          try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
+          const resp = await fetch(`${API_URL}/api/students/${id}`, {
+            method: 'DELETE',
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+          })
+          if (!resp.ok) return false
           await get().fetchStudents()
           return true
         } catch (error) {
@@ -769,29 +657,28 @@ export const useFranquiaStore = create<FranquiaState>()(
         try {
           const { academy } = get()
           if (!academy) return
-
-          const { data, error } = await supabase
-            .from('academy_plans')
-            .select('*')
-            .eq('academy_id', academy.id)
-            .order('created_at', { ascending: false })
-
-          if (error) throw error
-
-          const plans: Plan[] = (data || []).map(plan => ({
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          let token: string | null = null
+          try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
+          const resp = await fetch(`${API_URL}/api/plans/student?academy_id=${academy.id}`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+          })
+          if (!resp.ok) { set({ plans: [] }); return }
+          const payload = await resp.json()
+          const data = Array.isArray(payload?.plans) ? payload.plans : []
+          const plans: Plan[] = data.map((plan: any) => ({
             id: plan.id,
             name: plan.name,
             description: plan.description,
             price: plan.price,
             credits_included: plan.credits_included,
-            hoursIncluded: plan.credits_included, // Map credits to hours for now
+            hoursIncluded: plan.credits_included,
             duration_days: plan.duration_days,
             features: plan.features || ['Acesso às aulas', 'Suporte personalizado'],
             status: plan.is_active ? 'active' : 'inactive',
             is_active: plan.is_active,
             created_at: plan.created_at
           }))
-
           set({ plans })
         } catch (error) {
           set({ plans: [] })
@@ -802,15 +689,27 @@ export const useFranquiaStore = create<FranquiaState>()(
         try {
           const { academy } = get()
           if (!academy) return false
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          let token: string | null = null
+          try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
 
-          await supabase
-            .from('academy_plans')
-            .insert({
-              ...planData,
-              academy_id: academy.id
+          const resp = await fetch(`${API_URL}/api/plans/students`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {})
+            },
+            body: JSON.stringify({
+              academy_id: academy.id,
+              name: planData.name,
+              description: planData.description,
+              price: planData.price,
+              credits_included: planData.credits_included,
+              duration_days: planData.duration_days,
+              features: planData.features
             })
-
-          // Recarregar lista
+          })
+          if (!resp.ok) return false
           await get().fetchPlans()
           return true
         } catch (error) {
@@ -820,12 +719,29 @@ export const useFranquiaStore = create<FranquiaState>()(
 
       updatePlan: async (id, updates) => {
         try {
-          await supabase
-            .from('academy_plans')
-            .update(updates)
-            .eq('id', id)
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          let token: string | null = null
+          try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
 
-          // Recarregar lista
+          const body: any = {}
+          if (updates.name !== undefined) body.name = updates.name
+          if (updates.description !== undefined) body.description = updates.description
+          if (updates.price !== undefined) body.price = updates.price
+          if (updates.credits_included !== undefined) body.credits_included = updates.credits_included
+          if (updates.duration_days !== undefined) body.duration_days = updates.duration_days
+          if (updates.features !== undefined) body.features = updates.features
+          if (updates.status !== undefined) body.is_active = updates.status === 'active'
+          if ((updates as any).is_active !== undefined) body.is_active = (updates as any).is_active
+
+          const resp = await fetch(`${API_URL}/api/plans/students/${id}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {})
+            },
+            body: JSON.stringify(body)
+          })
+          if (!resp.ok) return false
           await get().fetchPlans()
           return true
         } catch (error) {
@@ -835,12 +751,14 @@ export const useFranquiaStore = create<FranquiaState>()(
 
       deletePlan: async (id) => {
         try {
-          await supabase
-            .from('academy_plans')
-            .update({ is_active: false })
-            .eq('id', id)
-
-          // Recarregar lista
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          let token: string | null = null
+          try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
+          const resp = await fetch(`${API_URL}/api/plans/students/${id}`, {
+            method: 'DELETE',
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+          })
+          if (!resp.ok) return false
           await get().fetchPlans()
           return true
         } catch (error) {
@@ -901,59 +819,35 @@ export const useFranquiaStore = create<FranquiaState>()(
         try {
           const { academy } = get()
           if (!academy) return
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          let token: string | null = null
+          try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
 
-          // Buscar IDs dos professores da academia
-          const { data: academyTeachers } = await supabase
-            .from('academy_teachers')
-            .select('teacher_id')
-            .eq('academy_id', academy.id)
-
-          const teacherIds = academyTeachers?.map(at => at.teacher_id) || []
-
-          // Se não há professores, não há aulas
-          if (teacherIds.length === 0) {
-            set({ classes: [] })
-            return
-          }
-
-          // Buscar bookings apenas dos professores da academia
-          const { data, error } = await supabase
-            .from('bookings')
-            .select('*')
-            .in('teacher_id', teacherIds)
-            .order('date', { ascending: false })
-
-          if (error) throw error
-
-          const classes: Class[] = (data || []).map(booking => {
-            // Extrair hora da data completa
-            const bookingDate = new Date(booking.date)
-            const hours = bookingDate.getHours().toString().padStart(2, '0')
-            const minutes = bookingDate.getMinutes().toString().padStart(2, '0')
-            const time = `${hours}:${minutes}`
-            
-            // Converter data para formato YYYY-MM-DD
-            const dateOnly = bookingDate.toISOString().split('T')[0]
-            
-            // Mapear status do backend para frontend
+          const resp = await fetch(`${API_URL}/api/bookings?unit_id=${academy.id}`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+          })
+          if (!resp.ok) { set({ classes: [] }); return }
+          const payload = await resp.json()
+          const rows = Array.isArray(payload?.bookings) ? payload.bookings : []
+          const classes: Class[] = rows.map((b: any) => {
+            const dt = new Date(b.date)
+            const hh = dt.getHours().toString().padStart(2, '0')
+            const mm = dt.getMinutes().toString().padStart(2, '0')
             let status: 'scheduled' | 'completed' | 'cancelled' = 'scheduled'
-            if (booking.status === 'COMPLETED') status = 'completed'
-            else if (booking.status === 'CANCELLED') status = 'cancelled'
-            else if (booking.status === 'CONFIRMED' || booking.status === 'PENDING') status = 'scheduled'
-
+            if (b.status === 'COMPLETED') status = 'completed'
+            else if (b.status === 'CANCELED' || b.status === 'CANCELLED') status = 'cancelled'
             return {
-              id: booking.id,
-              teacherId: booking.teacher_id,
-              studentId: booking.student_id,
-              date: dateOnly,
-              time: time,
-              status: status,
-              price: booking.credits_cost || 0,
-              duration: booking.duration || 60,
-              created_at: booking.created_at
+              id: b.id,
+              teacherId: b.teacherId,
+              studentId: b.studentId,
+              date: dt.toISOString().split('T')[0],
+              time: `${hh}:${mm}`,
+              status,
+              price: b.creditsCost || 0,
+              duration: b.duration || 60,
+              created_at: b.date
             }
           })
-
           set({ classes })
         } catch (error) {
           set({ classes: [] })
@@ -962,14 +856,30 @@ export const useFranquiaStore = create<FranquiaState>()(
 
       updateClass: async (id, updates) => {
         try {
-          const { error } = await supabase
-            .from('bookings')
-            .update(updates)
-            .eq('id', id)
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          let token: string | null = null
+          try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
 
-          if (error) throw error
+          // Apenas atualização de status é suportada via API
+          if (!updates.status) return false
+          const statusMap: Record<string, string> = {
+            completed: 'DONE',
+            cancelled: 'CANCELED',
+            scheduled: 'RESERVED'
+          }
+          const mapped = statusMap[updates.status]
+          if (!mapped) return false
 
-          // Recarregar lista
+          const resp = await fetch(`${API_URL}/api/bookings/${id}`, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {})
+            },
+            body: JSON.stringify({ status: mapped })
+          })
+          if (!resp.ok) return false
+
           await get().fetchClasses()
           return true
         } catch (error) {
@@ -979,14 +889,14 @@ export const useFranquiaStore = create<FranquiaState>()(
 
       deleteClass: async (id) => {
         try {
-          const { error } = await supabase
-            .from('bookings')
-            .delete()
-            .eq('id', id)
-
-          if (error) throw error
-
-          // Recarregar lista
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          let token: string | null = null
+          try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
+          const resp = await fetch(`${API_URL}/api/bookings/${id}`, {
+            method: 'DELETE',
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+          })
+          if (!resp.ok) return false
           await get().fetchClasses()
           return true
         } catch (error) {
@@ -999,17 +909,16 @@ export const useFranquiaStore = create<FranquiaState>()(
         try {
           const { academy } = get()
           if (!academy) return
-
-          const { data, error } = await supabase
-            .from('academy_time_slots')
-            .select('*')
-            .eq('academy_id', academy.id)
-            .order('day_of_week', { ascending: true })
-            .order('time', { ascending: true })
-
-          if (error) throw error
-
-          const timeSlots: TimeSlot[] = (data || []).map(slot => ({
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          let token: string | null = null
+          try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
+          const resp = await fetch(`${API_URL}/api/time-slots?academy_id=${academy.id}`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+          })
+          if (!resp.ok) { set({ timeSlots: [] }); return }
+          const payload = await resp.json()
+          const data = Array.isArray(payload?.slots) ? payload.slots : []
+          const timeSlots: TimeSlot[] = data.map((slot: any) => ({
             id: slot.id,
             time: slot.time,
             dayOfWeek: slot.day_of_week,
@@ -1017,7 +926,6 @@ export const useFranquiaStore = create<FranquiaState>()(
             maxCapacity: slot.max_capacity || 1,
             created_at: slot.created_at
           }))
-
           set({ timeSlots })
         } catch (error) {
           set({ timeSlots: [] })
@@ -1029,15 +937,18 @@ export const useFranquiaStore = create<FranquiaState>()(
           const { timeSlots } = get()
           const slot = timeSlots.find(s => s.id === id)
           if (!slot) return false
-
-          const { error } = await supabase
-            .from('academy_time_slots')
-            .update({ is_available: !slot.isAvailable })
-            .eq('id', id)
-
-          if (error) throw error
-
-          // Recarregar lista
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          let token: string | null = null
+          try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
+          const resp = await fetch(`${API_URL}/api/time-slots/${id}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {})
+            },
+            body: JSON.stringify({ is_available: !slot.isAvailable })
+          })
+          if (!resp.ok) return false
           await get().fetchTimeSlots()
           return true
         } catch (error) {
@@ -1048,39 +959,34 @@ export const useFranquiaStore = create<FranquiaState>()(
       // Notifications
       fetchNotifications: async () => {
         try {
-          const { franquiaUser } = get()
-          if (!franquiaUser) return
-
-          const { data, error } = await supabase
-            .from('franchise_notifications')
-            .select('*')
-            .eq('franchise_admin_id', franquiaUser.id)
-            .order('created_at', { ascending: false })
-            .limit(100)
-
-          if (error) throw error
-
-          const unreadCount = data?.filter((n: Notification) => !n.is_read).length || 0
-
+          const { franquiaUser, academy } = get()
+          if (!franquiaUser || !academy) return
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          let token: string | null = null
+          try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
+          const resp = await fetch(`${API_URL}/api/notifications?academy_id=${academy.id}`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+          })
+          if (!resp.ok) return
+          const payload = await resp.json()
           set({
-            notifications: data || [],
-            unreadNotifications: unreadCount
+            notifications: payload.notifications || [],
+            unreadNotifications: payload.unreadCount || 0
           })
         } catch (error) {
-          set({ notifications: [], unreadNotifications: 0 })
         }
       },
 
       markNotificationAsRead: async (id) => {
         try {
-          const { error } = await supabase
-            .from('franchise_notifications')
-            .update({ is_read: true })
-            .eq('id', id)
-
-          if (error) throw error
-
-          // Recarregar notificações
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          let token: string | null = null
+          try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
+          const resp = await fetch(`${API_URL}/api/notifications/${id}/read`, {
+            method: 'PATCH',
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+          })
+          if (!resp.ok) return false
           await get().fetchNotifications()
           return true
         } catch (error) {
@@ -1090,18 +996,20 @@ export const useFranquiaStore = create<FranquiaState>()(
 
       markAllNotificationsAsRead: async () => {
         try {
-          const { franquiaUser } = get()
-          if (!franquiaUser) return false
-
-          const { error } = await supabase
-            .from('franchise_notifications')
-            .update({ is_read: true })
-            .eq('franchise_admin_id', franquiaUser.id)
-            .eq('is_read', false)
-
-          if (error) throw error
-
-          // Recarregar notificações
+          const { academy } = get()
+          if (!academy) return false
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          let token: string | null = null
+          try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
+          const resp = await fetch(`${API_URL}/api/notifications/mark-all-read`, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {})
+            },
+            body: JSON.stringify({ academy_id: academy.id })
+          })
+          if (!resp.ok) return false
           await get().fetchNotifications()
           return true
         } catch (error) {
@@ -1112,15 +1020,17 @@ export const useFranquiaStore = create<FranquiaState>()(
       // Teacher Plans
       fetchTeacherPlans: async () => {
         try {
-          const { data, error } = await supabase
-            .from('teacher_plans')
-            .select('*')
-            .eq('is_active', true)
-            .order('created_at', { ascending: false })
-
-          if (error) throw error
-
-          set({ teacherPlans: data || [] })
+          const { academy } = get()
+          if (!academy) return
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          let token: string | null = null
+          try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
+          const resp = await fetch(`${API_URL}/api/plans/teacher?academy_id=${academy.id}`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+          })
+          if (!resp.ok) { set({ teacherPlans: [] }); return }
+          const payload = await resp.json()
+          set({ teacherPlans: payload.plans || [] })
         } catch (error) {
           set({ teacherPlans: [] })
         }
@@ -1128,13 +1038,28 @@ export const useFranquiaStore = create<FranquiaState>()(
 
       createTeacherPlan: async (planData) => {
         try {
-          const { error } = await supabase
-            .from('teacher_plans')
-            .insert([planData])
+          const { academy } = get()
+          if (!academy) return false
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          let token: string | null = null
+          try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
 
-          if (error) throw error
-
-          // Recarregar lista
+          const resp = await fetch(`${API_URL}/api/plans/teachers`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {})
+            },
+            body: JSON.stringify({
+              academy_id: academy.id,
+              name: planData.name,
+              description: planData.description,
+              price: planData.price,
+              commission_rate: planData.commission_rate,
+              features: planData.features
+            })
+          })
+          if (!resp.ok) return false
           await get().fetchTeacherPlans()
           return true
         } catch (error) {
@@ -1147,17 +1072,15 @@ export const useFranquiaStore = create<FranquiaState>()(
         try {
           const { academy } = get()
           if (!academy) return
-
-          const { data, error } = await supabase
-            .from('academy_plans')
-            .select('*')
-            .eq('academy_id', academy.id)
-            .eq('is_active', true)
-            .order('created_at', { ascending: false })
-
-          if (error) throw error
-
-          set({ studentPlans: data || [] })
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          let token: string | null = null
+          try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
+          const resp = await fetch(`${API_URL}/api/plans/student?academy_id=${academy.id}`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+          })
+          if (!resp.ok) { set({ studentPlans: [] }); return }
+          const payload = await resp.json()
+          set({ studentPlans: payload.plans || [] })
         } catch (error) {
           set({ studentPlans: [] })
         }
@@ -1167,14 +1090,19 @@ export const useFranquiaStore = create<FranquiaState>()(
         try {
           const { academy } = get()
           if (!academy) return false
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          let token: string | null = null
+          try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
 
-          const { error } = await supabase
-            .from('academy_plans')
-            .insert([{ ...planData, academy_id: academy.id }])
-
-          if (error) throw error
-
-          // Recarregar lista
+          const resp = await fetch(`${API_URL}/api/plans/students`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {})
+            },
+            body: JSON.stringify({ ...planData, academy_id: academy.id })
+          })
+          if (!resp.ok) return false
           await get().fetchStudentPlans()
           return true
         } catch (error) {
