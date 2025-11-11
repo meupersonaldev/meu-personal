@@ -6,35 +6,46 @@ import {
 } from './balance.service';
 
 async function fetchFranqueadoraIdFromUnit(unitId: string): Promise<string> {
-  const { data: academyDirect } = await supabase
+  console.log(`🔍 Buscando franqueadora_id para unitId: ${unitId}`)
+  
+  const { data: academyDirect, error: academyError } = await supabase
     .from('academies')
-    .select('franqueadora_id')
+    .select('franqueadora_id, name')
     .eq('id', unitId)
     .single();
 
+  console.log('📍 Resultado academies:', { academyDirect, academyError })
+
   if (academyDirect?.franqueadora_id) {
+    console.log(`✅ Franqueadora encontrada direto: ${academyDirect.franqueadora_id}`)
     return academyDirect.franqueadora_id;
   }
 
-  const { data: unitData } = await supabase
+  const { data: unitData, error: unitError } = await supabase
     .from('units')
     .select('academy_legacy_id')
     .eq('id', unitId)
     .single();
 
+  console.log('📍 Resultado units:', { unitData, unitError })
+
   if (unitData?.academy_legacy_id) {
     const { data: legacyAcademy } = await supabase
       .from('academies')
-      .select('franqueadora_id')
+      .select('franqueadora_id, name')
       .eq('id', unitData.academy_legacy_id)
       .single();
 
+    console.log('📍 Resultado legacy academy:', legacyAcademy)
+
     if (legacyAcademy?.franqueadora_id) {
+      console.log(`✅ Franqueadora encontrada via legacy: ${legacyAcademy.franqueadora_id}`)
       return legacyAcademy.franqueadora_id;
     }
   }
 
-  throw new Error('Franqueadora nao identificada para unidade informada');
+  console.error(`❌ Franqueadora não encontrada para unitId: ${unitId}`)
+  throw new Error(`Academia inválida ou sem franqueadora configurada (ID: ${unitId}). Por favor, selecione outra academia nas configurações.`);
 }
 
 function getAvailableClasses(balance: StudentClassBalance): number {

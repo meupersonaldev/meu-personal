@@ -879,6 +879,265 @@ router.get('/:id/transactions', requireAuth, async (req, res) => {
   }
 })
 
+// GET /api/teachers/:id/history - Histórico detalhado com filtros
+router.get('/:id/history', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params
+    const { 
+      month, 
+      year, 
+      student_id, 
+      type // 'academy' ou 'private'
+    } = req.query
+
+    if (!ensureTeacherScope(req, res, id)) {
+      return
+    }
+
+    // Buscar perfil do professor
+    const { data: profile } = await supabase
+      .from('teacher_profiles')
+      .select('hourly_rate')
+      .eq('user_id', id)
+      .single()
+
+    // Buscar alunos do professor com hourly_rate
+    const { data: students } = await supabase
+      .from('teacher_students')
+      .select('id, email, hourly_rate')
+      .eq('teacher_id', id)
+
+    // Criar mapa de hourly_rate por user_id
+    const studentRateMap = new Map<string, number>()
+    const studentEmailMap = new Map<string, string>()
+    
+    if (students) {
+      for (const student of students) {
+        if (student.email) {
+          const { data: user } = await supabase
+            .from('users')
+            .select('id, name')
+            .eq('email', student.email)
+            .single()
+          
+          if (user) {
+            studentRateMap.set(user.id, student.hourly_rate || 0)
+            studentEmailMap.set(user.id, student.email)
+          }
+        }
+      }
+    }
+
+    // Buscar bookings do professor
+    let bookingsQuery = supabase
+      .from('bookings')
+      .select(`
+        id,
+        date,
+        duration,
+        status,
+        status_canonical,
+        credits_cost,
+        student_id,
+        academy_id,
+        users!bookings_student_id_fkey (
+          id,
+          name,
+          email
+        ),
+        academies (
+          id,
+          name
+        )
+      `)
+      .eq('teacher_id', id)
+      .order('date', { ascending: false })
+
+    // Aplicar filtro de mês/ano
+    if (month && year) {
+      const startDate = new Date(Number(year), Number(month) - 1, 1)
+      const endDate = new Date(Number(year), Number(month), 0, 23, 59, 59)
+      bookingsQuery = bookingsQuery
+        .gte('date', startDate.toISOString())
+        .lte('date', endDate.toISOString())
+    }
+
+    // Aplicar filtro de aluno
+    if (student_id) {
+      bookingsQuery = bookingsQuery.eq('student_id', student_id)
+    }
+
+    const { data: bookings } = await bookingsQuery
+
+    // Buscar transações de horas (academia)
+    let hourTransactionsQuery = supabase
+      .from('hour_transactions')
+      .select('id, type, hours, created_at, meta_json')
+      .eq('professor_id', id)
+      .in('type', ['CONSUME'])
+      .order('created_at', { ascending: false })
+
+    // Aplicar filtro de mês/ano
+    if (month && year) {
+      const startDate = new Date(Number(year), Number(month) - 1, 1)
+      const endDate = new Date(Number(year), Number(month), 0, 23, 59, 59)
+      hourTransactionsQuery = hourTransactionsQuery
+        .gte('created_at', startDate.toISOString())
+        .lte('created_at', endDate.toISOString())
+    }
+
+    const { data: hourTransactions } = await hourTransactionsQuery
+
+    // Processar dados
+    const normalizedBookings = (bookings || []).map((b: any) => ({
+      ...b,
+      _status: normalizeBookingStatus(b.status, b.status_canonical)
+    }))
+
+    // Filtrar por tipo
+    let filteredBookings = normalizedBookings
+    if (type === 'private') {
+      filteredBookings = normalizedBookings.filter((b: any) => b.student_id)
+    } else if (type === 'academy') {
+      filteredBookings = normalizedBookings.filter((b: any) => !b.student_id)
+    }
+
+    // Calcular ganhos por aluno (aulas particulares)
+    const earningsByStudent = new Map<string, {
+      student_id: string
+      student_name: string
+      student_email: string
+      total_classes: number
+      completed_classes: number
+      total_earnings: number
+      hourly_rate: number
+    }>()
+
+    filteredBookings
+      .filter((b: any) => b._status === 'COMPLETED' && b.student_id)
+      .forEach((b: any) => {
+        const studentId = b.student_id
+        const studentRate = studentRateMap.get(studentId) || 0
+        const studentName = b.users?.name || 'Aluno'
+        const studentEmail = b.users?.email || studentEmailMap.get(studentId) || ''
+
+        if (!earningsByStudent.has(studentId)) {
+          earningsByStudent.set(studentId, {
+            student_id: studentId,
+            student_name: studentName,
+            student_email: studentEmail,
+            total_classes: 0,
+            completed_classes: 0,
+            total_earnings: 0,
+            hourly_rate: studentRate
+          })
+        }
+
+        const entry = earningsByStudent.get(studentId)!
+        entry.total_classes++
+        entry.completed_classes++
+        entry.total_earnings += studentRate
+      })
+
+    // Calcular ganhos da academia
+    const academyEarnings = (hourTransactions || []).reduce((sum: number, t: any) => {
+      const rate = profile?.hourly_rate || 0
+      return sum + (t.hours * rate)
+    }, 0)
+
+    const academyHours = (hourTransactions || []).reduce((sum: number, t: any) => {
+      return sum + (t.hours || 0)
+    }, 0)
+
+    // Calcular ganhos de aulas particulares
+    const privateEarnings = Array.from(earningsByStudent.values()).reduce(
+      (sum, entry) => sum + entry.total_earnings,
+      0
+    )
+
+    // Totalizadores
+    const completedBookings = filteredBookings.filter((b: any) => b._status === 'COMPLETED')
+    const totalClasses = completedBookings.length
+    const totalEarnings = academyEarnings + privateEarnings
+
+    // Agrupar por mês (últimos 12 meses)
+    const monthlyData = []
+    const now = new Date()
+    
+    for (let i = 11; i >= 0; i--) {
+      const targetDate = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      const targetMonth = targetDate.getMonth()
+      const targetYear = targetDate.getFullYear()
+      
+      const monthBookings = normalizedBookings.filter((b: any) => {
+        const bookingDate = new Date(b.date)
+        return bookingDate.getMonth() === targetMonth &&
+               bookingDate.getFullYear() === targetYear &&
+               b._status === 'COMPLETED'
+      })
+
+      const monthHourTransactions = (hourTransactions || []).filter((t: any) => {
+        const txDate = new Date(t.created_at)
+        return txDate.getMonth() === targetMonth &&
+               txDate.getFullYear() === targetYear
+      })
+
+      const monthAcademyEarnings = monthHourTransactions.reduce((sum: number, t: any) => {
+        const rate = profile?.hourly_rate || 0
+        return sum + (t.hours * rate)
+      }, 0)
+
+      const monthPrivateEarnings = monthBookings
+        .filter((b: any) => b.student_id)
+        .reduce((sum: number, b: any) => {
+          const studentRate = studentRateMap.get(b.student_id) || 0
+          return sum + studentRate
+        }, 0)
+
+      monthlyData.push({
+        month: targetMonth + 1,
+        year: targetYear,
+        month_name: targetDate.toLocaleDateString('pt-BR', { month: 'short' }),
+        total_classes: monthBookings.length,
+        academy_earnings: monthAcademyEarnings,
+        private_earnings: monthPrivateEarnings,
+        total_earnings: monthAcademyEarnings + monthPrivateEarnings
+      })
+    }
+
+    res.json({
+      summary: {
+        total_classes: totalClasses,
+        total_earnings: totalEarnings,
+        academy_earnings: academyEarnings,
+        academy_hours: academyHours,
+        private_earnings: privateEarnings,
+        hourly_rate: profile?.hourly_rate || 0
+      },
+      by_student: Array.from(earningsByStudent.values()).sort(
+        (a, b) => b.total_earnings - a.total_earnings
+      ),
+      monthly: monthlyData,
+      bookings: filteredBookings.map((b: any) => ({
+        id: b.id,
+        date: b.date,
+        duration: b.duration,
+        status: b._status,
+        credits_cost: b.credits_cost,
+        student_name: b.users?.name || null,
+        student_id: b.student_id,
+        academy_name: b.academies?.name || null,
+        academy_id: b.academy_id,
+        earnings: b.student_id ? (studentRateMap.get(b.student_id) || 0) : 0,
+        type: b.student_id ? 'private' : 'academy'
+      }))
+    })
+  } catch (error) {
+    console.error('Erro ao processar histórico:', error)
+    res.status(500).json({ error: 'Erro interno do servidor' })
+  }
+})
+
 // GET /api/teachers/:id - Buscar professor por ID
 router.get('/:id', requireAuth, async (req, res) => {
   try {

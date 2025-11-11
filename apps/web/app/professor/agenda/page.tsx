@@ -9,6 +9,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   Calendar,
   MapPin,
   Plus,
@@ -16,8 +24,11 @@ import {
   Check,
   Loader2,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Lock,
+  Unlock
 } from 'lucide-react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import { utcToLocal, hasPassedLocal, getLocalTimeFromUtc, getLocalDateFromUtc } from '@/lib/timezone-utils'
 
@@ -69,7 +80,10 @@ export default function ProfessorAgendaPage() {
   const [loadingBlocks, setLoadingBlocks] = useState(false)
   const [existingBookingInSlot, setExistingBookingInSlot] = useState<Booking | null>(null)
   const [selectedHoursToBlock, setSelectedHoursToBlock] = useState<string[]>([])
+  const [selectedHoursToAvailable, setSelectedHoursToAvailable] = useState<string[]>([])
   const [cancelledBookings, setCancelledBookings] = useState<Booking[]>([])
+  const [showClearModal, setShowClearModal] = useState(false)
+  const [clearModalType, setClearModalType] = useState<'disponibilizar' | 'bloquear'>('disponibilizar')
 
   const horariosDisponiveis = [
     '06:00', '07:00', '08:00', '09:00', '10:00', '11:00',
@@ -367,6 +381,7 @@ export default function ProfessorAgendaPage() {
           unitId: franchiseId,
           startAt: bookingDate.toISOString(),
           endAt: endTime.toISOString(),
+          status: 'AVAILABLE',
           professorNotes: 'Horário disponível'
         })
       })
@@ -553,12 +568,305 @@ export default function ProfessorAgendaPage() {
     )
   }
 
+  // Modal de aviso quando não há academias vinculadas
+  const NoAcademyModal = () => {
+    if (teacherAcademies.length > 0) return null
+
+    return createPortal(
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-xl">
+              <MapPin className="h-6 w-6 text-amber-500" />
+              Academia Não Vinculada
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <p className="text-gray-700">
+                Você ainda não está vinculado a nenhuma academia.
+              </p>
+              <p className="text-gray-600 text-sm">
+                Para criar horários e gerenciar sua agenda, você precisa estar atrelado a pelo menos uma unidade.
+              </p>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <p className="text-sm text-blue-800 font-medium mb-1">
+                Como resolver:
+              </p>
+              <p className="text-sm text-blue-700">
+                Vá até <strong>Configurações</strong> e vincule-se a uma ou mais academias para começar a agendar aulas.
+              </p>
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                onClick={() => window.location.href = '/professor/configuracoes'}
+                className="flex-1 bg-meu-primary hover:bg-meu-primary-dark"
+              >
+                Ir para Configurações
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>,
+      document.body
+    )
+  }
+
+  const handleClearConfirm = async () => {
+    try {
+      if (clearModalType === 'disponibilizar') {
+        let removed = 0
+        const dateBookings = bookings.filter(b => {
+          const bDate = new Date(b.date).toISOString().split('T')[0]
+          return bDate === selectedDate && b.status === 'AVAILABLE'
+        })
+        
+        for (const booking of dateBookings) {
+          const res = await authFetch(`${API_URL}/api/bookings/${booking.id}`, { method: 'DELETE' })
+          if (res.ok) removed++
+        }
+        
+        toast.success(`${removed} disponibilidade(s) removida(s)!`)
+        await fetchData()
+      } else {
+        let removed = 0
+        for (const block of blocks) {
+          const res = await authFetch(`${API_URL}/api/teachers/${user?.id}/blocks/${block.id}`, { method: 'DELETE' })
+          if (res.ok) removed++
+        }
+        toast.success(`${removed} bloqueio(s) removido(s)!`)
+        await fetchData()
+        await fetchBlocks()
+        await fetchSlots()
+      }
+    } catch {
+      toast.error(`Erro ao remover ${clearModalType === 'disponibilizar' ? 'disponibilidades' : 'bloqueios'}`)
+    } finally {
+      setShowClearModal(false)
+    }
+  }
+
+  const ClearConfirmModal = () => {
+    const isDisponibilizar = clearModalType === 'disponibilizar'
+    const title = isDisponibilizar ? 'Restaurar Disponibilidades' : 'Restaurar Bloqueios'
+    const description = isDisponibilizar
+      ? `Tem certeza que deseja remover TODAS as disponibilidades do dia ${selectedDate}? Isso restaurará o dia ao padrão (sem horários disponíveis).`
+      : `Tem certeza que deseja remover TODOS os bloqueios do dia ${selectedDate}? Isso restaurará o dia ao padrão (sem bloqueios).`
+    
+    return (
+      <Dialog open={showClearModal} onOpenChange={setShowClearModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span className="text-2xl">🔄</span>
+              {title}
+            </DialogTitle>
+            <DialogDescription className="pt-2">
+              {description}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-lg bg-yellow-50 border border-yellow-200 p-4">
+            <p className="text-sm text-yellow-800">
+              <strong>⚠️ Atenção:</strong> Esta ação não pode ser desfeita.
+            </p>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowClearModal(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleClearConfirm}
+            >
+              Sim, restaurar padrão
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    )
+  }
+
   return (
     <ProfessorLayout>
+      <NoAcademyModal />
+      <ClearConfirmModal />
       <div className="px-4 py-6 space-y-6 md:px-6">
-        {/* Controles de Bloqueio */}
+        {/* Gerenciamento de Horários */}
         <Card>
+          <CardHeader>
+            <CardTitle>Gerenciar Horários em Massa</CardTitle>
+          </CardHeader>
           <CardContent className="p-4">
+            <Tabs defaultValue="disponibilizar" className="w-full">
+              <TabsList className="grid w-full grid-cols-2 mb-6">
+                <TabsTrigger value="disponibilizar" className="flex items-center gap-2">
+                  <Unlock className="h-4 w-4" />
+                  Disponibilizar
+                </TabsTrigger>
+                <TabsTrigger value="bloquear" className="flex items-center gap-2">
+                  <Lock className="h-4 w-4" />
+                  Bloquear
+                </TabsTrigger>
+              </TabsList>
+
+              {/* ABA: Disponibilizar */}
+              <TabsContent value="disponibilizar" className="space-y-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:items-end lg:grid-cols-3">
+                  <div className="flex items-center gap-3">
+                    <MapPin className="h-5 w-5 text-gray-500" />
+                    <select
+                      value={selectedFranchise}
+                      onChange={(e) => setSelectedFranchise(e.target.value)}
+                      className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2 focus:ring-2 focus:ring-meu-primary md:w-auto"
+                    >
+                      <option value="todas">Todas as Unidades</option>
+                      {teacherAcademies.map(franchise => (
+                        <option key={franchise.id} value={franchise.id}>
+                          {franchise.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="md:max-w-sm">
+                    <label className="mb-1 block text-sm font-medium text-gray-700">Data</label>
+                    <input
+                      type="date"
+                      value={selectedDate}
+                      onChange={(e) => setSelectedDate(e.target.value)}
+                      min={new Date().toISOString().split('T')[0]}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-transparent focus:ring-2 focus:ring-meu-primary"
+                    />
+                  </div>
+                </div>
+
+                {selectedDate && (
+                  <div>
+                    <p className="text-sm font-medium mb-2 text-green-700">
+                      Selecione os horários para disponibilizar
+                      {selectedFranchise === 'todas' ? ' em todas as unidades' : ` na ${teacherAcademies.find(a => a.id === selectedFranchise)?.name}`}:
+                    </p>
+                    <div className="grid grid-cols-3 gap-2 mb-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
+                      {horariosDisponiveis.map((hora) => (
+                        <button
+                          key={hora}
+                          onClick={() => {
+                            if (selectedHoursToAvailable.includes(hora)) {
+                              setSelectedHoursToAvailable(selectedHoursToAvailable.filter(h => h !== hora))
+                            } else {
+                              setSelectedHoursToAvailable([...selectedHoursToAvailable, hora])
+                            }
+                          }}
+                          className={`px-3 py-2 text-sm rounded-lg border-2 transition-all ${
+                            selectedHoursToAvailable.includes(hora)
+                              ? 'bg-green-600 text-white border-green-600'
+                              : 'bg-white text-gray-700 border-gray-300 hover:border-green-600'
+                          }`}
+                        >
+                          {hora}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:space-x-3">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setSelectedHoursToAvailable(horariosDisponiveis)}
+                      >
+                        Selecionar todos
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setSelectedHoursToAvailable([])}
+                      >
+                        Limpar seleção
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => {
+                          setClearModalType('disponibilizar')
+                          setShowClearModal(true)
+                        }}
+                        className="text-white"
+                      >
+                        🔄 Restaurar Padrão
+                      </Button>
+                      <Button
+                        disabled={selectedHoursToAvailable.length === 0}
+                        onClick={async () => {
+                          try {
+                            if (selectedFranchise === 'todas') {
+                              let totalCreated = 0
+                              for (const academy of teacherAcademies) {
+                                for (const hora of selectedHoursToAvailable) {
+                                  const bookingDate = new Date(selectedDate + 'T' + hora + ':00Z')
+                                  const endTime = new Date(bookingDate.getTime() + 60 * 60 * 1000)
+                                  const res = await authFetch(`${API_URL}/api/bookings`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                      source: 'PROFESSOR',
+                                      professorId: user?.id,
+                                      unitId: academy.id,
+                                      startAt: bookingDate.toISOString(),
+                                      endAt: endTime.toISOString(),
+                                      professorNotes: 'Horário disponível'
+                                    })
+                                  })
+                                  if (res.ok) totalCreated++
+                                }
+                              }
+                              toast.success(`${totalCreated} horário(s) disponibilizado(s)!`)
+                            } else {
+                              let created = 0
+                              for (const hora of selectedHoursToAvailable) {
+                                const bookingDate = new Date(selectedDate + 'T' + hora + ':00Z')
+                                const endTime = new Date(bookingDate.getTime() + 60 * 60 * 1000)
+                                const res = await authFetch(`${API_URL}/api/bookings`, {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    source: 'PROFESSOR',
+                                    professorId: user?.id,
+                                    unitId: selectedFranchise,
+                                    startAt: bookingDate.toISOString(),
+                                    endAt: endTime.toISOString(),
+                                    professorNotes: 'Horário disponível'
+                                  })
+                                })
+                                if (res.ok) created++
+                              }
+                              toast.success(`${created} horário(s) disponibilizado(s)!`)
+                            }
+                            setSelectedHoursToAvailable([])
+                            await fetchData()
+                          } catch {
+                            toast.error('Erro ao disponibilizar horários')
+                          }
+                        }}
+                        className="bg-green-600 hover:bg-green-700 text-white"
+                      >
+                        {selectedFranchise === 'todas' 
+                          ? `Disponibilizar ${selectedHoursToAvailable.length} horário(s) em todas`
+                          : `Disponibilizar ${selectedHoursToAvailable.length} horário(s)`
+                        }
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </TabsContent>
+
+              {/* ABA: Bloquear */}
+              <TabsContent value="bloquear" className="space-y-4">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:items-end lg:grid-cols-3">
               <div className="flex items-center gap-3">
                 <MapPin className="h-5 w-5 text-gray-500" />
@@ -653,6 +961,17 @@ export default function ProfessorAgendaPage() {
                     onClick={() => setSelectedHoursToBlock([])}
                   >
                     Limpar seleção
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => {
+                      setClearModalType('bloquear')
+                      setShowClearModal(true)
+                    }}
+                    className="text-white"
+                  >
+                    🔄 Restaurar Padrão
                   </Button>
                   <Button
                     disabled={selectedHoursToBlock.length === 0}
@@ -829,8 +1148,133 @@ export default function ProfessorAgendaPage() {
                 )}
               </div>
             )}
+              </TabsContent>
+            </Tabs>
           </CardContent>
         </Card>
+
+        {/* Header da Agenda */}
+        <Card style={{display: 'none'}}>
+          <CardContent className="p-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:items-end lg:grid-cols-3">
+              <div className="flex items-center gap-3">
+                <Plus className="h-5 w-5 text-green-500" />
+                <span className="text-sm font-medium text-gray-700">Disponibilizar Horários em Massa</span>
+              </div>
+            </div>
+
+            {selectedDate && (
+              <div className="mt-4">
+                <p className="text-sm font-medium mb-2 text-green-700">
+                  Selecione os horários para disponibilizar
+                  {selectedFranchise === 'todas' ? ' em todas as unidades' : ` na ${teacherAcademies.find(a => a.id === selectedFranchise)?.name}`}:
+                </p>
+                <div className="grid grid-cols-3 gap-2 mb-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
+                  {horariosDisponiveis.map((hora) => (
+                    <button
+                      key={hora}
+                      onClick={() => {
+                        if (selectedHoursToAvailable.includes(hora)) {
+                          setSelectedHoursToAvailable(selectedHoursToAvailable.filter(h => h !== hora))
+                        } else {
+                          setSelectedHoursToAvailable([...selectedHoursToAvailable, hora])
+                        }
+                      }}
+                      className={`px-3 py-2 text-sm rounded-lg border-2 transition-all ${
+                        selectedHoursToAvailable.includes(hora)
+                          ? 'bg-green-600 text-white border-green-600'
+                          : 'bg-white text-gray-700 border-gray-300 hover:border-green-600'
+                      }`}
+                    >
+                      {hora}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:space-x-3">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full sm:w-auto"
+                    onClick={() => setSelectedHoursToAvailable(horariosDisponiveis)}
+                  >
+                    Selecionar todos
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full sm:w-auto"
+                    onClick={() => setSelectedHoursToAvailable([])}
+                  >
+                    Limpar seleção
+                  </Button>
+                  <Button
+                    disabled={selectedHoursToAvailable.length === 0}
+                    onClick={async () => {
+                      try {
+                        if (selectedFranchise === 'todas') {
+                          let totalCreated = 0
+                          for (const academy of teacherAcademies) {
+                            for (const hora of selectedHoursToAvailable) {
+                              const bookingDate = new Date(selectedDate + 'T' + hora + ':00Z')
+                              const endTime = new Date(bookingDate.getTime() + 60 * 60 * 1000)
+
+                              const res = await authFetch(`${API_URL}/api/bookings`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  source: 'PROFESSOR',
+                                  professorId: user?.id,
+                                  unitId: academy.id,
+                                  startAt: bookingDate.toISOString(),
+                                  endAt: endTime.toISOString(),
+                                  professorNotes: 'Horário disponível'
+                                })
+                              })
+                              if (res.ok) totalCreated++
+                            }
+                          }
+                          toast.success(`${totalCreated} horário(s) disponibilizado(s)!`)
+                        } else {
+                          let created = 0
+                          for (const hora of selectedHoursToAvailable) {
+                            const bookingDate = new Date(selectedDate + 'T' + hora + ':00Z')
+                            const endTime = new Date(bookingDate.getTime() + 60 * 60 * 1000)
+
+                            const res = await authFetch(`${API_URL}/api/bookings`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                source: 'PROFESSOR',
+                                professorId: user?.id,
+                                unitId: selectedFranchise,
+                                startAt: bookingDate.toISOString(),
+                                endAt: endTime.toISOString(),
+                                professorNotes: 'Horário disponível'
+                              })
+                            })
+                            if (res.ok) created++
+                          }
+                          toast.success(`${created} horário(s) disponibilizado(s)!`)
+                        }
+                        setSelectedHoursToAvailable([])
+                        await fetchData()
+                      } catch {
+                        toast.error('Erro ao disponibilizar horários')
+                      }
+                    }}
+                    className="bg-green-600 hover:bg-green-700 text-white"
+                  >
+                    {selectedFranchise === 'todas' 
+                      ? `Disponibilizar ${selectedHoursToAvailable.length} horário(s) em todas`
+                      : `Disponibilizar ${selectedHoursToAvailable.length} horário(s)`
+                    }
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Header */}
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
@@ -1387,6 +1831,7 @@ export default function ProfessorAgendaPage() {
                                       unitId: academy.id,
                                       startAt: bookingDate.toISOString(),
                                       endAt: endTime.toISOString(),
+                                      status: 'AVAILABLE',
                                       professorNotes: 'Horário disponível'
                                     }
 

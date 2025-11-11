@@ -47,8 +47,9 @@ router.get('/', requireAuth, requireRole(['FRANQUEADORA', 'FRANQUIA', 'TEACHER',
   try {
     const { data, error } = await supabase
       .from('academies')
-      .select('id, name, city, state, credits_per_class, class_duration_minutes, checkin_tolerance')
+      .select('id, name, city, state, credits_per_class, class_duration_minutes, checkin_tolerance, franqueadora_id')
       .eq('is_active', true)
+      .not('franqueadora_id', 'is', null) // ✅ Apenas academias com franqueadora válida
       .order('name')
 
     if (error) throw error

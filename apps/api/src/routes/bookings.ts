@@ -20,6 +20,7 @@ const createBookingSchema = z.object({
   unitId: z.string().uuid(),
   startAt: z.string().datetime(),
   endAt: z.string().datetime(),
+  status: z.enum(['AVAILABLE', 'RESERVED', 'PAID', 'DONE', 'CANCELED']).optional(),
   studentNotes: z.string().optional(),
   professorNotes: z.string().optional()
 })
@@ -558,6 +559,7 @@ router.post('/', requireAuth, requireRole(['STUDENT', 'ALUNO', 'TEACHER', 'PROFE
     unitId: bookingData.unitId,
     startAt: startAt,
     endAt: endAt,
+    status: bookingData.status,
     studentNotes: bookingData.studentNotes,
     professorNotes: bookingData.professorNotes
   })

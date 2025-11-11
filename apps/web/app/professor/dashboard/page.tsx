@@ -6,9 +6,11 @@ import { useAuthStore } from '@/lib/stores/auth-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import ProfessorLayout from '@/components/layout/professor-layout'
 import { ApprovalBanner } from '@/components/teacher/approval-banner'
 import { ApprovalBlock } from '@/components/teacher/approval-block'
+import { HistorySection } from '@/components/professor/history-section'
 import {
   Clock,
   Calendar,
@@ -19,9 +21,9 @@ import {
   Loader2,
   AlertCircle,
   MapPin,
-  ArrowRight
+  ArrowRight,
+  BarChart3
 } from 'lucide-react'
-import { fmtTime, fmtDate } from '@/lib/date'
 
 const currencyFormatter = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -66,7 +68,6 @@ export default function ProfessorDashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [needsApproval, setNeedsApproval] = useState<boolean>(false)
 
   useEffect(() => {
     if (!user?.id) return
@@ -123,14 +124,7 @@ export default function ProfessorDashboardPage() {
           throw new Error('Unauthorized')
         }
 
-        // Checar aprovação (usa is_available do profile)
-        try {
-          const availResp = await fetch(`${API_URL}/api/teachers/${user.id}/availability`, requestInit)
-          if (availResp.ok) {
-            const avail = await availResp.json().catch(() => null)
-            setNeedsApproval(avail?.is_available === false)
-          }
-        } catch {}
+        // Aprovação é verificada via user.approval_status
       } catch (err) {
         if (err instanceof Error && err.message === 'Unauthorized') {
           setError('Sessão expirada. Faça login novamente.')
@@ -147,9 +141,8 @@ export default function ProfessorDashboardPage() {
 
   if (!user) return null
 
-  const pendingBookings = bookings.filter((b) => b.status === 'PENDING' || b.status === 'RESERVED')
   const confirmedBookings = bookings.filter((b) => b.status === 'CONFIRMED' || b.status === 'PAID')
-  const activeBookingsCount = confirmedBookings.length // Removido pendentes
+  const activeBookingsCount = confirmedBookings.length
 
   const today = new Date()
   const formattedDate = today.toLocaleDateString('pt-BR', {
@@ -218,6 +211,20 @@ export default function ProfessorDashboardPage() {
             {formattedDate}
           </p>
         </section>
+
+        <Tabs defaultValue="visao-geral" className="w-full">
+          <TabsList className="grid w-full grid-cols-2 mb-6">
+            <TabsTrigger value="visao-geral" className="flex items-center gap-2">
+              <Activity className="h-4 w-4" />
+              Visão Geral
+            </TabsTrigger>
+            <TabsTrigger value="historico" className="flex items-center gap-2">
+              <BarChart3 className="h-4 w-4" />
+              Histórico e Relatórios
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="visao-geral" className="space-y-6 md:space-y-8">
 
         <section className={isNotApproved ? 'relative' : ''}>
           {isNotApproved && (
@@ -490,6 +497,14 @@ export default function ProfessorDashboardPage() {
             </CardContent>
           </Card>
         </section>
+          </TabsContent>
+
+          <TabsContent value="historico">
+            {user.id && token && (
+              <HistorySection userId={user.id} token={token} />
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
     )
   }

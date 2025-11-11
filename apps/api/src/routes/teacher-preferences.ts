@@ -122,6 +122,18 @@ router.put('/:teacherId/preferences', requireAuth, async (req, res) => {
     for (const academyId of academiesToAdd) {
       console.log(`Criando vínculo: professor ${teacherId} → academia ${academyId}`)
       
+      // ✅ VALIDAR: Verificar se a academia existe
+      const { data: academyExists } = await supabase
+        .from('academies')
+        .select('id, franqueadora_id')
+        .eq('id', academyId)
+        .single()
+
+      if (!academyExists) {
+        console.error(`❌ Academia não encontrada: ${academyId}`)
+        continue // Pular este vínculo inválido
+      }
+      
       // Verificar se já existe vínculo
       const { data: existingLink } = await supabase
         .from('academy_teachers')
