@@ -63,6 +63,7 @@ export interface CreateBookingParams {
   unitId: string;
   startAt: Date;
   endAt: Date;
+  status?: 'AVAILABLE' | 'RESERVED' | 'PAID' | 'DONE' | 'CANCELED';
   studentNotes?: string;
   professorNotes?: string;
 }
@@ -190,6 +191,7 @@ class BookingCanonicalService {
 
     if (!hasStudent) {
       // CRIAÇÃO DE DISPONIBILIDADE (sem aluno)
+      const statusToUse = params.status || 'AVAILABLE';
       const { data: availability, error: availabilityError } = await supabase
         .from('bookings')
         .insert({
@@ -200,8 +202,8 @@ class BookingCanonicalService {
           date: params.startAt.toISOString(),
           start_at: params.startAt.toISOString(),
           end_at: params.endAt.toISOString(),
-          status: 'AVAILABLE',
-          status_canonical: 'AVAILABLE',
+          status: statusToUse === 'AVAILABLE' ? 'AVAILABLE' : 'CONFIRMED',
+          status_canonical: statusToUse,
           cancellable_until: cancellableUntil.toISOString(),
           student_notes: params.studentNotes,
           professor_notes: params.professorNotes
