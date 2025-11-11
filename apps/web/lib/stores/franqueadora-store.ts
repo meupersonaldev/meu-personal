@@ -378,9 +378,24 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           }
           if (typeof document !== 'undefined') {
             const maxAge = 7 * 24 * 60 * 60
-            const isProd = process.env.NODE_ENV === 'production'
-            const sameSite = isProd ? 'None' : 'Lax'
-            const secure = (isProd || (typeof window !== 'undefined' && window.location.protocol === 'https:')) ? '; Secure' : ''
+            // Definir SameSite/Secure dinamicamente para evitar perder o cookie em HTTP local
+            let sameSite = 'Lax'
+            let secure = ''
+            try {
+              const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+              const pageOrigin = typeof window !== 'undefined' ? window.location.origin : ''
+              const apiOrigin = new URL(apiUrl).origin
+              const crossSite = pageOrigin && apiOrigin && apiOrigin !== pageOrigin
+              const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:'
+              if (crossSite) {
+                // Para requests cross-site (diferente origin), precisamos SameSite=None e Secure
+                sameSite = 'None'
+                secure = '; Secure'
+              } else if (isHttps) {
+                // Mesmo site em HTTPS pode (opcionalmente) usar Secure
+                secure = '; Secure'
+              }
+            } catch {}
             document.cookie = `auth-token=${data.token}; Path=/; Max-Age=${maxAge}; SameSite=${sameSite}${secure}`
           }
           set({

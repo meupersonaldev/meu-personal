@@ -19,6 +19,8 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') })
 process.env.TZ = 'America/Sao_Paulo'
 
 export const app = express()
+// Necessário quando rodando atrás de proxy (nginx, traefik, cloud) para que req.secure/x-forwarded-* funcionem
+app.set('trust proxy', 1)
 const PORT = process.env.PORT || 3001
 
 // SEGURANÇA CRÍTICA: Headers de segurança aprimorados

@@ -90,6 +90,7 @@ export const useAuthStore = create<AuthState>()(
             headers: {
               'Content-Type': 'application/json'
             },
+            credentials: 'include',
             body: JSON.stringify({ email, password })
           })
 
@@ -115,11 +116,26 @@ export const useAuthStore = create<AuthState>()(
               isAuthenticated: true
             })
 
-            // Setar cookie para o middleware do Next.js
+            // Setar cookie auth-token com SameSite/Secure apropriados (SSE precisa do cookie)
             if (typeof document !== 'undefined' && data.token) {
               const maxAge = 7 * 24 * 60 * 60 // 7 dias
-              const secure = typeof window !== 'undefined' && window.location.protocol === 'https:' ? '; Secure' : ''
-              document.cookie = `auth-token=${data.token}; Path=/; Max-Age=${maxAge}; SameSite=Lax${secure}`
+              let sameSite: 'Lax' | 'None' = 'Lax'
+              let secure = ''
+              try {
+                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                const pageOrigin = typeof window !== 'undefined' ? window.location.origin : ''
+                const apiOrigin = new URL(apiUrl).origin
+                const crossSite = pageOrigin && apiOrigin && apiOrigin !== pageOrigin
+                const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:'
+                if (crossSite) {
+                  // Cross-site exige SameSite=None e Secure (navegadores rejeitam None sem Secure)
+                  sameSite = 'None'
+                  secure = '; Secure'
+                } else if (isHttps) {
+                  secure = '; Secure'
+                }
+              } catch {}
+              document.cookie = `auth-token=${data.token}; Path=/; Max-Age=${maxAge}; SameSite=${sameSite}${secure}`
             }
             return true
           }
@@ -140,6 +156,7 @@ export const useAuthStore = create<AuthState>()(
             headers: {
               'Content-Type': 'application/json'
             },
+            credentials: 'include',
             body: JSON.stringify({
               name: userData.name,
               email: userData.email,
@@ -177,11 +194,25 @@ export const useAuthStore = create<AuthState>()(
               isAuthenticated: true
             })
 
-            // Setar cookie para o middleware (se backend retornar token)
+            // Setar cookie auth-token com SameSite/Secure apropriados (SSE precisa do cookie)
             if (typeof document !== 'undefined' && data.token) {
               const maxAge = 7 * 24 * 60 * 60
-              const secure = typeof window !== 'undefined' && window.location.protocol === 'https:' ? '; Secure' : ''
-              document.cookie = `auth-token=${data.token}; Path=/; Max-Age=${maxAge}; SameSite=Lax${secure}`
+              let sameSite: 'Lax' | 'None' = 'Lax'
+              let secure = ''
+              try {
+                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                const pageOrigin = typeof window !== 'undefined' ? window.location.origin : ''
+                const apiOrigin = new URL(apiUrl).origin
+                const crossSite = pageOrigin && apiOrigin && apiOrigin !== pageOrigin
+                const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:'
+                if (crossSite) {
+                  sameSite = 'None'
+                  secure = '; Secure'
+                } else if (isHttps) {
+                  secure = '; Secure'
+                }
+              } catch {}
+              document.cookie = `auth-token=${data.token}; Path=/; Max-Age=${maxAge}; SameSite=${sameSite}${secure}`
             }
             return true
           }
