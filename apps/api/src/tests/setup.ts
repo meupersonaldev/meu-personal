@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase'
+import { runMigrationsIfNeeded } from './utils/runMigrations'
 
 // Setup global test environment
 beforeAll(async () => {
@@ -10,6 +11,9 @@ beforeAll(async () => {
   // JWT secret com 32+ caracteres para satisfazer validação do middleware
   process.env.JWT_SECRET = 'test-jwt-secret-0123456789-abcdef-XYZ'
   process.env.ASAAS_ENV = 'sandbox'
+
+  // Ensure required tables exist for integration tests
+  await runMigrationsIfNeeded()
 })
 
 afterAll(async () => {

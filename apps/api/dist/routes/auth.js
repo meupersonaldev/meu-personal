@@ -1,10 +1,45 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
+const crypto_1 = require("crypto");
+const https = __importStar(require("https"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const zod_1 = require("zod");
 const resend_1 = require("resend");
@@ -12,21 +47,72 @@ const supabase_1 = require("../lib/supabase");
 const franqueadora_contacts_service_1 = require("../services/franqueadora-contacts.service");
 const audit_1 = require("../middleware/audit");
 const router = express_1.default.Router();
+async function isPasswordPwned(password) {
+    const sha1 = (0, crypto_1.createHash)('sha1').update(password).digest('hex').toUpperCase();
+    const prefix = sha1.slice(0, 5);
+    const suffix = sha1.slice(5);
+    try {
+        const text = await new Promise((resolve, reject) => {
+            const req = https.request(`https://api.pwnedpasswords.com/range/${prefix}`, { method: 'GET', headers: { 'Add-Padding': 'true' } }, (res) => {
+                let data = '';
+                res.on('data', (chunk) => { data += chunk; });
+                res.on('end', () => resolve(data));
+            });
+            req.on('error', reject);
+            req.end();
+        });
+        const lines = text.split('\n');
+        for (const line of lines) {
+            const [h, count] = line.trim().split(':');
+            if (h === suffix && Number(count) > 0)
+                return true;
+        }
+        return false;
+    }
+    catch {
+        return false;
+    }
+}
+function isStrongPassword(password) {
+    if (!password || password.length < 12)
+        return false;
+    const hasLower = /[a-z]/.test(password);
+    const hasUpper = /[A-Z]/.test(password);
+    const hasDigit = /\d/.test(password);
+    const hasSymbol = /[^A-Za-z0-9]/.test(password);
+    return hasLower && hasUpper && hasDigit && hasSymbol;
+}
 function normalizeCref(v) {
     if (!v)
-        return v;
-    return v.toUpperCase().replace(/\s+/g, ' ').trim();
+        return null;
+    let normalized = v.toUpperCase().trim();
+    if (normalized.startsWith('CREF')) {
+        normalized = normalized.substring(4).trim();
+    }
+    normalized = normalized.replace(/[^0-9A-Z\-\/]/g, '');
+    const match = normalized.match(/^(\d{4,6})[\-]?([A-Z])?[\/-]?([A-Z]{2})?$/);
+    if (match) {
+        const [, number, category, uf] = match;
+        let result = number;
+        if (category)
+            result += `-${category}`;
+        if (uf)
+            result += `/${uf}`;
+        return result;
+    }
+    return normalized || null;
 }
 const loginSchema = zod_1.z.object({
     email: zod_1.z.string().email('Email inválido'),
-    password: zod_1.z.string().min(6, 'Senha deve ter pelo menos 6 caracteres')
+    password: zod_1.z.string().min(1, 'Senha é obrigatória')
 });
 const registerSchema = zod_1.z.object({
     name: zod_1.z.string().min(2, 'Nome deve ter pelo menos 2 caracteres'),
     email: zod_1.z.string().email('Email inválido'),
-    password: zod_1.z.string().min(6, 'Senha deve ter pelo menos 6 caracteres'),
-    phone: zod_1.z.string().optional(),
+    password: zod_1.z.string().min(12, 'Senha deve ter pelo menos 12 caracteres'),
+    phone: zod_1.z.string().min(8, 'Telefone é obrigatório'),
     cpf: zod_1.z.string().min(11, 'CPF deve ter 11 dígitos').max(14, 'CPF inválido'),
+    gender: zod_1.z.enum(['MALE', 'FEMALE', 'NON_BINARY', 'OTHER', 'PREFER_NOT_TO_SAY']),
     role: zod_1.z.enum(['STUDENT', 'TEACHER']).default('STUDENT'),
     cref: zod_1.z.string().optional(),
     specialties: zod_1.z.array(zod_1.z.string()).optional()
@@ -42,7 +128,7 @@ router.post('/login', (0, audit_1.auditAuthEvent)('LOGIN'), async (req, res) => 
         const { email, password } = loginSchema.parse(req.body);
         const { data: users, error: userError } = await supabase_1.supabase
             .from('users')
-            .select('id, name, email, phone, role, credits, avatar_url, is_active, password_hash, password')
+            .select('id, name, email, phone, role, credits, avatar_url, is_active, password_hash, password, approval_status')
             .eq('email', email)
             .eq('is_active', true)
             .single();
@@ -104,7 +190,8 @@ router.post('/login', (0, audit_1.auditAuthEvent)('LOGIN'), async (req, res) => 
                 role: users.role,
                 credits: users.credits,
                 avatarUrl: users.avatar_url,
-                isActive: users.is_active
+                isActive: users.is_active,
+                approval_status: users.approval_status
             }
         });
     }
@@ -122,14 +209,18 @@ router.post('/login', (0, audit_1.auditAuthEvent)('LOGIN'), async (req, res) => 
 });
 router.post('/register', (0, audit_1.auditSensitiveOperation)('CREATE', 'users'), async (req, res) => {
     try {
+        console.log('JWT_SECRET configurado:', process.env.JWT_SECRET ? `Sim (${process.env.JWT_SECRET.length} chars)` : 'Não');
         const userData = registerSchema.parse(req.body);
         if (userData.role === 'TEACHER') {
             if (!userData.cref || !userData.cref.trim()) {
                 return res.status(400).json({ message: 'CREF é obrigatório para professores' });
             }
-            if (!userData.specialties || userData.specialties.length === 0) {
-                return res.status(400).json({ message: 'Informe ao menos uma especialidade' });
-            }
+        }
+        if (!isStrongPassword(userData.password)) {
+            return res.status(400).json({ message: 'Senha fraca. Mínimo 12 caracteres, com dígito, minúscula, maiúscula e símbolo.' });
+        }
+        if (await isPasswordPwned(userData.password)) {
+            return res.status(400).json({ message: 'Senha vazada ou muito comum. Escolha outra senha.' });
         }
         const sanitizedCpf = userData.cpf.replace(/\D/g, '');
         const { data: existingUser, error: checkError } = await supabase_1.supabase
@@ -158,15 +249,20 @@ router.post('/register', (0, audit_1.auditSensitiveOperation)('CREATE', 'users')
             .select('id')
             .eq('is_active', true)
             .single();
+        const crefNormalized = userData.role === 'TEACHER' && userData.cref
+            ? normalizeCref(userData.cref)
+            : null;
         const newUser = {
             name: userData.name,
             email: userData.email,
             phone: userData.phone || null,
             cpf: sanitizedCpf,
+            cref: crefNormalized,
             role: userData.role,
             credits: userData.role === 'STUDENT' ? 5 : 0,
             is_active: true,
             password_hash: passwordHash,
+            gender: userData.gender,
             franchisor_id: franqueadora?.id || null,
             franchise_id: null
         };
@@ -190,7 +286,6 @@ router.post('/register', (0, audit_1.auditSensitiveOperation)('CREATE', 'users')
             console.warn('Falha ao sincronizar contato da franqueadora:', contactError);
         }
         if (userData.role === 'TEACHER') {
-            const crefNormalized = normalizeCref(userData.cref || '');
             const { error: profileError } = await supabase_1.supabase
                 .from('teacher_profiles')
                 .insert([{
@@ -209,8 +304,21 @@ router.post('/register', (0, audit_1.auditSensitiveOperation)('CREATE', 'users')
                 console.error('Erro ao criar perfil de professor:', profileError);
                 return res.status(500).json({ message: 'Erro ao criar perfil de professor' });
             }
+            try {
+                await supabase_1.supabase
+                    .from('approval_requests')
+                    .insert({
+                    type: 'teacher_registration',
+                    user_id: createdUser.id,
+                    requested_data: { cref: crefNormalized || null }
+                });
+            }
+            catch (e) {
+                console.warn('Falha ao criar approval_request de professor:', e);
+            }
         }
-        const jwtSecret = process.env.JWT_SECRET;
+        const isProd = process.env.NODE_ENV === 'production';
+        const jwtSecret = process.env.JWT_SECRET || (!isProd ? 'dev-insecure-jwt-secret-please-set-env-32chars-123456' : '');
         if (!jwtSecret || jwtSecret.length < 32) {
             throw new Error('JWT_SECRET deve ter pelo menos 32 caracteres para segurança');
         }
@@ -234,6 +342,7 @@ router.post('/register', (0, audit_1.auditSensitiveOperation)('CREATE', 'users')
                 email: createdUser.email,
                 phone: createdUser.phone,
                 role: createdUser.role,
+                gender: createdUser.gender,
                 credits: createdUser.credits,
                 avatarUrl: createdUser.avatar_url,
                 isActive: createdUser.is_active
@@ -285,7 +394,8 @@ router.get('/me', async (req, res) => {
                 role: user.role,
                 credits: user.credits,
                 avatarUrl: user.avatar_url,
-                isActive: user.is_active
+                isActive: user.is_active,
+                approval_status: user.approval_status
             }
         });
     }
@@ -374,7 +484,7 @@ router.post('/forgot-password', async (req, res) => {
 router.post('/reset-password', (0, audit_1.auditSensitiveOperation)('SENSITIVE_CHANGE', 'users'), async (req, res) => {
     try {
         const { password, token } = zod_1.z.object({
-            password: zod_1.z.string().min(6, 'Senha deve ter pelo menos 6 caracteres'),
+            password: zod_1.z.string().min(12, 'Senha deve ter pelo menos 12 caracteres'),
             token: zod_1.z.string().min(1, 'Token é obrigatório')
         }).parse(req.body);
         const isProd = process.env.NODE_ENV === 'production';
@@ -398,6 +508,12 @@ router.post('/reset-password', (0, audit_1.auditSensitiveOperation)('SENSITIVE_C
         const isValidToken = await bcryptjs_1.default.compare(token, user.reset_token_hash);
         if (!isValidToken) {
             return res.status(401).json({ message: 'Token inválido' });
+        }
+        if (!isStrongPassword(password)) {
+            return res.status(400).json({ message: 'Senha fraca. Mínimo 12 caracteres, com dígito, minúscula, maiúscula e símbolo.' });
+        }
+        if (await isPasswordPwned(password)) {
+            return res.status(400).json({ message: 'Senha vazada ou muito comum. Escolha outra senha.' });
         }
         const passwordHash = await bcryptjs_1.default.hash(password, 10);
         await supabase_1.supabase

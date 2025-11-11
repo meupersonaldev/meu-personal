@@ -7,6 +7,8 @@ const express_1 = __importDefault(require("express"));
 const zod_1 = require("zod");
 const supabase_1 = require("../lib/supabase");
 const asaas_service_1 = require("../services/asaas.service");
+const auth_1 = require("../middleware/auth");
+const approval_1 = require("../middleware/approval");
 const router = express_1.default.Router();
 const studentPackagePurchaseSchema = zod_1.z.object({
     student_id: zod_1.z.string().uuid(),
@@ -94,7 +96,6 @@ router.post('/student/purchase-package', async (req, res) => {
                 package_id: package_.id,
                 teacher_id: teacher.id,
                 credits_to_add: package_.credits_included,
-                hours_to_gift_teacher: 1,
                 asaas_payment_id: paymentResult.data.id,
                 payment_method: data.payment_method
             }
@@ -137,7 +138,7 @@ router.post('/student/purchase-package', async (req, res) => {
         res.status(500).json({ error: 'Erro interno do servidor' });
     }
 });
-router.post('/teacher/purchase-hours', async (req, res) => {
+router.post('/teacher/purchase-hours', auth_1.requireAuth, approval_1.requireApprovedTeacher, async (req, res) => {
     try {
         const data = teacherHoursPurchaseSchema.parse(req.body);
         const { data: teacher, error: teacherError } = await supabase_1.supabase
@@ -253,82 +254,6 @@ router.post('/teacher/purchase-hours', async (req, res) => {
         }
         console.error('Erro ao processar compra:', error);
         res.status(500).json({ error: 'Erro interno do servidor' });
-    }
-});
-router.post('/webhook/asaas', async (req, res) => {
-    try {
-        const event = req.body;
-        console.log('Webhook Asaas recebido:', event.event, event.payment?.id);
-        if (event.event === 'PAYMENT_RECEIVED' || event.event === 'PAYMENT_CONFIRMED') {
-            const paymentId = event.payment.id;
-            const externalReference = event.payment.externalReference;
-            const { data: transaction, error: transactionError } = await supabase_1.supabase
-                .from('transactions')
-                .select('*')
-                .eq('reference_id', paymentId)
-                .single();
-            if (transactionError || !transaction) {
-                console.error('Transação não encontrada:', paymentId);
-                return res.sendStatus(200);
-            }
-            if (transaction.status === 'COMPLETED') {
-                console.log('Transação já processada:', transaction.id);
-                return res.sendStatus(200);
-            }
-            const metadata = transaction.metadata;
-            if (externalReference?.startsWith('STUDENT_PACKAGE_')) {
-                await supabase_1.supabase.rpc('add_credits', {
-                    user_id: transaction.user_id,
-                    credits_amount: metadata.credits_to_add
-                });
-                const giftedHours = Math.max(0, Math.floor(Number(metadata.hours_to_gift_teacher || 0)));
-                if (giftedHours > 0 && metadata.teacher_id) {
-                    await supabase_1.supabase.rpc('add_teacher_hours', {
-                        teacher_id: metadata.teacher_id,
-                        hours_amount: giftedHours
-                    });
-                }
-                await supabase_1.supabase
-                    .from('notifications')
-                    .insert({
-                    user_id: metadata.teacher_id,
-                    type: 'HOURS_GIFTED',
-                    title: 'Você ganhou horas!',
-                    message: `Parabéns! Você ganhou ${giftedHours}h de brinde por ter sido escolhido por um novo aluno.`,
-                    data: {
-                        student_id: transaction.user_id,
-                        hours_gifted: giftedHours
-                    }
-                });
-                console.log(`✅ Aluno ${transaction.user_id} recebeu ${metadata.credits_to_add} créditos`);
-                console.log(`🎁 Professor ${metadata.teacher_id} ganhou ${giftedHours}h de brinde`);
-            }
-            if (externalReference?.startsWith('TEACHER_HOURS_')) {
-                const hoursToAdd = Math.max(0, Math.floor(Number(metadata.hours_to_add || 0)));
-                if (hoursToAdd > 0) {
-                    await supabase_1.supabase.rpc('add_teacher_hours', {
-                        teacher_id: transaction.user_id,
-                        hours_amount: hoursToAdd
-                    });
-                    console.log(`✅ Professor ${transaction.user_id} recebeu ${hoursToAdd}h`);
-                }
-                else {
-                    console.warn('Compra de horas recebida sem quantidade válida:', metadata);
-                }
-            }
-            await supabase_1.supabase
-                .from('transactions')
-                .update({
-                status: 'COMPLETED',
-                completed_at: new Date().toISOString()
-            })
-                .eq('id', transaction.id);
-        }
-        res.sendStatus(200);
-    }
-    catch (error) {
-        console.error('Erro ao processar webhook:', error);
-        res.sendStatus(500);
     }
 });
 router.get('/academy/:academy_id', async (req, res) => {

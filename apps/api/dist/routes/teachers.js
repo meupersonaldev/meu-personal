@@ -9,7 +9,7 @@ const supabase_1 = require("../lib/supabase");
 const auth_1 = require("../middleware/auth");
 const booking_status_1 = require("../utils/booking-status");
 const router = express_1.default.Router();
-const ADMIN_ROLES = ['FRANQUEADORA', 'FRANQUIA', 'SUPER_ADMIN', 'ADMIN'];
+const ADMIN_ROLES = ['FRANCHISE_ADMIN', 'FRANQUEADORA', 'FRANQUIA', 'SUPER_ADMIN', 'ADMIN'];
 const TEACHER_ROLES = ['TEACHER'];
 const hasAdminAccess = (user) => Boolean(user?.role && ADMIN_ROLES.includes(user.role));
 const hasTeacherSelfAccess = (user, teacherId) => Boolean(user && teacherId && user.role && TEACHER_ROLES.includes(user.role) && user.userId === teacherId);
@@ -29,6 +29,128 @@ const ensureAdminScope = (req, res) => {
     }
     return true;
 };
+router.get('/by-academy', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANCHISE_ADMIN', 'FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']), async (req, res) => {
+    try {
+        const { academy_id } = req.query;
+        if (!academy_id) {
+            return res.status(400).json({ error: 'academy_id é obrigatório' });
+        }
+        const { data: links, error: linksErr } = await supabase_1.supabase
+            .from('academy_teachers')
+            .select(`
+        id,
+        teacher_id,
+        academy_id,
+        status,
+        created_at,
+        users:teacher_id (
+          id,
+          name,
+          email,
+          phone,
+          avatar_url,
+          is_active,
+          created_at,
+          role
+        )
+      `)
+            .eq('academy_id', academy_id)
+            .eq('status', 'active');
+        if (linksErr) {
+            return res.status(500).json({ error: 'Erro ao buscar professores' });
+        }
+        const base = (links || []).filter((l) => l.users);
+        const enriched = await Promise.all(base.map(async (item) => {
+            const teacherId = item.users.id;
+            const [allAcademyTeachers, profileRow, subscriptions] = await Promise.all([
+                supabase_1.supabase
+                    .from('academy_teachers')
+                    .select(`
+            *,
+            academies:academy_id (
+              id,
+              name,
+              city,
+              state
+            )
+          `)
+                    .eq('teacher_id', teacherId),
+                supabase_1.supabase
+                    .from('teacher_profiles')
+                    .select('*')
+                    .eq('user_id', teacherId)
+                    .single(),
+                supabase_1.supabase
+                    .from('teacher_subscriptions')
+                    .select(`
+            *,
+            teacher_plans (
+              name,
+              price,
+              features
+            )
+          `)
+                    .eq('teacher_id', teacherId)
+            ]);
+            const teacher = item.users;
+            const profile = profileRow?.data || null;
+            const subs = subscriptions?.data || [];
+            const allLinks = allAcademyTeachers?.data || [];
+            return {
+                id: teacher.id,
+                name: teacher.name || 'Professor',
+                email: teacher.email || '',
+                phone: teacher.phone || '',
+                avatar_url: teacher.avatar_url,
+                is_active: teacher.is_active,
+                created_at: teacher.created_at,
+                specialties: profile?.specialties || profile?.specialization || [],
+                status: item.status || 'active',
+                teacher_profiles: profile ? [profile] : [],
+                academy_teachers: allLinks,
+                teacher_subscriptions: subs
+            };
+        }));
+        return res.json({ teachers: enriched });
+    }
+    catch (error) {
+        console.error('Erro ao listar professores por academia:', error);
+        return res.status(500).json({ error: 'Erro interno do servidor' });
+    }
+});
+router.put('/:id/academy-link', auth_1.requireAuth, async (req, res) => {
+    try {
+        if (!ensureAdminScope(req, res)) {
+            return;
+        }
+        const { id } = req.params;
+        const { academy_id, status, commission_rate } = req.body || {};
+        if (!academy_id) {
+            return res.status(400).json({ error: 'academy_id é obrigatório' });
+        }
+        const updates = { updated_at: new Date().toISOString() };
+        if (status !== undefined)
+            updates.status = status;
+        if (commission_rate !== undefined)
+            updates.commission_rate = commission_rate;
+        const { data, error } = await supabase_1.supabase
+            .from('academy_teachers')
+            .update(updates)
+            .eq('teacher_id', id)
+            .eq('academy_id', academy_id)
+            .select('*')
+            .single();
+        if (error) {
+            console.error('Erro ao atualizar vínculo professor-academia:', error);
+            return res.status(500).json({ error: 'Erro ao atualizar vínculo com academia' });
+        }
+        res.json({ link: data });
+    }
+    catch (error) {
+        console.error('Erro interno (academy-link):', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    }
+});
 const teacherSchema = zod_1.z.object({
     bio: zod_1.z.string().optional(),
     specialties: zod_1.z.array(zod_1.z.string()).optional(),
@@ -331,7 +453,9 @@ router.get('/', auth_1.requireAuth, async (req, res) => {
           specialization,
           hourly_rate,
           availability,
-          is_available
+          is_available,
+          rating_avg,
+          rating_count
         ),
         academy_teachers!inner (
           id,
@@ -399,7 +523,13 @@ router.get('/', auth_1.requireAuth, async (req, res) => {
             filteredTeachers = filteredTeachers.filter(teacher => teacher.academy?.state?.toLowerCase() === state.toLowerCase());
         }
         filteredTeachers = filteredTeachers.filter(teacher => teacher.teacher_profiles?.[0]?.is_available === true);
-        res.json(filteredTeachers);
+        const enhanced = filteredTeachers.map((t) => {
+            const profile = t.teacher_profiles?.[0];
+            const avg = profile?.rating_avg != null ? Number(profile.rating_avg) : 0;
+            const count = profile?.rating_count != null ? Number(profile.rating_count) : 0;
+            return { ...t, rating_avg: avg, rating_count: count };
+        });
+        res.json(enhanced);
     }
     catch (error) {
         console.error('Erro interno:', error);
@@ -591,7 +721,9 @@ router.get('/:id', auth_1.requireAuth, async (req, res) => {
           specialties: specialization,
           hourly_rate,
           availability,
-          is_available
+          is_available,
+          rating_avg,
+          rating_count
         )
       `)
             .eq('id', id)
@@ -630,10 +762,67 @@ router.get('/:id', auth_1.requireAuth, async (req, res) => {
                 ? [{ ...newProfile, specialties: newProfile.specialization ?? [] }]
                 : [];
         }
+        const firstProfile = profiles?.[0];
+        const rCount = firstProfile?.rating_count != null ? Number(firstProfile.rating_count) : 0;
+        const rAvg = firstProfile?.rating_avg != null ? Number(firstProfile.rating_avg) : 0;
         res.json({
             ...teacher,
-            teacher_profiles: profiles
+            teacher_profiles: profiles,
+            rating_avg: rAvg,
+            rating_count: rCount
         });
+    }
+    catch (error) {
+        console.error('Erro interno:', error);
+        res.status(500).json({ error: 'Erro interno do servidor' });
+    }
+});
+router.get('/:id/ratings', auth_1.requireAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const limit = Math.min(Math.max(parseInt(String(req.query.limit || '10')), 1), 50);
+        const offset = Math.max(parseInt(String(req.query.offset || '0')), 0);
+        const { data: teacher, error: tErr } = await supabase_1.supabase
+            .from('users')
+            .select('id')
+            .eq('id', id)
+            .eq('role', 'TEACHER')
+            .single();
+        if (tErr || !teacher) {
+            return res.status(404).json({ error: 'Professor não encontrado' });
+        }
+        const rangeStart = offset;
+        const rangeEnd = offset + limit - 1;
+        const { data: rows, error } = await supabase_1.supabase
+            .from('teacher_ratings')
+            .select('id, rating, comment, created_at, student_id')
+            .eq('teacher_id', id)
+            .order('created_at', { ascending: false })
+            .range(rangeStart, rangeEnd);
+        if (error) {
+            console.error('Erro ao buscar avaliações:', error);
+            return res.status(500).json({ error: 'Erro ao buscar avaliações' });
+        }
+        const list = rows || [];
+        const studentIds = Array.from(new Set(list.map(r => r.student_id).filter(Boolean)));
+        let studentsMap = {};
+        if (studentIds.length > 0) {
+            const { data: students } = await supabase_1.supabase
+                .from('users')
+                .select('id, name, avatar_url')
+                .in('id', studentIds);
+            if (students) {
+                studentsMap = students.reduce((acc, s) => { acc[s.id] = s; return acc; }, {});
+            }
+        }
+        const ratings = list.map(r => ({
+            id: r.id,
+            rating: r.rating,
+            comment: r.comment,
+            created_at: r.created_at,
+            student: r.student_id ? studentsMap[r.student_id] || { id: r.student_id } : null
+        }));
+        res.json({ ratings });
     }
     catch (error) {
         console.error('Erro interno:', error);
@@ -655,6 +844,22 @@ router.put('/:id', auth_1.requireAuth, async (req, res) => {
             .single();
         if (teacherError || !teacher) {
             return res.status(404).json({ message: 'Professor não encontrado' });
+        }
+        const { name: uName, email: uEmail, phone: uPhone } = req.body || {};
+        if (uName !== undefined || uEmail !== undefined || uPhone !== undefined) {
+            const { error: userUpdateError } = await supabase_1.supabase
+                .from('users')
+                .update({
+                ...(uName !== undefined ? { name: uName } : {}),
+                ...(uEmail !== undefined ? { email: uEmail } : {}),
+                ...(uPhone !== undefined ? { phone: uPhone } : {}),
+                updated_at: new Date().toISOString()
+            })
+                .eq('id', id);
+            if (userUpdateError) {
+                console.error('Erro ao atualizar usuário (teacher):', userUpdateError);
+                return res.status(500).json({ message: 'Erro ao atualizar dados do usuário' });
+            }
         }
         const { specialties, ...rest } = updateData;
         const profileUpdate = {

@@ -12,6 +12,11 @@ exports.rateLimitConfig = {
         windowMs: 15 * 60 * 1000,
         maxRequests: 1000,
         message: 'Muitas requisições. Tente novamente em alguns minutos.'
+    },
+    ratings: {
+        windowMs: 60 * 1000,
+        maxRequests: 6,
+        message: 'Muitas avaliações enviadas. Tente novamente em instantes.'
     }
 };
 const createRateLimit = (config) => {
@@ -64,7 +69,22 @@ const createBlacklist = (blockedIPs) => {
 exports.createBlacklist = createBlacklist;
 const createUserRateLimit = (config) => {
     return (req, res, next) => {
-        return next();
+        const now = Date.now();
+        cleanupExpiredEntries(now);
+        const uid = req.user?.userId;
+        if (!uid)
+            return next();
+        const key = `user:${uid}:ratings:${config.windowMs}`;
+        const entry = store[key];
+        if (!entry || now > entry.resetTime) {
+            store[key] = { count: 1, resetTime: now + config.windowMs };
+            return next();
+        }
+        if (entry.count >= config.maxRequests) {
+            return res.status(429).json({ message: config.message });
+        }
+        entry.count += 1;
+        next();
     };
 };
 exports.createUserRateLimit = createUserRateLimit;

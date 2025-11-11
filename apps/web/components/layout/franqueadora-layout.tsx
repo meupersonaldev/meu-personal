@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import FranqueadoraSidebar from './franqueadora-sidebar'
 import { useFranqueadoraStore } from '@/lib/stores/franqueadora-store'
 import { Menu, X } from 'lucide-react'
@@ -13,6 +14,14 @@ interface FranqueadoraLayoutProps {
 export default function FranqueadoraLayout({ children }: FranqueadoraLayoutProps) {
   const { franqueadora, user } = useFranqueadoraStore()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const router = useRouter()
+
+  // Verificar se o usuário tem permissão para acessar a franqueadora
+  useEffect(() => {
+    if (user && user.role !== 'SUPER_ADMIN') {
+      router.push('/')
+    }
+  }, [user, router])
   
   return (
     <div className="min-h-screen">

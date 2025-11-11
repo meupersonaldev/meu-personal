@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const supabase_1 = require("../lib/supabase");
 const payment_intent_service_1 = require("../services/payment-intent.service");
+const provider_1 = require("../services/payments/provider");
 const notifications_1 = require("./notifications");
 const router = express_1.default.Router();
 router.post('/asaas', async (req, res) => {
@@ -25,20 +26,13 @@ router.post('/asaas', async (req, res) => {
                 return res.status(401).json({ error: 'Invalid webhook token' });
             }
         }
-        switch (event.event) {
-            case 'PAYMENT_CONFIRMED':
-            case 'PAYMENT_RECEIVED':
-                await payment_intent_service_1.paymentIntentService.processWebhook(event.payment.id, event.payment.status || 'CONFIRMED');
-                break;
-            case 'PAYMENT_OVERDUE':
-                await payment_intent_service_1.paymentIntentService.processWebhook(event.payment.id, 'OVERDUE');
-                break;
-            case 'PAYMENT_DELETED':
-            case 'PAYMENT_REFUNDED':
-                await payment_intent_service_1.paymentIntentService.processWebhook(event.payment.id, 'CANCELED');
-                break;
-            default:
-                console.log('Evento não tratado:', event.event);
+        const provider = (0, provider_1.getPaymentProvider)();
+        const parsed = provider.parseWebhook ? provider.parseWebhook(event) : { providerId: event?.payment?.id || null, status: event?.payment?.status || null };
+        if (parsed.providerId && parsed.status) {
+            await payment_intent_service_1.paymentIntentService.processWebhook(parsed.providerId, parsed.status);
+        }
+        else {
+            console.log('Evento não tratado:', event?.event);
         }
         res.status(200).json({ received: true });
     }

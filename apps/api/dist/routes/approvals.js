@@ -131,14 +131,27 @@ router.put('/:id', async (req, res) => {
         if (status === 'approved') {
             try {
                 if (request.type === 'teacher_registration') {
-                    await supabase_1.supabase
+                    const { data: existingProfile } = await supabase_1.supabase
                         .from('teacher_profiles')
-                        .insert({
-                        user_id: request.user_id,
-                        specialties: request.requested_data.specialties || [],
-                        hourly_rate: request.requested_data.hourly_rate || 80.00,
-                        is_available: true
-                    });
+                        .select('id')
+                        .eq('user_id', request.user_id)
+                        .maybeSingle();
+                    if (existingProfile) {
+                        await supabase_1.supabase
+                            .from('teacher_profiles')
+                            .update({ is_available: true, updated_at: new Date().toISOString() })
+                            .eq('id', existingProfile.id);
+                    }
+                    else {
+                        await supabase_1.supabase
+                            .from('teacher_profiles')
+                            .insert({
+                            user_id: request.user_id,
+                            specialties: request.requested_data?.specialties || [],
+                            hourly_rate: request.requested_data?.hourly_rate || 80.0,
+                            is_available: true
+                        });
+                    }
                     const { data: franchiseAdmin } = await supabase_1.supabase
                         .from('franqueadora_admins')
                         .select('user_id')

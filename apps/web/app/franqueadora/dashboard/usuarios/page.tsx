@@ -19,8 +19,7 @@ import {
   RefreshCw,
   CheckCircle,
   XCircle,
-  Image as ImageIcon,
-  Clock
+  Image as ImageIcon
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -98,7 +97,6 @@ function UsuariosPageContent() {
       })
 
       if (data) {
-        console.log('Dados recebidos:', data.data.map(u => ({ name: u.name, status: u.approval_status })))
         setUsersData({
           users: data.data,
           pagination: data.pagination
@@ -143,7 +141,6 @@ function UsuariosPageContent() {
   const handleApproveUser = async () => {
     if (!selectedUser) return
     
-    console.log('Aprovando usuário:', selectedUser.id, selectedUser.name)
     setApprovalLoading(true)
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
@@ -156,9 +153,7 @@ function UsuariosPageContent() {
         }
       })
 
-      console.log('Response status:', response.status)
       const responseData = await response.json()
-      console.log('Response data:', responseData)
 
       if (!response.ok) {
         throw new Error(responseData.error || 'Erro ao aprovar usuário')
@@ -167,9 +162,7 @@ function UsuariosPageContent() {
       toast.success('Profissional aprovado com sucesso!')
       setShowApprovalModal(false)
       await fetchUsuarios() // Recarregar lista
-      console.log('Lista recarregada')
-    } catch (error) {
-      console.error('Error approving user:', error)
+    } catch {
       toast.error('Erro ao aprovar profissional')
     } finally {
       setApprovalLoading(false)
@@ -179,7 +172,6 @@ function UsuariosPageContent() {
   const handleRejectUser = async () => {
     if (!selectedUser) return
     
-    console.log('Reprovando usuário:', selectedUser.id, selectedUser.name)
     setApprovalLoading(true)
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
@@ -192,9 +184,7 @@ function UsuariosPageContent() {
         }
       })
 
-      console.log('Response status:', response.status)
       const responseData = await response.json()
-      console.log('Response data:', responseData)
 
       if (!response.ok) {
         throw new Error(responseData.error || 'Erro ao reprovar usuário')
@@ -203,9 +193,7 @@ function UsuariosPageContent() {
       toast.success('Profissional reprovado')
       setShowApprovalModal(false)
       await fetchUsuarios() // Recarregar lista
-      console.log('Lista recarregada')
-    } catch (error) {
-      console.error('Error rejecting user:', error)
+    } catch {
       toast.error('Erro ao reprovar profissional')
     } finally {
       setApprovalLoading(false)
@@ -941,7 +929,12 @@ function UsuariosPageContent() {
                       <div className="mt-1 flex flex-wrap gap-3 text-sm text-gray-600">
                         <span className="flex items-center gap-1"><Mail className="h-4 w-4" />{selectedUser.email}</span>
                         <span className="flex items-center gap-1"><Phone className="h-4 w-4" />{formatarTelefone(selectedUser.phone)}</span>
-                        <span className="flex items-center gap-1">CPF: <span title={selectedUser.cpf || ''}>{selectedUser.cpf ? formatarCPF(selectedUser.cpf) : '—'}</span></span>
+                        {selectedUser.cpf && (
+                          <span className="flex items-center gap-1">CPF: <span title={selectedUser.cpf}>{formatarCPF(selectedUser.cpf)}</span></span>
+                        )}
+                        {selectedUser.cref && (
+                          <span className="flex items-center gap-1">CREF: {selectedUser.cref}</span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -953,6 +946,10 @@ function UsuariosPageContent() {
                       <div>
                         <label className="block text-sm text-gray-500">CPF</label>
                         <p className="text-sm font-medium text-gray-900" title={selectedUser.cpf || ''}>{selectedUser.cpf ? formatarCPF(selectedUser.cpf) : '—'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm text-gray-500">CREF</label>
+                        <p className="text-sm font-medium text-gray-900">{selectedUser.cref || '—'}</p>
                       </div>
                       <div>
                         <label className="block text-sm text-gray-500">Tipo</label>

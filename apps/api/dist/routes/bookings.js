@@ -10,6 +10,8 @@ const franqueadora_contacts_service_1 = require("../services/franqueadora-contac
 const notifications_1 = require("./notifications");
 const booking_canonical_service_1 = require("../services/booking-canonical.service");
 const auth_1 = require("../middleware/auth");
+const approval_1 = require("../middleware/approval");
+const rateLimit_1 = require("../middleware/rateLimit");
 const errorHandler_1 = require("../middleware/errorHandler");
 const booking_status_1 = require("../utils/booking-status");
 const router = express_1.default.Router();
@@ -42,6 +44,8 @@ router.get('/', auth_1.requireAuth, (0, errorHandler_1.asyncErrorHandler)(async 
         const franchiseAddressParts = unit.id
             ? [unit.address, unit.city, unit.state]
             : [academy.city, academy.state];
+        const startIso = booking.start_at || booking.date;
+        const fallbackCutoff = startIso ? new Date(new Date(startIso).getTime() - 4 * 60 * 60 * 1000).toISOString() : undefined;
         return {
             id: booking.id,
             studentId: booking.student_id || undefined,
@@ -57,7 +61,8 @@ router.get('/', auth_1.requireAuth, (0, errorHandler_1.asyncErrorHandler)(async 
             notes: booking.notes || undefined,
             creditsCost: booking.credits_cost ?? 0,
             source: booking.source || undefined,
-            hourlyRate: booking.hourly_rate || undefined
+            hourlyRate: booking.hourly_rate || undefined,
+            cancellableUntil: booking.cancellable_until || fallbackCutoff
         };
     };
     if (!unitId && !teacherId && !studentId) {
@@ -80,7 +85,8 @@ router.get('/', auth_1.requireAuth, (0, errorHandler_1.asyncErrorHandler)(async 
         status,
         status_canonical,
         notes,
-        credits_cost
+        credits_cost,
+        cancellable_until
       `)
             .eq('student_id', studentId)
             .order('date', { ascending: true });
@@ -149,7 +155,8 @@ router.get('/', auth_1.requireAuth, (0, errorHandler_1.asyncErrorHandler)(async 
                 duration: booking.duration ?? 60,
                 status: (0, booking_status_1.normalizeBookingStatus)(booking.status, booking.status_canonical),
                 notes: booking.notes || undefined,
-                creditsCost: booking.credits_cost ?? 0
+                creditsCost: booking.credits_cost ?? 0,
+                cancellableUntil: booking.cancellable_until || (booking.date ? new Date(new Date(booking.date).getTime() - 4 * 60 * 60 * 1000).toISOString() : undefined)
             };
         });
         return res.json({ bookings });
@@ -172,7 +179,8 @@ router.get('/', auth_1.requireAuth, (0, errorHandler_1.asyncErrorHandler)(async 
         status_canonical,
         notes,
         credits_cost,
-        source
+        source,
+        cancellable_until
       `)
             .eq('teacher_id', teacherId)
             .order('date', { ascending: true });
@@ -306,7 +314,8 @@ router.get('/', auth_1.requireAuth, (0, errorHandler_1.asyncErrorHandler)(async 
                 notes: booking.notes || undefined,
                 creditsCost: booking.credits_cost ?? 0,
                 source: booking.source || undefined,
-                hourlyRate
+                hourlyRate,
+                cancellableUntil: booking.cancellable_until || (booking.date ? new Date(new Date(booking.date).getTime() - 4 * 60 * 60 * 1000).toISOString() : undefined)
             };
         });
         return res.json({ bookings });
@@ -345,6 +354,7 @@ router.get('/', auth_1.requireAuth, (0, errorHandler_1.asyncErrorHandler)(async 
       status_canonical,
       notes,
       credits_cost,
+      cancellable_until,
       student:users!bookings_student_id_fkey (id, name),
       teacher:users!bookings_teacher_id_fkey (id, name),
       unit:units!bookings_unit_id_fk (id, name, city, state, address),
@@ -410,7 +420,7 @@ router.get('/:id', auth_1.requireAuth, (0, errorHandler_1.asyncErrorHandler)(asy
     }
     res.json({ booking });
 }));
-router.post('/', auth_1.requireAuth, (0, auth_1.requireRole)(['STUDENT', 'ALUNO', 'TEACHER', 'PROFESSOR', 'FRANQUIA', 'FRANQUEADORA']), (0, errorHandler_1.asyncErrorHandler)(async (req, res) => {
+router.post('/', auth_1.requireAuth, (0, auth_1.requireRole)(['STUDENT', 'ALUNO', 'TEACHER', 'PROFESSOR', 'FRANQUIA', 'FRANQUEADORA']), approval_1.requireApprovedTeacher, (0, errorHandler_1.asyncErrorHandler)(async (req, res) => {
     const bookingData = createBookingSchema.parse(req.body);
     if (bookingData.studentId === null) {
         bookingData.studentId = undefined;
@@ -559,6 +569,99 @@ router.delete('/:id', auth_1.requireAuth, (0, errorHandler_1.asyncErrorHandler)(
     res.json({
         message: 'Agendamento cancelado com sucesso',
         status: 'CANCELED'
+    });
+}));
+router.get('/:id/rating', auth_1.requireAuth, (0, errorHandler_1.asyncErrorHandler)(async (req, res) => {
+    const { id } = req.params;
+    const user = req.user;
+    const { data: booking, error: getError } = await supabase_1.supabase
+        .from('bookings')
+        .select('id, student_id, teacher_id')
+        .eq('id', id)
+        .single();
+    if (getError || !booking) {
+        return res.status(404).json({ error: 'Agendamento não encontrado' });
+    }
+    if (booking.student_id !== user.userId && booking.teacher_id !== user.userId && !['ADMIN', 'FRANQUEADORA', 'FRANQUIA'].includes(user.role)) {
+        return res.status(403).json({ error: 'Acesso não autorizado' });
+    }
+    const { data: ratingRow } = await supabase_1.supabase
+        .from('teacher_ratings')
+        .select('*')
+        .eq('booking_id', id)
+        .single();
+    if (!ratingRow)
+        return res.json({ rating: null });
+    return res.json({ rating: ratingRow });
+}));
+router.post('/:id/rating', auth_1.requireAuth, (0, rateLimit_1.createUserRateLimit)(rateLimit_1.rateLimitConfig.ratings), (0, errorHandler_1.asyncErrorHandler)(async (req, res) => {
+    const { id } = req.params;
+    const user = req.user;
+    const ratingSchema = zod_1.z.object({
+        rating: zod_1.z.number().int().min(1).max(5),
+        comment: zod_1.z.string().max(1000).optional()
+    });
+    const { rating, comment } = ratingSchema.parse(req.body);
+    const { data: booking, error: getError } = await supabase_1.supabase
+        .from('bookings')
+        .select('id, student_id, teacher_id, status, status_canonical, date')
+        .eq('id', id)
+        .single();
+    if (getError || !booking) {
+        return res.status(404).json({ error: 'Agendamento não encontrado' });
+    }
+    if (booking.student_id !== user.userId) {
+        return res.status(403).json({ error: 'Você não pode avaliar este agendamento' });
+    }
+    const normalized = (0, booking_status_1.normalizeBookingStatus)(booking.status, booking.status_canonical);
+    if (normalized !== 'COMPLETED') {
+        return res.status(400).json({ error: 'A avaliação só é permitida para aulas concluídas' });
+    }
+    if (!booking.teacher_id) {
+        return res.status(400).json({ error: 'Agendamento sem professor associado' });
+    }
+    const payload = {
+        teacher_id: booking.teacher_id,
+        student_id: booking.student_id,
+        booking_id: booking.id,
+        rating,
+        comment: comment ?? null
+    };
+    const { data: upserted, error: upsertError } = await supabase_1.supabase
+        .from('teacher_ratings')
+        .upsert([payload], { onConflict: 'booking_id' })
+        .select()
+        .single();
+    if (upsertError) {
+        console.error('Erro ao salvar avaliação:', upsertError);
+        return res.status(500).json({ error: 'Erro ao salvar avaliação' });
+    }
+    const { data: ratingsRows, error: aggError } = await supabase_1.supabase
+        .from('teacher_ratings')
+        .select('rating')
+        .eq('teacher_id', booking.teacher_id);
+    if (aggError) {
+        console.error('Erro ao calcular média de avaliações:', aggError);
+    }
+    const rows = ratingsRows || [];
+    const count = rows.length;
+    const avg = count ? Number((rows.reduce((s, r) => s + (Number(r.rating) || 0), 0) / count).toFixed(2)) : 0;
+    try {
+        await supabase_1.supabase
+            .from('teacher_profiles')
+            .update({
+            rating_avg: avg,
+            rating_count: count,
+            updated_at: new Date().toISOString()
+        })
+            .eq('user_id', booking.teacher_id);
+    }
+    catch (e) {
+        console.warn('Falha ao atualizar cache de rating em teacher_profiles:', e);
+    }
+    res.json({
+        rating: upserted,
+        teacher_summary: { avg, count }
     });
 }));
 exports.default = router;

@@ -52,8 +52,31 @@ function isStrongPassword(password: string): boolean {
 }
 
 function normalizeCref(v?: string | null) {
-  if (!v) return v as any
-  return v.toUpperCase().replace(/\s+/g, ' ').trim()
+  if (!v) return null
+  
+  // Remover "CREF" do início se presente
+  let normalized = v.toUpperCase().trim()
+  if (normalized.startsWith('CREF')) {
+    normalized = normalized.substring(4).trim()
+  }
+  
+  // Remover espaços extras e caracteres inválidos, mantendo apenas números, letras, hífen e barra
+  normalized = normalized.replace(/[^0-9A-Z\-\/]/g, '')
+  
+  // Formato esperado: 12345-G/SP ou variações
+  // Garantir que está no formato correto
+  const match = normalized.match(/^(\d{4,6})[\-]?([A-Z])?[\/-]?([A-Z]{2})?$/)
+  
+  if (match) {
+    const [, number, category, uf] = match
+    let result = number
+    if (category) result += `-${category}`
+    if (uf) result += `/${uf}`
+    return result
+  }
+  
+  // Se não corresponder ao padrão, retornar normalizado básico
+  return normalized || null
 }
 
 // Schemas de validação
@@ -243,11 +266,16 @@ router.post('/register', auditSensitiveOperation('CREATE', 'users'), async (req,
       .eq('is_active', true)
       .single()
 
+    const crefNormalized = userData.role === 'TEACHER' && userData.cref 
+      ? normalizeCref(userData.cref) 
+      : null
+
     const newUser = {
       name: userData.name,
       email: userData.email,
       phone: userData.phone || null,
       cpf: sanitizedCpf, // Armazenar apenas números
+      cref: crefNormalized, // Armazenar CREF normalizado na tabela users
       role: userData.role,
       credits: userData.role === 'STUDENT' ? 5 : 0, // Créditos de boas-vindas
       is_active: true,
@@ -279,7 +307,6 @@ router.post('/register', auditSensitiveOperation('CREATE', 'users'), async (req,
     }
     // Se for professor, criar perfil de professor e abrir approval request
     if (userData.role === 'TEACHER') {
-      const crefNormalized = normalizeCref(userData.cref || '')
       const { error: profileError } = await supabase
         .from('teacher_profiles')
         .insert([{

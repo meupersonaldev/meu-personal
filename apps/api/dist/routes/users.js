@@ -14,9 +14,9 @@ const router = (0, express_1.Router)();
 const storage = multer_1.default.memoryStorage();
 const upload = (0, multer_1.default)({
     storage,
-    limits: { fileSize: 5 * 1024 * 1024 },
+    limits: { fileSize: 8 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
-        const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp', 'application/pdf'];
         if (allowedTypes.includes(file.mimetype)) {
             cb(null, true);
         }
@@ -51,20 +51,23 @@ router.get('/:id', auth_1.requireAuth, async (req, res) => {
 router.put('/:id', auth_1.requireAuth, async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, email, phone, bio } = req.body;
+        const { name, email, phone, bio, gender } = req.body;
         const user = req.user;
         const isAdmin = ['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN'].includes(user?.role);
         if (!isAdmin && user?.userId !== id) {
             return res.status(403).json({ error: 'Forbidden' });
         }
-        const { data, error } = await supabase_1.supabase
-            .from('users')
-            .update({
+        const updates = {
             name,
             email,
             phone,
             updated_at: new Date().toISOString()
-        })
+        };
+        if (typeof gender === 'string')
+            updates.gender = gender;
+        const { data, error } = await supabase_1.supabase
+            .from('users')
+            .update(updates)
             .eq('id', id)
             .select()
             .single();
@@ -89,7 +92,7 @@ router.put('/:id', auth_1.requireAuth, async (req, res) => {
 router.patch('/:id', auth_1.requireAuth, async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, email, cpf } = req.body;
+        const { name, email, cpf, gender } = req.body;
         const user = req.user;
         const isAdmin = ['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN'].includes(user?.role);
         if (!isAdmin && user?.userId !== id) {
@@ -100,6 +103,8 @@ router.patch('/:id', auth_1.requireAuth, async (req, res) => {
             updateData.name = name;
         if (email !== undefined)
             updateData.email = email;
+        if (gender !== undefined)
+            updateData.gender = gender;
         if (cpf !== undefined) {
             const cpfSanitized = String(cpf).replace(/\D/g, '');
             if (process.env.ASAAS_ENV === 'production' && cpfSanitized.length < 11) {
@@ -210,6 +215,96 @@ router.post('/:id/avatar', auth_1.requireAuth, upload.single('avatar'), async (r
     }
     catch (error) {
         console.error('Error uploading avatar:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+router.post('/:id/cref-card', auth_1.requireAuth, upload.single('file'), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const file = req.file;
+        const user = req.user;
+        if (user?.userId !== id) {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+        if (!file) {
+            return res.status(400).json({ error: 'Nenhum arquivo enviado' });
+        }
+        const fileExt = path_1.default.extname(file.originalname);
+        const fileName = `${id}-${(0, crypto_1.randomUUID)()}${fileExt}`;
+        const filePath = `cref-cards/${fileName}`;
+        const { error: uploadError } = await supabase_1.supabase.storage
+            .from('avatars')
+            .upload(filePath, file.buffer, {
+            contentType: file.mimetype,
+            upsert: true
+        });
+        if (uploadError)
+            throw uploadError;
+        const { data: { publicUrl } } = supabase_1.supabase.storage
+            .from('avatars')
+            .getPublicUrl(filePath);
+        const { error: updateError } = await supabase_1.supabase
+            .from('users')
+            .update({ cref_card_url: publicUrl, updated_at: new Date().toISOString() })
+            .eq('id', id);
+        if (updateError)
+            throw updateError;
+        res.json({ cref_card_url: publicUrl });
+    }
+    catch (error) {
+        console.error('Error uploading cref card:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+router.put('/:id/approve', auth_1.requireAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const user = req.user;
+        const isAdmin = ['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN', 'FRANCHISE_ADMIN'].includes(user?.role);
+        if (!isAdmin) {
+            return res.status(403).json({ error: 'Apenas administradores podem aprovar usuários' });
+        }
+        const { error } = await supabase_1.supabase
+            .from('users')
+            .update({
+            approval_status: 'approved',
+            approved_at: new Date().toISOString(),
+            approved_by: user.userId,
+            updated_at: new Date().toISOString()
+        })
+            .eq('id', id);
+        if (error)
+            throw error;
+        res.json({ message: 'Usuário aprovado com sucesso' });
+    }
+    catch (error) {
+        console.error('Error approving user:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+router.put('/:id/reject', auth_1.requireAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const user = req.user;
+        const isAdmin = ['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN', 'FRANCHISE_ADMIN'].includes(user?.role);
+        if (!isAdmin) {
+            return res.status(403).json({ error: 'Apenas administradores podem reprovar usuários' });
+        }
+        const { error } = await supabase_1.supabase
+            .from('users')
+            .update({
+            approval_status: 'rejected',
+            approved_at: new Date().toISOString(),
+            approved_by: user.userId,
+            updated_at: new Date().toISOString()
+        })
+            .eq('id', id);
+        if (error)
+            throw error;
+        res.json({ message: 'Usuário reprovado' });
+    }
+    catch (error) {
+        console.error('Error rejecting user:', error);
         res.status(500).json({ error: error.message });
     }
 });

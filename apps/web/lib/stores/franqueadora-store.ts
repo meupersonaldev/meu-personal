@@ -369,6 +369,13 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             set({ isLoading: false })
             return false
           }
+          
+          // Validar se o usuário é SUPER_ADMIN
+          if (data.user.role !== 'SUPER_ADMIN') {
+            set({ isLoading: false })
+            toast.error('Acesso negado. Apenas SUPER_ADMIN pode acessar a franqueadora.')
+            return false
+          }
           if (typeof document !== 'undefined') {
             const maxAge = 7 * 24 * 60 * 60
             const isProd = process.env.NODE_ENV === 'production'

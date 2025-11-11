@@ -131,7 +131,7 @@ router.get('/:id', async (req, res) => {
 });
 router.post('/', async (req, res) => {
     try {
-        const { name, email, phone, academy_id, plan_id, avatar_url } = req.body;
+        const { name, email, phone, academy_id, plan_id, avatar_url, credits } = req.body;
         if (!name || !email || !academy_id) {
             return res.status(400).json({
                 error: 'Nome, email e academia são obrigatórios'
@@ -155,6 +155,7 @@ router.post('/', async (req, res) => {
             phone,
             role: 'STUDENT',
             avatar_url,
+            credits: credits ?? 0,
             is_active: true
         })
             .select()
@@ -211,7 +212,7 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, email, phone, avatar_url, is_active, academy_id, plan_id, status } = req.body;
+        const { name, email, phone, avatar_url, is_active, academy_id, plan_id, status, credits } = req.body;
         const { data: existingStudent } = await supabase_1.supabase
             .from('users')
             .select('id')
@@ -245,6 +246,8 @@ router.put('/:id', async (req, res) => {
             userUpdates.avatar_url = avatar_url;
         if (is_active !== undefined)
             userUpdates.is_active = is_active;
+        if (credits !== undefined)
+            userUpdates.credits = credits;
         if (Object.keys(userUpdates).length > 0) {
             userUpdates.updated_at = new Date().toISOString();
             const { error: userError } = await supabase_1.supabase

@@ -217,29 +217,31 @@ class BookingCanonicalService {
         const franqueadoraId = await fetchFranqueadoraIdFromUnit(booking.unit_id);
         const hasStudent = Boolean(booking.student_id);
         if (hasStudent && booking.source === 'ALUNO') {
-            const balance = await balance_service_1.balanceService.getStudentBalance(booking.student_id, franqueadoraId);
-            await balance_service_1.balanceService.updateStudentBalance(booking.student_id, franqueadoraId, {
-                total_consumed: Math.max(0, balance.total_consumed - 1)
-            });
-            await balance_service_1.balanceService.createStudentTransaction(booking.student_id, franqueadoraId, 'REFUND', 1, {
-                unitId: booking.unit_id,
-                source: 'SYSTEM',
-                bookingId: bookingId,
-                metaJson: {
-                    booking_id: bookingId,
-                    actor: userId,
-                    reason: 'booking_cancelled_refund_student'
-                }
-            });
-            await balance_service_1.balanceService.revokeProfessorHours(booking.teacher_id, franqueadoraId, 1, bookingId, {
-                unitId: booking.unit_id,
-                source: 'SYSTEM',
-                metaJson: {
-                    booking_id: bookingId,
-                    actor: userId,
-                    reason: 'booking_cancelled'
-                }
-            });
+            const nowUtc = new Date();
+            const cutoff = booking.cancellable_until ? new Date(booking.cancellable_until) : new Date(new Date(booking.start_at || booking.date).getTime() - 4 * 60 * 60 * 1000);
+            const freeCancel = nowUtc <= cutoff;
+            if (freeCancel) {
+                await balance_service_1.balanceService.revokeProfessorHours(booking.teacher_id, franqueadoraId, 1, bookingId, {
+                    unitId: booking.unit_id,
+                    source: 'SYSTEM',
+                    metaJson: {
+                        booking_id: bookingId,
+                        actor: userId,
+                        reason: 'booking_cancelled_before_4h'
+                    }
+                });
+            }
+            else {
+                await balance_service_1.balanceService.consumeStudentClasses(booking.student_id, franqueadoraId, 1, bookingId, {
+                    unitId: booking.unit_id,
+                    source: 'ALUNO',
+                    metaJson: {
+                        booking_id: bookingId,
+                        actor: userId,
+                        reason: 'booking_late_cancel_after_4h'
+                    }
+                });
+            }
         }
         else if (hasStudent && booking.source === 'PROFESSOR') {
             const profBalance = await balance_service_1.balanceService.getProfessorBalance(booking.teacher_id, franqueadoraId);
@@ -285,25 +287,6 @@ class BookingCanonicalService {
         if (booking.status_canonical === 'PAID') {
             return booking;
         }
-        const franqueadoraId = await fetchFranqueadoraIdFromUnit(booking.unit_id);
-        if (booking.student_id) {
-            await balance_service_1.balanceService.consumeStudentClasses(booking.student_id, franqueadoraId, 1, bookingId, {
-                unitId: booking.unit_id,
-                source: 'ALUNO',
-                metaJson: {
-                    booking_id: bookingId,
-                    reason: 'booking_confirmed'
-                }
-            });
-        }
-        await balance_service_1.balanceService.consumeProfessorHours(booking.teacher_id, franqueadoraId, 1, bookingId, {
-            unitId: booking.unit_id,
-            source: 'SYSTEM',
-            metaJson: {
-                booking_id: bookingId,
-                reason: 'booking_confirmed'
-            }
-        });
         const now = new Date();
         const { data: updatedBooking, error: updateError } = await supabase_1.supabase
             .from('bookings')
@@ -339,14 +322,6 @@ class BookingCanonicalService {
                 }
             });
         }
-        await balance_service_1.balanceService.consumeProfessorHours(booking.teacher_id, franqueadoraId, 1, bookingId, {
-            unitId: booking.unit_id,
-            source: 'SYSTEM',
-            metaJson: {
-                booking_id: bookingId,
-                reason: 'booking_completed'
-            }
-        });
         const now = new Date();
         const { data: updatedBooking, error: updateError } = await supabase_1.supabase
             .from('bookings')

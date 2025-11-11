@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.paymentIntentService = void 0;
 const supabase_1 = require("../lib/supabase");
 const errorHandler_1 = require("../middleware/errorHandler");
-const asaas_service_1 = require("./asaas.service");
+const provider_1 = require("./payments/provider");
 const balance_service_1 = require("./balance.service");
 class PaymentIntentService {
     async createPaymentIntent(params) {
@@ -24,6 +24,7 @@ class PaymentIntentService {
             .single();
         if (intentError)
             throw intentError;
+        const provider = (0, provider_1.getPaymentProvider)();
         const user = await this.getUser(params.actorUserId);
         if (!user)
             throw new Error('Usuário não encontrado');
@@ -35,7 +36,7 @@ class PaymentIntentService {
                     throw new errorHandler_1.CustomError('CPF obrigatório para pagamento', 400, true, 'BUSINESS_RULE_VIOLATION');
                 }
             }
-            const customerResult = await asaas_service_1.asaasService.createCustomer({
+            const customerResult = await provider.createCustomer({
                 name: user.name,
                 email: user.email,
                 cpfCnpj: (user.cpf || '').replace(/\D/g, '') || '00000000000',
@@ -43,10 +44,10 @@ class PaymentIntentService {
             });
             if (!customerResult.success) {
                 const message = Array.isArray(customerResult.error)
-                    ? (customerResult.error[0]?.description || 'Erro ao criar cliente no Asaas')
-                    : (customerResult.error || 'Erro ao criar cliente no Asaas');
+                    ? (customerResult.error[0]?.description || 'Erro ao criar cliente no provedor de pagamento')
+                    : (customerResult.error || 'Erro ao criar cliente no provedor de pagamento');
                 const isCpfError = typeof message === 'string' && message.toLowerCase().includes('cpf');
-                throw new errorHandler_1.CustomError(message, isCpfError ? 400 : 502, true, isCpfError ? 'BUSINESS_RULE_VIOLATION' : 'EXTERNAL_PROVIDER_ERROR', { provider: 'ASAAS', step: 'createCustomer' });
+                throw new errorHandler_1.CustomError(message, isCpfError ? 400 : 502, true, isCpfError ? 'BUSINESS_RULE_VIOLATION' : 'EXTERNAL_PROVIDER_ERROR', { provider: process.env.PAYMENT_PROVIDER || 'ASAAS', step: 'createCustomer' });
             }
             asaasCustomerId = customerResult.data.id;
             await supabase_1.supabase
@@ -57,9 +58,13 @@ class PaymentIntentService {
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
         const dueDate = tomorrow.toISOString().split('T')[0];
-        const paymentResult = await asaas_service_1.asaasService.createPayment({
+        const requestedMethod = String(params.metadata?.payment_method || 'PIX').toUpperCase();
+        const billingType = ['PIX', 'BOLETO', 'CREDIT_CARD'].includes(requestedMethod)
+            ? requestedMethod
+            : 'PIX';
+        const paymentResult = await provider.createPayment({
             customer: asaasCustomerId,
-            billingType: 'PIX',
+            billingType,
             value: params.amountCents / 100,
             dueDate: dueDate,
             description: this.getPaymentDescription(params.type, params.metadata),
@@ -68,7 +73,7 @@ class PaymentIntentService {
         if (!paymentResult.success) {
             throw new Error('Erro ao criar pagamento no Asaas');
         }
-        const linkResult = await asaas_service_1.asaasService.generatePaymentLink(paymentResult.data.id);
+        const linkResult = await provider.generatePaymentLink(paymentResult.data.id);
         const paymentLink = linkResult.success ? linkResult.data : {
             paymentUrl: paymentResult.data.invoiceUrl,
             bankSlipUrl: paymentResult.data.bankSlipUrl,
@@ -82,7 +87,7 @@ class PaymentIntentService {
             payload_json: {
                 ...params.metadata,
                 asaas_payment_id: paymentResult.data.id,
-                billing_type: 'PIX',
+                billing_type: billingType,
                 franqueadora_id: params.franqueadoraId,
                 unit_id: params.unitId || null
             }

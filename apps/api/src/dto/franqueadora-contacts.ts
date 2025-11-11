@@ -42,7 +42,12 @@ export interface ContactUser {
   email: string
   phone?: string | null
   cpf?: string | null
+  cref?: string | null
   role: string
+  cref_card_url?: string | null
+  approval_status?: string | null
+  approved_at?: string | null
+  approved_by?: string | null
   is_active?: boolean | null
   credits?: number | null
   created_at?: string | null

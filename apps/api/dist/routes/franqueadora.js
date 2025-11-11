@@ -11,7 +11,7 @@ const audit_service_1 = require("../services/audit.service");
 const cache_service_1 = require("../services/cache.service");
 const franqueadora_contacts_1 = require("../dto/franqueadora-contacts");
 const router = (0, express_1.Router)();
-router.get('/me', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']), auth_1.requireFranqueadoraAdmin, async (req, res) => {
+router.get('/me', auth_1.requireAuth, (0, auth_1.requireRole)(['SUPER_ADMIN']), auth_1.requireFranqueadoraAdmin, async (req, res) => {
     try {
         let franqueadoraId = req.franqueadoraAdmin?.franqueadora_id;
         if (!franqueadoraId && req.user?.role === 'SUPER_ADMIN') {
@@ -43,7 +43,7 @@ router.get('/me', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEADORA', '
         return res.status(500).json({ error: err.message });
     }
 });
-router.get('/contacts', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']), pagination_1.extractPagination, pagination_1.addPaginationHeaders, (0, errorHandler_1.asyncErrorHandler)(async (req, res) => {
+router.get('/contacts', auth_1.requireAuth, (0, auth_1.requireRole)(['SUPER_ADMIN']), pagination_1.extractPagination, pagination_1.addPaginationHeaders, (0, errorHandler_1.asyncErrorHandler)(async (req, res) => {
     const { pagination } = req;
     const queryParams = (req.query || {});
     let franqueadoraId = queryParams.franqueadora_id || (req.franqueadoraAdmin && req.franqueadoraAdmin.franqueadora_id) || null;
@@ -120,7 +120,7 @@ router.get('/contacts', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEADO
         ...response,
     });
 }));
-router.get('/packages', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']), auth_1.requireFranqueadoraAdmin, pagination_1.extractPagination, (0, pagination_1.extractFilters)(['is_active', 'name', 'investment_amount']), pagination_1.addPaginationHeaders, (0, errorHandler_1.asyncErrorHandler)(async (req, res) => {
+router.get('/packages', auth_1.requireAuth, (0, auth_1.requireRole)(['SUPER_ADMIN']), auth_1.requireFranqueadoraAdmin, pagination_1.extractPagination, (0, pagination_1.extractFilters)(['is_active', 'name', 'investment_amount']), pagination_1.addPaginationHeaders, (0, errorHandler_1.asyncErrorHandler)(async (req, res) => {
     if (!req.franqueadoraAdmin?.franqueadora_id) {
         return res.json({
             success: true,
@@ -156,7 +156,7 @@ router.get('/packages', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEADO
         ...response
     });
 }));
-router.post('/packages', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']), auth_1.requireFranqueadoraAdmin, (0, audit_1.auditSensitiveOperation)('CREATE', 'franchise_packages'), (0, errorHandler_1.asyncErrorHandler)(async (req, res) => {
+router.post('/packages', auth_1.requireAuth, (0, auth_1.requireRole)(['SUPER_ADMIN']), auth_1.requireFranqueadoraAdmin, (0, audit_1.auditSensitiveOperation)('CREATE', 'franchise_packages'), (0, errorHandler_1.asyncErrorHandler)(async (req, res) => {
     if (!req.franqueadoraAdmin?.franqueadora_id) {
         return res.status(400).json({
             success: false,
@@ -181,7 +181,7 @@ router.post('/packages', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEAD
         data: { package: data }
     });
 }));
-router.put('/packages/:id', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']), auth_1.requireFranqueadoraAdmin, (0, audit_1.auditSensitiveOperation)('UPDATE', 'franchise_packages'), (0, errorHandler_1.asyncErrorHandler)(async (req, res) => {
+router.put('/packages/:id', auth_1.requireAuth, (0, auth_1.requireRole)(['SUPER_ADMIN']), auth_1.requireFranqueadoraAdmin, (0, audit_1.auditSensitiveOperation)('UPDATE', 'franchise_packages'), (0, errorHandler_1.asyncErrorHandler)(async (req, res) => {
     if (!req.franqueadoraAdmin?.franqueadora_id) {
         return res.status(400).json({
             success: false,
@@ -228,7 +228,7 @@ router.put('/packages/:id', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQU
         data: { package: data }
     });
 }));
-router.delete('/packages/:id', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']), auth_1.requireFranqueadoraAdmin, (0, audit_1.auditSensitiveOperation)('DELETE', 'franchise_packages'), (0, errorHandler_1.asyncErrorHandler)(async (req, res) => {
+router.delete('/packages/:id', auth_1.requireAuth, (0, auth_1.requireRole)(['SUPER_ADMIN']), auth_1.requireFranqueadoraAdmin, (0, audit_1.auditSensitiveOperation)('DELETE', 'franchise_packages'), (0, errorHandler_1.asyncErrorHandler)(async (req, res) => {
     if (!req.franqueadoraAdmin?.franqueadora_id) {
         return res.status(400).json({
             success: false,
@@ -270,7 +270,7 @@ router.delete('/packages/:id', auth_1.requireAuth, (0, auth_1.requireRole)(['FRA
     }
     return res.status(204).send();
 }));
-router.get('/leads', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']), auth_1.requireFranqueadoraAdmin, pagination_1.extractPagination, (0, pagination_1.extractFilters)(['status', 'name', 'email', 'phone']), pagination_1.addPaginationHeaders, (0, errorHandler_1.asyncErrorHandler)(async (req, res) => {
+router.get('/leads', auth_1.requireAuth, (0, auth_1.requireRole)(['SUPER_ADMIN']), auth_1.requireFranqueadoraAdmin, pagination_1.extractPagination, (0, pagination_1.extractFilters)(['status', 'name', 'email', 'phone']), pagination_1.addPaginationHeaders, (0, errorHandler_1.asyncErrorHandler)(async (req, res) => {
     if (!req.franqueadoraAdmin?.franqueadora_id) {
         return res.json({
             success: true,
@@ -304,7 +304,7 @@ router.get('/leads', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEADORA'
         ...response
     });
 }));
-router.put('/leads/:id', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']), auth_1.requireFranqueadoraAdmin, async (req, res) => {
+router.put('/leads/:id', auth_1.requireAuth, (0, auth_1.requireRole)(['SUPER_ADMIN']), auth_1.requireFranqueadoraAdmin, async (req, res) => {
     try {
         if (!req.franqueadoraAdmin?.franqueadora_id)
             return res.status(400).json({ error: 'No franqueadora context' });
@@ -332,7 +332,7 @@ router.put('/leads/:id', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEAD
         return res.status(500).json({ error: err.message });
     }
 });
-router.get('/academies/:id/stats', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']), auth_1.requireFranqueadoraAdmin, (0, errorHandler_1.asyncErrorHandler)(async (req, res) => {
+router.get('/academies/:id/stats', auth_1.requireAuth, (0, auth_1.requireRole)(['SUPER_ADMIN']), auth_1.requireFranqueadoraAdmin, (0, errorHandler_1.asyncErrorHandler)(async (req, res) => {
     const { id } = req.params;
     if (!req.franqueadoraAdmin?.franqueadora_id) {
         return res.status(400).json({
@@ -449,7 +449,7 @@ router.get('/academies/:id/stats', auth_1.requireAuth, (0, auth_1.requireRole)([
         cached: false
     });
 }));
-router.get('/users', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']), pagination_1.extractPagination, pagination_1.addPaginationHeaders, (0, errorHandler_1.asyncErrorHandler)(async (req, res) => {
+router.get('/users', auth_1.requireAuth, (0, auth_1.requireRole)(['SUPER_ADMIN']), pagination_1.extractPagination, pagination_1.addPaginationHeaders, (0, errorHandler_1.asyncErrorHandler)(async (req, res) => {
     const { pagination } = req;
     const queryParams = (req.query || {});
     const { role, search, status } = queryParams;
@@ -462,8 +462,13 @@ router.get('/users', auth_1.requireAuth, (0, auth_1.requireRole)(['FRANQUEADORA'
           email,
           phone,
           cpf,
+          cref,
+          cref_card_url,
           role,
           avatar_url,
+          approval_status,
+          approved_at,
+          approved_by,
           created_at,
           updated_at,
           last_login_at,

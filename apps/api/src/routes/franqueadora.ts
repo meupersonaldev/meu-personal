@@ -19,7 +19,7 @@ import { FRANQUEADORA_CONTACTS_SELECT } from '../dto/franqueadora-contacts'
 const router = Router()
 
 // GET /api/franqueadora/me - contexto da franqueadora do admin atual
-router.get('/me', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']), requireFranqueadoraAdmin, async (req, res) => {
+router.get('/me', requireAuth, requireRole(['SUPER_ADMIN']), requireFranqueadoraAdmin, async (req, res) => {
   try {
     let franqueadoraId = req.franqueadoraAdmin?.franqueadora_id
 
@@ -58,7 +58,7 @@ router.get('/me', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMI
 
 router.get('/contacts',
   requireAuth,
-  requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']),
+  requireRole(['SUPER_ADMIN']),
   extractPagination,
   addPaginationHeaders,
   asyncErrorHandler(async (req, res) => {
@@ -169,7 +169,7 @@ router.get('/contacts',
 // Packages (Franchise Packages) COM PAGINAÇÃO E FILTROS
 router.get('/packages',
   requireAuth,
-  requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']),
+  requireRole(['SUPER_ADMIN']),
   requireFranqueadoraAdmin,
   extractPagination,
   extractFilters(['is_active', 'name', 'investment_amount']),
@@ -232,7 +232,7 @@ router.get('/packages',
 
 router.post('/packages',
   requireAuth,
-  requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']),
+  requireRole(['SUPER_ADMIN']),
   requireFranqueadoraAdmin,
   auditSensitiveOperation('CREATE', 'franchise_packages'),
   asyncErrorHandler(async (req, res) => {
@@ -268,7 +268,7 @@ router.post('/packages',
 
 router.put('/packages/:id',
   requireAuth,
-  requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']),
+  requireRole(['SUPER_ADMIN']),
   requireFranqueadoraAdmin,
   auditSensitiveOperation('UPDATE', 'franchise_packages'),
   asyncErrorHandler(async (req, res) => {
@@ -332,7 +332,7 @@ router.put('/packages/:id',
 
 router.delete('/packages/:id',
   requireAuth,
-  requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']),
+  requireRole(['SUPER_ADMIN']),
   requireFranqueadoraAdmin,
   auditSensitiveOperation('DELETE', 'franchise_packages'),
   asyncErrorHandler(async (req, res) => {
@@ -392,7 +392,7 @@ router.delete('/packages/:id',
 // Leads (COM PAGINAÇÃO E FILTROS)
 router.get('/leads',
   requireAuth,
-  requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']),
+  requireRole(['SUPER_ADMIN']),
   requireFranqueadoraAdmin,
   extractPagination,
   extractFilters(['status', 'name', 'email', 'phone']),
@@ -451,7 +451,7 @@ router.get('/leads',
   })
 )
 
-router.put('/leads/:id', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']), requireFranqueadoraAdmin, async (req, res) => {
+router.put('/leads/:id', requireAuth, requireRole(['SUPER_ADMIN']), requireFranqueadoraAdmin, async (req, res) => {
   try {
     if (!req.franqueadoraAdmin?.franqueadora_id) return res.status(400).json({ error: 'No franqueadora context' })
     const { id } = req.params
@@ -476,7 +476,7 @@ router.put('/leads/:id', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN'
 })
 
 // Academy stats (OTIMIZADO: consulta única agregada com cache)
-router.get('/academies/:id/stats', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']), requireFranqueadoraAdmin, asyncErrorHandler(async (req, res) => {
+router.get('/academies/:id/stats', requireAuth, requireRole(['SUPER_ADMIN']), requireFranqueadoraAdmin, asyncErrorHandler(async (req, res) => {
   const { id } = req.params
   if (!req.franqueadoraAdmin?.franqueadora_id) {
     return res.status(400).json({
@@ -634,7 +634,7 @@ router.get('/academies/:id/stats', requireAuth, requireRole(['FRANQUEADORA', 'SU
 // GET /api/franqueadora/users - Listar todos os usuários com informações detalhadas
 router.get('/users',
   requireAuth,
-  requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']),
+  requireRole(['SUPER_ADMIN']),
   extractPagination,
   addPaginationHeaders,
   asyncErrorHandler(async (req, res) => {
