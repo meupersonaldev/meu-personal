@@ -519,6 +519,8 @@ router.get('/:id', requireAuth, asyncErrorHandler(async (req, res) => {
 
 // POST /api/bookings - Criar novo agendamento (endpoint canônico)
 router.post('/', requireAuth, requireRole(['STUDENT', 'ALUNO', 'TEACHER', 'PROFESSOR', 'FRANQUIA', 'FRANQUEADORA']), requireApprovedTeacher, asyncErrorHandler(async (req, res) => {
+  console.log('[POST /api/bookings] Payload recebido:', JSON.stringify(req.body, null, 2))
+  
   const bookingData = createBookingSchema.parse(req.body)
   if (bookingData.studentId === null) {
     bookingData.studentId = undefined
@@ -544,11 +546,22 @@ router.post('/', requireAuth, requireRole(['STUDENT', 'ALUNO', 'TEACHER', 'PROFE
   const endAt = new Date(bookingData.endAt)
   const now = new Date()
 
+  console.log('[POST /api/bookings] Validação de datas:', {
+    startAt: startAt.toISOString(),
+    endAt: endAt.toISOString(),
+    now: now.toISOString(),
+    startAtTimestamp: startAt.getTime(),
+    nowTimestamp: now.getTime(),
+    isPast: startAt <= now
+  })
+
   if (startAt <= now) {
+    console.log('[POST /api/bookings] ERRO: Data no passado')
     return res.status(400).json({ error: 'Data de início deve ser no futuro' })
   }
 
   if (endAt <= startAt) {
+    console.log('[POST /api/bookings] ERRO: endAt <= startAt')
     return res.status(400).json({ error: 'Data de término deve ser após a data de início' })
   }
 

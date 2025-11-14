@@ -369,7 +369,8 @@ export default function ProfessorAgendaPage() {
 
     try {
       const [hours, minutes] = selectedSlot.time.split(':')
-      const bookingDate = new Date(selectedSlot.date + 'T' + selectedSlot.time + ':00Z')
+      // Criar data no timezone local (sem Z no final)
+      const bookingDate = new Date(selectedSlot.date + 'T' + selectedSlot.time + ':00')
       const endTime = new Date(bookingDate.getTime() + 60 * 60 * 1000) // 60 minutes later
 
       const response = await authFetch(`${API_URL}/api/bookings`, {
@@ -808,7 +809,7 @@ export default function ProfessorAgendaPage() {
                               let totalCreated = 0
                               for (const academy of teacherAcademies) {
                                 for (const hora of selectedHoursToAvailable) {
-                                  const bookingDate = new Date(selectedDate + 'T' + hora + ':00Z')
+                                  const bookingDate = new Date(selectedDate + 'T' + hora + ':00')
                                   const endTime = new Date(bookingDate.getTime() + 60 * 60 * 1000)
                                   const res = await authFetch(`${API_URL}/api/bookings`, {
                                     method: 'POST',
@@ -829,7 +830,7 @@ export default function ProfessorAgendaPage() {
                             } else {
                               let created = 0
                               for (const hora of selectedHoursToAvailable) {
-                                const bookingDate = new Date(selectedDate + 'T' + hora + ':00Z')
+                                const bookingDate = new Date(selectedDate + 'T' + hora + ':00')
                                 const endTime = new Date(bookingDate.getTime() + 60 * 60 * 1000)
                                 const res = await authFetch(`${API_URL}/api/bookings`, {
                                   method: 'POST',
@@ -1215,7 +1216,7 @@ export default function ProfessorAgendaPage() {
                           let totalCreated = 0
                           for (const academy of teacherAcademies) {
                             for (const hora of selectedHoursToAvailable) {
-                              const bookingDate = new Date(selectedDate + 'T' + hora + ':00Z')
+                              const bookingDate = new Date(selectedDate + 'T' + hora + ':00')
                               const endTime = new Date(bookingDate.getTime() + 60 * 60 * 1000)
 
                               const res = await authFetch(`${API_URL}/api/bookings`, {
@@ -1237,7 +1238,7 @@ export default function ProfessorAgendaPage() {
                         } else {
                           let created = 0
                           for (const hora of selectedHoursToAvailable) {
-                            const bookingDate = new Date(selectedDate + 'T' + hora + ':00Z')
+                            const bookingDate = new Date(selectedDate + 'T' + hora + ':00')
                             const endTime = new Date(bookingDate.getTime() + 60 * 60 * 1000)
 
                             const res = await authFetch(`${API_URL}/api/bookings`, {
@@ -1802,7 +1803,7 @@ export default function ProfessorAgendaPage() {
                               if (!selectedSlot || !user?.id) return
                               try {
                                 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-                                const bookingDate = new Date(selectedSlot.date + 'T' + selectedSlot.time + ':00Z')
+                                const bookingDate = new Date(selectedSlot.date + 'T' + selectedSlot.time + ':00')
 
                                 // Primeiro, remover qualquer disponibilidade existente neste horário
                                 const existingBookings = bookings.filter(b => {
