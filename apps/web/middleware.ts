@@ -5,7 +5,6 @@ const PROTECTED_PREFIXES = ['/professor', '/aluno', '/admin', '/franquia'] as co
 const PROFESSOR_AUTH_ROUTES = ['/professor/login', '/professor/cadastro', '/professor/esqueci-senha', '/professor/redefinir-senha'] as const
 const ALUNO_AUTH_ROUTES = ['/aluno/login', '/aluno/cadastro', '/aluno/esqueci-senha', '/aluno/redefinir-senha'] as const
 const AUTH_PREFIXES: readonly string[] = [
-  '/login',
   '/cadastro',
   '/esqueci-senha',
   ...PROFESSOR_AUTH_ROUTES,
