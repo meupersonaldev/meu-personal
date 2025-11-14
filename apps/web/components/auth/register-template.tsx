@@ -1,7 +1,6 @@
 "use client"
 
 import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react"
-import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ArrowLeft, Eye, EyeOff, GraduationCap, Loader2, Users, Shield, Clock, Trophy, ClipboardList, Activity, Heart, Sparkles } from "lucide-react"
@@ -9,6 +8,7 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Logo } from "@/components/ui/logo"
 import { useAuthStore, UserRole } from "@/lib/stores/auth-store"
 
 const FEATURE_ICON_MAP = {
@@ -198,7 +198,7 @@ export function RegisterTemplate({
             return
           }
         }
-      } catch (e) {
+      } catch {
         toast.error('Erro ao enviar carteirinha. Tente novamente.')
         setIsLoading(false)
         return
@@ -268,12 +268,11 @@ export function RegisterTemplate({
 
         <div className="relative z-10 flex flex-col justify-center px-16 text-white">
           <div className="mb-8">
-            <Image
-              src="/images/logo-full.png"
-              alt="Meu Personal"
-              width={64}
-              height={64}
-              className="h-16 w-auto object-contain mb-8"
+            <Logo
+              size="md"
+              variant="default"
+              showText={false}
+              className="mb-[-50px]"
             />
             <h1 className="text-5xl font-bold mb-6 leading-tight">
               {copy.heroTitle}
@@ -298,13 +297,13 @@ export function RegisterTemplate({
           </Link>
 
           <div className="lg:hidden text-center mb-12">
-            <Image
-              src="/images/logo.png"
-              alt="Meu Personal"
-              width={48}
-              height={48}
-              className="h-12 w-auto object-contain mx-auto mb-6"
-            />
+            <div className="flex justify-center mt-[-86px] mb-[-53px]">
+              <Logo
+                size="lg"
+                variant="dark"
+                showText={false}
+              />
+            </div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">{copy.mobileTitle ?? copy.pageTitle}</h1>
             <p className="text-gray-600">{copy.mobileSubtitle ?? copy.pageSubtitle}</p>
           </div>

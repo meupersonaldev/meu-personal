@@ -365,6 +365,18 @@ router.post('/register', auditSensitiveOperation('CREATE', 'users'), async (req,
       jwtOptions // Access token curto
     )
 
+    // Setar cookie HttpOnly para o domínio da API (usado pela API com credentials: include)
+    try {
+      const isProdEnv = process.env.NODE_ENV === 'production'
+      res.cookie('auth-token', token, {
+        httpOnly: true,
+        secure: isProdEnv,
+        sameSite: isProdEnv ? 'none' : 'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+        path: '/',
+      })
+    } catch {}
+
     // Retornar dados do usuário
     res.status(201).json({
       message: 'Conta criada com sucesso',
