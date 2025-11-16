@@ -24,7 +24,7 @@ import {
   X
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { teachersAPI } from '@/lib/api'
+import api from '@/lib/api'
 import { formatCurrency } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 
@@ -74,33 +74,6 @@ export default function ConfiguracoesPage() {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-
-  const authorizedFetch = async (path: string, init: RequestInit = {}) => {
-    if (!token) {
-      throw new Error('Sessao expirada. Faca login novamente.')
-    }
-
-    let headers: Record<string, string> = {}
-    if (init.headers instanceof Headers) {
-      headers = Object.fromEntries(init.headers.entries())
-    } else if (Array.isArray(init.headers)) {
-      headers = Object.fromEntries(init.headers)
-    } else if (init.headers) {
-      headers = { ...(init.headers as Record<string, string>) }
-    }
-
-    const endpoint = path.startsWith('/') ? path : `/${path}`
-
-    return fetch(`${API_URL}${endpoint}`, {
-      ...init,
-      headers: {
-        ...headers,
-        Authorization: `Bearer ${token}`,
-      },
-      credentials: 'include',
-    })
-  }
 
   useEffect(() => {
     if (user?.id) {
@@ -116,7 +89,7 @@ export default function ConfiguracoesPage() {
     }
 
     try {
-      const data = await teachersAPI.getById(user.id)
+      const data = await api.teachers.getById(user.id)
       const profileData = data.teacher_profiles?.[0] || data.teacher_profiles || {}
 
       setProfessionalProfile({
@@ -143,27 +116,22 @@ export default function ConfiguracoesPage() {
     }
 
     try {
-      const response = await authorizedFetch('/api/academies')
-
-      if (response.ok) {
-        const data = await response.json()
-        setAcademies(data.academies || [])
-      }
+      const data = await api.academies.getAll()
+      setAcademies(data.academies || [])
     } catch (error) {
+      console.error('Erro ao buscar academias:', error)
     }
   }
 
   const fetchTeacherPreferences = async () => {
     if (!token || !user?.id) return
 
+    if (!token) return
     try {
-      const response = await authorizedFetch(`/api/teachers/${user.id}/preferences`)
-
-      if (response.ok) {
-        const data = await response.json()
-        setSelectedAcademies(data.academy_ids || [])
-      }
+      const data = await api.teachers.getPreferences(user.id)
+      setSelectedAcademies(data.academy_ids || [])
     } catch (error) {
+      console.error('Erro ao buscar preferências:', error)
     }
   }
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -189,18 +157,8 @@ export default function ConfiguracoesPage() {
       formData.append('avatar', avatarFile)
       formData.append('userId', user.id)
 
-      // Enviar para o backend que tem acesso service_role
-      const response = await authorizedFetch(`/api/users/${user.id}/avatar`, {
-        method: 'POST',
-        body: formData
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Erro ao fazer upload')
-      }
-
-      const data = await response.json()
+      if (!token) throw new Error('Token não encontrado')
+      const data = await api.users.uploadAvatar(user.id, formData)
 
       // Atualizar estado local
       updateUser({ ...user, avatar_url: data.avatar_url })
@@ -218,22 +176,13 @@ export default function ConfiguracoesPage() {
     e.preventDefault()
     setLoading(true)
 
+    if (!user?.id || !token) return
     try {
-      const response = await authorizedFetch(`/api/users/${user?.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(profileData)
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        updateUser(data.user)
-        toast.success('Perfil atualizado com sucesso!')
-      } else {
-        toast.error('Erro ao atualizar perfil')
-      }
+      const data = await api.users.update(user.id, profileData)
+      updateUser(data.user)
+      toast.success('Perfil atualizado com sucesso!')
     } catch (error) {
-      toast.error('Erro ao processar requisição')
+      toast.error('Erro ao atualizar perfil')
     } finally {
       setLoading(false)
     }
@@ -254,24 +203,16 @@ export default function ConfiguracoesPage() {
 
     setLoading(true)
 
+    if (!user?.id || !token) return
     try {
-      const response = await authorizedFetch(`/api/users/${user?.id}/password`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          currentPassword: passwordData.currentPassword,
-          newPassword: passwordData.newPassword
-        })
+      await api.users.updatePassword(user.id, {
+        currentPassword: passwordData.currentPassword,
+        newPassword: passwordData.newPassword,
       })
-
-      if (response.ok) {
-        toast.success('Senha alterada com sucesso!')
-        setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' })
-      } else {
-        toast.error('Senha atual incorreta')
-      }
+      toast.success('Senha alterada com sucesso!')
+      setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' })
     } catch (error) {
-      toast.error('Erro ao processar requisição')
+      toast.error('Senha atual incorreta')
     } finally {
       setLoading(false)
     }
@@ -280,22 +221,12 @@ export default function ConfiguracoesPage() {
   const handleAcademiesUpdate = async () => {
     setLoading(true)
 
+    if (!user?.id || !token) return
     try {
-      const response = await authorizedFetch(`/api/teachers/${user?.id}/preferences`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          academy_ids: selectedAcademies
-        })
-      })
-
-      if (response.ok) {
-        toast.success('Preferências atualizadas!')
-      } else {
-        toast.error('Erro ao atualizar preferências')
-      }
+      await api.teachers.updatePreferences(user.id, { academy_ids: selectedAcademies })
+      toast.success('Preferências atualizadas!')
     } catch (error) {
-      toast.error('Erro ao processar requisição')
+      toast.error('Erro ao atualizar preferências')
     } finally {
       setLoading(false)
     }
@@ -343,7 +274,7 @@ export default function ConfiguracoesPage() {
         return
       }
 
-      await teachersAPI.update(user.id, professionalProfile, authToken)
+      await api.teachers.update(user.id, professionalProfile)
       toast.success('Perfil profissional atualizado!')
     } catch (error) {
       toast.error('Erro ao atualizar perfil profissional')

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useAuthStore } from '@/lib/stores/auth-store'
+import api from '@/lib/api'
 
 export interface StudentNotification {
   id: string
@@ -20,7 +21,6 @@ export interface StudentHeaderData {
   isLoading: boolean
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
 export function useStudentHeaderData(): StudentHeaderData {
   const { user, token } = useAuthStore()
@@ -29,7 +29,7 @@ export function useStudentHeaderData(): StudentHeaderData {
   const [isLoading, setIsLoading] = useState(false)
 
   const fetchData = useCallback(async () => {
-    if (!user?.id || !token) {
+    if (!user?.id) {
       setAvailableCredits(0)
       setNotifications([])
       return
@@ -37,35 +37,19 @@ export function useStudentHeaderData(): StudentHeaderData {
 
     setIsLoading(true)
     try {
-      const [balanceResponse, notificationsResponse] = await Promise.all([
-        fetch(`${API_URL}/api/packages/student/balance`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        }),
-        fetch(`${API_URL}/api/notifications?user_id=${user.id}&unread=true`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        })
+      const [balanceData, notificationsData] = await Promise.all([
+        api.packages.getStudentBalance(),
+        api.notifications.getAll({ user_id: user.id, unread: true }),
       ])
 
-      if (balanceResponse.ok) {
-        const data = await balanceResponse.json()
-        const available = data?.balance?.available_classes ?? data?.available_classes
-        setAvailableCredits(typeof available === 'number' ? available : 0)
-      } else {
-        setAvailableCredits(0)
-      }
+      const available = balanceData?.balance?.available_classes ?? balanceData?.available_classes
+      setAvailableCredits(typeof available === 'number' ? available : 0)
 
-      if (notificationsResponse.ok) {
-        const data = await notificationsResponse.json()
-        setNotifications(data.notifications || [])
-      } else {
-        setNotifications([])
-      }
+      setNotifications(notificationsData.notifications || [])
     } catch (error) {
+      console.error('Failed to fetch student header data:', error)
       setAvailableCredits(0)
+      setNotifications([])
     } finally {
       setIsLoading(false)
     }
@@ -77,25 +61,13 @@ export function useStudentHeaderData(): StudentHeaderData {
 
   const markNotificationAsRead = useCallback(
     async (notificationId: string) => {
-      if (!user?.id || !token) return
-
       try {
-        const response = await fetch(
-          `${API_URL}/api/notifications/${notificationId}/read`,
-          {
-            method: 'PUT',
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          }
+        await api.notifications.markAsRead(notificationId)
+        setNotifications((prev) =>
+          prev.filter((notification) => notification.id !== notificationId)
         )
-
-        if (response.ok) {
-          setNotifications((prev) =>
-            prev.filter((notification) => notification.id !== notificationId)
-          )
-        }
       } catch (error) {
+        console.error('Failed to mark notification as read:', error)
       }
     },
     [user?.id, token]

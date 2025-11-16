@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Logo } from "@/components/ui/logo"
 import { useAuthStore, UserRole } from "@/lib/stores/auth-store"
+import { isStrongPassword } from '@/lib/utils'
 
 const FEATURE_ICON_MAP = {
   shield: Shield,
@@ -97,6 +98,7 @@ export function RegisterTemplate({
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [teacherCref, setTeacherCref] = useState('')
+  const [passwordMismatch, setPasswordMismatch] = useState(false)
   
   const [crefCardFile, setCrefCardFile] = useState<File | null>(null)
 
@@ -114,18 +116,24 @@ export function RegisterTemplate({
     )
   }, [initialRole, lockedRole])
 
+  useEffect(() => {
+    if (formData.password === formData.confirmPassword) {
+      setPasswordMismatch(false)
+    }
+  }, [formData.password, formData.confirmPassword])
+
   const effectiveRole = useMemo<AccessibleRole>(() => formData.role, [formData.role])
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
     if (formData.password !== formData.confirmPassword) {
-      toast.error("As senhas nao coincidem")
+      setPasswordMismatch(true)
       return
     }
 
-    if (formData.password.length < 6) {
-      toast.error("A senha deve ter pelo menos 6 caracteres")
+    if (!isStrongPassword(formData.password)) {
+      toast.error('Senha fraca. Use no mínimo 12 caracteres, com letras maiúsculas, minúsculas, números e símbolos.')
       return
     }
 
@@ -169,6 +177,7 @@ export function RegisterTemplate({
         phone: formData.phone,
         cpf: cleanCpf, // Enviar CPF sem formatação
         password: formData.password,
+        passwordConfirmation: formData.confirmPassword,
         gender: formData.gender as any,
         role: effectiveRole,
         ...(teacherPayload as any),
@@ -447,7 +456,7 @@ export function RegisterTemplate({
                   value={formData.password}
                   onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
                   className="w-full px-3 py-3 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-meu-primary focus:border-transparent"
-                  placeholder="Mínimo 6 caracteres"
+                  placeholder="Crie uma senha forte"
                   required
                 />
                 <button
@@ -458,6 +467,7 @@ export function RegisterTemplate({
                   {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
+              <p className="text-xs text-gray-500">Mínimo 12 caracteres, com maiúscula, minúscula, número e símbolo.</p>
             </div>
 
             {/* Confirm Password */}
@@ -483,6 +493,7 @@ export function RegisterTemplate({
                   {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
+              {passwordMismatch && <p className="text-sm text-red-500">As senhas não coincidem.</p>}
             </div>
 
             {/* Role Selection */}

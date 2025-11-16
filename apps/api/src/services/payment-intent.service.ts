@@ -30,33 +30,18 @@ export interface CreatePaymentIntentParams {
 
 class PaymentIntentService {
   async createPaymentIntent(params: CreatePaymentIntentParams): Promise<PaymentIntent> {
-    // 1. Criar registro em payment_intents
-    const { data: intent, error: intentError } = await supabase
-      .from('payment_intents')
-      .insert({
-        type: params.type,
-        provider: 'ASAAS',
-        provider_id: '', // Sera preenchido apos criacao no Asaas
-        amount_cents: params.amountCents,
-        status: 'PENDING',
-        payload_json: params.metadata || {},
-        actor_user_id: params.actorUserId,
-        franqueadora_id: params.franqueadoraId,
-        unit_id: params.unitId
-      })
-      .select()
-      .single();
+    const existingIntent = await this.findExistingIntent(params);
+    if (existingIntent) {
+      return existingIntent;
+    }
 
-    if (intentError) throw intentError;
-
-    // 2. Gerar checkout no provedor de pagamentos
+    // 1. Gerar checkout no provedor de pagamentos
     const provider = getPaymentProvider();
     const user = await this.getUser(params.actorUserId);
     if (!user) throw new Error('Usuário não encontrado');
 
     let asaasCustomerId = user.asaas_customer_id;
     if (!asaasCustomerId) {
-      // Em produção, exigir CPF válido antes de criar cliente no Asaas
       if (process.env.ASAAS_ENV === 'production') {
         const cpfSanitizedPre = (user.cpf || '').replace(/\D/g, '');
         if (cpfSanitizedPre.length < 11) {
@@ -83,17 +68,10 @@ class PaymentIntentService {
           { provider: process.env.PAYMENT_PROVIDER || 'ASAAS', step: 'createCustomer' }
         );
       }
-
       asaasCustomerId = customerResult.data.id;
-
-      // Salvar ID do Asaas no banco
-      await supabase
-        .from('users')
-        .update({ asaas_customer_id: asaasCustomerId })
-        .eq('id', user.id);
+      await supabase.from('users').update({ asaas_customer_id: asaasCustomerId }).eq('id', user.id);
     }
 
-    // Criar pagamento
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     const dueDate = tomorrow.toISOString().split('T')[0];
@@ -109,24 +87,29 @@ class PaymentIntentService {
       value: params.amountCents / 100,
       dueDate: dueDate,
       description: this.getPaymentDescription(params.type, params.metadata),
-      externalReference: `${params.type}_${intent.id}_${Date.now()}`
+      externalReference: `meupersonal_${params.type}_${params.actorUserId}_${Date.now()}`
     });
 
     if (!paymentResult.success) {
       throw new Error('Erro ao criar pagamento no Asaas');
     }
 
-    // 3. Atualizar PaymentIntent com provider_id e checkout_url
+    // 2. Criar registro em payment_intents AGORA, com o provider_id
     const linkResult = await provider.generatePaymentLink(paymentResult.data.id);
     const paymentLink = linkResult.success ? linkResult.data : {
       paymentUrl: paymentResult.data.invoiceUrl,
       bankSlipUrl: paymentResult.data.bankSlipUrl,
       pixCode: paymentResult.data.payload
     };
-    const { data: updatedIntent, error: updateError } = await supabase
+
+    const { data: intent, error: intentError } = await supabase
       .from('payment_intents')
-      .update({
-        provider_id: paymentResult.data.id,
+      .insert({
+        type: params.type,
+        provider: 'ASAAS',
+        provider_id: paymentResult.data.id, // ID do Asaas usado aqui
+        amount_cents: params.amountCents,
+        status: 'PENDING',
         checkout_url: paymentLink.paymentUrl,
         payload_json: {
           ...params.metadata,
@@ -134,15 +117,17 @@ class PaymentIntentService {
           billing_type: billingType,
           franqueadora_id: params.franqueadoraId,
           unit_id: params.unitId || null
-        }
+        },
+        actor_user_id: params.actorUserId,
+        franqueadora_id: params.franqueadoraId,
+        unit_id: params.unitId
       })
-      .eq('id', intent.id)
       .select()
       .single();
 
-    if (updateError) throw updateError;
+    if (intentError) throw intentError;
 
-    return updatedIntent;
+    return intent;
   }
 
   async processWebhook(providerId: string, status: string): Promise<void> {
@@ -245,6 +230,25 @@ class PaymentIntentService {
       return `${metadata.package_title} - ${metadata.hours_qty} horas`;
     }
     return 'Pagamento Meu Personal';
+  }
+
+  private async findExistingIntent(params: CreatePaymentIntentParams): Promise<PaymentIntent | null> {
+    const { data, error } = await supabase
+      .from('payment_intents')
+      .select('*')
+      .eq('actor_user_id', params.actorUserId)
+      .eq('type', params.type)
+      .eq('status', 'PENDING')
+      .eq('payload_json->>package_id', params.metadata?.package_id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error || !data) {
+      return null;
+    }
+
+    return data;
   }
 
   async getPaymentIntentsByUser(userId: string, status?: string): Promise<PaymentIntent[]> {

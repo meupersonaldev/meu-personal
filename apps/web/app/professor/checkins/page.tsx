@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import api from '@/lib/api'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -25,48 +26,21 @@ export default function ProfessorCheckinsPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'GRANTED' | 'DENIED'>('all')
   const [dateFilter, setDateFilter] = useState<'today' | 'week' | 'month' | 'all'>('today')
 
-  const authFetch = async (url: string, init: RequestInit = {}) => {
-    if (!token) {
-      throw new Error('Sessao expirada. Faca login novamente.')
-    }
-
-    let headers: Record<string, string> = {}
-    if (init.headers instanceof Headers) {
-      headers = Object.fromEntries(init.headers.entries())
-    } else if (Array.isArray(init.headers)) {
-      headers = Object.fromEntries(init.headers)
-    } else if (init.headers) {
-      headers = { ...(init.headers as Record<string, string>) }
-    }
-
-    return fetch(url, {
-      ...init,
-      headers: {
-        ...headers,
-        Authorization: `Bearer ${token}`,
-      },
-      credentials: 'include',
-    })
-  }
 
   useEffect(() => {
-    if (!user?.id || !token) return
+    if (!user?.id) return
     loadData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, token])
+  }, [user?.id])
 
   async function loadData() {
+    if (!user?.id) return
     setLoading(true)
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      const res = await authFetch(`${API_URL}/api/checkins?teacher_id=${user?.id}`)
-      if (!res.ok) {
-        setCheckins([])
-        return
-      }
-      const data = await res.json()
+      const data = await api.checkins.getAll({ teacher_id: user.id })
       setCheckins(data.checkins || [])
-    } catch {
+    } catch (error) {
+      console.error(error)
       setCheckins([])
     } finally {
       setLoading(false)

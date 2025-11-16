@@ -6,7 +6,6 @@ const PROFESSOR_AUTH_ROUTES = ['/professor/login', '/professor/cadastro', '/prof
 const ALUNO_AUTH_ROUTES = ['/aluno/login', '/aluno/cadastro', '/aluno/esqueci-senha', '/aluno/redefinir-senha'] as const
 const AUTH_PREFIXES: readonly string[] = [
   '/cadastro',
-  '/esqueci-senha',
   ...PROFESSOR_AUTH_ROUTES,
   ...ALUNO_AUTH_ROUTES,
 ]

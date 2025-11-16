@@ -1,18 +1,20 @@
+import dotenv from 'dotenv'
+import path from 'path'
+
+// Load environment variables from apps/api/.env
+// IMPORTANTE: Esta deve ser a primeira coisa a ser executada
+dotenv.config({ path: path.resolve(__dirname, '../.env') })
+
 import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
 import morgan from 'morgan'
 import compression from 'compression'
-import dotenv from 'dotenv'
-import path from 'path'
 
 // SEGURANÇA CRÍTICA: Importar middlewares de segurança
 import { authRateLimit, apiRateLimit } from './middleware/rateLimit'
 import { errorHandler, notFoundHandler } from './middleware/errorHandler'
 import { auditMiddleware } from './middleware/audit'
-
-// Load environment variables from apps/api/.env
-dotenv.config({ path: path.resolve(__dirname, '../.env') })
 
 
 // Configurar timezone globalmente
@@ -174,17 +176,49 @@ app.use(notFoundHandler)
 // SEGURANÇA CRÍTICA: Middleware de tratamento de erros avançado (deve ser o último)
 app.use(errorHandler)
 
-if (process.env.NODE_ENV !== 'test') app.listen(PORT, () => {
-  console.log(`🚀 Servidor rodando na porta ${PORT}`)
-  console.log(`📚 API Documentation: http://localhost:${PORT}/api`)
-  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`)
-  console.log(`🔒 Modo de segurança: ATIVO`)
+// Usar global para persistir o servidor entre reloads do tsx watch
+declare global {
+  var __server: import('http').Server | undefined;
+}
 
-  // Iniciar scheduler T-4h para processamento automático de locks
-  console.log(`⏰ Iniciando scheduler T-4h para processamento automático de locks...`)
-  const schedulerInterval = process.env.SCHEDULER_INTERVAL_MINUTES ?
-    parseInt(process.env.SCHEDULER_INTERVAL_MINUTES) : 15
+const gracefulShutdown = () => {
+  console.log('🔌 Recebido sinal de desligamento, encerrando servidor...');
+  if (global.__server) {
+    global.__server.close(() => {
+      console.log('✅ Servidor encerrado.');
+      process.exit(0);
+    });
+  } else {
+    process.exit(0);
+  }
+};
 
-  bookingScheduler.startScheduler(schedulerInterval)
-  console.log(`✅ Scheduler configurado para rodar a cada ${schedulerInterval} minutos`)
-})
+// Registrar handlers de shutdown (remover duplicados)
+process.removeAllListeners('SIGTERM');
+process.removeAllListeners('SIGINT');
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);
+
+// Fechar servidor existente antes de criar um novo (hot reload)
+if (global.__server) {
+  console.log('� FeMchando servidor anterior...');
+  global.__server.close();
+  global.__server = undefined;
+}
+
+if (process.env.NODE_ENV !== 'test') {
+  global.__server = app.listen(PORT, () => {
+    console.log(`🚀 Servidor rodando na porta ${PORT}`)
+    console.log(`📚 API Documentation: http://localhost:${PORT}/api`)
+    console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`)
+    console.log(`🔒 Modo de segurança: ATIVO`)
+
+    // Iniciar scheduler T-4h para processamento automático de locks
+    console.log(`⏰ Iniciando scheduler T-4h para processamento automático de locks...`)
+    const schedulerInterval = process.env.SCHEDULER_INTERVAL_MINUTES ?
+      parseInt(process.env.SCHEDULER_INTERVAL_MINUTES) : 15
+
+    bookingScheduler.startScheduler(schedulerInterval)
+    console.log(`✅ Scheduler configurado para rodar a cada ${schedulerInterval} minutos`)
+  });
+}

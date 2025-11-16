@@ -8,7 +8,8 @@ import { ArrowLeft, Lock, Eye, EyeOff, Loader2, CheckCircle, AlertCircle } from 
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { supabase } from '@/lib/supabase'
+import { authAPI } from '@/lib/api'
+import { isStrongPassword } from '@/lib/utils'
 
 function ResetPasswordForm() {
   const router = useRouter()
@@ -28,16 +29,16 @@ function ResetPasswordForm() {
   const [isLoading, setIsLoading] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState('')
-  const [isRecoveryMode, setIsRecoveryMode] = useState(false)
+  const [token, setToken] = useState<string | null>(null)
 
   useEffect(() => {
-    // Verificar se o usuário está em modo de recuperação de senha
-    supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        setIsRecoveryMode(true)
-      }
-    })
-  }, [])
+    const tokenFromUrl = searchParams?.get('token')
+    if (tokenFromUrl) {
+      setToken(tokenFromUrl)
+    } else {
+      router.push('/')
+    }
+  }, [searchParams, router])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -47,36 +48,32 @@ function ResetPasswordForm() {
       return
     }
 
-    if (formData.password.length < 6) {
-      toast.error('A senha deve ter pelo menos 6 caracteres')
+    if (!isStrongPassword(formData.password)) {
+      toast.error('Senha fraca. Use no mínimo 12 caracteres, com letras maiúsculas, minúsculas, números e símbolos.')
       return
     }
 
     setIsLoading(true)
     setError('')
 
-    try {
-      // Atualizar senha usando Supabase Auth
-      const { data, error: updateError } = await supabase.auth.updateUser({
-        password: formData.password
-      })
+    if (!token) {
+      setError('Token de redefinição inválido ou ausente.')
+      toast.error('Token de redefinição inválido ou ausente.')
+      setIsLoading(false)
+      return
+    }
 
-      if (updateError) {
-        throw updateError
-      }
+    try {
+      const response = await authAPI.resetPassword(token, formData.password)
 
       setSuccess(true)
-      toast.success('Senha redefinida com sucesso!')
+      toast.success(response.message || 'Senha redefinida com sucesso!')
 
-      // Fazer logout para forçar novo login
-      await supabase.auth.signOut()
-
-      // Redirecionar para login após 3 segundos
       setTimeout(() => {
         router.push(loginHref)
       }, 3000)
     } catch (error: any) {
-      const errorMessage = error?.message || 'Erro ao processar solicitação. Tente novamente.'
+      const errorMessage = error.response?.data?.message || 'Erro ao redefinir a senha. O link pode ter expirado.'
       setError(errorMessage)
       toast.error(errorMessage)
     } finally {
@@ -169,23 +166,6 @@ function ResetPasswordForm() {
             </div>
           )}
 
-          {!isRecoveryMode && !success && (
-            <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex items-start">
-              <AlertCircle className="h-5 w-5 text-yellow-500 mr-3 mt-0.5 flex-shrink-0" />
-              <div className="flex-1">
-                <p className="text-sm text-yellow-800">
-                  Link de recuperação não detectado. Por favor, clique no link enviado para seu email.
-                </p>
-                <Link
-                  href={forgotHref}
-                  className="text-sm text-yellow-600 hover:text-yellow-700 font-medium underline mt-2 inline-block"
-                >
-                  Solicitar novo link
-                </Link>
-              </div>
-            </div>
-          )}
-
           {!success ? (
             <form onSubmit={handleSubmit} className="space-y-5">
               {/* Password Field */}
@@ -200,7 +180,7 @@ function ResetPasswordForm() {
                     type={showPassword ? 'text' : 'password'}
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className="w-full pl-10 pr-10 px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+                    className="w-full pl-12 pr-10 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-meu-primary focus:border-transparent"
                     placeholder="Digite sua nova senha"
                     required
                     minLength={6}
@@ -213,7 +193,7 @@ function ResetPasswordForm() {
                     {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
                 </div>
-                <p className="text-xs text-gray-500">Mínimo de 6 caracteres</p>
+                <p className="text-xs text-gray-500">Mínimo 12 caracteres, com maiúscula, minúscula, número e símbolo.</p>
               </div>
 
               {/* Confirm Password Field */}
@@ -228,7 +208,7 @@ function ResetPasswordForm() {
                     type={showConfirmPassword ? 'text' : 'password'}
                     value={formData.confirmPassword}
                     onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                    className="w-full pl-10 pr-10 px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+                    className="w-full pl-12 pr-10 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-meu-primary focus:border-transparent"
                     placeholder="Confirme sua nova senha"
                     required
                     minLength={6}
@@ -246,7 +226,7 @@ function ResetPasswordForm() {
               <Button
                 type="submit"
                 className="w-full bg-meu-primary hover:bg-meu-primary-dark text-white font-semibold py-3 px-4 rounded-lg transition-colors duration-200"
-                disabled={isLoading || !isRecoveryMode || !!error}
+                disabled={isLoading || !token || !!error}
               >
                 {isLoading ? (
                   <>

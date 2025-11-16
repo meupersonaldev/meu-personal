@@ -87,10 +87,6 @@ export default function LoginSelectionPage() {
               </div>
             ))}
           </div>
-
-          <div className="text-center text-sm text-gray-500">
-            Precisa redefinir sua senha? Acesse <Link href="/esqueci-senha" className="text-meu-primary hover:text-meu-primary-dark font-medium">Esqueci minha senha</Link>
-          </div>
         </div>
       </div>
     </div>

@@ -5,11 +5,11 @@ import * as https from 'https'
 import jwt, { type Secret, type SignOptions } from 'jsonwebtoken'
 import type { StringValue } from 'ms'
 import { z } from 'zod'
-import { Resend } from 'resend'
 import { supabase } from '../lib/supabase'
 import { ensureFranqueadoraContact } from '../services/franqueadora-contacts.service'
 import { auditAuthEvent, auditSensitiveOperation } from '../middleware/audit'
 import { auditService } from '../services/audit.service'
+import { emailService } from '../services/email.service'
 
 const router = express.Router()
 
@@ -89,21 +89,22 @@ const registerSchema = z.object({
   name: z.string().min(2, 'Nome deve ter pelo menos 2 caracteres'),
   email: z.string().email('Email inválido'),
   password: z.string().min(12, 'Senha deve ter pelo menos 12 caracteres'),
+  passwordConfirmation: z.string(),
   phone: z.string().min(8, 'Telefone é obrigatório'),
   cpf: z.string().min(11, 'CPF deve ter 11 dígitos').max(14, 'CPF inválido'),
   gender: z.enum(['MALE', 'FEMALE', 'NON_BINARY', 'OTHER', 'PREFER_NOT_TO_SAY']),
   role: z.enum(['STUDENT', 'TEACHER']).default('STUDENT'),
   cref: z.string().optional(),
   specialties: z.array(z.string()).optional()
+}).refine(data => data.password === data.passwordConfirmation, {
+  message: 'As senhas não coincidem',
+  path: ['passwordConfirmation']
 })
 
 const forgotPasswordSchema = z.object({
   email: z.string().email('Email inválido')
 })
 
-const resendApiKey = process.env.RESEND_API_KEY
-const resendFromEmail = process.env.RESEND_FROM_EMAIL
-const resendClient = resendApiKey ? new Resend(resendApiKey) : null
 
 
 // POST /api/auth/login
@@ -397,8 +398,9 @@ router.post('/register', auditSensitiveOperation('CREATE', 'users'), async (req,
   } catch (error) {
     if (error instanceof z.ZodError) {
       console.warn('Validação de registro falhou:', JSON.stringify(error.errors, null, 2))
+      const errorMessage = error.errors.map(e => e.message).join(', ')
       return res.status(400).json({
-        message: 'Dados inválidos',
+        message: `Dados inválidos: ${errorMessage}`,
         errors: error.errors
       })
     }
@@ -466,27 +468,21 @@ router.post('/forgot-password', async (req, res) => {
   try {
     const { email } = forgotPasswordSchema.parse(req.body)
 
-    // Buscar usuário pelo email
-    const { data: user, error } = await supabase
+    const { data: user, error: userError } = await supabase
       .from('users')
       .select('id, name')
       .eq('email', email)
       .eq('is_active', true)
       .single()
 
-    // Se usuário existe, gerar token de reset
-    if (user && !error) {
-      // Gerar token único para reset de senha
-      const isProd = process.env.NODE_ENV === 'production'
-      const jwtSecret = process.env.JWT_SECRET || (!isProd ? 'dev-insecure-jwt-secret-please-set-env-32chars-123456' : '')
+    if (user && !userError) {
+      const jwtSecret = process.env.JWT_SECRET
+      if (!jwtSecret) throw new Error('JWT_SECRET não está configurado.')
+
       const resetToken = jwt.sign(
-        {
-          userId: user.id,
-          email: email,
-          type: 'password_reset'
-        },
+        { userId: user.id, email: email, type: 'password_reset' },
         jwtSecret,
-        { expiresIn: '1h' } // Token expira em 1 hora
+        { expiresIn: '1h' }
       )
 
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000'
@@ -494,62 +490,41 @@ router.post('/forgot-password', async (req, res) => {
       resetUrl.searchParams.set('token', resetToken)
       const resetLink = resetUrl.toString()
 
-      if (resendClient && resendFromEmail) {
-        try {
-          await resendClient.emails.send({
-            from: resendFromEmail,
-            to: email,
-            subject: 'Redefinição de senha - Meu Personal',
-            html: `
-              <p>Olá ${user.name || ''},</p>
-              <p>Recebemos uma solicitação para redefinir a sua senha na plataforma Meu Personal.</p>
-              <p><a href="${resetLink}" target="_blank" rel="noopener noreferrer">Clique aqui para criar uma nova senha</a>.</p>
-              <p>Se você não solicitou essa alteração, ignore este e-mail.</p>
-              <p>Atenciosamente,<br/>Equipe Meu Personal</p>
-            `,
-            text: [
-              `Olá ${user.name || ''},`,
-              '',
-              'Recebemos uma solicitação para redefinir a sua senha na plataforma Meu Personal.',
-              `Acesse o link a seguir para criar uma nova senha: ${resetLink}`,
-              '',
-              'Se você não solicitou essa alteração, ignore este e-mail.',
-              '',
-              'Equipe Meu Personal'
-            ].join('\n')
-          })
-        } catch (sendError) {
-          console.error('Erro ao enviar email de redefinição de senha via Resend:', sendError)
-        }
-      } else {
-        console.warn('Resend não está configurado. Token de redefinição gerado:', resetToken)
-      }
-
-      // Salvar hash do token na tabela users para validação posterior
-      const tokenHash = await bcrypt.hash(resetToken, 10)
-      await supabase
-        .from('users')
-        .update({
-          reset_token_hash: tokenHash,
-          reset_token_expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // 1 hora
-          updated_at: new Date().toISOString()
+      try {
+        await emailService.sendEmail({
+          to: email,
+          subject: 'Redefinição de senha - Meu Personal',
+          html: `
+            <p>Olá ${user.name || ''},</p>
+            <p>Recebemos uma solicitação para redefinir a sua senha na plataforma Meu Personal.</p>
+            <p><a href="${resetLink}" target="_blank" rel="noopener noreferrer">Clique aqui para criar uma nova senha</a>.</p>
+            <p>Se você não solicitou essa alteração, ignore este e-mail.</p>
+            <p>Atenciosamente,<br>Equipe Meu Personal</p>
+          `,
+          text: [
+            `Olá ${user.name || ''},`,
+            '',
+            'Recebemos uma solicitação para redefinir a sua senha na plataforma Meu Personal.',
+            `Acesse o link a seguir para criar uma nova senha: ${resetLink}`,
+            '',
+            'Se você não solicitou essa alteração, ignore este e-mail.',
+            '',
+            'Atenciosamente,',
+            'Equipe Meu Personal'
+          ].join('\n'),
         })
-        .eq('id', user.id)
+      } catch (sendError) {
+        console.error('Erro ao enviar email de redefinição de senha:', sendError)
+      }
     }
 
-    // Sempre retornar sucesso por segurança (não expor se email existe)
     res.json({
-      message: 'Se o email estiver cadastrado, você receberá instruções para redefinir sua senha.'
+      message: 'Se o email estiver cadastrado, você receberá instruções para redefinir sua senha.',
     })
-
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return res.status(400).json({
-        message: 'Email inválido',
-        errors: error.errors
-      })
+      return res.status(400).json({ message: 'Dados inválidos', errors: error.errors })
     }
-
     console.error('Erro em forgot-password:', error)
     res.status(500).json({ message: 'Erro interno do servidor' })
   }
@@ -572,27 +547,17 @@ router.post('/reset-password', auditSensitiveOperation('SENSITIVE_CHANGE', 'user
       return res.status(401).json({ message: 'Token inválido' })
     }
 
-    // Buscar usuário e validar token hash
+    // Buscar usuário
     const { data: user, error } = await supabase
       .from('users')
-      .select('id, reset_token_hash, reset_token_expires_at')
+      .select('id')
       .eq('id', decoded.userId)
       .eq('email', decoded.email)
+      .eq('is_active', true)
       .single()
 
     if (error || !user) {
       return res.status(401).json({ message: 'Usuário não encontrado' })
-    }
-
-    // Verificar se token não expirou
-    if (user.reset_token_expires_at && new Date(user.reset_token_expires_at) < new Date()) {
-      return res.status(401).json({ message: 'Token expirado' })
-    }
-
-    // Validar hash do token
-    const isValidToken = await bcrypt.compare(token, user.reset_token_hash)
-    if (!isValidToken) {
-      return res.status(401).json({ message: 'Token inválido' })
     }
 
     if (!isStrongPassword(password)) {
@@ -605,14 +570,12 @@ router.post('/reset-password', auditSensitiveOperation('SENSITIVE_CHANGE', 'user
     // Hash da nova senha
     const passwordHash = await bcrypt.hash(password, 10)
 
-    // Atualizar senha e limpar token de reset
+    // Atualizar senha
     await supabase
       .from('users')
       .update({
         password_hash: passwordHash,
         password: null,
-        reset_token_hash: null,
-        reset_token_expires_at: null,
         updated_at: new Date().toISOString()
       })
       .eq('id', user.id)

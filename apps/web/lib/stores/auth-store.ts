@@ -237,9 +237,9 @@ export const useAuthStore = create<AuthState>()(
             document.cookie = `auth-token=; Path=/; Max-Age=0; SameSite=Lax${secure}`
           }
 
-          // Redirecionar para landing page
-          if (shouldRedirect && typeof window !== 'undefined') {
-            window.location.href = '/'
+          // Redirecionar para página de login
+          if (shouldRedirect && typeof window !== 'undefined' && window.location.pathname !== '/login') {
+            window.location.href = '/login'
           }
         } catch {
         }
