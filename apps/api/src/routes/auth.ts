@@ -13,7 +13,7 @@ import { emailService } from '../services/email.service'
 
 const router = express.Router()
 
-async function isPasswordPwned(password: string): Promise<boolean> {
+async function isPasswordPwned (password: string): Promise<boolean> {
   const sha1 = createHash('sha1').update(password).digest('hex').toUpperCase()
   const prefix = sha1.slice(0, 5)
   const suffix = sha1.slice(5)
@@ -22,9 +22,11 @@ async function isPasswordPwned(password: string): Promise<boolean> {
       const req = https.request(
         `https://api.pwnedpasswords.com/range/${prefix}`,
         { method: 'GET', headers: { 'Add-Padding': 'true' } },
-        (res) => {
+        res => {
           let data = ''
-          res.on('data', (chunk) => { data += chunk })
+          res.on('data', chunk => {
+            data += chunk
+          })
           res.on('end', () => resolve(data))
         }
       )
@@ -42,8 +44,8 @@ async function isPasswordPwned(password: string): Promise<boolean> {
   }
 }
 
-function isStrongPassword(password: string): boolean {
-  if (!password || password.length < 12) return false
+function isStrongPassword (password: string): boolean {
+  if (!password || password.length < 6) return false
   const hasLower = /[a-z]/.test(password)
   const hasUpper = /[A-Z]/.test(password)
   const hasDigit = /\d/.test(password)
@@ -51,22 +53,22 @@ function isStrongPassword(password: string): boolean {
   return hasLower && hasUpper && hasDigit && hasSymbol
 }
 
-function normalizeCref(v?: string | null) {
+function normalizeCref (v?: string | null) {
   if (!v) return null
-  
+
   // Remover "CREF" do início se presente
   let normalized = v.toUpperCase().trim()
   if (normalized.startsWith('CREF')) {
     normalized = normalized.substring(4).trim()
   }
-  
+
   // Remover espaços extras e caracteres inválidos, mantendo apenas números, letras, hífen e barra
   normalized = normalized.replace(/[^0-9A-Z\-\/]/g, '')
-  
+
   // Formato esperado: 12345-G/SP ou variações
   // Garantir que está no formato correto
   const match = normalized.match(/^(\d{4,6})[\-]?([A-Z])?[\/-]?([A-Z]{2})?$/)
-  
+
   if (match) {
     const [, number, category, uf] = match
     let result = number
@@ -74,7 +76,7 @@ function normalizeCref(v?: string | null) {
     if (uf) result += `/${uf}`
     return result
   }
-  
+
   // Se não corresponder ao padrão, retornar normalizado básico
   return normalized || null
 }
@@ -85,27 +87,33 @@ const loginSchema = z.object({
   password: z.string().min(1, 'Senha é obrigatória')
 })
 
-const registerSchema = z.object({
-  name: z.string().min(2, 'Nome deve ter pelo menos 2 caracteres'),
-  email: z.string().email('Email inválido'),
-  password: z.string().min(12, 'Senha deve ter pelo menos 12 caracteres'),
-  passwordConfirmation: z.string(),
-  phone: z.string().min(8, 'Telefone é obrigatório'),
-  cpf: z.string().min(11, 'CPF deve ter 11 dígitos').max(14, 'CPF inválido'),
-  gender: z.enum(['MALE', 'FEMALE', 'NON_BINARY', 'OTHER', 'PREFER_NOT_TO_SAY']),
-  role: z.enum(['STUDENT', 'TEACHER']).default('STUDENT'),
-  cref: z.string().optional(),
-  specialties: z.array(z.string()).optional()
-}).refine(data => data.password === data.passwordConfirmation, {
-  message: 'As senhas não coincidem',
-  path: ['passwordConfirmation']
-})
+const registerSchema = z
+  .object({
+    name: z.string().min(2, 'Nome deve ter pelo menos 2 caracteres'),
+    email: z.string().email('Email inválido'),
+    password: z.string().min(6, 'Senha deve ter pelo menos 6 caracteres'),
+    passwordConfirmation: z.string(),
+    phone: z.string().min(8, 'Telefone é obrigatório'),
+    cpf: z.string().min(11, 'CPF deve ter 11 dígitos').max(14, 'CPF inválido'),
+    gender: z.enum([
+      'MALE',
+      'FEMALE',
+      'NON_BINARY',
+      'OTHER',
+      'PREFER_NOT_TO_SAY'
+    ]),
+    role: z.enum(['STUDENT', 'TEACHER']).default('STUDENT'),
+    cref: z.string().optional(),
+    specialties: z.array(z.string()).optional()
+  })
+  .refine(data => data.password === data.passwordConfirmation, {
+    message: 'As senhas não coincidem',
+    path: ['passwordConfirmation']
+  })
 
 const forgotPasswordSchema = z.object({
   email: z.string().email('Email inválido')
 })
-
-
 
 // POST /api/auth/login
 router.post('/login', auditAuthEvent('LOGIN'), async (req, res) => {
@@ -115,7 +123,9 @@ router.post('/login', auditAuthEvent('LOGIN'), async (req, res) => {
     // Buscar usuário no Supabase (inclui campos de senha)
     const { data: users, error: userError } = await supabase
       .from('users')
-      .select('id, name, email, phone, role, credits, avatar_url, is_active, password_hash, password, approval_status')
+      .select(
+        'id, name, email, phone, role, credits, avatar_url, is_active, password_hash, password, approval_status'
+      )
       .eq('email', email)
       .eq('is_active', true)
       .single()
@@ -136,7 +146,11 @@ router.post('/login', auditAuthEvent('LOGIN'), async (req, res) => {
         const newHash = await bcrypt.hash(password, 10)
         await supabase
           .from('users')
-          .update({ password_hash: newHash, password: null, updated_at: new Date().toISOString() })
+          .update({
+            password_hash: newHash,
+            password: null,
+            updated_at: new Date().toISOString()
+          })
           .eq('id', users.id)
       }
     }
@@ -147,16 +161,19 @@ router.post('/login', auditAuthEvent('LOGIN'), async (req, res) => {
 
     // SEGURANÇA CRÍTICA: Validar secret forte (exigente em produção). Fallback em dev.
     const isProd = process.env.NODE_ENV === 'production'
-    const jwtSecret = process.env.JWT_SECRET || (!isProd ? 'dev-insecure-jwt-secret-please-set-env-32chars-123456' : '')
+    const jwtSecret =
+      process.env.JWT_SECRET ||
+      (!isProd ? 'dev-insecure-jwt-secret-please-set-env-32chars-123456' : '')
     if (!jwtSecret || (isProd && jwtSecret.length < 32)) {
       throw new Error('JWT_SECRET inválido (produção exige >=32 chars)')
     }
     const jwtSecretKey: Secret = jwtSecret
-    const expiresIn: StringValue = (process.env.JWT_EXPIRES_IN || '15m') as StringValue
+    const expiresIn: StringValue = (process.env.JWT_EXPIRES_IN ||
+      '15m') as StringValue
     const jwtOptions: SignOptions = {
       expiresIn
     }
-    
+
     // Gerar JWT com expiração curta para maior segurança
     const token = jwt.sign(
       {
@@ -177,7 +194,7 @@ router.post('/login', auditAuthEvent('LOGIN'), async (req, res) => {
         secure: isProd,
         sameSite: isProd ? 'none' : 'lax',
         maxAge: 7 * 24 * 60 * 60 * 1000,
-        path: '/',
+        path: '/'
       })
     } catch {}
 
@@ -197,10 +214,12 @@ router.post('/login', auditAuthEvent('LOGIN'), async (req, res) => {
         approval_status: users.approval_status
       }
     })
-
   } catch (error) {
     if (error instanceof z.ZodError) {
-      console.warn('Validação de login falhou:', JSON.stringify(error.errors, null, 2))
+      console.warn(
+        'Validação de login falhou:',
+        JSON.stringify(error.errors, null, 2)
+      )
       return res.status(400).json({
         message: 'Dados inválidos',
         errors: error.errors
@@ -213,202 +232,237 @@ router.post('/login', auditAuthEvent('LOGIN'), async (req, res) => {
 })
 
 // POST /api/auth/register
-router.post('/register', auditSensitiveOperation('CREATE', 'users'), async (req, res) => {
-  try {
-    console.log('JWT_SECRET configurado:', process.env.JWT_SECRET ? `Sim (${process.env.JWT_SECRET.length} chars)` : 'Não')
-    const userData = registerSchema.parse(req.body)
-  if (userData.role === 'TEACHER') {
-    if (!userData.cref || !userData.cref.trim()) {
-      return res.status(400).json({ message: 'CREF é obrigatório para professores' })
-    }
-  }
-    if (!isStrongPassword(userData.password)) {
-      return res.status(400).json({ message: 'Senha fraca. Mínimo 12 caracteres, com dígito, minúscula, maiúscula e símbolo.' })
-    }
-    if (await isPasswordPwned(userData.password)) {
-      return res.status(400).json({ message: 'Senha vazada ou muito comum. Escolha outra senha.' })
-    }
-    const sanitizedCpf = userData.cpf.replace(/\D/g, '')
-
-    // Verificar se email já existe
-    const { data: existingUser, error: checkError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('email', userData.email)
-      .single()
-
-    if (existingUser) {
-      return res.status(400).json({ message: 'Email já está em uso' })
-    }
-
-    // Verificar se CPF já existe
-    const { data: existingCpfUsers, error: cpfCheckError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('cpf', sanitizedCpf)
-      .limit(1)
-
-    if (cpfCheckError) {
-      console.error('Erro ao verificar CPF existente:', cpfCheckError)
-      return res.status(500).json({ message: 'Erro ao validar CPF' })
-    }
-
-    if (existingCpfUsers && existingCpfUsers.length > 0) {
-      return res.status(400).json({ message: 'CPF já está em uso' })
-    }
-
-    // Criar novo usuário no Supabase
-    const passwordHash = await bcrypt.hash(userData.password, 10)
-
-    // Buscar ID da franqueadora principal
-    const { data: franqueadora } = await supabase
-      .from('franqueadora')
-      .select('id')
-      .eq('is_active', true)
-      .single()
-
-    const crefNormalized = userData.role === 'TEACHER' && userData.cref 
-      ? normalizeCref(userData.cref) 
-      : null
-
-    const newUser = {
-      name: userData.name,
-      email: userData.email,
-      phone: userData.phone || null,
-      cpf: sanitizedCpf, // Armazenar apenas números
-      cref: crefNormalized, // Armazenar CREF normalizado na tabela users
-      role: userData.role,
-      credits: userData.role === 'STUDENT' ? 5 : 0, // Créditos de boas-vindas
-      is_active: true,
-      password_hash: passwordHash,
-      gender: userData.gender,
-      franchisor_id: franqueadora?.id || null, // Vincular à franqueadora principal
-      franchise_id: null // Franquia definida apenas por vínculo operacional
-    }
-
-    const { data: createdUser, error: createError } = await supabase
-      .from('users')
-      .insert([newUser])
-      .select()
-      .single()
-
-    if (createError) {
-      console.error('Erro ao criar usuário:', createError)
-      return res.status(500).json({ message: 'Erro ao criar usuário' })
-    }
-
+router.post(
+  '/register',
+  auditSensitiveOperation('CREATE', 'users'),
+  async (req, res) => {
     try {
-      await ensureFranqueadoraContact({
-        userId: createdUser.id,
-        role: createdUser.role,
-        origin: 'SELF_REGISTRATION',
-      })
-    } catch (contactError) {
-      console.warn('Falha ao sincronizar contato da franqueadora:', contactError)
-    }
-    // Se for professor, criar perfil de professor e abrir approval request
-    if (userData.role === 'TEACHER') {
-      const { error: profileError } = await supabase
-        .from('teacher_profiles')
-        .insert([{
-          user_id: createdUser.id,
-          bio: '',
-          specialization: Array.isArray(userData.specialties) ? userData.specialties : [],
-          hourly_rate: 0,
-          availability: {},
-          is_available: false,
-          cref: crefNormalized || null
-        }])
-
-      if (profileError) {
-        if ((profileError as any).code === '23505') {
-          return res.status(409).json({ message: 'CREF já cadastrado' })
+      console.log(
+        'JWT_SECRET configurado:',
+        process.env.JWT_SECRET
+          ? `Sim (${process.env.JWT_SECRET.length} chars)`
+          : 'Não'
+      )
+      const userData = registerSchema.parse(req.body)
+      if (userData.role === 'TEACHER') {
+        if (!userData.cref || !userData.cref.trim()) {
+          return res
+            .status(400)
+            .json({ message: 'CREF é obrigatório para professores' })
         }
-        console.error('Erro ao criar perfil de professor:', profileError)
-        return res.status(500).json({ message: 'Erro ao criar perfil de professor' })
+      }
+      if (!isStrongPassword(userData.password)) {
+        return res
+          .status(400)
+          .json({
+            message:
+              'Senha fraca. Mínimo 6 caracteres, com dígito, minúscula, maiúscula e símbolo.'
+          })
+      }
+      if (await isPasswordPwned(userData.password)) {
+        return res
+          .status(400)
+          .json({
+            message: 'Senha vazada ou muito comum. Escolha outra senha.'
+          })
+      }
+      const sanitizedCpf = userData.cpf.replace(/\D/g, '')
+
+      // Verificar se email já existe
+      const { data: existingUser, error: checkError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', userData.email)
+        .single()
+
+      if (existingUser) {
+        return res.status(400).json({ message: 'Email já está em uso' })
       }
 
-      // Criar approval request pendente para franqueadora
+      // Verificar se CPF já existe
+      const { data: existingCpfUsers, error: cpfCheckError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('cpf', sanitizedCpf)
+        .limit(1)
+
+      if (cpfCheckError) {
+        console.error('Erro ao verificar CPF existente:', cpfCheckError)
+        return res.status(500).json({ message: 'Erro ao validar CPF' })
+      }
+
+      if (existingCpfUsers && existingCpfUsers.length > 0) {
+        return res.status(400).json({ message: 'CPF já está em uso' })
+      }
+
+      // Criar novo usuário no Supabase
+      const passwordHash = await bcrypt.hash(userData.password, 10)
+
+      // Buscar ID da franqueadora principal
+      const { data: franqueadora } = await supabase
+        .from('franqueadora')
+        .select('id')
+        .eq('is_active', true)
+        .single()
+
+      const crefNormalized =
+        userData.role === 'TEACHER' && userData.cref
+          ? normalizeCref(userData.cref)
+          : null
+
+      const newUser = {
+        name: userData.name,
+        email: userData.email,
+        phone: userData.phone || null,
+        cpf: sanitizedCpf, // Armazenar apenas números
+        cref: crefNormalized, // Armazenar CREF normalizado na tabela users
+        role: userData.role,
+        credits: userData.role === 'STUDENT' ? 5 : 0, // Créditos de boas-vindas
+        is_active: true,
+        password_hash: passwordHash,
+        gender: userData.gender,
+        franchisor_id: franqueadora?.id || null, // Vincular à franqueadora principal
+        franchise_id: null // Franquia definida apenas por vínculo operacional
+      }
+
+      const { data: createdUser, error: createError } = await supabase
+        .from('users')
+        .insert([newUser])
+        .select()
+        .single()
+
+      if (createError) {
+        console.error('Erro ao criar usuário:', createError)
+        return res.status(500).json({ message: 'Erro ao criar usuário' })
+      }
+
       try {
-        await supabase
-          .from('approval_requests')
-          .insert({
+        await ensureFranqueadoraContact({
+          userId: createdUser.id,
+          role: createdUser.role,
+          origin: 'SELF_REGISTRATION'
+        })
+      } catch (contactError) {
+        console.warn(
+          'Falha ao sincronizar contato da franqueadora:',
+          contactError
+        )
+      }
+      // Se for professor, criar perfil de professor e abrir approval request
+      if (userData.role === 'TEACHER') {
+        const { error: profileError } = await supabase
+          .from('teacher_profiles')
+          .insert([
+            {
+              user_id: createdUser.id,
+              bio: '',
+              specialization: Array.isArray(userData.specialties)
+                ? userData.specialties
+                : [],
+              hourly_rate: 0,
+              availability: {},
+              is_available: false,
+              cref: crefNormalized || null
+            }
+          ])
+
+        if (profileError) {
+          if ((profileError as any).code === '23505') {
+            return res.status(409).json({ message: 'CREF já cadastrado' })
+          }
+          console.error('Erro ao criar perfil de professor:', profileError)
+          return res
+            .status(500)
+            .json({ message: 'Erro ao criar perfil de professor' })
+        }
+
+        // Criar approval request pendente para franqueadora
+        try {
+          await supabase.from('approval_requests').insert({
             type: 'teacher_registration',
             user_id: createdUser.id,
             requested_data: { cref: crefNormalized || null }
           })
-      } catch (e) {
-        console.warn('Falha ao criar approval_request de professor:', e)
+        } catch (e) {
+          console.warn('Falha ao criar approval_request de professor:', e)
+        }
       }
-    }
 
-    // SEGURANÇA CRÍTICA: Validar secret forte (exigente em produção). Fallback em dev.
-    const isProd = process.env.NODE_ENV === 'production'
-    const jwtSecret = process.env.JWT_SECRET || (!isProd ? 'dev-insecure-jwt-secret-please-set-env-32chars-123456' : '')
-    if (!jwtSecret || jwtSecret.length < 32) {
-      throw new Error('JWT_SECRET deve ter pelo menos 32 caracteres para segurança')
-    }
-    const jwtSecretKey: Secret = jwtSecret
-    const expiresIn: StringValue = (process.env.JWT_EXPIRES_IN || '15m') as StringValue
-    const jwtOptions: SignOptions = {
-      expiresIn
-    }
-    
-    // Gerar JWT com expiração curta para maior segurança
-    const token = jwt.sign(
-      {
-        userId: createdUser.id,
-        email: createdUser.email,
-        role: createdUser.role,
-        iat: Math.floor(Date.now() / 1000)
-      },
-      jwtSecretKey,
-      jwtOptions // Access token curto
-    )
-
-    // Setar cookie HttpOnly para o domínio da API (usado pela API com credentials: include)
-    try {
-      const isProdEnv = process.env.NODE_ENV === 'production'
-      res.cookie('auth-token', token, {
-        httpOnly: true,
-        secure: isProdEnv,
-        sameSite: isProdEnv ? 'none' : 'lax',
-        maxAge: 7 * 24 * 60 * 60 * 1000,
-        path: '/',
-      })
-    } catch {}
-
-    // Retornar dados do usuário
-    res.status(201).json({
-      message: 'Conta criada com sucesso',
-      token,
-      user: {
-        id: createdUser.id,
-        name: createdUser.name,
-        email: createdUser.email,
-        phone: createdUser.phone,
-        role: createdUser.role,
-        gender: createdUser.gender,
-        credits: createdUser.credits,
-        avatarUrl: createdUser.avatar_url,
-        isActive: createdUser.is_active
+      // SEGURANÇA CRÍTICA: Validar secret forte (exigente em produção). Fallback em dev.
+      const isProd = process.env.NODE_ENV === 'production'
+      const jwtSecret =
+        process.env.JWT_SECRET ||
+        (!isProd ? 'dev-insecure-jwt-secret-please-set-env-32chars-123456' : '')
+      if (!jwtSecret || jwtSecret.length < 32) {
+        throw new Error(
+          'JWT_SECRET deve ter pelo menos 32 caracteres para segurança'
+        )
       }
-    })
+      const jwtSecretKey: Secret = jwtSecret
+      const expiresIn: StringValue = (process.env.JWT_EXPIRES_IN ||
+        '15m') as StringValue
+      const jwtOptions: SignOptions = {
+        expiresIn
+      }
 
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      console.warn('Validação de registro falhou:', JSON.stringify(error.errors, null, 2))
-      const errorMessage = error.errors.map(e => e.message).join(', ')
-      return res.status(400).json({
-        message: `Dados inválidos: ${errorMessage}`,
-        errors: error.errors
+      // Gerar JWT com expiração curta para maior segurança
+      const token = jwt.sign(
+        {
+          userId: createdUser.id,
+          email: createdUser.email,
+          role: createdUser.role,
+          iat: Math.floor(Date.now() / 1000)
+        },
+        jwtSecretKey,
+        jwtOptions // Access token curto
+      )
+
+      // Setar cookie HttpOnly para o domínio da API (usado pela API com credentials: include)
+      try {
+        const isProdEnv = process.env.NODE_ENV === 'production'
+        res.cookie('auth-token', token, {
+          httpOnly: true,
+          secure: isProdEnv,
+          sameSite: isProdEnv ? 'none' : 'lax',
+          maxAge: 7 * 24 * 60 * 60 * 1000,
+          path: '/'
+        })
+      } catch {}
+
+      // Retornar dados do usuário
+      res.status(201).json({
+        message: 'Conta criada com sucesso',
+        token,
+        user: {
+          id: createdUser.id,
+          name: createdUser.name,
+          email: createdUser.email,
+          phone: createdUser.phone,
+          role: createdUser.role,
+          gender: createdUser.gender,
+          credits: createdUser.credits,
+          avatarUrl: createdUser.avatar_url,
+          isActive: createdUser.is_active
+        }
       })
-    }
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        console.warn(
+          'Validação de registro falhou:',
+          JSON.stringify(error.errors, null, 2)
+        )
+        const errorMessage = error.errors.map(e => e.message).join(', ')
+        return res.status(400).json({
+          message: `Dados inválidos: ${errorMessage}`,
+          errors: error.errors
+        })
+      }
 
-    console.error('Erro no registro:', error)
-    res.status(500).json({ message: 'Erro interno do servidor' })
+      console.error('Erro no registro:', error)
+      res.status(500).json({ message: 'Erro interno do servidor' })
+    }
   }
-})
+)
 
 // POST /api/auth/logout
 router.post('/logout', (req, res) => {
@@ -426,7 +480,9 @@ router.get('/me', async (req, res) => {
 
   try {
     const isProd = process.env.NODE_ENV === 'production'
-    const jwtSecret = process.env.JWT_SECRET || (!isProd ? 'dev-insecure-jwt-secret-please-set-env-32chars-123456' : '')
+    const jwtSecret =
+      process.env.JWT_SECRET ||
+      (!isProd ? 'dev-insecure-jwt-secret-please-set-env-32chars-123456' : '')
     if (!jwtSecret || (isProd && jwtSecret.length < 32)) {
       throw new Error('JWT_SECRET inválido (produção exige >=32 chars)')
     }
@@ -457,7 +513,6 @@ router.get('/me', async (req, res) => {
         approval_status: user.approval_status
       }
     })
-
   } catch (error) {
     res.status(401).json({ message: 'Token inválido' })
   }
@@ -511,19 +566,25 @@ router.post('/forgot-password', async (req, res) => {
             '',
             'Atenciosamente,',
             'Equipe Meu Personal'
-          ].join('\n'),
+          ].join('\n')
         })
       } catch (sendError) {
-        console.error('Erro ao enviar email de redefinição de senha:', sendError)
+        console.error(
+          'Erro ao enviar email de redefinição de senha:',
+          sendError
+        )
       }
     }
 
     res.json({
-      message: 'Se o email estiver cadastrado, você receberá instruções para redefinir sua senha.',
+      message:
+        'Se o email estiver cadastrado, você receberá instruções para redefinir sua senha.'
     })
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return res.status(400).json({ message: 'Dados inválidos', errors: error.errors })
+      return res
+        .status(400)
+        .json({ message: 'Dados inválidos', errors: error.errors })
     }
     console.error('Erro em forgot-password:', error)
     res.status(500).json({ message: 'Erro interno do servidor' })
@@ -531,83 +592,102 @@ router.post('/forgot-password', async (req, res) => {
 })
 
 // POST /api/auth/reset-password
-router.post('/reset-password', auditSensitiveOperation('SENSITIVE_CHANGE', 'users'), async (req, res) => {
-  try {
-    const { password, token } = z.object({
-      password: z.string().min(12, 'Senha deve ter pelo menos 12 caracteres'),
-      token: z.string().min(1, 'Token é obrigatório')
-    }).parse(req.body)
+router.post(
+  '/reset-password',
+  auditSensitiveOperation('SENSITIVE_CHANGE', 'users'),
+  async (req, res) => {
+    try {
+      const { password, token } = z
+        .object({
+          password: z.string().min(6, 'Senha deve ter pelo menos 6 caracteres'),
+          token: z.string().min(1, 'Token é obrigatório')
+        })
+        .parse(req.body)
 
-    // Validar token JWT
-    const isProd = process.env.NODE_ENV === 'production'
-    const jwtSecret = process.env.JWT_SECRET || (!isProd ? 'dev-insecure-jwt-secret-please-set-env-32chars-123456' : '')
-    const decoded = jwt.verify(token, jwtSecret) as any
-    
-    if (decoded.type !== 'password_reset') {
-      return res.status(401).json({ message: 'Token inválido' })
-    }
+      // Validar token JWT
+      const isProd = process.env.NODE_ENV === 'production'
+      const jwtSecret =
+        process.env.JWT_SECRET ||
+        (!isProd ? 'dev-insecure-jwt-secret-please-set-env-32chars-123456' : '')
+      const decoded = jwt.verify(token, jwtSecret) as any
 
-    // Buscar usuário
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('id')
-      .eq('id', decoded.userId)
-      .eq('email', decoded.email)
-      .eq('is_active', true)
-      .single()
+      if (decoded.type !== 'password_reset') {
+        return res.status(401).json({ message: 'Token inválido' })
+      }
 
-    if (error || !user) {
-      return res.status(401).json({ message: 'Usuário não encontrado' })
-    }
+      // Buscar usuário
+      const { data: user, error } = await supabase
+        .from('users')
+        .select('id')
+        .eq('id', decoded.userId)
+        .eq('email', decoded.email)
+        .eq('is_active', true)
+        .single()
 
-    if (!isStrongPassword(password)) {
-      return res.status(400).json({ message: 'Senha fraca. Mínimo 12 caracteres, com dígito, minúscula, maiúscula e símbolo.' })
-    }
-    if (await isPasswordPwned(password)) {
-      return res.status(400).json({ message: 'Senha vazada ou muito comum. Escolha outra senha.' })
-    }
+      if (error || !user) {
+        return res.status(401).json({ message: 'Usuário não encontrado' })
+      }
 
-    // Hash da nova senha
-    const passwordHash = await bcrypt.hash(password, 10)
+      if (!isStrongPassword(password)) {
+        return res
+          .status(400)
+          .json({
+            message:
+              'Senha fraca. Mínimo 6 caracteres, com dígito, minúscula, maiúscula e símbolo.'
+          })
+      }
+      if (await isPasswordPwned(password)) {
+        return res
+          .status(400)
+          .json({
+            message: 'Senha vazada ou muito comum. Escolha outra senha.'
+          })
+      }
 
-    // Atualizar senha
-    await supabase
-      .from('users')
-      .update({
-        password_hash: passwordHash,
-        password: null,
-        updated_at: new Date().toISOString()
+      // Hash da nova senha
+      const passwordHash = await bcrypt.hash(password, 10)
+
+      // Atualizar senha
+      await supabase
+        .from('users')
+        .update({
+          password_hash: passwordHash,
+          password: null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id)
+
+      res.json({
+        message:
+          'Senha redefinida com sucesso! Você já pode fazer login com sua nova senha.'
       })
-      .eq('id', user.id)
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({
+          message: 'Dados inválidos',
+          errors: error.errors
+        })
+      }
 
-    res.json({
-      message: 'Senha redefinida com sucesso! Você já pode fazer login com sua nova senha.'
-    })
+      if (error instanceof jwt.JsonWebTokenError) {
+        return res.status(401).json({ message: 'Token inválido ou expirado' })
+      }
 
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json({
-        message: 'Dados inválidos',
-        errors: error.errors
-      })
+      console.error('Erro em reset-password:', error)
+      res.status(500).json({ message: 'Erro interno do servidor' })
     }
-
-    if (error instanceof jwt.JsonWebTokenError) {
-      return res.status(401).json({ message: 'Token inválido ou expirado' })
-    }
-
-    console.error('Erro em reset-password:', error)
-    res.status(500).json({ message: 'Erro interno do servidor' })
   }
-})
+)
 
 // POST /api/auth/verify-password - Verificar senha do usuário da franqueadora
 router.post('/verify-password', async (req, res) => {
   try {
-    const { email, password } = z.object({
-      email: z.string().email('Email inválido'),
-      password: z.string().min(1, 'Senha é obrigatória')
-    }).parse(req.body)
+    const { email, password } = z
+      .object({
+        email: z.string().email('Email inválido'),
+        password: z.string().min(1, 'Senha é obrigatória')
+      })
+      .parse(req.body)
 
     // Buscar usuário pelo email
     const { data: userData, error: userError } = await supabase
@@ -641,7 +721,11 @@ router.post('/verify-password', async (req, res) => {
         const newHash = await bcrypt.hash(password, 10)
         await supabase
           .from('users')
-          .update({ password_hash: newHash, password: null, updated_at: new Date().toISOString() })
+          .update({
+            password_hash: newHash,
+            password: null,
+            updated_at: new Date().toISOString()
+          })
           .eq('id', userData.id)
       }
     }
@@ -704,9 +788,11 @@ router.post('/verify-password', async (req, res) => {
 // POST /api/auth/check-email - Verificar se email já existe
 router.post('/check-email', async (req, res) => {
   try {
-    const { email } = z.object({
-      email: z.string().email('Email inválido')
-    }).parse(req.body)
+    const { email } = z
+      .object({
+        email: z.string().email('Email inválido')
+      })
+      .parse(req.body)
 
     // Buscar usuário pelo email
     const { data: userData, error: userError } = await supabase
@@ -734,5 +820,3 @@ router.post('/check-email', async (req, res) => {
 })
 
 export default router
- 
-

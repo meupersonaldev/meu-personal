@@ -7,6 +7,7 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') })
 
 import express from 'express'
 import cors from 'cors'
+import type { CorsOptions } from 'cors'
 import helmet from 'helmet'
 import morgan from 'morgan'
 import compression from 'compression'
@@ -16,7 +17,6 @@ import { authRateLimit, apiRateLimit } from './middleware/rateLimit'
 import { errorHandler, notFoundHandler } from './middleware/errorHandler'
 import { auditMiddleware } from './middleware/audit'
 
-
 // Configurar timezone globalmente
 process.env.TZ = 'America/Sao_Paulo'
 
@@ -25,65 +25,46 @@ export const app = express()
 app.set('trust proxy', 1)
 const PORT = process.env.PORT || 3001
 
-// SEGURANÇA CRÍTICA: Headers de segurança aprimorados
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      scriptSrc: ["'self'"],
-      imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'"],
-      fontSrc: ["'self'"],
-      objectSrc: ["'none'"],
-      mediaSrc: ["'self'"],
-      frameSrc: ["'none'"],
-    },
-  },
-  crossOriginEmbedderPolicy: false, // Necessário para alguns recursos
-  hsts: {
-    maxAge: 31536000,
-    includeSubDomains: true,
-    preload: true
-  }
-}))
-
-// Rate limiting global para todas as APIs
-app.use(apiRateLimit)
-
 // SEGURANÇA CRÍTICA: CORS configurado para produção com allowlist restritiva
 const isProduction = process.env.NODE_ENV === 'production'
-const rawOrigins = process.env.CORS_ORIGINS || process.env.FRONTEND_URL || 'http://localhost:3000'
-const allowedOrigins = rawOrigins.split(',').map(o => o.trim()).filter(Boolean)
+const rawOrigins =
+  process.env.CORS_ORIGINS ||
+  process.env.FRONTEND_URL ||
+  'http://localhost:3000'
+const allowedOrigins = rawOrigins
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean)
 
-app.use(cors({
+const corsOptions: CorsOptions = {
   origin: (origin, callback) => {
-    // Permitir requisições sem origin (health checks, serviços internos, mobile apps, Postman, etc)
     if (!origin) {
       if (isProduction) {
-        console.warn('CORS allowing request sem origem (provável health-check ou serviço interno)')
+        console.warn(
+          'CORS allowing request sem origem (provável health-check ou serviço interno)'
+        )
       }
       return callback(null, true)
     }
-    
-    // Em desenvolvimento, permitir localhost
+
     if (!isProduction) {
-      const isLocalhost = /^(https?:\/\/)?(localhost|127\.0\.0\.1):(\d+)(\/.*)?$/.test(origin || '')
+      const isLocalhost =
+        /^(https?:\/\/)?(localhost|127\.0\.0\.1):(\d+)(\/.*)?$/.test(
+          origin || ''
+        )
       if (isLocalhost) {
         return callback(null, true)
       }
     }
-    
-    // Verificar se origin está na allowlist
+
     if (origin && allowedOrigins.includes(origin)) {
       return callback(null, true)
     }
-    
-    // Log de tentativa de acesso não autorizado em produção (sem req.ip nesse escopo)
+
     if (isProduction && origin) {
       console.warn(`CORS blocked origin: ${origin}`)
     }
-    
+
     return callback(new Error(`Not allowed by CORS: ${origin}`))
   },
   credentials: true,
@@ -98,10 +79,46 @@ app.use(cors({
     'Pragma',
     'asaas-access-token'
   ],
-  exposedHeaders: ['X-Total-Count', 'X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset'],
-  maxAge: isProduction ? 86400 : 3600, // 24h em produção, 1h em dev
+  exposedHeaders: [
+    'X-Total-Count',
+    'X-RateLimit-Limit',
+    'X-RateLimit-Remaining',
+    'X-RateLimit-Reset'
+  ],
+  maxAge: isProduction ? 86400 : 3600,
   optionsSuccessStatus: 204
-}))
+}
+
+app.use(cors(corsOptions))
+app.options('*', cors(corsOptions))
+
+// SEGURANÇA CRÍTICA: Headers de segurança aprimorados
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'"],
+        imgSrc: ["'self'", 'data:', 'https:'],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        mediaSrc: ["'self'"],
+        frameSrc: ["'none'"]
+      }
+    },
+    crossOriginEmbedderPolicy: false, // Necessário para alguns recursos
+    hsts: {
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: true
+    }
+  })
+)
+
+// Rate limiting global para todas as APIs
+app.use(apiRateLimit)
 app.use(compression())
 app.use(morgan('dev'))
 
@@ -178,32 +195,32 @@ app.use(errorHandler)
 
 // Usar global para persistir o servidor entre reloads do tsx watch
 declare global {
-  var __server: import('http').Server | undefined;
+  var __server: import('http').Server | undefined
 }
 
 const gracefulShutdown = () => {
-  console.log('🔌 Recebido sinal de desligamento, encerrando servidor...');
+  console.log('🔌 Recebido sinal de desligamento, encerrando servidor...')
   if (global.__server) {
     global.__server.close(() => {
-      console.log('✅ Servidor encerrado.');
-      process.exit(0);
-    });
+      console.log('✅ Servidor encerrado.')
+      process.exit(0)
+    })
   } else {
-    process.exit(0);
+    process.exit(0)
   }
-};
+}
 
 // Registrar handlers de shutdown (remover duplicados)
-process.removeAllListeners('SIGTERM');
-process.removeAllListeners('SIGINT');
-process.on('SIGTERM', gracefulShutdown);
-process.on('SIGINT', gracefulShutdown);
+process.removeAllListeners('SIGTERM')
+process.removeAllListeners('SIGINT')
+process.on('SIGTERM', gracefulShutdown)
+process.on('SIGINT', gracefulShutdown)
 
 // Fechar servidor existente antes de criar um novo (hot reload)
 if (global.__server) {
-  console.log('� FeMchando servidor anterior...');
-  global.__server.close();
-  global.__server = undefined;
+  console.log('� FeMchando servidor anterior...')
+  global.__server.close()
+  global.__server = undefined
 }
 
 if (process.env.NODE_ENV !== 'test') {
@@ -214,11 +231,16 @@ if (process.env.NODE_ENV !== 'test') {
     console.log(`🔒 Modo de segurança: ATIVO`)
 
     // Iniciar scheduler T-4h para processamento automático de locks
-    console.log(`⏰ Iniciando scheduler T-4h para processamento automático de locks...`)
-    const schedulerInterval = process.env.SCHEDULER_INTERVAL_MINUTES ?
-      parseInt(process.env.SCHEDULER_INTERVAL_MINUTES) : 15
+    console.log(
+      `⏰ Iniciando scheduler T-4h para processamento automático de locks...`
+    )
+    const schedulerInterval = process.env.SCHEDULER_INTERVAL_MINUTES
+      ? parseInt(process.env.SCHEDULER_INTERVAL_MINUTES)
+      : 15
 
     bookingScheduler.startScheduler(schedulerInterval)
-    console.log(`✅ Scheduler configurado para rodar a cada ${schedulerInterval} minutos`)
-  });
+    console.log(
+      `✅ Scheduler configurado para rodar a cada ${schedulerInterval} minutos`
+    )
+  })
 }

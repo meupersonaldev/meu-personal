@@ -133,7 +133,7 @@ export function RegisterTemplate({
     }
 
     if (!isStrongPassword(formData.password)) {
-      toast.error('Senha fraca. Use no mínimo 12 caracteres, com letras maiúsculas, minúsculas, números e símbolos.')
+      toast.error('Senha fraca. Use no mínimo 6 caracteres, com letras maiúsculas, minúsculas, números e símbolos.')
       return
     }
 
@@ -467,7 +467,7 @@ export function RegisterTemplate({
                   {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
-              <p className="text-xs text-gray-500">Mínimo 12 caracteres, com maiúscula, minúscula, número e símbolo.</p>
+              <p className="text-xs text-gray-500">Mínimo 6 caracteres, com maiúscula, minúscula, número e símbolo.</p>
             </div>
 
             {/* Confirm Password */}

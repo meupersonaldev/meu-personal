@@ -1,19 +1,19 @@
-import { clsx, type ClassValue } from "clsx"
-import { twMerge } from "tailwind-merge"
+import { clsx, type ClassValue } from 'clsx'
+import { twMerge } from 'tailwind-merge'
 
-export function cn(...inputs: ClassValue[]) {
+export function cn (...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export function formatCurrency(value: number): string {
+export function formatCurrency (value: number): string {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
     currency: 'BRL'
   }).format(value)
 }
 
-export function isStrongPassword(password: string): boolean {
-  if (!password || password.length < 12) return false
+export function isStrongPassword (password: string): boolean {
+  if (!password || password.length < 6) return false
   const hasLower = /[a-z]/.test(password)
   const hasUpper = /[A-Z]/.test(password)
   const hasDigit = /\d/.test(password)

@@ -65,9 +65,10 @@ export default function Home() {
               <Image
                 src="/images/logo-fundobranco.png"
                 alt="Meu Personal"
-                width={160}
-                height={60}
-                className="h-12 w-auto object-contain transform scale-[2] origin-left translate-y-2"
+                width={200}
+                height={75}
+                priority
+                className="object-contain transform scale-[1.5] origin-left translate-y-2"
               />
             </Link>
 
@@ -217,6 +218,8 @@ export default function Home() {
                     src="/images/photo-1534438327276-14e5300c3a48.jpg"
                     alt="Personal Training"
                     fill
+                    priority
+                    sizes="(min-width: 1024px) 50vw, 100vw"
                     className="object-cover opacity-90 group-hover:scale-105 transition-transform duration-700"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-meu-primary-dark via-transparent to-transparent"></div>
@@ -318,6 +321,7 @@ export default function Home() {
                   src="/images/photo-1571019614242-c5c5dee9f50b.jpg" 
                   alt="Aluno treinando" 
                   fill
+                  sizes="(min-width: 1024px) 40vw, 90vw"
                   className="object-cover opacity-80"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-meu-primary-dark/80 to-transparent"></div>
@@ -337,6 +341,7 @@ export default function Home() {
                   src="/images/photo-1571019613454-1cb2f99b2d8b.jpg" 
                   alt="Personal trainer" 
                   fill
+                  sizes="(min-width: 1024px) 40vw, 90vw"
                   className="object-cover opacity-80"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-meu-primary-dark/80 to-transparent"></div>
@@ -458,6 +463,7 @@ export default function Home() {
                   src="/images/photo-1534438327276-14e5300c3a48-600.jpg" 
                   alt="Academia franquia" 
                   fill
+                  sizes="(min-width: 1024px) 40vw, 90vw"
                   className="object-cover opacity-80"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-meu-primary-dark/80 to-transparent"></div>

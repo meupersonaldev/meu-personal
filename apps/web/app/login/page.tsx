@@ -41,7 +41,7 @@ export default function LoginSelectionPage() {
             alt="Meu Personal"
             width={64}
             height={64}
-            className="h-16 w-auto object-contain"
+            className="object-contain"
           />
           <h1 className="text-5xl font-bold leading-tight">
             Escolha sua forma de entrar

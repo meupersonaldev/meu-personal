@@ -23,6 +23,7 @@ interface AuthState {
     name: string
     email: string
     password: string
+    passwordConfirmation: string
     phone: string
     cpf: string
     gender: 'MALE' | 'FEMALE' | 'NON_BINARY' | 'OTHER' | 'PREFER_NOT_TO_SAY'
@@ -44,17 +45,23 @@ export const useAuthStore = create<AuthState>()(
 
       initialize: async () => {
         try {
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const API_URL =
+            process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           const token = get().token
           if (!token) {
             set({ isLoading: false, isAuthenticated: false, user: null })
             return
           }
           const resp = await fetch(`${API_URL}/api/auth/me`, {
-            headers: { Authorization: `Bearer ${token}` },
+            headers: { Authorization: `Bearer ${token}` }
           })
           if (!resp.ok) {
-            set({ isLoading: false, isAuthenticated: false, user: null, token: null })
+            set({
+              isLoading: false,
+              isAuthenticated: false,
+              user: null,
+              token: null
+            })
             return
           }
           const { user } = await resp.json()
@@ -67,10 +74,10 @@ export const useAuthStore = create<AuthState>()(
                 phone: user.phone,
                 role: user.role,
                 avatar_url: user.avatarUrl ?? user.avatar_url,
-                approval_status: user.approval_status,
+                approval_status: user.approval_status
               },
               isAuthenticated: true,
-              isLoading: false,
+              isLoading: false
             })
           } else {
             set({ isLoading: false, isAuthenticated: false })
@@ -83,8 +90,9 @@ export const useAuthStore = create<AuthState>()(
       login: async (email: string, password: string) => {
         try {
           // Usar a API do backend para login
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-          
+          const API_URL =
+            process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+
           const response = await fetch(`${API_URL}/api/auth/login`, {
             method: 'POST',
             headers: {
@@ -110,7 +118,7 @@ export const useAuthStore = create<AuthState>()(
                 phone: data.user.phone,
                 role: data.user.role,
                 avatar_url: data.user.avatarUrl,
-                approval_status: data.user.approval_status,
+                approval_status: data.user.approval_status
               },
               token: data.token || null,
               isAuthenticated: true
@@ -122,11 +130,16 @@ export const useAuthStore = create<AuthState>()(
               let sameSite: 'Lax' | 'None' = 'Lax'
               let secure = ''
               try {
-                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-                const pageOrigin = typeof window !== 'undefined' ? window.location.origin : ''
+                const apiUrl =
+                  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                const pageOrigin =
+                  typeof window !== 'undefined' ? window.location.origin : ''
                 const apiOrigin = new URL(apiUrl).origin
-                const crossSite = pageOrigin && apiOrigin && apiOrigin !== pageOrigin
-                const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:'
+                const crossSite =
+                  pageOrigin && apiOrigin && apiOrigin !== pageOrigin
+                const isHttps =
+                  typeof window !== 'undefined' &&
+                  window.location.protocol === 'https:'
                 if (crossSite) {
                   // Cross-site exige SameSite=None e Secure (navegadores rejeitam None sem Secure)
                   sameSite = 'None'
@@ -146,11 +159,12 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      register: async (userData) => {
+      register: async userData => {
         try {
           // Usar a API do backend para registro (não depende do Supabase Auth)
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-          
+          const API_URL =
+            process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+
           const response = await fetch(`${API_URL}/api/auth/register`, {
             method: 'POST',
             headers: {
@@ -161,6 +175,7 @@ export const useAuthStore = create<AuthState>()(
               name: userData.name,
               email: userData.email,
               password: userData.password,
+              passwordConfirmation: userData.passwordConfirmation,
               phone: userData.phone,
               cpf: userData.cpf,
               gender: userData.gender,
@@ -188,7 +203,7 @@ export const useAuthStore = create<AuthState>()(
                 phone: data.user.phone,
                 role: data.user.role,
                 avatar_url: data.user.avatarUrl,
-                approval_status: data.user.approval_status,
+                approval_status: data.user.approval_status
               },
               token: data.token || null,
               isAuthenticated: true
@@ -200,11 +215,16 @@ export const useAuthStore = create<AuthState>()(
               let sameSite: 'Lax' | 'None' = 'Lax'
               let secure = ''
               try {
-                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-                const pageOrigin = typeof window !== 'undefined' ? window.location.origin : ''
+                const apiUrl =
+                  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                const pageOrigin =
+                  typeof window !== 'undefined' ? window.location.origin : ''
                 const apiOrigin = new URL(apiUrl).origin
-                const crossSite = pageOrigin && apiOrigin && apiOrigin !== pageOrigin
-                const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:'
+                const crossSite =
+                  pageOrigin && apiOrigin && apiOrigin !== pageOrigin
+                const isHttps =
+                  typeof window !== 'undefined' &&
+                  window.location.protocol === 'https:'
                 if (crossSite) {
                   sameSite = 'None'
                   secure = '; Secure'
@@ -225,38 +245,49 @@ export const useAuthStore = create<AuthState>()(
 
       logout: async (options?: { redirect?: boolean }) => {
         try {
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const API_URL =
+            process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           // Opcional: avisar backend
-          try { await fetch(`${API_URL}/api/auth/logout`, { method: 'POST' }) } catch {}
+          try {
+            await fetch(`${API_URL}/api/auth/logout`, { method: 'POST' })
+          } catch {}
           set({ user: null, token: null, isAuthenticated: false })
           const shouldRedirect = options?.redirect ?? true
 
           // Remover cookie do middleware
           if (typeof document !== 'undefined') {
-            const secure = typeof window !== 'undefined' && window.location.protocol === 'https:' ? '; Secure' : ''
+            const secure =
+              typeof window !== 'undefined' &&
+              window.location.protocol === 'https:'
+                ? '; Secure'
+                : ''
             document.cookie = `auth-token=; Path=/; Max-Age=0; SameSite=Lax${secure}`
           }
 
           // Redirecionar para página de login
-          if (shouldRedirect && typeof window !== 'undefined' && window.location.pathname !== '/login') {
+          if (
+            shouldRedirect &&
+            typeof window !== 'undefined' &&
+            window.location.pathname !== '/login'
+          ) {
             window.location.href = '/login'
           }
-        } catch {
-        }
+        } catch {}
       },
 
-      updateUser: async (userData) => {
+      updateUser: async userData => {
         const currentUser = get().user
         const token = get().token
         if (!currentUser || !token) return
 
         try {
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const API_URL =
+            process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           const resp = await fetch(`${API_URL}/api/users/${currentUser.id}`, {
             method: 'PUT',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
+              Authorization: `Bearer ${token}`
             },
             body: JSON.stringify(userData)
           })
@@ -270,17 +301,16 @@ export const useAuthStore = create<AuthState>()(
                 ...currentUser,
                 ...user,
                 avatar_url: user.avatarUrl ?? user.avatar_url,
-                approval_status: user.approval_status,
+                approval_status: user.approval_status
               }
             })
           }
-        } catch (error) {
-        }
+        } catch (error) {}
       }
     }),
     {
       name: 'auth-storage',
-      partialize: (state) => ({
+      partialize: state => ({
         user: state.user,
         token: state.token,
         isAuthenticated: state.isAuthenticated
@@ -288,5 +318,3 @@ export const useAuthStore = create<AuthState>()(
     }
   )
 )
-
-

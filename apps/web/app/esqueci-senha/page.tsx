@@ -78,7 +78,7 @@ function ForgotPasswordContent() {
               alt="Meu Personal"
               width={64}
               height={64}
-              className="h-16 w-auto object-contain mb-8"
+              className="object-contain mb-8"
             />
             <h1 className="text-5xl font-bold mb-6 leading-tight">
               Recupere o acesso a
@@ -110,7 +110,7 @@ function ForgotPasswordContent() {
               alt="Meu Personal"
               width={48}
               height={48}
-              className="h-12 w-auto object-contain mx-auto mb-6"
+              className="object-contain mx-auto mb-6"
             />
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Esqueci minha senha</h1>
             <p className="text-gray-600">Recupere o acesso a {heroHighlight}</p>
