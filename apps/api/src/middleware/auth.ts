@@ -64,6 +64,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
     }
 
     if (!token) {
+      console.warn(`requireAuth: No token found for ${req.method} ${req.path}`)
       return res.status(401).json({ message: 'Unauthorized' })
     }
 
@@ -79,8 +80,15 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
       email: decoded.email,
       role: decoded.role,
     }
+
+    // Log para debug de SSE
+    if (req.path.includes('/stream')) {
+      console.log(`requireAuth: SSE access - User: ${decoded.userId}, Role: ${decoded.role}, Path: ${req.path}`)
+    }
+
     return next()
   } catch (err) {
+    console.warn(`requireAuth: Invalid token for ${req.method} ${req.path}:`, err.message)
     return res.status(401).json({ message: 'Invalid token' })
   }
 }
