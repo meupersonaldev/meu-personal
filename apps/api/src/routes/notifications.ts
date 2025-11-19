@@ -308,7 +308,18 @@ router.get('/stream', requireAuth, async (req, res) => {
     const unsubs: Array<() => void> = []
     const onMessage = (payload: any) => send('notification', payload)
     if (academy_id) unsubs.push(subscribe(topicForAcademy(academy_id), onMessage))
-    if (user_id && user_id === (req.user?.userId || '')) unsubs.push(subscribe(topicForUser(user_id), onMessage))
+    if (user_id) {
+      // Permitir apenas se o user_id for do próprio usuário ou se for admin
+      const requestedUserId = user_id
+      const currentUserId = req.user?.userId || ''
+      const isAdmin = req.user?.role === 'ADMIN' || req.user?.role === 'SUPER_ADMIN'
+
+      if (requestedUserId === currentUserId || isAdmin) {
+        unsubs.push(subscribe(topicForUser(requestedUserId), onMessage))
+      } else {
+        console.warn(`Acesso negado ao stream de notificações. Usuário ${currentUserId} tentando acessar notificações de ${requestedUserId}`)
+      }
+    }
     if (franqueadora_id) {
       let allowed = false
       try {
