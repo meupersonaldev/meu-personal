@@ -44,19 +44,7 @@ export const metadata: Metadata = {
         width: 1200,
         height: 630,
         alt: 'Meu Personal - Plataforma de Personal Training',
-      },
-      {
-        url: '/images/og-image.png',
-        width: 1200,
-        height: 630,
-        alt: 'Meu Personal - Plataforma de Personal Training',
-      },
-      {
-        url: '/images/og-image-square.png',
-        width: 1200,
-        height: 1200,
-        alt: 'Meu Personal - Plataforma de Personal Training',
-      },
+      }
     ],
   },
   twitter: {

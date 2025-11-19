@@ -47,7 +47,7 @@ export function SEOHead({
 
   const metaKeywords = [...defaultKeywords, ...keywords].join(', ')
 
-  const metaImage = ogImage || `${baseUrl}/images/og-image.png`
+  const metaImage = ogImage || `${baseUrl}/images/og-image-v2.png`
 
   return (
     <>
