@@ -200,7 +200,14 @@ function UsuariosPageContent() {
     }
   }
 
-  const getApprovalStatusBadge = (status?: string) => {
+  const getApprovalStatusBadge = (status?: string, role?: string) => {
+    // Alunos não precisam de aprovação - status sempre é aprovado
+    const isStudent = role === 'STUDENT' || role === 'ALUNO'
+    if (isStudent) {
+      return <Badge className="bg-green-100 text-green-800">Aprovado</Badge>
+    }
+
+    // Professores precisam de aprovação
     switch (status) {
       case 'approved':
         return <Badge className="bg-green-100 text-green-800">Aprovado</Badge>
@@ -729,7 +736,7 @@ function UsuariosPageContent() {
                           </Badge>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          {getApprovalStatusBadge(usuario.approval_status)}
+                          {getApprovalStatusBadge(usuario.approval_status, usuario.role)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                           <div className="flex items-center justify-end gap-3">
@@ -769,7 +776,9 @@ function UsuariosPageContent() {
                                   : 'text-gray-300 cursor-not-allowed'
                               }`}
                               title={
-                                usuario.role !== 'TEACHER' && usuario.role !== 'PROFESSOR'
+                                usuario.role === 'STUDENT' || usuario.role === 'ALUNO'
+                                  ? 'Alunos não precisam de aprovação'
+                                  : usuario.role !== 'TEACHER' && usuario.role !== 'PROFESSOR'
                                   ? 'Aprovação apenas para professores'
                                   : usuario.approval_status === 'approved'
                                   ? 'Já aprovado'
@@ -798,7 +807,9 @@ function UsuariosPageContent() {
                                   : 'text-gray-300 cursor-not-allowed'
                               }`}
                               title={
-                                usuario.role !== 'TEACHER' && usuario.role !== 'PROFESSOR'
+                                usuario.role === 'STUDENT' || usuario.role === 'ALUNO'
+                                  ? 'Alunos não precisam de aprovação'
+                                  : usuario.role !== 'TEACHER' && usuario.role !== 'PROFESSOR'
                                   ? 'Reprovação apenas para professores'
                                   : usuario.approval_status === 'pending'
                                   ? 'Reprovar profissional'
