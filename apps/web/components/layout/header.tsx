@@ -43,7 +43,7 @@ export default function Header({ className }: HeaderProps) {
     )}>
       <div className="container mx-auto px-4 max-w-7xl">
         <div className="flex items-center justify-between h-24">
-          <Logo size="md" variant="default" showText={false} />
+          <Logo size="header" variant="default" showText={false} />
 
           <nav className="hidden md:flex items-center space-x-6">
             {isAuthenticated ? (

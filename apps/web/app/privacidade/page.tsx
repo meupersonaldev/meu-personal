@@ -14,15 +14,12 @@ export default function PoliticaPrivacidade() {
         <div className="container mx-auto px-4 max-w-7xl">
           <div className="flex items-center justify-between py-4">
             {/* Logo */}
-            <Link href="/" className="flex items-center">
-              <Image
-                src="/images/logo-fundobranco.png"
-                alt="Meu Personal"
-                width={160}
-                height={60}
-                className="h-12 w-auto object-contain transform scale-[2] origin-left translate-y-2"
-              />
-            </Link>
+            <Logo
+              size="header"
+              variant="default"
+              showText={false}
+              href="/"
+            />
 
             {/* Back Button */}
             <Link href="/">

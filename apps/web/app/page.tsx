@@ -58,19 +58,15 @@ export default function Home() {
     <div className="min-h-screen bg-meu-primary-dark text-white">
       {/* Header */}
       <header className="bg-meu-primary text-white sticky top-0 z-50 border-b border-meu-primary-dark">
-        <div className="container mx-auto px-4 max-w-7xl">
-          <div className="flex items-center justify-between py-4">
+        <div className="container-meu">
+          <div className="flex items-center justify-between h-20">
             {/* Logo */}
-            <Link href="/" className="flex items-center">
-              <Image
-                src="/images/logo-fundobranco.png"
-                alt="Meu Personal"
-                width={200}
-                height={75}
-                priority
-                className="object-contain transform scale-[1.5] origin-left translate-y-2"
-              />
-            </Link>
+            <Logo
+              size="header"
+              variant="default"
+              showText={false}
+              href="/"
+            />
 
             {/* Desktop Navigation */}
             <nav className="hidden md:flex items-center space-x-6">
@@ -257,7 +253,10 @@ export default function Home() {
         </section>
 
       {/* Para Alunos Section */}
-      <section id="para-alunos" className="py-16 sm:py-20 lg:py-24 bg-gradient-to-b from-meu-primary to-meu-primary-dark opacity-100 transform translate-y-0 transition-all duration-700 ease-out">
+      <section
+        id="para-alunos"
+        className="py-16 sm:py-20 lg:py-24 bg-gradient-to-b from-meu-primary to-meu-primary-dark opacity-100 transform translate-y-0 transition-all duration-700 ease-out scroll-mt-24"
+      >
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
             <div>
@@ -332,7 +331,10 @@ export default function Home() {
       </section>
 
       {/* Para Professores Section */}
-      <section id="para-professores" className="py-16 sm:py-20 lg:py-24 bg-meu-primary-dark">
+      <section
+        id="para-professores"
+        className="py-16 sm:py-20 lg:py-24 bg-meu-primary-dark scroll-mt-24"
+      >
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
             <div className="order-last lg:order-first relative">
@@ -407,7 +409,10 @@ export default function Home() {
       </section>
 
       {/* Franquias Section */}
-      <section id="franquias" className="py-16 sm:py-20 lg:py-24 bg-gradient-to-b from-meu-primary to-meu-primary-dark">
+      <section
+        id="franquias"
+        className="py-16 sm:py-20 lg:py-24 bg-gradient-to-b from-meu-primary to-meu-primary-dark scroll-mt-24"
+      >
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
             <div>
@@ -474,7 +479,10 @@ export default function Home() {
       </section>
 
       {/* Como Funciona Section */}
-      <section id="como-funciona" className="py-16 sm:py-20 lg:py-24 bg-meu-primary-dark fade-in-on-load">
+      <section
+        id="como-funciona"
+        className="py-16 sm:py-20 lg:py-24 bg-meu-primary-dark fade-in-on-load scroll-mt-24"
+      >
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl">
           <div className="text-center mb-12 lg:mb-16 fade-in-on-load-delay-1">
             <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-4 lg:mb-6">

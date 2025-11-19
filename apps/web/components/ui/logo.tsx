@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { cn } from '@/lib/utils'
 
 interface LogoProps {
-  size?: 'sm' | 'md' | 'lg' | 'xl'
+  size?: 'sm' | 'md' | 'lg' | 'xl' | 'header'
   variant?: 'default' | 'white' | 'dark'
   showText?: boolean
   href?: string
@@ -12,16 +12,18 @@ interface LogoProps {
 
 const sizeClasses = {
   sm: 'h-24 w-24',
-  md: 'h-40 w-40', 
+  md: 'h-40 w-40',
   lg: 'h-56 w-56',
-  xl: 'h-72 w-72'
+  xl: 'h-72 w-72',
+  header: 'h-24 w-48 lg:transform lg:scale-125 lg:origin-left relative lg:top-6'
 }
 
 const textSizeClasses = {
   sm: 'text-lg',
   md: 'text-xl',
-  lg: 'text-2xl', 
-  xl: 'text-3xl'
+  lg: 'text-2xl',
+  xl: 'text-3xl',
+  header: 'text-xl'
 }
 
 export function Logo({ 
@@ -42,11 +44,11 @@ export function Logo({
         'flex items-center justify-center',
         sizeClasses[size]
       )}>
-        <Image 
+        <Image
           src={logoSrc}
-          alt="Meu Personal" 
-          width={size === 'xl' ? 288 : size === 'lg' ? 224 : size === 'md' ? 160 : 96}
-          height={size === 'xl' ? 288 : size === 'lg' ? 224 : size === 'md' ? 160 : 96}
+          alt="Meu Personal"
+          width={size === 'header' ? 192 : size === 'xl' ? 288 : size === 'lg' ? 224 : size === 'md' ? 160 : 96}
+          height={size === 'header' ? 192 : size === 'xl' ? 288 : size === 'lg' ? 224 : size === 'md' ? 160 : 96}
           className="object-contain"
           priority
         />

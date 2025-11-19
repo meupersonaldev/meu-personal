@@ -6,6 +6,7 @@ import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Home, ArrowLeft, Search, Menu, X } from 'lucide-react'
 import SiteFooter from '@/components/site-footer'
+import { Logo } from '@/components/ui/logo'
 
 export default function NotFound() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -33,15 +34,12 @@ export default function NotFound() {
           <div className="container mx-auto px-4 max-w-7xl">
             <div className="flex items-center justify-between py-4">
               {/* Logo */}
-              <Link href="/" className="flex items-center">
-                <Image
-                  src="/images/logo-fundobranco.png"
-                  alt="Meu Personal"
-                  width={160}
-                  height={60}
-                  className="h-12 w-auto object-contain transform scale-[2] origin-left translate-y-2"
-                />
-              </Link>
+              <Logo
+                size="header"
+                variant="default"
+                showText={false}
+                href="/"
+              />
 
               {/* Desktop Navigation */}
               <nav className="hidden md:flex items-center space-x-6">
