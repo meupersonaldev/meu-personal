@@ -275,7 +275,35 @@ export async function createUserNotification(
 }
 
 // SSE stream
-router.get('/stream', requireAuth, async (req, res) => {
+router.get('/stream', async (req, res) => {
+  try {
+    const { academy_id, user_id, franqueadora_id, since, token } = req.query as any
+
+    // Try token from query parameter first (for EventSource compatibility)
+    let authReq = req
+    if (token && !req.headers.authorization && !req.headers.cookie?.includes('auth-token=')) {
+      // Create a mock request with the token in Authorization header
+      authReq = {
+        ...req,
+        headers: {
+          ...req.headers,
+          authorization: `Bearer ${token}`,
+          cookie: undefined // Remove cookie to avoid conflicts
+        }
+      }
+    }
+
+    // Use requireAuth middleware with our potentially modified request
+    const authResult = await new Promise((resolve, reject) => {
+      requireAuth(authReq, {
+        status: () => ({ json: resolve }),
+        json: resolve
+      } as any, () => resolve('success'))
+    })
+
+    if (authResult !== 'success') {
+      return res.status(401).json({ message: 'Unauthorized' })
+    }
   try {
     const { academy_id, user_id, franqueadora_id, since } = req.query as any
     res.setHeader('Content-Type', 'text/event-stream')

@@ -43,19 +43,31 @@ export const useNotificationsStore = create<NotificationsState>()(
         const { connections } = get()
         if (connections[key]) return
         const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-        const url = `${API_URL}/api/notifications/stream?academy_id=${encodeURIComponent(academyId)}`
-        const es = new EventSource(url, { withCredentials: true } as any)
+
+        // Get token from auth store or cookie
+        const getToken = () => {
+          const cookies = document.cookie.split(';').map(c => c.trim())
+          const authCookie = cookies.find(c => c.startsWith('auth-token='))
+          if (authCookie) return authCookie.split('=')[1]
+          const { token } = useAuthStore.getState()
+          return token
+        }
+
+        const token = getToken()
+        if (!token) {
+          console.warn('No auth token available for SSE stream')
+          return
+        }
+
+        const url = `${API_URL}/api/notifications/stream?academy_id=${encodeURIComponent(academyId)}&token=${encodeURIComponent(token)}`
+        const es = new EventSource(url, { withCredentials: false } as any)
         es.addEventListener('notification', (e: MessageEvent) => {
           try {
             const parsed = JSON.parse(e.data)
             if (parsed?.notification) get().add(parsed.notification as AppNotification)
           } catch {}
         })
-        es.onerror = (err: any) => {
-          if (err.target?.readyState === 2) { // CLOSED
-            useAuthStore.getState().logout()
-            return
-          }
+        es.onerror = () => {
           try { es.close() } catch {}
           const map = { ...get().connections }
           delete map[key]
@@ -71,19 +83,31 @@ export const useNotificationsStore = create<NotificationsState>()(
         const { connections } = get()
         if (connections[key]) return
         const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-        const url = `${API_URL}/api/notifications/stream?franqueadora_id=${encodeURIComponent(franqueadoraId)}`
-        const es = new EventSource(url, { withCredentials: true } as any)
+
+        // Get token from auth store or cookie
+        const getToken = () => {
+          const cookies = document.cookie.split(';').map(c => c.trim())
+          const authCookie = cookies.find(c => c.startsWith('auth-token='))
+          if (authCookie) return authCookie.split('=')[1]
+          const { token } = useAuthStore.getState()
+          return token
+        }
+
+        const token = getToken()
+        if (!token) {
+          console.warn('No auth token available for SSE stream')
+          return
+        }
+
+        const url = `${API_URL}/api/notifications/stream?franqueadora_id=${encodeURIComponent(franqueadoraId)}&token=${encodeURIComponent(token)}`
+        const es = new EventSource(url, { withCredentials: false } as any)
         es.addEventListener('notification', (e: MessageEvent) => {
           try {
             const parsed = JSON.parse(e.data)
             if (parsed?.notification) get().add(parsed.notification as AppNotification)
           } catch {}
         })
-        es.onerror = (err: any) => {
-          if (err.target?.readyState === 2) { // CLOSED
-            useAuthStore.getState().logout()
-            return
-          }
+        es.onerror = () => {
           try { es.close() } catch {}
           const map = { ...get().connections }
           delete map[key]
@@ -99,19 +123,34 @@ export const useNotificationsStore = create<NotificationsState>()(
         const { connections } = get()
         if (connections[key]) return
         const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-        const url = `${API_URL}/api/notifications/stream?user_id=${encodeURIComponent(userId)}`
-        const es = new EventSource(url, { withCredentials: true } as any)
+
+        // Get token from auth store or cookie
+        const getToken = () => {
+          // Try cookie first
+          const cookies = document.cookie.split(';').map(c => c.trim())
+          const authCookie = cookies.find(c => c.startsWith('auth-token='))
+          if (authCookie) return authCookie.split('=')[1]
+
+          // Fallback to auth store
+          const { token } = useAuthStore.getState()
+          return token
+        }
+
+        const token = getToken()
+        if (!token) {
+          console.warn('No auth token available for SSE stream')
+          return
+        }
+
+        const url = `${API_URL}/api/notifications/stream?user_id=${encodeURIComponent(userId)}&token=${encodeURIComponent(token)}`
+        const es = new EventSource(url, { withCredentials: false } as any) // Disable credentials since we're sending token in query
         es.addEventListener('notification', (e: MessageEvent) => {
           try {
             const parsed = JSON.parse(e.data)
             if (parsed?.notification) get().add(parsed.notification as AppNotification)
           } catch {}
         })
-        es.onerror = (err: any) => {
-          if (err.target?.readyState === 2) { // CLOSED
-            useAuthStore.getState().logout()
-            return
-          }
+        es.onerror = () => {
           try { es.close() } catch {}
           const map = { ...get().connections }
           delete map[key]
