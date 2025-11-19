@@ -1156,11 +1156,27 @@ function UsuariosPageContent() {
                   </div>
 
                   {/* Perfil do Professor */}
-                  {selectedUser.teacher_profiles && selectedUser.teacher_profiles.length > 0 && (
+                  {(selectedUser.teacher_profiles && selectedUser.teacher_profiles.length > 0) || (selectedUser.role === 'TEACHER' || selectedUser.role === 'PROFESSOR') ? (
                     <div>
                       <h4 className="text-sm font-medium text-gray-900 mb-3">Perfil do Professor</h4>
+
+                      {/* Observação sobre verificação CREF */}
+                      <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                        <p className="text-sm text-blue-800">
+                          <strong>Observação:</strong> Você pode verificar a autenticidade do documento do professor através do site oficial do CREF:
+                          <a
+                            href="https://www.cref1.org.br/"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 underline hover:text-blue-800 ml-1"
+                          >
+                            https://www.cref1.org.br/
+                          </a>
+                        </p>
+                      </div>
+
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {selectedUser.teacher_profiles.map((profile) => (
+                        {selectedUser.teacher_profiles?.map((profile) => (
                           <div key={profile.id} className="space-y-2">
                             {profile.specialization && (
                               <div>
@@ -1200,7 +1216,11 @@ function UsuariosPageContent() {
                               </div>
                             </div>
                           </div>
-                        ))}
+                        )) || (
+                          <div className="col-span-2">
+                            <p className="text-sm text-gray-500">Perfil do professor não preenchido completamente.</p>
+                          </div>
+                        )}
                       </div>
                       {selectedUser.cref_card_url && (
                         <div className="mt-3">
@@ -1213,7 +1233,7 @@ function UsuariosPageContent() {
                         </div>
                       )}
                     </div>
-                  )}
+                  ) : null}
 
                   {/* Perfil do Aluno */}
                   {selectedUser.student_profiles && selectedUser.student_profiles.length > 0 && (

@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "supabase": {
+      "command": "npx",
+      "args": ["mcp-supabase-db"],
+      "cwd": "C:\\Users\\zaira\\Documents\\GitHub\\meu-personal",
+      "env": {
+        "SUPABASE_URL": "https://fstbhakmmznfdeluyexc.supabase.co",
+        "SUPABASE_SERVICE_ROLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzdGJoYWttbXpuZmRlbHV5ZXhjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1OTA3Nzc5MCwiZXhwIjoyMDc0NjUzNzkwfQ.F8e_TEb0xg-MurNypMX9jeD2HEa0EfWYHheg3a77hH0",
+        "SUPABASE_ACCESS_TOKEN": "sbp_a69e1ba38fc45816c9a64f22aafe80344449b901",
+        "SUPABASE_PROJECT_ID": "fstbhakmmznfdeluyexc",
+        "POSTGRES_URL_NON_POOLING": "postgresql://postgres.eyvpzjxvzvqgqfzdxsrf:eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzdGJoYWttbXpuZmRlbHV5ZXhjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1OTA3Nzc5MCwiZXhwIjoyMDc0NjUzNzkwfQ.F8e_TEb0xg-MurNypMX9jeD2HEa0EfWYHheg3a77hH0@aws-0-sa-east-1.pooler.supabase.com:5432/postgres",
+        "MCP_MODE": "direct"
+      }
+    }
+  }
+}

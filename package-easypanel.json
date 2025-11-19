@@ -1,0 +1,19 @@
+{
+  "name": "meu-personal",
+  "version": "1.0.0",
+  "description": "Sistema de agendamento de Personal Trainers",
+  "scripts": {
+    "build:api": "cd apps/api && npm ci && npm run build",
+    "build:web": "cd apps/web && cp .env.production .env.local && npm ci && npm run build",
+    "start:api": "cd apps/api && npm start",
+    "start:web": "cd apps/web && npm start",
+    "postinstall": "npm install --prefix apps/api && npm install --prefix apps/web"
+  },
+  "dependencies": {
+    "next": "^15.5.3",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "express": "^4.19.0",
+    "typescript": "^5.5.0"
+  }
+}

@@ -52,7 +52,10 @@
       "Bash(npx @supabase/mcp-server-supabase@latest:*)",
       "Bash(set:*)",
       "mcp__supabase__get_publishable_keys",
-      "mcp__supabase__generate_typescript_types"
+      "mcp__supabase__generate_typescript_types",
+      "Bash(tree:*)",
+      "mcp__supabase__get_advisors",
+      "Bash(openssl:*)"
     ],
     "deny": [],
     "ask": []

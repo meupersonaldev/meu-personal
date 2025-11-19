@@ -1,0 +1,54 @@
+{
+  "applications": {
+    "api": {
+      "name": "Meu Personal API",
+      "domain": "api.meupersonalfranquia.com.br",
+      "type": "nodejs",
+      "version": "20",
+      "build_command": "cd apps/api && npm ci && npm run build",
+      "start_command": "cd apps/api && npm start",
+      "working_directory": "/var/www/meu-personal",
+      "environment_variables": {
+        "NODE_ENV": "production",
+        "PORT": "3001",
+        "SUPABASE_URL": "https://fstbhakmmznfdeluyexc.supabase.co",
+        "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzdGJoYWttbXpuZmRlbHV5ZXhjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkwNzc3OTAsImV4cCI6MjA3NDY1Mzc5MH0.R9MaYf45DejVYpUlxUARE9UO2Qj1_THASVBBhIKOL9Q",
+        "SUPABASE_SERVICE_ROLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzdGJoYWttbXpuZmRlbHV5ZXhjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1OTA3Nzc5MCwiZXhwIjoyMDc0NjUzNzkwfQ.F8e_TEb0xg-MurNypMX9jeD2HEa0EfWYHheg3a77hH0",
+        "DATABASE_URL": "postgresql://postgres.eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzdGJoYWttbXpuZmRlbHV5ZXhjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1OTA3Nzc5MCwiZXhwIjoyMDc0NjUzNzkwfQ.F8e_TEb0xg-MurNypMX9jeD2HEa0EfWYHheg3a77hH0@aws-0-sa-east-1.pooler.supabase.com:6543/postgres?schema=public",
+        "FRONTEND_URL": "https://meupersonalfranquia.com.br",
+        "CORS_ORIGINS": "https://meupersonalfranquia.com.br,https://www.meupersonalfranquia.com.br",
+        "JWT_SECRET": "E2P7s1oT9uL4X0hB5mQ8Wz7R3cV6Ya2kSn9pD1fG5lH3rJ6Bt9Cv2Nx4Qw7Zy5",
+        "JWT_EXPIRES_IN": "7d",
+        "ASAAS_API_KEY": "aact_prod_000MzkwODA2MWY2OGM3MWRlMDU2NWM3MzJlNzZmNGZhZGY6OjM4ZDFmNThhLTkzYzgtNDFkZS04MDNiLWM3ZGUyYTkyYzVkNjo6JGFhY2hfMzVkMzNmOGUtMjdjYS00MmNiLWEzNjgtNTgzODM5ODFjNjQ5",
+        "ASAAS_ENV": "production",
+        "REDIS_URL": "redis://redis:6379",
+        "DEFAULT_CREDITS_PER_CLASS": "1"
+      }
+    },
+    "web": {
+      "name": "Meu Personal Web",
+      "domain": "meupersonalfranquia.com.br",
+      "type": "nodejs",
+      "version": "20",
+      "build_command": "cd apps/web && cp .env.production .env.local && npm ci && npm run build",
+      "start_command": "cd apps/web && npm start",
+      "working_directory": "/var/www/meu-personal",
+      "environment_variables": {
+        "NODE_ENV": "production",
+        "PORT": "3000",
+        "NEXT_PUBLIC_API_URL": "https://api.meupersonalfranquia.com.br",
+        "NEXT_PUBLIC_SUPABASE_URL": "https://fstbhakmmznfdeluyexc.supabase.co",
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzdGJoYWttbXpuZmRlbHV5ZXhjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkwNzc3OTAsImV4cCI6MjA3NDY1Mzc5MH0.R9MaYf45DejVYpUlxUARE9UO2Qj1_THASVBBhIKOL9Q",
+        "NEXT_PUBLIC_APP_NAME": "Meu Personal",
+        "NEXT_PUBLIC_APP_VERSION": "1.0.0"
+      }
+    }
+  },
+  "databases": {
+    "redis": {
+      "type": "redis",
+      "version": "7",
+      "password": ""
+    }
+  }
+}
