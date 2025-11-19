@@ -104,6 +104,13 @@ export default function RootLayout({
         <StructuredData type="organization" />
         <StructuredData type="website" />
         <StructuredData type="service" />
+
+        {/* Explicit favicon links for better browser compatibility */}
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="icon" href="/favicon.png" type="image/png" />
+        <link rel="apple-touch-icon" href="/favicon-192x192.png" sizes="192x192" />
+        <link rel="manifest" href="/site.webmanifest" />
+        <meta name="theme-color" content="#002C4E" />
       </head>
       <body className="antialiased">
         <Providers>
