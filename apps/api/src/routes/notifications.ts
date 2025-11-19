@@ -280,32 +280,13 @@ router.get('/stream', async (req, res) => {
     const { academy_id, user_id, franqueadora_id, since, token } = req.query as any
 
     // Try token from query parameter first (for EventSource compatibility)
-    let authReq = req
     if (token && !req.headers.authorization && !req.headers.cookie?.includes('auth-token=')) {
-      // Create a mock request with the token in Authorization header
-      authReq = {
-        ...req,
-        headers: {
-          ...req.headers,
-          authorization: `Bearer ${token}`,
-          cookie: undefined // Remove cookie to avoid conflicts
-        }
-      }
+      req.headers.authorization = `Bearer ${token}`
     }
 
-    // Use requireAuth middleware with our potentially modified request
-    const authResult = await new Promise((resolve, reject) => {
-      requireAuth(authReq, {
-        status: () => ({ json: resolve }),
-        json: resolve
-      } as any, () => resolve('success'))
-    })
+    // Use the existing requireAuth middleware
+    return requireAuth(req, res, async () => {
 
-    if (authResult !== 'success') {
-      return res.status(401).json({ message: 'Unauthorized' })
-    }
-  try {
-    const { academy_id, user_id, franqueadora_id, since } = req.query as any
     res.setHeader('Content-Type', 'text/event-stream')
     res.setHeader('Cache-Control', 'no-cache')
     res.setHeader('Connection', 'keep-alive')
@@ -371,6 +352,7 @@ router.get('/stream', async (req, res) => {
       unsubs.forEach(u => { try { u() } catch {} })
       try { res.end() } catch {}
     })
+  })
   } catch (e) {
     try { res.end() } catch {}
   }
