@@ -1,0 +1,74 @@
+{
+  "name": "Meu Personal - Plataforma de Personal Training",
+  "short_name": "Meu Personal",
+  "description": "Conectando professores e alunos para aulas personalizadas em academias franqueadas",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#002C4E",
+  "theme_color": "#002C4E",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "lang": "pt-BR",
+  "categories": ["health", "fitness", "education", "lifestyle"],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon-16x16.png",
+      "sizes": "16x16",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicon-32x32.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Buscar Professores",
+      "short_name": "Buscar",
+      "description": "Encontre professores de educação física",
+      "url": "/professores",
+      "icons": [
+        {
+          "src": "/favicon-96x96.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "Minha Conta",
+      "short_name": "Conta",
+      "description": "Acesse seu perfil e configurações",
+      "url": "/perfil",
+      "icons": [
+        {
+          "src": "/favicon-96x96.png",
+          "sizes": "96x96"
+        }
+      ]
+    }
+  ]
+}

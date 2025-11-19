@@ -1,0 +1,29 @@
+# Robots.txt para Meu Personal
+# Permitir que todos os robôs acessem o site
+
+User-agent: *
+Allow: /
+
+# Bloquear acesso a áreas administrativas
+Disallow: /api/
+Disallow: /admin/
+Disallow: /franqueadora/
+Disallow: /professor/
+Disallow: /protected/
+
+# Bloquear acesso a arquivos temporários e de sistema
+Disallow: /temp/
+Disallow: /cache/
+Disallow: /_next/
+Disallow: /favicon.ico
+Disallow: /*.json$
+
+# Permitir acesso a recursos importantes
+Allow: /api/auth/
+Allow: /api/public/
+
+# Sitemap
+Sitemap: https://meupersonal.com.br/sitemap.xml
+
+# Delay para crawlers (respeitar servidor)
+Crawl-delay: 1

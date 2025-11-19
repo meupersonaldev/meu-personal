@@ -154,7 +154,7 @@ export default function FranqueadoraLoginPage() {
             <p className="text-white/60 text-sm">
               Suporte técnico: {' '}
               <Link href="#" className="text-meu-accent hover:underline">
-                suporte@meupersonal.com
+                suporte@meupersonalfranquia.com.br
               </Link>
             </p>
           </div>

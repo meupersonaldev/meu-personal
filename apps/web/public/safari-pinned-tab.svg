@@ -1,0 +1,16 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background with primary color for Safari pinned tab -->
+  <rect width="32" height="32" rx="8" fill="#002C4E"/>
+
+  <!-- Simplified "MP" logo -->
+  <g transform="translate(16, 16)">
+    <!-- Letter M -->
+    <path d="M-8 -4h4v8h-4V2l4 8h4l4-8v8h4v-8h-4l-6 12-6-12z" fill="#FFF373"/>
+
+    <!-- Letter P -->
+    <path d="M4 -4h8c8 0 12 4 12 12v8c0 8-4 12-12 12h-4v8h-4v-40zm4 8v16h4c4 0 4 0 4-4v-8c0-4 0-4-4-4h-4z" fill="#FFF373"/>
+
+    <!-- Small accent dot -->
+    <circle cx="14" cy="-2" r="2" fill="#27DFFF"/>
+  </g>
+</svg>
