@@ -40,6 +40,12 @@ export const metadata: Metadata = {
     siteName: 'Meu Personal',
     images: [
       {
+        url: '/images/og-image-v2.png',
+        width: 1200,
+        height: 630,
+        alt: 'Meu Personal - Plataforma de Personal Training',
+      },
+      {
         url: '/images/og-image.png',
         width: 1200,
         height: 630,
@@ -57,7 +63,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'Meu Personal - Plataforma de Personal Training',
     description: 'Conectando professores e alunos para aulas personalizadas em academias franqueadas.',
-    images: ['/images/og-image.png'],
+    images: ['/images/og-image-v2.png'],
     creator: '@meupersonal',
   },
   robots: {
@@ -79,10 +85,13 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       { url: '/favicon.svg', type: 'image/svg+xml' },
-      { url: '/favicon.ico', sizes: '32x32' }
+      { url: '/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
+      { url: '/favicon.ico', sizes: 'any' }
     ],
     apple: [
-      { url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }
+      { url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
+      { url: '/favicon-192x192.png', sizes: '192x192', type: 'image/png' }
     ],
     shortcut: '/favicon.ico',
     other: [
