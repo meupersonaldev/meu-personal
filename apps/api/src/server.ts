@@ -161,6 +161,7 @@ import teacherPreferencesRoutes from './routes/teacher-preferences'
 import teacherStudentsRoutes from './routes/teacher-students'
 import academiesRoutes from './routes/academies'
 import studentUnitsRoutes from './routes/student-units'
+import studentsRoutes from './routes/students'
 import franchisorPoliciesRoutes from './routes/franchisor-policies'
 import { bookingScheduler } from './jobs/booking-scheduler'
 
@@ -181,6 +182,7 @@ app.use('/api/teachers', teachersRoutes)
 app.use('/api/teachers', teacherPreferencesRoutes)
 app.use('/api/teachers', teacherStudentsRoutes)
 app.use('/api/student-units', studentUnitsRoutes)
+app.use('/api/students', studentsRoutes)
 // Webhooks (pagamentos, etc)
 app.use('/api/webhooks', webhooksRoutes)
 app.use('/api/franqueadora', franqueadoraRoutes)

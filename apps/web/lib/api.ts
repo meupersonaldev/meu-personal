@@ -1,41 +1,54 @@
 import { useAuthStore } from './stores/auth-store'
 
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+export const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
-// Função helper para fazer requests
+// Função helper genérica para chamadas à API
 async function apiRequest(endpoint: string, options: RequestInit = {}) {
   const token = useAuthStore.getState().token
   const url = `${API_BASE_URL}${endpoint}`
 
+  const isFormData =
+    typeof FormData !== 'undefined' && options.body instanceof FormData
+
+  const headers: Record<string, string> = {
+    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
+    ...(options.headers as Record<string, string> | undefined),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  }
+
   const config: RequestInit = {
     credentials: 'include',
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
+    headers,
   }
 
   try {
     const response = await fetch(url, config)
+
     if (!response.ok) {
       if (response.status === 401) {
         console.log('API request returned 401. Logging out.')
         useAuthStore.getState().logout()
-        // Retorna uma promessa que nunca resolve para interromper a cadeia de promessas
-        return new Promise(() => {})
+        // Interrompe a cadeia de promessas
+        return new Promise<never>(() => {})
       }
+
       const error = await response
         .json()
-        .catch(() => ({ message: `Erro na requisição: ${response.status} ${response.statusText}` }))
+        .catch(() => ({
+          message: `Erro na requisição: ${response.status} ${response.statusText}`,
+        }))
+
       throw new Error(error.message || `Erro na requisição: ${response.status}`)
     }
 
     return response.json()
   } catch (error) {
     if (error instanceof Error && error.message.includes('fetch')) {
-      throw new Error('Não foi possível conectar ao servidor. Verifique se o backend está rodando.')
+      throw new Error(
+        'Não foi possível conectar ao servidor. Verifique se o backend está rodando.',
+      )
     }
     throw error
   }
@@ -86,7 +99,9 @@ export const teachersAPI = {
   async getAll(params?: { academy_id?: string }) {
     const query = new URLSearchParams()
     if (params?.academy_id) query.append('academy_id', params.academy_id)
-    const path = `/api/teachers${query.toString() ? `?${query.toString()}` : ''}`
+    const path = `/api/teachers${
+      query.toString() ? `?${query.toString()}` : ''
+    }`
     return apiRequest(path)
   },
 
@@ -123,11 +138,17 @@ export const academiesAPI = {
     return apiRequest('/api/academies')
   },
 
-  async getAvailableSlots(academyId: string, date: string, teacherId?: string) {
+  async getAvailableSlots(
+    academyId: string,
+    date: string,
+    teacherId?: string,
+  ) {
     const query = new URLSearchParams({ date })
     if (teacherId) query.append('teacher_id', teacherId)
-    return apiRequest(`/api/academies/${academyId}/available-slots?${query.toString()}`)
-  }
+    return apiRequest(
+      `/api/academies/${academyId}/available-slots?${query.toString()}`,
+    )
+  },
 }
 
 // Bookings API
@@ -138,12 +159,17 @@ export const bookingsAPI = {
     status?: string
   }) {
     const queryParams = new URLSearchParams()
-    if (params?.student_id) queryParams.append('student_id', params.student_id)
-    if (params?.teacher_id) queryParams.append('teacher_id', params.teacher_id)
+    if (params?.student_id)
+      queryParams.append('student_id', params.student_id)
+    if (params?.teacher_id)
+      queryParams.append('teacher_id', params.teacher_id)
     if (params?.status) queryParams.append('status', params.status)
-    const endpoint = `/api/bookings${queryParams.toString() ? '?' + queryParams.toString() : ''}`
+    const endpoint = `/api/bookings${
+      queryParams.toString() ? '?' + queryParams.toString() : ''
+    }`
     return apiRequest(endpoint)
   },
+
   async getById(id: string) {
     return apiRequest(`/api/bookings/${id}`)
   },
@@ -162,10 +188,13 @@ export const bookingsAPI = {
     })
   },
 
-  async update(id: string, data: {
-    status?: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED'
-    notes?: string
-  }) {
+  async update(
+    id: string,
+    data: {
+      status?: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED'
+      notes?: string
+    },
+  ) {
     return apiRequest(`/api/bookings/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -198,7 +227,7 @@ export const bookingsAPI = {
     return apiRequest(`/api/bookings/${id}/cancel`, {
       method: 'POST',
     })
-  }
+  },
 }
 
 // Users API
@@ -218,7 +247,6 @@ export const usersAPI = {
   },
 
   async uploadAvatar(id: string, formData: FormData) {
-    // Para FormData, não definimos Content-Type, o browser faz isso
     return apiRequest(`/api/users/${id}/avatar`, {
       method: 'POST',
       body: formData,
@@ -264,7 +292,9 @@ export const studentUnitsAPI = {
   },
 
   async activateUnit(unitId: string) {
-    return apiRequest(`/api/student-units/${unitId}/activate`, { method: 'POST' })
+    return apiRequest(`/api/student-units/${unitId}/activate`, {
+      method: 'POST',
+    })
   },
 
   async joinUnit(unitId: string) {
@@ -281,12 +311,14 @@ export const checkinsAPI = {
     const query = new URLSearchParams()
     if (params?.teacher_id) query.append('teacher_id', params.teacher_id)
     if (params?.student_id) query.append('student_id', params.student_id)
-    const path = `/api/checkins${query.toString() ? `?${query.toString()}` : ''}`
+    const path = `/api/checkins${
+      query.toString() ? `?${query.toString()}` : ''
+    }`
     return apiRequest(path)
   },
 }
 
-export default {
+const api = {
   auth: authAPI,
   teachers: teachersAPI,
   bookings: bookingsAPI,
@@ -297,3 +329,6 @@ export default {
   notifications: notificationsAPI,
   studentUnits: studentUnitsAPI,
 }
+
+export default api
+
