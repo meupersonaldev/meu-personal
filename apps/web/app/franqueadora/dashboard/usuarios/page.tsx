@@ -19,7 +19,12 @@ import {
   RefreshCw,
   CheckCircle,
   XCircle,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Plus,
+  Edit,
+  Trash2,
+  Save,
+  X
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -50,6 +55,23 @@ function UsuariosPageContent() {
   const [showApprovalModal, setShowApprovalModal] = useState(false)
   const [approvalAction, setApprovalAction] = useState<'approve' | 'reject'>('approve')
   const [approvalLoading, setApprovalLoading] = useState(false)
+
+  // Estados para CRUD de usuários
+  const [showUserModal, setShowUserModal] = useState(false)
+  const [userModalMode, setUserModalMode] = useState<'create' | 'edit'>('create')
+  const [userLoading, setUserLoading] = useState(false)
+  const [deleteLoading, setDeleteLoading] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [userToDelete, setUserToDelete] = useState<User | null>(null)
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    cpf: '',
+    role: 'STUDENT' as 'STUDENT' | 'TEACHER',
+    cref: '',
+    active: true
+  })
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 20,
@@ -171,7 +193,7 @@ function UsuariosPageContent() {
 
   const handleRejectUser = async () => {
     if (!selectedUser) return
-    
+
     setApprovalLoading(true)
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
@@ -197,6 +219,126 @@ function UsuariosPageContent() {
       toast.error('Erro ao reprovar profissional')
     } finally {
       setApprovalLoading(false)
+    }
+  }
+
+  // Funções CRUD
+  const handleCreateUser = () => {
+    setUserModalMode('create')
+    setFormData({
+      name: '',
+      email: '',
+      phone: '',
+      cpf: '',
+      role: 'STUDENT',
+      cref: '',
+      active: true
+    })
+    setShowUserModal(true)
+  }
+
+  const handleEditUser = (user: User) => {
+    setUserModalMode('edit')
+    setFormData({
+      name: user.name || '',
+      email: user.email || '',
+      phone: user.phone || '',
+      cpf: user.cpf || '',
+      role: (user.role === 'TEACHER' || user.role === 'PROFESSOR') ? 'TEACHER' : 'STUDENT',
+      cref: user.cref || '',
+      active: user.active ?? true
+    })
+    setSelectedUser(user)
+    setShowUserModal(true)
+  }
+
+  const handleDeleteUser = (user: User) => {
+    setUserToDelete(user)
+    setShowDeleteModal(true)
+  }
+
+  const confirmDeleteUser = async () => {
+    if (!userToDelete) return
+
+    setDeleteLoading(true)
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const response = await fetch(`${API_URL}/api/users/${userToDelete.id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        }
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.message || 'Erro ao remover usuário')
+      }
+
+      toast.success(`${userToDelete.role === 'TEACHER' || userToDelete.role === 'PROFESSOR' ? 'Professor' : 'Aluno'} removido com sucesso!`)
+      setShowDeleteModal(false)
+      setUserToDelete(null)
+      await fetchUsuarios() // Recarregar lista
+    } catch (error: any) {
+      toast.error(error.message || 'Erro ao remover usuário')
+    } finally {
+      setDeleteLoading(false)
+    }
+  }
+
+  const handleSubmitUser = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setUserLoading(true)
+
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const url = userModalMode === 'create' ? `${API_URL}/api/users` : `${API_URL}/api/users/${selectedUser?.id}`
+      const method = userModalMode === 'create' ? 'POST' : 'PUT'
+
+      const userData = {
+        ...formData,
+        // Para alunos, sempre aprovado; para professores, pending
+        approval_status: formData.role === 'STUDENT' ? 'approved' : 'pending',
+        // Adicionar campos específicos de professores se for o caso
+        ...(formData.role === 'TEACHER' && {
+          specialization: [],
+          hourly_rate: 0,
+          available_online: true,
+          available_in_person: true
+        })
+      }
+
+      const response = await fetch(url, {
+        method,
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify(userData)
+      })
+
+      const responseData = await response.json()
+
+      if (!response.ok) {
+        const errorMessage = responseData.error || responseData.message || `Erro ao ${userModalMode === 'create' ? 'criar' : 'atualizar'} usuário`
+        throw new Error(errorMessage)
+      }
+
+      const successMessage = userModalMode === 'create'
+        ? `${formData.role === 'TEACHER' ? 'Professor' : 'Aluno'} criado com sucesso!`
+        : `${formData.role === 'TEACHER' ? 'Professor' : 'Aluno'} atualizado com sucesso!`
+
+      toast.success(successMessage)
+      setShowUserModal(false)
+      setSelectedUser(null)
+      await fetchUsuarios() // Recarregar lista
+    } catch (error: any) {
+      toast.error(error.message || `Erro ao ${userModalMode === 'create' ? 'criar' : 'atualizar'} usuário`)
+    } finally {
+      setUserLoading(false)
     }
   }
 
@@ -240,6 +382,11 @@ function UsuariosPageContent() {
       hour: '2-digit',
       minute: '2-digit'
     })
+  }
+
+  const handleCPFChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatarCPF(e.target.value)
+    setFormData({ ...formData, cpf: formatted })
   }
 
   const getRoleLabel = (role: string) => {
@@ -492,6 +639,15 @@ function UsuariosPageContent() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-4 lg:mt-0">
+            <Button
+              onClick={handleCreateUser}
+              size="sm"
+              className="bg-meu-primary hover:bg-meu-primary/90"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Novo Usuário
+            </Button>
+
             <Button
               variant="outline"
               size="sm"
@@ -827,6 +983,20 @@ function UsuariosPageContent() {
                               title="Ver detalhes"
                             >
                               <Eye className="h-5 w-5" />
+                            </button>
+                            <button
+                              onClick={() => handleEditUser(usuario)}
+                              className="text-blue-600 hover:text-blue-800 transition-colors"
+                              title="Editar usuário"
+                            >
+                              <Edit className="h-5 w-5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteUser(usuario)}
+                              className="text-red-600 hover:text-red-800 transition-colors"
+                              title="Remover usuário"
+                            >
+                              <Trash2 className="h-5 w-5" />
                             </button>
                           </div>
                         </td>
@@ -1226,6 +1396,212 @@ function UsuariosPageContent() {
                   <Button variant="outline" onClick={() => setShowUserDetails(false)}>
                     Fechar
                   </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Modal de Criação/Edição de Usuário */}
+          {showUserModal && (
+            <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+              <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-2/3 xl:w-1/2 shadow-lg rounded-md bg-white">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-semibold text-gray-900">
+                    {userModalMode === 'create' ? 'Criar' : 'Editar'} {formData.role === 'TEACHER' ? 'Professor' : 'Aluno'}
+                  </h3>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowUserModal(false)}
+                  >
+                    <X className="h-5 w-5" />
+                  </Button>
+                </div>
+
+                <form onSubmit={handleSubmitUser} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Tipo de Usuário *
+                      </label>
+                      <select
+                        value={formData.role}
+                        onChange={(e) => setFormData({ ...formData, role: e.target.value as 'STUDENT' | 'TEACHER' })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+                        required
+                      >
+                        <option value="STUDENT">Aluno</option>
+                        <option value="TEACHER">Professor</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Nome Completo *
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+                        placeholder="Nome completo"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Email *
+                      </label>
+                      <input
+                        type="email"
+                        value={formData.email}
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+                        placeholder="email@exemplo.com"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Telefone
+                      </label>
+                      <input
+                        type="tel"
+                        value={formData.phone}
+                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+                        placeholder="(00) 00000-0000"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        CPF *
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.cpf}
+                        onChange={handleCPFChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+                        placeholder="000.000.000-00"
+                        maxLength={14}
+                        required
+                      />
+                    </div>
+
+                    {formData.role === 'TEACHER' && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          CREF
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.cref}
+                          onChange={(e) => setFormData({ ...formData, cref: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+                          placeholder="00000-XX/UF"
+                        />
+                      </div>
+                    )}
+
+                    <div className="md:col-span-2">
+                      <label className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={formData.active}
+                          onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
+                          className="w-4 h-4 text-meu-primary border-gray-300 rounded focus:ring-meu-primary"
+                        />
+                        <span className="ml-2 text-sm text-gray-700">
+                          Usuário ativo
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-3 pt-4 border-t">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setShowUserModal(false)}
+                      disabled={userLoading}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={userLoading}
+                      className="bg-meu-primary hover:bg-meu-primary/90"
+                    >
+                      {userLoading ? (
+                        <>
+                          <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                          {userModalMode === 'create' ? 'Criando...' : 'Salvando...'}
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4 mr-2" />
+                          {userModalMode === 'create' ? 'Criar Usuário' : 'Salvar Alterações'}
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Modal de Confirmação de Exclusão */}
+          {showDeleteModal && userToDelete && (
+            <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+              <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+                <div className="mt-3 text-center">
+                  <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+                    <Trash2 className="h-6 w-6 text-red-600" />
+                  </div>
+                  <h3 className="text-lg leading-6 font-medium text-gray-900 mb-2">
+                    Remover {userToDelete.role === 'TEACHER' || userToDelete.role === 'PROFESSOR' ? 'Professor' : 'Aluno'}
+                  </h3>
+                  <div className="mt-2 px-7 py-3">
+                    <p className="text-sm text-gray-500">
+                      Tem certeza que deseja remover <strong>{userToDelete.name}</strong>?
+                    </p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Esta ação não pode ser desfeita.
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-center gap-3 mt-4">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setShowDeleteModal(false)
+                        setUserToDelete(null)
+                      }}
+                      disabled={deleteLoading}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={confirmDeleteUser}
+                      disabled={deleteLoading}
+                      className="border-red-600 text-red-600 hover:bg-red-50 hover:border-red-700 hover:text-red-700"
+                    >
+                      {deleteLoading ? (
+                        <>
+                          <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                          Removendo...
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Confirmar Remoção
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>

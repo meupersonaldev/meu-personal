@@ -10,6 +10,109 @@ import { requireAuth } from '../middleware/auth'
 
 const router = Router()
 
+// POST /api/users - Criar usuário
+router.post('/', requireAuth, async (req, res) => {
+  try {
+    const { name, email, phone, cpf, role, cref, approval_status, active, specialization, hourly_rate, available_online, available_in_person } = req.body
+    const user = (req as any).user
+    const isAdmin = ['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN', 'FRANCHISE_ADMIN'].includes(user?.role)
+
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Apenas administradores podem criar usuários' })
+    }
+
+    // Validações básicas
+    if (!name || !email || !cpf) {
+      return res.status(400).json({ error: 'Nome, email e CPF são obrigatórios' })
+    }
+
+    if (!role || !['STUDENT', 'TEACHER'].includes(role)) {
+      return res.status(400).json({ error: 'Tipo de usuário inválido' })
+    }
+
+    // Verificar se email já existe
+    const { data: existingEmail } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', email)
+      .single()
+
+    if (existingEmail) {
+      return res.status(400).json({ error: 'Email já cadastrado' })
+    }
+
+    // Verificar se CPF já existe
+    const { data: existingCpf } = await supabase
+      .from('users')
+      .select('id')
+      .eq('cpf', cpf.replace(/\D/g, ''))
+      .single()
+
+    if (existingCpf) {
+      return res.status(400).json({ error: 'CPF já cadastrado' })
+    }
+
+    // Preparar dados do usuário
+    const userData: any = {
+      name,
+      email,
+      phone,
+      cpf: cpf.replace(/\D/g, ''),
+      role,
+      approval_status: approval_status || (role === 'STUDENT' ? 'approved' : 'pending'),
+      active: active !== undefined ? active : true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }
+
+    // Adicionar campos específicos de professores
+    if (role === 'TEACHER') {
+      userData.cref = cref || null
+      userData.approval_status = 'pending' // Professores sempre precisam de aprovação
+    }
+
+    // Criar usuário
+    const { data: newUser, error: createError } = await supabase
+      .from('users')
+      .insert(userData)
+      .select()
+      .single()
+
+    if (createError) throw createError
+
+    // Criar profile para professor se necessário
+    if (role === 'TEACHER') {
+      await supabase
+        .from('teacher_profiles')
+        .insert({
+          user_id: newUser.id,
+          specialization: specialization || [],
+          hourly_rate: hourly_rate || 0,
+          available_online: available_online !== undefined ? available_online : true,
+          available_in_person: available_in_person !== undefined ? available_in_person : true,
+          rating: 0,
+          total_reviews: 0,
+          total_sessions: 0,
+          rating_avg: 0,
+          is_available: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+    }
+
+    // Remover senha do retorno
+    const { password, ...userWithoutPassword } = newUser
+
+    res.status(201).json({
+      user: userWithoutPassword,
+      message: `${role === 'TEACHER' ? 'Professor' : 'Aluno'} criado com sucesso`
+    })
+  } catch (error: any) {
+    console.error('Error creating user:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
 // Configurar multer para upload de arquivos
 const storage = multer.memoryStorage()
 const upload = multer({
@@ -53,24 +156,57 @@ router.get('/:id', requireAuth, async (req, res) => {
   }
 })
 
-// PUT /api/users/:id - Atualizar usuário
+// PUT /api/users/:id - Atualizar usuário COMPLETO
 router.put('/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params
-    const { name, email, phone, bio, gender } = req.body as { name?: string; email?: string; phone?: string; bio?: string; gender?: string }
+    const { name, email, phone, cpf, bio, gender, role, cref, active } = req.body as {
+      name?: string;
+      email?: string;
+      phone?: string;
+      cpf?: string;
+      bio?: string;
+      gender?: string;
+      role?: string;
+      cref?: string;
+      active?: boolean;
+    }
     const user = (req as any).user
-    const isAdmin = ['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN'].includes(user?.role)
-    if (!isAdmin && user?.userId !== id) {
-      return res.status(403).json({ error: 'Forbidden' })
+    const isAdmin = ['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN', 'FRANCHISE_ADMIN'].includes(user?.role)
+    const isOwner = user?.userId === id
+
+    if (!isAdmin && !isOwner) {
+      return res.status(403).json({ error: 'Apenas administradores ou o próprio usuário podem atualizar' })
+    }
+
+    // Validação para admins - não permitir mudar role de super_admin
+    if (role === 'SUPER_ADMIN' && user.userId !== id) {
+      return res.status(403).json({ error: 'Apenas o próprio Super Admin pode alterar seu tipo' })
     }
 
     const updates: any = {
-      name,
-      email,
-      phone,
       updated_at: new Date().toISOString()
     }
-    if (typeof gender === 'string') updates.gender = gender
+
+    // Campos permitidos para todos os usuários (donos ou admins)
+    if (name !== undefined) updates.name = name
+    if (email !== undefined) updates.email = email
+    if (phone !== undefined) updates.phone = phone
+    if (gender !== undefined) updates.gender = gender
+    if (active !== undefined) updates.active = active
+
+    // Campos que apenas admins podem alterar
+    if (isAdmin) {
+      if (cpf !== undefined) {
+        const cpfSanitized = String(cpf).replace(/\D/g, '')
+        if (process.env.ASAAS_ENV === 'production' && cpfSanitized.length < 11) {
+          return res.status(400).json({ error: 'CPF inválido' })
+        }
+        updates.cpf = cpfSanitized
+      }
+      if (role !== undefined) updates.role = role
+      if (cref !== undefined) updates.cref = cref
+    }
 
     const { data, error } = await supabase
       .from('users')
@@ -81,7 +217,7 @@ router.put('/:id', requireAuth, async (req, res) => {
 
     if (error) throw error
 
-    // Upsert da bio em teacher_preferences (unificação de persistência)
+    // Salvar bio em teacher_preferences se fornecida
     if (typeof bio === 'string') {
       const { error: prefError } = await supabase
         .from('teacher_preferences')
@@ -94,10 +230,57 @@ router.put('/:id', requireAuth, async (req, res) => {
       }
     }
 
+    // Atualizar role em tabelas relacionadas se mudou
+    if (isAdmin && role !== undefined) {
+      const isTeacher = ['TEACHER', 'PROFESSOR'].includes(role)
+      const isStudent = ['STUDENT', 'ALUNO'].includes(role)
+
+      // Remover vínculos antigos e criar novos
+      if (isTeacher) {
+        // Remover vínculos de estudante
+        await supabase.from('academy_students').delete().eq('student_id', id)
+        await supabase.from('student_units').delete().eq('student_id', id)
+
+        // Garantir teacher_profile exista
+        const { data: teacherProfile } = await supabase
+          .from('teacher_profiles')
+          .select('id')
+          .eq('user_id', id)
+          .single()
+
+        if (!teacherProfile) {
+          await supabase.from('teacher_profiles').insert({
+            user_id: id,
+            specialization: [],
+            hourly_rate: 0,
+            rating: 0,
+            total_reviews: 0,
+            total_sessions: 0,
+            rating_avg: 0,
+            available_online: true,
+            available_in_person: true,
+            is_available: true,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+        }
+      } else if (isStudent) {
+        // Remover vínculos de professor
+        await supabase.from('academy_teachers').delete().eq('teacher_id', id)
+        await supabase.from('professor_units').delete().eq('professor_id', id)
+
+        // Remover teacher_profile se existir
+        await supabase.from('teacher_profiles').delete().eq('user_id', id)
+      }
+    }
+
     // Remover senha do retorno
     const { password, ...userWithoutPassword } = data
 
-    res.json({ user: userWithoutPassword })
+    res.json({
+      user: userWithoutPassword,
+      message: 'Usuário atualizado com sucesso em toda a aplicação'
+    })
   } catch (error: any) {
     console.error('Error updating user:', error)
     res.status(500).json({ error: error.message })
@@ -361,6 +544,128 @@ router.put('/:id/reject', requireAuth, async (req, res) => {
     res.json({ message: 'Usuário reprovado' })
   } catch (error: any) {
     console.error('Error rejecting user:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// DELETE /api/users/:id - Remover usuário COMPLETO
+router.delete('/:id', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params
+    const user = (req as any).user
+    const isAdmin = ['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN', 'FRANCHISE_ADMIN'].includes(user?.role)
+
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Apenas administradores podem remover usuários' })
+    }
+
+    // Verificar se o usuário existe antes de remover
+    const { data: existingUser, error: fetchError } = await supabase
+      .from('users')
+      .select('id, name, role, avatar_url, cref_card_url')
+      .eq('id', id)
+      .single()
+
+    if (fetchError || !existingUser) {
+      return res.status(404).json({ error: 'Usuário não encontrado' })
+    }
+
+    // Impedir remoção de super_admins (a menos que seja ele mesmo)
+    if (existingUser.role === 'SUPER_ADMIN' && user.userId !== id) {
+      return res.status(403).json({ error: 'Não é possível remover um Super Admin' })
+    }
+
+    console.log(`🗑️ Removendo usuário ${existingUser.name} (${existingUser.role}) de TODAS as tabelas relacionadas...`)
+
+    // REMOVER COMPLETAMENTE TODOS OS DADOS RELACIONADOS
+
+    // 1. Vínculos administrativos
+    await supabase.from('academy_students').delete().eq('student_id', id)
+    await supabase.from('academy_teachers').delete().eq('teacher_id', id)
+    await supabase.from('franchise_admins').delete().eq('user_id', id)
+    await supabase.from('franqueadora_admins').delete().eq('user_id', id)
+    await supabase.from('franqueadora_contacts').delete().eq('user_id', id)
+
+    // 2. Profiles e preferências
+    await supabase.from('teacher_preferences').delete().eq('teacher_id', id)
+    await supabase.from('teacher_profiles').delete().eq('user_id', id)
+    await supabase.from('professor_units').delete().eq('professor_id', id)
+    await supabase.from('student_units').delete().eq('student_id', id)
+
+    // 3. Avaliações e reviews
+    await supabase.from('teacher_ratings').delete().or(`teacher_id.eq.${id},student_id.eq.${id}`)
+    await supabase.from('reviews').delete().or(`teacher_id.eq.${id},student_id.eq.${id}`)
+
+    // 4. Assinaturas e pacotes
+    await supabase.from('student_subscriptions').delete().eq('student_id', id)
+    await supabase.from('teacher_subscriptions').delete().eq('teacher_id', id)
+
+    // 5. Saldo e transações
+    await supabase.from('student_class_balance').delete().eq('student_id', id)
+    await supabase.from('prof_hour_balance').delete().eq('professor_id', id)
+    await supabase.from('student_class_tx').delete().eq('student_id', id)
+    await supabase.from('hour_tx').delete().eq('professor_id', id)
+
+    // 6. Pagamentos e intents
+    await supabase.from('payments').delete().eq('user_id', id)
+    await supabase.from('payment_intents').delete().eq('actor_user_id', id)
+
+    // 7. Agendamentos
+    await supabase.from('bookings').delete().or(`student_id.eq.${id},teacher_id.eq.${id}`)
+
+    // 8. Notificações e auditoria
+    await supabase.from('notifications').delete().eq('user_id', id)
+    await supabase.from('audit_logs').delete().eq('actor_user_id', id)
+
+    // 9. Requisições de aprovação
+    await supabase.from('approval_requests').delete().eq('user_id', id)
+    await supabase.from('approval_requests').delete().eq('reviewed_by', id)
+
+    // 10. Franchises e leads (se for admin da franqueadora)
+    await supabase.from('franchise_leads').delete().eq('assigned_to', id)
+
+    // 11. Notificações da franquia
+    await supabase.from('franchise_notifications').delete().eq('franchise_admin_id', id)
+
+    // 12. Remover arquivos do storage (avatar e CREF)
+    if (existingUser.avatar_url) {
+      try {
+        const avatarPath = existingUser.avatar_url.split('/').pop()
+        if (avatarPath) {
+          await supabase.storage.from('avatars').remove([`avatars/${avatarPath}`])
+        }
+      } catch (err) {
+        console.warn('Erro ao remover avatar:', err)
+      }
+    }
+
+    if (existingUser.cref_card_url) {
+      try {
+        const crefPath = existingUser.cref_card_url.split('/').pop()
+        if (crefPath) {
+          await supabase.storage.from('avatars').remove([`cref-cards/${crefPath}`])
+        }
+      } catch (err) {
+        console.warn('Erro ao remover carteirinha CREF:', err)
+      }
+    }
+
+    // 13. Finalmente remover o usuário da tabela principal
+    const { error } = await supabase
+      .from('users')
+      .delete()
+      .eq('id', id)
+
+    if (error) throw error
+
+    console.log(`✅ Usuário ${existingUser.name} removido COMPLETAMENTE da aplicação`)
+
+    res.json({
+      message: 'Usuário removido com sucesso',
+      details: 'Todos os dados relacionados foram completamente removidos da aplicação'
+    })
+  } catch (error: any) {
+    console.error('Error deleting user:', error)
     res.status(500).json({ error: error.message })
   }
 })
