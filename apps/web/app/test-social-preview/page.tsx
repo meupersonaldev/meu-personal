@@ -1,6 +1,19 @@
+'use client'
+
 import { SEOHead } from '@/components/seo/seo-head'
+import { useEffect, useState } from 'react'
 
 export default function TestSocialPreview() {
+  const [currentUrl, setCurrentUrl] = useState('')
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+    if (typeof window !== 'undefined') {
+      setCurrentUrl(window.location.origin + window.location.pathname)
+    }
+  }, [])
+
   return (
     <>
       <SEOHead
@@ -117,7 +130,7 @@ export default function TestSocialPreview() {
               </h2>
               <div className="bg-white p-3 rounded border border-gray-300">
                 <code className="text-sm text-gray-700">
-                  {typeof window !== 'undefined' ? window.location.origin : 'https://seu-dominio.com.br'}{window.location.pathname}
+                  {mounted ? currentUrl : 'http://localhost:3000/test-social-preview'}
                 </code>
               </div>
               <p className="text-sm text-gray-600 mt-2">
