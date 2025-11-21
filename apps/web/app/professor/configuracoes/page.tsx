@@ -39,7 +39,26 @@ interface Academy {
 
 // Especialidades disponíveis
 const specialties = [
-  'Musculação'
+  'Musculação',
+  'CrossFit',
+  'Yoga',
+  'Pilates',
+  'Treinamento Funcional',
+  'Boxe',
+  'Muay Thai',
+  'Jiu-Jitsu',
+  'Natação',
+  'Corrida',
+  'Ciclismo',
+  'Dança',
+  'Zumba',
+  'FitDance',
+  'Alongamento',
+  'Reabilitação',
+  'Idosos',
+  'Gestantes',
+  'Nutrição Esportiva',
+  'Consultoria Online'
 ]
 
 export default function ConfiguracoesPage() {
@@ -51,6 +70,7 @@ export default function ConfiguracoesPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [customSpecialty, setCustomSpecialty] = useState('')
 
   const [profileData, setProfileData] = useState({
     name: user?.name || '',
@@ -249,6 +269,13 @@ export default function ConfiguracoesPage() {
     }
   }
 
+  const handleAddCustomSpecialty = () => {
+    if (customSpecialty.trim() && !professionalProfile.specialties.includes(customSpecialty.trim())) {
+      addSpecialty(customSpecialty.trim())
+      setCustomSpecialty('')
+    }
+  }
+
   const removeSpecialty = (specialty: string) => {
     setProfessionalProfile({
       ...professionalProfile,
@@ -310,11 +337,10 @@ export default function ConfiguracoesPage() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex flex-shrink-0 items-center gap-2 border-b-2 px-1 py-3 text-sm font-medium transition-colors sm:py-4 ${
-                    activeTab === tab.id
-                      ? 'border-meu-primary text-meu-primary'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
+                  className={`flex flex-shrink-0 items-center gap-2 border-b-2 px-1 py-3 text-sm font-medium transition-colors sm:py-4 ${activeTab === tab.id
+                    ? 'border-meu-primary text-meu-primary'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
                 >
                   <Icon className="h-5 w-5" />
                   <span>{tab.label}</span>
@@ -338,63 +364,63 @@ export default function ConfiguracoesPage() {
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={handleProfileUpdate} className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Nome Completo
-                    </label>
-                    <input
-                      type="text"
-                      value={profileData.name}
-                      onChange={(e) => setProfileData({ ...profileData, name: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-meu-primary focus:border-transparent"
-                      required
-                    />
-                  </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Nome Completo
+                      </label>
+                      <input
+                        type="text"
+                        value={profileData.name}
+                        onChange={(e) => setProfileData({ ...profileData, name: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+                        required
+                      />
+                    </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Email
-                    </label>
-                    <input
-                      type="email"
-                      value={profileData.email}
-                      onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-meu-primary focus:border-transparent"
-                      required
-                    />
-                  </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Email
+                      </label>
+                      <input
+                        type="email"
+                        value={profileData.email}
+                        onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+                        required
+                      />
+                    </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Telefone
-                    </label>
-                    <input
-                      type="tel"
-                      value={profileData.phone}
-                      onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-meu-primary focus:border-transparent"
-                      placeholder="(11) 99999-9999"
-                    />
-                  </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Telefone
+                      </label>
+                      <input
+                        type="tel"
+                        value={profileData.phone}
+                        onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+                        placeholder="(11) 99999-9999"
+                      />
+                    </div>
 
-                  <Button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full bg-meu-primary hover:bg-meu-primary-dark text-white"
-                  >
-                    {loading ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Salvando...
-                      </>
-                    ) : (
-                      <>
-                        <Save className="h-4 w-4 mr-2" />
-                        Salvar Alterações
-                      </>
-                    )}
-                  </Button>
-                </form>
+                    <Button
+                      type="submit"
+                      disabled={loading}
+                      className="w-full bg-meu-primary hover:bg-meu-primary-dark text-white"
+                    >
+                      {loading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Salvando...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4 mr-2" />
+                          Salvar Alterações
+                        </>
+                      )}
+                    </Button>
+                  </form>
                 </CardContent>
               </Card>
             </div>
@@ -512,23 +538,55 @@ export default function ConfiguracoesPage() {
                       </div>
                     )}
 
+
                     {/* Adicionar Especialidade */}
-                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
-                      <p className="text-sm text-gray-600 mb-3">Adicionar especialidade:</p>
-                      <div className="flex flex-wrap gap-2">
-                        {specialties
-                          .filter((spec) => !professionalProfile.specialties.includes(spec))
-                          .map((spec) => (
-                            <button
-                              key={spec}
-                              type="button"
-                              onClick={() => addSpecialty(spec)}
-                              className="px-3 py-1 text-sm border border-gray-300 rounded-full hover:border-meu-primary hover:bg-meu-primary/5 transition-colors"
-                            >
-                              <Plus className="h-3 w-3 inline mr-1" />
-                              {spec}
-                            </button>
-                          ))}
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 space-y-4">
+                      <div>
+                        <p className="text-sm text-gray-600 mb-3">Adicionar especialidade da lista:</p>
+                        <div className="flex flex-wrap gap-2">
+                          {specialties
+                            .filter((spec) => !professionalProfile.specialties.includes(spec))
+                            .map((spec) => (
+                              <button
+                                key={spec}
+                                type="button"
+                                onClick={() => addSpecialty(spec)}
+                                className="px-3 py-1 text-sm border border-gray-300 rounded-full hover:border-meu-primary hover:bg-meu-primary/5 transition-colors"
+                              >
+                                <Plus className="h-3 w-3 inline mr-1" />
+                                {spec}
+                              </button>
+                            ))}
+                        </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-gray-200">
+                        <p className="text-sm text-gray-600 mb-2">Ou adicione uma personalizada:</p>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={customSpecialty}
+                            onChange={(e) => setCustomSpecialty(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault()
+                                handleAddCustomSpecialty()
+                              }
+                            }}
+                            placeholder="Digite uma especialidade..."
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-meu-primary focus:border-transparent text-sm"
+                          />
+                          <Button
+                            type="button"
+                            onClick={handleAddCustomSpecialty}
+                            disabled={!customSpecialty.trim()}
+                            variant="outline"
+                            size="sm"
+                          >
+                            <Plus className="h-4 w-4 mr-1" />
+                            Adicionar
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -567,14 +625,12 @@ export default function ConfiguracoesPage() {
                   <button
                     type="button"
                     onClick={() => setProfessionalProfile({ ...professionalProfile, is_available: !professionalProfile.is_available })}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      professionalProfile.is_available ? 'bg-meu-primary' : 'bg-gray-300'
-                    }`}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${professionalProfile.is_available ? 'bg-meu-primary' : 'bg-gray-300'
+                      }`}
                   >
                     <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        professionalProfile.is_available ? 'translate-x-6' : 'translate-x-1'
-                      }`}
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${professionalProfile.is_available ? 'translate-x-6' : 'translate-x-1'
+                        }`}
                     />
                   </button>
                 </div>
@@ -725,19 +781,17 @@ export default function ConfiguracoesPage() {
                     <div
                       key={academy.id}
                       onClick={() => toggleAcademy(academy.id)}
-                      className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                        selectedAcademies.includes(academy.id)
-                          ? 'border-meu-primary bg-meu-primary/5'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
+                      className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${selectedAcademies.includes(academy.id)
+                        ? 'border-meu-primary bg-meu-primary/5'
+                        : 'border-gray-200 hover:border-gray-300'
+                        }`}
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex items-start space-x-3">
-                          <div className={`mt-1 w-5 h-5 rounded border-2 flex items-center justify-center ${
-                            selectedAcademies.includes(academy.id)
-                              ? 'border-meu-primary bg-meu-primary'
-                              : 'border-gray-300'
-                          }`}>
+                          <div className={`mt-1 w-5 h-5 rounded border-2 flex items-center justify-center ${selectedAcademies.includes(academy.id)
+                            ? 'border-meu-primary bg-meu-primary'
+                            : 'border-gray-300'
+                            }`}>
                             {selectedAcademies.includes(academy.id) && (
                               <svg className="w-3 h-3 text-white" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
                                 <path d="M5 13l4 4L19 7"></path>
@@ -777,6 +831,6 @@ export default function ConfiguracoesPage() {
           </div>
         )}
       </div>
-    </ProfessorLayout>
+    </ProfessorLayout >
   )
 }
