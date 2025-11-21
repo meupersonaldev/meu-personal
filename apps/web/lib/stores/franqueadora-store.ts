@@ -1090,6 +1090,15 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
         try {
           const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           const token = get().token
+          const franqueadoraId = await get().ensureFranqueadoraId()
+
+          if (!franqueadoraId) {
+            try {
+              const { toast } = await import('sonner')
+              toast.error('Contexto da franqueadora não disponível.')
+            } catch {}
+            return false
+          }
 
           const resp = await fetch(`${API_URL}/api/packages/student/manage/${id}`, {
             method: 'PUT',
@@ -1099,6 +1108,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             },
             credentials: 'include',
             body: JSON.stringify({
+              franqueadora_id: franqueadoraId,
               title: payload.title,
               classes_qty: payload.classesQty,
               price_cents: payload.priceCents,
@@ -1136,8 +1146,17 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
         try {
           const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           const token = get().token
+          const franqueadoraId = await get().ensureFranqueadoraId()
 
-          const resp = await fetch(`${API_URL}/api/packages/student/manage/${id}`, {
+          if (!franqueadoraId) {
+            try {
+              const { toast } = await import('sonner')
+              toast.error('Contexto da franqueadora não disponível.')
+            } catch {}
+            return false
+          }
+
+          const resp = await fetch(`${API_URL}/api/packages/student/manage/${id}?franqueadora_id=${encodeURIComponent(franqueadoraId)}`, {
             method: 'DELETE',
             headers: token ? { Authorization: `Bearer ${token}` } : undefined,
             credentials: 'include'
@@ -1172,6 +1191,15 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
         try {
           const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           const token = get().token
+          const franqueadoraId = await get().ensureFranqueadoraId()
+
+          if (!franqueadoraId) {
+            try {
+              const { toast } = await import('sonner')
+              toast.error('Contexto da franqueadora não disponível.')
+            } catch {}
+            return false
+          }
 
           const resp = await fetch(`${API_URL}/api/packages/professor/manage/${id}`, {
             method: 'PUT',
@@ -1181,6 +1209,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             },
             credentials: 'include',
             body: JSON.stringify({
+              franqueadora_id: franqueadoraId,
               title: payload.title,
               hours_qty: payload.hoursQty,
               price_cents: payload.priceCents,
@@ -1218,8 +1247,17 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
         try {
           const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           const token = get().token
+          const franqueadoraId = await get().ensureFranqueadoraId()
 
-          const resp = await fetch(`${API_URL}/api/packages/professor/manage/${id}`, {
+          if (!franqueadoraId) {
+            try {
+              const { toast } = await import('sonner')
+              toast.error('Contexto da franqueadora não disponível.')
+            } catch {}
+            return false
+          }
+
+          const resp = await fetch(`${API_URL}/api/packages/professor/manage/${id}?franqueadora_id=${encodeURIComponent(franqueadoraId)}`, {
             method: 'DELETE',
             headers: token ? { Authorization: `Bearer ${token}` } : undefined,
             credentials: 'include'
