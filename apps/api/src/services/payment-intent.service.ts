@@ -131,83 +131,122 @@ class PaymentIntentService {
   }
 
   async processWebhook(providerId: string, status: string): Promise<void> {
-    // 1. Buscar PaymentIntent por provider_id
-    const { data: intent, error: intentError } = await supabase
-      .from('payment_intents')
-      .select('*')
-      .eq('provider_id', providerId)
-      .single();
+    try {
+      // 1. Buscar PaymentIntent por provider_id
+      const { data: intent, error: intentError } = await supabase
+        .from('payment_intents')
+        .select('*')
+        .eq('provider_id', providerId)
+        .single();
 
-    if (intentError || !intent) {
-      console.log(`PaymentIntent não encontrado para provider_id: ${providerId}`);
-      return;
-    }
+      if (intentError || !intent) {
+        console.log(`⚠️ PaymentIntent não encontrado para provider_id: ${providerId}`);
+        return;
+      }
 
-    // 2. Verificar se já foi processado (idempotência)
-    if (intent.status === 'PAID') {
-      console.log(`PaymentIntent ${intent.id} já foi processado`);
-      return;
-    }
+      // 2. Verificar se já foi processado (idempotência)
+      if (intent.status === 'PAID') {
+        console.log(`ℹ️ PaymentIntent ${intent.id} já foi processado anteriormente`);
+        return;
+      }
 
-    // 3. Atualizar status
-    const newStatus = status === 'CONFIRMED' || status === 'RECEIVED' ? 'PAID' :
-                     status === 'FAILED' ? 'FAILED' : 'PENDING';
+      // 3. Atualizar status
+      const newStatus = status === 'CONFIRMED' || status === 'RECEIVED' ? 'PAID' :
+                       status === 'FAILED' ? 'FAILED' : 
+                       status === 'CANCELED' ? 'CANCELED' : 'PENDING';
 
-    await supabase
-      .from('payment_intents')
-      .update({
-        status: newStatus,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', intent.id);
+      const { error: updateError } = await supabase
+        .from('payment_intents')
+        .update({
+          status: newStatus,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', intent.id);
 
-    // 4. Se PAID, creditar pacote ao usuário
-    if (newStatus === 'PAID') {
-      await this.creditPackage(intent);
+      if (updateError) {
+        console.error('❌ Erro ao atualizar status do PaymentIntent:', updateError);
+        throw updateError;
+      }
+
+      console.log(`✅ PaymentIntent ${intent.id} atualizado para status: ${newStatus}`);
+
+      // 4. Se PAID, creditar pacote ao usuário
+      if (newStatus === 'PAID') {
+        await this.creditPackage(intent);
+      }
+    } catch (error: any) {
+      console.error('❌ Erro ao processar webhook:', {
+        providerId,
+        status,
+        error: error.message
+      });
+      throw error;
     }
   }
 
   private async creditPackage(intent: PaymentIntent): Promise<void> {
     const metadata = intent.payload_json;
 
-    if (intent.type === 'STUDENT_PACKAGE') {
-      // Creditar aulas para aluno
-      await balanceService.purchaseStudentClasses(
-        intent.actor_user_id,
-        intent.franqueadora_id,
-        metadata.classes_qty,
-        {
-          unitId: intent.unit_id || null,
-          source: 'ALUNO',
-          metaJson: {
-            payment_intent_id: intent.id,
-            provider_id: intent.provider_id,
-            package_title: metadata.package_title
+    try {
+      if (intent.type === 'STUDENT_PACKAGE') {
+        console.log(`💳 Creditando aulas para aluno ${intent.actor_user_id}...`);
+        
+        // Creditar aulas para aluno
+        const result = await balanceService.purchaseStudentClasses(
+          intent.actor_user_id,
+          intent.franqueadora_id,
+          metadata.classes_qty,
+          {
+            unitId: intent.unit_id || null,
+            source: 'ALUNO',
+            metaJson: {
+              payment_intent_id: intent.id,
+              provider_id: intent.provider_id,
+              package_title: metadata.package_title,
+              amount_cents: intent.amount_cents
+            }
           }
-        }
-      );
+        );
 
-      console.log(`✅ Aluno ${intent.actor_user_id} recebeu ${metadata.classes_qty} aulas`);
-    }
+        console.log(`✅ Aluno ${intent.actor_user_id} recebeu ${metadata.classes_qty} aulas`, {
+          balance: result.balance,
+          transaction_id: result.transaction.id
+        });
+      }
 
-    if (intent.type === 'PROF_HOURS') {
-      // Creditar horas para professor
-      await balanceService.purchaseProfessorHours(
-        intent.actor_user_id,
-        intent.franqueadora_id,
-        metadata.hours_qty,
-        {
-          unitId: intent.unit_id || null,
-          source: 'PROFESSOR',
-          metaJson: {
-            payment_intent_id: intent.id,
-            provider_id: intent.provider_id,
-            package_title: metadata.package_title
+      if (intent.type === 'PROF_HOURS') {
+        console.log(`💳 Creditando horas para professor ${intent.actor_user_id}...`);
+        
+        // Creditar horas para professor
+        const result = await balanceService.purchaseProfessorHours(
+          intent.actor_user_id,
+          intent.franqueadora_id,
+          metadata.hours_qty,
+          {
+            unitId: intent.unit_id || null,
+            source: 'PROFESSOR',
+            metaJson: {
+              payment_intent_id: intent.id,
+              provider_id: intent.provider_id,
+              package_title: metadata.package_title,
+              amount_cents: intent.amount_cents
+            }
           }
-        }
-      );
+        );
 
-      console.log(`✅ Professor ${intent.actor_user_id} recebeu ${metadata.hours_qty} horas`);
+        console.log(`✅ Professor ${intent.actor_user_id} recebeu ${metadata.hours_qty} horas`, {
+          balance: result.balance,
+          transaction_id: result.transaction.id
+        });
+      }
+    } catch (error: any) {
+      console.error('❌ Erro ao creditar pacote:', {
+        intent_id: intent.id,
+        type: intent.type,
+        user_id: intent.actor_user_id,
+        error: error.message
+      });
+      throw error;
     }
   }
 

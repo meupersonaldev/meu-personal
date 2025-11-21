@@ -17,7 +17,8 @@ import {
   Package,
   GraduationCap,
   Briefcase,
-  Settings2
+  Settings2,
+  BookOpen
 } from 'lucide-react'
 
 interface FranqueadoraSidebarProps {
@@ -88,6 +89,13 @@ export default function FranqueadoraSidebar({ isMobile = false, onNavigate }: Fr
       icon: Settings2,
       href: '/franqueadora/dashboard/politicas',
       isExpanded: expandedSections.includes('policies')
+    },
+    {
+      id: 'docs',
+      label: 'Documentação',
+      icon: BookOpen,
+      href: '/franqueadora/docs',
+      isExpanded: expandedSections.includes('docs')
     }
   ]
 
@@ -102,15 +110,15 @@ export default function FranqueadoraSidebar({ isMobile = false, onNavigate }: Fr
       <div className="p-6 border-b border-meu-primary/20">
         {/* Logo */}
         <div className="mb-4">
-          <Logo 
-            size="lg" 
-            variant="default" 
+          <Logo
+            size="lg"
+            variant="default"
             showText={false}
             href="/franqueadora/dashboard"
             className="justify-start"
           />
         </div>
-        
+
         {/* Perfil da Franqueadora */}
         <div className="space-y-1 text-center" style={{ marginTop: '-79px' }}>
           <div className="text-sm text-white">Bem-vindo</div>
@@ -133,11 +141,10 @@ export default function FranqueadoraSidebar({ isMobile = false, onNavigate }: Fr
                 <Link
                   href={item.href}
                   onClick={onNavigate}
-                  className={`flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-                    pathname === item.href
-                      ? 'bg-white text-meu-primary shadow-md font-semibold'
-                      : 'text-white hover:text-white hover:underline hover:bg-meu-primary/80'
-                  }`}
+                  className={`flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${pathname === item.href
+                    ? 'bg-white text-meu-primary shadow-md font-semibold'
+                    : 'text-white hover:text-white hover:underline hover:bg-meu-primary/80'
+                    }`}
                 >
                   <item.icon className="h-5 w-5" />
                   <span className="font-medium">{item.label}</span>
@@ -167,11 +174,10 @@ export default function FranqueadoraSidebar({ isMobile = false, onNavigate }: Fr
                       key={subItem.href}
                       href={subItem.href}
                       onClick={onNavigate}
-                      className={`flex items-center space-x-3 px-4 py-2 rounded-lg transition-all duration-200 text-sm ${
-                        pathname === subItem.href
-                          ? 'bg-white/10 text-white border-l-2 border-meu-accent-cyan font-medium'
-                          : 'text-white/90 hover:text-white hover:underline hover:bg-white/5'
-                      }`}
+                      className={`flex items-center space-x-3 px-4 py-2 rounded-lg transition-all duration-200 text-sm ${pathname === subItem.href
+                        ? 'bg-white/10 text-white border-l-2 border-meu-accent-cyan font-medium'
+                        : 'text-white/90 hover:text-white hover:underline hover:bg-white/5'
+                        }`}
                     >
                       <subItem.icon className="h-4 w-4" />
                       <span>{subItem.label}</span>
