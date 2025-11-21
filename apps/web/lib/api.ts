@@ -114,7 +114,7 @@ export const teachersAPI = {
   },
 
   async update(id: string, data: any) {
-    return apiRequest(`/api/teachers/${id}/profile`, {
+    return apiRequest(`/api/teachers/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     })
