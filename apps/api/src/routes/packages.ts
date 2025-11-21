@@ -605,6 +605,7 @@ router.put(
     }
 
     const franqueadoraId = await resolveFranqueadoraId({
+      franqueadoraId: (req.body && req.body.franqueadora_id) || null,
       contextFranqueadoraId: getContextFranqueadoraId(req),
       allowFallback: false
     });
@@ -649,6 +650,7 @@ router.delete(
   requireRole(['FRANQUEADORA', 'SUPER_ADMIN']),
   asyncErrorHandler(async (req, res) => {
     const { id } = req.params;
+    const { franqueadora_id } = req.query as { franqueadora_id?: string };
 
     // Verificar se o pacote existe e pertence à franqueadora
     const { data: existingPackage, error: fetchError } = await supabase
@@ -662,6 +664,7 @@ router.delete(
     }
 
     const franqueadoraId = await resolveFranqueadoraId({
+      franqueadoraId: franqueadora_id || null,
       contextFranqueadoraId: getContextFranqueadoraId(req),
       allowFallback: false
     });
@@ -820,6 +823,7 @@ router.put(
     }
 
     const franqueadoraId = await resolveFranqueadoraId({
+      franqueadoraId: (req.body && req.body.franqueadora_id) || null,
       contextFranqueadoraId: getContextFranqueadoraId(req),
       allowFallback: false
     });
@@ -864,6 +868,7 @@ router.delete(
   requireRole(['FRANQUEADORA', 'SUPER_ADMIN']),
   asyncErrorHandler(async (req, res) => {
     const { id } = req.params;
+    const { franqueadora_id } = req.query as { franqueadora_id?: string };
 
     // Verificar se o pacote existe e pertence à franqueadora
     const { data: existingPackage, error: fetchError } = await supabase
@@ -877,6 +882,7 @@ router.delete(
     }
 
     const franqueadoraId = await resolveFranqueadoraId({
+      franqueadoraId: franqueadora_id || null,
       contextFranqueadoraId: getContextFranqueadoraId(req),
       allowFallback: false
     });
