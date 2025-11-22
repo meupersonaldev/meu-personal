@@ -30,7 +30,7 @@ import {
 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
-import { utcToLocal, hasPassedLocal, getLocalTimeFromUtc, getLocalDateFromUtc } from '@/lib/timezone-utils'
+import { utcToLocal, hasPassedLocal, getLocalTimeFromUtc, getLocalDateFromUtc, localToUtc, createUtcFromLocal } from '@/lib/timezone-utils'
 
 interface Booking {
   id: string
@@ -188,11 +188,35 @@ export default function ProfessorAgendaPage() {
     fetchBlocks()
   }, [user?.id, token, selectedFranchise, selectedDate])
 
-  const fetchData = async () => {
+  // Função para adicionar booking otimisticamente sem recarregar tudo
+  const addBookingOptimistically = (newBooking: Booking) => {
+    setBookings(prev => {
+      // Verificar se o booking já existe (evitar duplicatas)
+      if (prev.some(b => b.id === newBooking.id)) {
+        return prev
+      }
+      // Adicionar o novo booking ao final do array (evita scroll jump)
+      return [...prev, newBooking]
+    })
+    
+    // Atualizar lista de cancelados se necessário
+    if (isCanceledStatus(newBooking.status)) {
+      setCancelledBookings(prev => {
+        if (prev.some(b => b.id === newBooking.id)) {
+          return prev
+        }
+        return [newBooking, ...prev]
+      })
+    }
+  }
+
+  const fetchData = async (showLoading = true) => {
     if (!user?.id || !token) return
 
     try {
-      setLoading(true)
+      if (showLoading) {
+        setLoading(true)
+      }
 
       const bookingsRes = await authFetch(`${API_URL}/api/bookings?teacher_id=${user.id}`)
 
@@ -226,6 +250,15 @@ export default function ProfessorAgendaPage() {
             return b
           }))
           
+          // Log para confirmar que bookings estão usando franchise_id diretamente
+          console.log('📋 [FILTRAGEM] Bookings carregados:', JSON.stringify(updatedBookings.map(b => ({
+            id: b.id,
+            franchiseId: b.franchiseId,
+            status: b.status,
+            date: b.date,
+            studentName: b.studentName
+          })), null, 2))
+          
           // Manter todos os bookings (incluindo cancelados) para mostrar na agenda
           // Os cancelados serão exibidos com card vermelho
           setBookings(updatedBookings)
@@ -241,7 +274,9 @@ export default function ProfessorAgendaPage() {
     } catch (err) {
       toast.error('Erro ao carregar agenda')
     } finally {
-      setLoading(false)
+      if (showLoading) {
+        setLoading(false)
+      }
     }
   }
 
@@ -368,10 +403,9 @@ export default function ProfessorAgendaPage() {
     if (!selectedSlot || !user?.id) return
 
     try {
-      const [hours, minutes] = selectedSlot.time.split(':')
-      // Criar data no timezone local (sem Z no final)
-      const bookingDate = new Date(selectedSlot.date + 'T' + selectedSlot.time + ':00')
-      const endTime = new Date(bookingDate.getTime() + 60 * 60 * 1000) // 60 minutes later
+      // Converter horário local para UTC antes de enviar
+      const bookingDateUtc = createUtcFromLocal(selectedSlot.date, selectedSlot.time)
+      const endTimeUtc = new Date(bookingDateUtc.getTime() + 60 * 60 * 1000) // 60 minutes later
 
       const response = await authFetch(`${API_URL}/api/bookings`, {
         method: 'POST',
@@ -379,9 +413,9 @@ export default function ProfessorAgendaPage() {
         body: JSON.stringify({
           source: 'PROFESSOR',
           professorId: user.id,
-          unitId: franchiseId,
-          startAt: bookingDate.toISOString(),
-          endAt: endTime.toISOString(),
+          academyId: franchiseId,
+          startAt: bookingDateUtc.toISOString(),
+          endAt: endTimeUtc.toISOString(),
           status: 'AVAILABLE',
           professorNotes: 'Horário disponível'
         })
@@ -389,7 +423,19 @@ export default function ProfessorAgendaPage() {
 
       if (response.ok) {
         toast.success('Horário disponibilizado!')
-        fetchData()
+        const data = await response.json()
+        if (data.booking) {
+          addBookingOptimistically({
+            id: data.booking.id,
+            teacherId: data.booking.teacher_id || data.booking.professorId || user?.id || '',
+            franchiseId: data.booking.franchiseId || franchiseId,
+            date: bookingDateUtc.toISOString(), // Usar o horário UTC que foi enviado
+            duration: data.booking.duration || 60,
+            status: data.booking.status || 'AVAILABLE',
+            creditsCost: data.booking.creditsCost || 0,
+            notes: data.booking.professorNotes || data.booking.notes
+          })
+        }
         setShowModal(false)
       } else {
         const errorData = await response.json()
@@ -410,7 +456,14 @@ export default function ProfessorAgendaPage() {
 
       if (response.ok) {
         toast.success('Aula confirmada!')
-        fetchData()
+        // Atualizar booking otimisticamente
+        if (selectedBooking) {
+          setBookings(prev => prev.map(b => 
+            b.id === selectedBooking.id 
+              ? { ...b, status: 'PAID' as const }
+              : b
+          ))
+        }
         setShowModal(false)
       } else {
         const errorData = await response.json().catch(() => ({}))
@@ -440,8 +493,19 @@ export default function ProfessorAgendaPage() {
           toast.success('Cancelado com sucesso!')
         }
         
-        // Recarregar dados (incluindo créditos)
-        fetchData()
+        // Atualizar booking otimisticamente (sem recarregar tudo)
+        if (selectedBooking) {
+          setBookings(prev => prev.filter(b => b.id !== selectedBooking.id))
+          setCancelledBookings(prev => {
+            const cancelled = { ...selectedBooking, status: 'CANCELED' as const }
+            if (!prev.some(b => b.id === cancelled.id)) {
+              return [...prev, cancelled]
+            }
+            return prev
+          })
+        }
+        // Recarregar dados em background (sem mostrar loading)
+        fetchData(false)
         
         // Recarregar créditos do usuário
         if (user?.id) {
@@ -511,11 +575,14 @@ export default function ProfessorAgendaPage() {
       }
 
       setShowModal(false)
-      setLoading(true)
-      await fetchData()
+      // Remover booking otimisticamente
+      if (selectedBooking) {
+        setBookings(prev => prev.filter(b => b.id !== selectedBooking.id))
+      }
+      // Atualizar em background sem mostrar loading
+      await fetchData(false)
       await fetchBlocks()
       await fetchSlots()
-      setLoading(false)
     } catch {
       toast.error('Erro ao remover')
     }
@@ -559,15 +626,7 @@ export default function ProfessorAgendaPage() {
     return null
   }
 
-  if (loading) {
-    return (
-      <ProfessorLayout>
-        <div className="flex items-center justify-center h-96">
-          <Loader2 className="h-8 w-8 animate-spin text-meu-primary" />
-        </div>
-      </ProfessorLayout>
-    )
-  }
+  // Não mostrar tela branca - apenas um indicador sutil no topo se necessário
 
   // Modal de aviso quando não há academias vinculadas
   const NoAcademyModal = () => {
@@ -631,7 +690,8 @@ export default function ProfessorAgendaPage() {
         }
         
         toast.success(`${removed} disponibilidade(s) removida(s)!`)
-        await fetchData()
+        // Atualizar em background sem mostrar loading
+        await fetchData(false)
       } else {
         let removed = 0
         for (const block of blocks) {
@@ -639,7 +699,8 @@ export default function ProfessorAgendaPage() {
           if (res.ok) removed++
         }
         toast.success(`${removed} bloqueio(s) removido(s)!`)
-        await fetchData()
+        // Atualizar em background sem mostrar loading
+        await fetchData(false)
         await fetchBlocks()
         await fetchSlots()
       }
@@ -807,49 +868,83 @@ export default function ProfessorAgendaPage() {
                           try {
                             if (selectedFranchise === 'todas') {
                               let totalCreated = 0
+                              let errors = 0
                               for (const academy of teacherAcademies) {
                                 for (const hora of selectedHoursToAvailable) {
-                                  const bookingDate = new Date(selectedDate + 'T' + hora + ':00')
-                                  const endTime = new Date(bookingDate.getTime() + 60 * 60 * 1000)
+                                  // Converter horário local para UTC antes de enviar
+                                  const bookingDateUtc = createUtcFromLocal(selectedDate, hora)
+                                  const endTimeUtc = new Date(bookingDateUtc.getTime() + 60 * 60 * 1000)
                                   const res = await authFetch(`${API_URL}/api/bookings`, {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({
                                       source: 'PROFESSOR',
                                       professorId: user?.id,
-                                      unitId: academy.id,
-                                      startAt: bookingDate.toISOString(),
-                                      endAt: endTime.toISOString(),
+                                      academyId: academy.id, // Usar academyId - backend vai resolver unit_id
+                                      startAt: bookingDateUtc.toISOString(),
+                                      endAt: endTimeUtc.toISOString(),
                                       professorNotes: 'Horário disponível'
                                     })
                                   })
-                                  if (res.ok) totalCreated++
+                                  if (res.ok) {
+                                    totalCreated++
+                                  } else {
+                                    const errorData = await res.json().catch(() => ({}))
+                                    console.error(`Erro ao criar booking para ${academy.name}:`, errorData)
+                                    errors++
+                                  }
                                 }
                               }
-                              toast.success(`${totalCreated} horário(s) disponibilizado(s)!`)
+                              
+                              if (totalCreated > 0) {
+                                toast.success(`${totalCreated} horário(s) disponibilizado(s)!`)
+                              }
+                              if (errors > 0) {
+                                toast.error(`${errors} erro(s) ao criar horários. Verifique se as unidades estão configuradas corretamente.`)
+                              }
                             } else {
                               let created = 0
+                              const newBookings: Booking[] = []
                               for (const hora of selectedHoursToAvailable) {
-                                const bookingDate = new Date(selectedDate + 'T' + hora + ':00')
-                                const endTime = new Date(bookingDate.getTime() + 60 * 60 * 1000)
+                                // Converter horário local para UTC antes de enviar
+                                const bookingDateUtc = createUtcFromLocal(selectedDate, hora)
+                                const endTimeUtc = new Date(bookingDateUtc.getTime() + 60 * 60 * 1000)
                                 const res = await authFetch(`${API_URL}/api/bookings`, {
                                   method: 'POST',
                                   headers: { 'Content-Type': 'application/json' },
                                   body: JSON.stringify({
                                     source: 'PROFESSOR',
                                     professorId: user?.id,
-                                    unitId: selectedFranchise,
-                                    startAt: bookingDate.toISOString(),
-                                    endAt: endTime.toISOString(),
+                                    academyId: selectedFranchise,
+                                    startAt: bookingDateUtc.toISOString(),
+                                    endAt: endTimeUtc.toISOString(),
                                     professorNotes: 'Horário disponível'
                                   })
                                 })
-                                if (res.ok) created++
+                                if (res.ok) {
+                                  created++
+                                  const data = await res.json()
+                                  if (data.booking) {
+                                    // Adicionar booking otimisticamente usando o horário UTC correto
+                                    addBookingOptimistically({
+                                      id: data.booking.id,
+                                      teacherId: data.booking.teacher_id || data.booking.professorId || user?.id || '',
+                                      franchiseId: data.booking.franchiseId || selectedFranchise,
+                                      date: bookingDateUtc.toISOString(), // Usar o horário UTC que foi enviado
+                                      duration: data.booking.duration || 60,
+                                      status: data.booking.status || 'AVAILABLE',
+                                      creditsCost: data.booking.creditsCost || 0,
+                                      notes: data.booking.professorNotes || data.booking.notes
+                                    })
+                                  }
+                                }
                               }
                               toast.success(`${created} horário(s) disponibilizado(s)!`)
                             }
                             setSelectedHoursToAvailable([])
                             await fetchData()
+                            await fetchBlocks()
+                            await fetchSlots()
                           } catch {
                             toast.error('Erro ao disponibilizar horários')
                           }
@@ -1005,7 +1100,8 @@ export default function ProfessorAgendaPage() {
                           }
                           toast.success(`${totalCreated} horário(s) bloqueado(s) em ${academiesBlocked} unidade(s)!`)
                           setSelectedHoursToBlock([])
-                          await fetchData()
+                          // Atualizar em background sem mostrar loading
+                          await fetchData(false)
                           await fetchBlocks()
                           await fetchSlots()
                         } else {
@@ -1024,7 +1120,8 @@ export default function ProfessorAgendaPage() {
                             const count = result.created?.length || 0
                             toast.success(`${count} horário(s) bloqueado(s)!`)
                             setSelectedHoursToBlock([])
-                            await fetchData()
+                            // Atualizar em background sem mostrar loading
+                            await fetchData(false)
                             await fetchBlocks()
                             await fetchSlots()
                           } else {
@@ -1092,8 +1189,8 @@ export default function ProfessorAgendaPage() {
                                   if (res.ok) removed++
                                 }
                                 toast.success(`${removed} bloqueio(s) removido(s)!`)
-                                // Recarregar tudo
-                                await fetchData()
+                                // Atualizar em background sem mostrar loading
+                                await fetchData(false)
                                 await fetchBlocks()
                                 await fetchSlots()
                               } catch {
@@ -1128,8 +1225,8 @@ export default function ProfessorAgendaPage() {
                                 const res = await authFetch(`${API_URL}/api/teachers/${user?.id}/blocks/${b.id}`, { method: 'DELETE' })
                                 if (res.ok) {
                                   toast.success('Bloqueio removido!')
-                                  // Recarregar tudo
-                                  await fetchData()
+                                  // Atualizar em background sem mostrar loading
+                                  await fetchData(false)
                                   await fetchBlocks()
                                   await fetchSlots()
                                 } else {
@@ -1216,8 +1313,9 @@ export default function ProfessorAgendaPage() {
                           let totalCreated = 0
                           for (const academy of teacherAcademies) {
                             for (const hora of selectedHoursToAvailable) {
-                              const bookingDate = new Date(selectedDate + 'T' + hora + ':00')
-                              const endTime = new Date(bookingDate.getTime() + 60 * 60 * 1000)
+                              // Converter horário local para UTC antes de enviar
+                              const bookingDateUtc = createUtcFromLocal(selectedDate, hora)
+                              const endTimeUtc = new Date(bookingDateUtc.getTime() + 60 * 60 * 1000)
 
                               const res = await authFetch(`${API_URL}/api/bookings`, {
                                 method: 'POST',
@@ -1225,9 +1323,9 @@ export default function ProfessorAgendaPage() {
                                 body: JSON.stringify({
                                   source: 'PROFESSOR',
                                   professorId: user?.id,
-                                  unitId: academy.id,
-                                  startAt: bookingDate.toISOString(),
-                                  endAt: endTime.toISOString(),
+                                  academyId: academy.id, // Usar academyId diretamente (franchise_id)
+                                  startAt: bookingDateUtc.toISOString(),
+                                  endAt: endTimeUtc.toISOString(),
                                   professorNotes: 'Horário disponível'
                                 })
                               })
@@ -1238,8 +1336,9 @@ export default function ProfessorAgendaPage() {
                         } else {
                           let created = 0
                           for (const hora of selectedHoursToAvailable) {
-                            const bookingDate = new Date(selectedDate + 'T' + hora + ':00')
-                            const endTime = new Date(bookingDate.getTime() + 60 * 60 * 1000)
+                            // Converter horário local para UTC antes de enviar
+                            const bookingDateUtc = createUtcFromLocal(selectedDate, hora)
+                            const endTimeUtc = new Date(bookingDateUtc.getTime() + 60 * 60 * 1000)
 
                             const res = await authFetch(`${API_URL}/api/bookings`, {
                               method: 'POST',
@@ -1247,18 +1346,36 @@ export default function ProfessorAgendaPage() {
                               body: JSON.stringify({
                                 source: 'PROFESSOR',
                                 professorId: user?.id,
-                                unitId: selectedFranchise,
-                                startAt: bookingDate.toISOString(),
-                                endAt: endTime.toISOString(),
+                                academyId: selectedFranchise, // Usar academyId diretamente (franchise_id)
+                                startAt: bookingDateUtc.toISOString(),
+                                endAt: endTimeUtc.toISOString(),
                                 professorNotes: 'Horário disponível'
                               })
                             })
-                            if (res.ok) created++
+                            if (res.ok) {
+                              created++
+                              const data = await res.json()
+                              if (data.booking) {
+                                // Adicionar booking otimisticamente usando o horário UTC correto
+                                addBookingOptimistically({
+                                  id: data.booking.id,
+                                  teacherId: data.booking.teacher_id || data.booking.professorId || user?.id || '',
+                                  franchiseId: data.booking.franchiseId || selectedFranchise,
+                                  date: bookingDateUtc.toISOString(), // Usar o horário UTC que foi enviado
+                                  duration: data.booking.duration || 60,
+                                  status: data.booking.status || 'AVAILABLE',
+                                  creditsCost: data.booking.creditsCost || 0,
+                                  notes: data.booking.professorNotes || data.booking.notes
+                                })
+                              }
+                            }
                           }
                           toast.success(`${created} horário(s) disponibilizado(s)!`)
                         }
                         setSelectedHoursToAvailable([])
-                        await fetchData()
+                        // Não recarregar tudo, apenas atualizar blocks e slots se necessário
+                        await fetchBlocks()
+                        await fetchSlots()
                       } catch {
                         toast.error('Erro ao disponibilizar horários')
                       }
@@ -1278,9 +1395,14 @@ export default function ProfessorAgendaPage() {
 
         {/* Header */}
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 md:text-3xl md:mb-2">Minha Agenda</h1>
-            <p className="text-gray-600">Gerencie sua disponibilidade e aulas</p>
+          <div className="flex items-center gap-3">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 md:text-3xl md:mb-2">Minha Agenda</h1>
+              <p className="text-gray-600">Gerencie sua disponibilidade e aulas</p>
+            </div>
+            {loading && (
+              <Loader2 className="h-5 w-5 animate-spin text-meu-primary" />
+            )}
           </div>
           
           <div className="flex w-full items-center gap-2 md:w-auto md:justify-end">
@@ -1571,7 +1693,8 @@ export default function ProfessorAgendaPage() {
                                   const res = await authFetch(`${API_URL}/api/teachers/${user?.id}/blocks/${selectedBooking.id}`, { method: 'DELETE' })
                                   if (res.ok) {
                                     toast.success('Bloqueio removido!')
-                                    await fetchData()
+                                    // Atualizar em background sem mostrar loading
+                                    await fetchData(false)
                                     await fetchBlocks()
                                     setShowModal(false)
                                   }
@@ -1803,7 +1926,9 @@ export default function ProfessorAgendaPage() {
                               if (!selectedSlot || !user?.id) return
                               try {
                                 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-                                const bookingDate = new Date(selectedSlot.date + 'T' + selectedSlot.time + ':00')
+                                // Converter horário local para UTC antes de enviar
+                                const bookingDateUtc = createUtcFromLocal(selectedSlot.date, selectedSlot.time)
+                                const endTimeUtc = new Date(bookingDateUtc.getTime() + 60 * 60 * 1000)
 
                                 // Primeiro, remover qualquer disponibilidade existente neste horário
                                 const existingBookings = bookings.filter(b => {
@@ -1825,13 +1950,12 @@ export default function ProfessorAgendaPage() {
                                 for (let i = 0; i < teacherAcademies.length; i++) {
                                   const academy = teacherAcademies[i]
                                   try {
-                                    const endTime = new Date(bookingDate.getTime() + 60 * 60 * 1000) // 60 minutes later
                                     const payload = {
                                       source: 'PROFESSOR',
                                       professorId: user.id,
-                                      unitId: academy.id,
-                                      startAt: bookingDate.toISOString(),
-                                      endAt: endTime.toISOString(),
+                                      academyId: academy.id, // Usar academyId - backend vai resolver unit_id
+                                      startAt: bookingDateUtc.toISOString(),
+                                      endAt: endTimeUtc.toISOString(),
                                       status: 'AVAILABLE',
                                       professorNotes: 'Horário disponível'
                                     }
@@ -1859,7 +1983,8 @@ export default function ProfessorAgendaPage() {
                                   toast.error(`${errors} erro(s) ao criar disponibilidades`)
                                 }
                                 
-                                await fetchData()
+                                // Atualizar em background sem mostrar loading
+                                await fetchData(false)
                                 setShowModal(false)
                               } catch (error) {
                                 toast.error('Erro ao processar requisição')

@@ -9,6 +9,8 @@ import { requireApprovedTeacher } from '../middleware/approval'
 import { createUserRateLimit, rateLimitConfig } from '../middleware/rateLimit'
 import { asyncErrorHandler } from '../middleware/errorHandler'
 import { normalizeBookingStatus } from '../utils/booking-status'
+import { toZonedTime, fromZonedTime, format } from 'date-fns-tz'
+import { parse } from 'date-fns'
 
 const router = express.Router()
 
@@ -17,12 +19,15 @@ const createBookingSchema = z.object({
   source: z.enum(['ALUNO', 'PROFESSOR']),
   studentId: z.string().uuid().nullable().optional(),
   professorId: z.string().uuid(),
-  unitId: z.string().uuid(),
+  academyId: z.string().uuid().optional(), // Aceitar academyId ou unitId
+  unitId: z.string().uuid().optional(), // Aceitar unitId para compatibilidade (será convertido para academyId)
   startAt: z.string().datetime(),
   endAt: z.string().datetime(),
   status: z.enum(['AVAILABLE', 'RESERVED', 'PAID', 'DONE', 'CANCELED']).optional(),
   studentNotes: z.string().optional(),
   professorNotes: z.string().optional()
+}).refine(data => data.academyId || data.unitId, {
+  message: "academyId ou unitId é obrigatório"
 })
 
 // Schema de validação para atualização de status
@@ -61,7 +66,7 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
       studentName: student.name || undefined,
       teacherId: booking.teacher_id,
       teacherName: teacher.name || undefined,
-      franchiseId: booking.unit_id || booking.franchise_id || undefined,
+      franchiseId: booking.franchise_id || undefined,
       franchiseName,
       franchiseAddress: franchiseAddressParts.filter(Boolean).join(', ') || undefined,
       date: booking.date,
@@ -175,7 +180,7 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
         studentId: booking.student_id || undefined,
         teacherId: booking.teacher_id,
         teacherName: teacher.name || undefined,
-        franchiseId: booking.unit_id || booking.franchise_id || undefined,
+        franchiseId: booking.franchise_id || undefined,
         franchiseName,
         franchiseAddress: franchiseAddressParts.filter(Boolean).join(', ') || undefined,
         date: booking.date,
@@ -377,7 +382,7 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
         studentId: booking.student_id || undefined,
         studentName: student?.name || undefined,
         teacherId: booking.teacher_id,
-        franchiseId: booking.unit_id || booking.franchise_id || undefined,
+        franchiseId: booking.franchise_id || undefined,
         franchiseName,
         franchiseAddress: franchiseAddressParts.filter(Boolean).join(', ') || undefined,
         date: booking.date,
@@ -541,23 +546,116 @@ router.post('/', requireAuth, requireRole(['STUDENT', 'ALUNO', 'TEACHER', 'PROFE
     bookingData.studentId = user.userId // Aluno está criando para si mesmo
   }
 
-  // Validar datas
-  const startAt = new Date(bookingData.startAt)
-  const endAt = new Date(bookingData.endAt)
+  // Receber datas do frontend e preservar valores de hora original como UTC
+  // O frontend envia ISO string com Z (UTC), extraímos os componentes e criamos Date UTC puro
+  // Isso preserva a hora original (ex: 06:00) como 06:00 UTC, sem conversão de timezone
+  const timeZone = 'America/Sao_Paulo'
   const now = new Date()
+  
+  // Extrair componentes da string ISO e criar Date UTC puro
+  // Exemplo: '2025-11-22T06:00:00.000Z' -> Date UTC com 06:00 UTC (não 03:00 local)
+  const parseUtcDate = (isoString: string): Date => {
+    // Remover o Z e milissegundos
+    const cleanString = isoString.replace(/\.\d{3}Z?$/, '').replace(/Z$/, '')
+    // Extrair componentes: YYYY-MM-DDTHH:mm:ss
+    const [datePart, timePart] = cleanString.split('T')
+    const [year, month, day] = datePart.split('-').map(Number)
+    const [hour, minute, second = 0] = timePart.split(':').map(Number)
+    
+    // Log para debug
+    console.log('[parseUtcDate] Parseando:', {
+      isoString,
+      cleanString,
+      year, month, day, hour, minute, second
+    })
+    
+    // Criar Date UTC puro usando Date.UTC
+    const utcTimestamp = Date.UTC(year, month - 1, day, hour, minute, second)
+    const date = new Date(utcTimestamp)
+    
+    console.log('[parseUtcDate] Resultado:', {
+      utcTimestamp,
+      dateISO: date.toISOString(),
+      dateUTCString: date.toUTCString(),
+      getUTCHours: date.getUTCHours(),
+      getHours: date.getHours()
+    })
+    
+    return date
+  }
+  
+  const startAt = parseUtcDate(bookingData.startAt)
+  const endAt = parseUtcDate(bookingData.endAt)
+  
+  // Calcular cancellable_until usando a mesma lógica de startAt/endAt (preservar hora UTC)
+  // Extrair componentes UTC de startAt, subtrair 4 horas, e criar Date UTC puro
+  const startAtYear = startAt.getUTCFullYear()
+  const startAtMonth = startAt.getUTCMonth()
+  const startAtDay = startAt.getUTCDate()
+  const startAtHour = startAt.getUTCHours()
+  const startAtMinute = startAt.getUTCMinutes()
+  const startAtSecond = startAt.getUTCSeconds()
+  
+  // Calcular hora de cancellable_until (4 horas antes)
+  let cancellableHour = startAtHour - 4
+  let cancellableDay = startAtDay
+  let cancellableMonth = startAtMonth
+  let cancellableYear = startAtYear
+  
+  // Ajustar se a subtração mudou o dia
+  if (cancellableHour < 0) {
+    cancellableHour += 24
+    cancellableDay -= 1
+    if (cancellableDay < 1) {
+      cancellableMonth -= 1
+      if (cancellableMonth < 0) {
+        cancellableMonth = 11
+        cancellableYear -= 1
+      }
+      // Pegar último dia do mês anterior
+      cancellableDay = new Date(Date.UTC(cancellableYear, cancellableMonth + 1, 0)).getUTCDate()
+    }
+  }
+  
+  // Criar Date UTC puro usando Date.UTC (preserva hora como UTC, sem conversão de timezone)
+  const cancellableUntil = new Date(Date.UTC(cancellableYear, cancellableMonth, cancellableDay, cancellableHour, startAtMinute, startAtSecond))
+  
+  // Para validação: startAt (06:00 UTC) representa 06:00 de Brasília
+  // Precisamos comparar 06:00 Brasília com now (convertido para Brasília)
+  const nowBrazil = toZonedTime(now, timeZone)
+  
+  // startAt está como 06:00 UTC, mas representa 06:00 Brasília
+  // Criar uma string ISO "naive" (sem timezone) com a hora de Brasília
+  // Formato: YYYY-MM-DDTHH:mm:ss (usar startAtMonth + 1 para string, pois é 0-indexed)
+  const startAtBrazilString = `${startAtYear}-${String(startAtMonth + 1).padStart(2, '0')}-${String(startAtDay).padStart(2, '0')}T${String(startAtHour).padStart(2, '0')}:${String(startAtMinute).padStart(2, '0')}:${String(startAtSecond).padStart(2, '0')}`
+  
+  // Parsear a string como data "naive" (sem timezone) usando parse do date-fns
+  const startAtBrazilNaive = parse(startAtBrazilString, "yyyy-MM-dd'T'HH:mm:ss", new Date())
+  
+  // fromZonedTime interpreta a data naive como sendo em Brasília e converte para UTC
+  // Depois converter de volta para Brasília para comparar
+  const startAtAsBrazilUTC = fromZonedTime(startAtBrazilNaive, timeZone)
+  const startAtBrazil = toZonedTime(startAtAsBrazilUTC, timeZone)
 
-  console.log('[POST /api/bookings] Validação de datas:', {
-    startAt: startAt.toISOString(),
-    endAt: endAt.toISOString(),
-    now: now.toISOString(),
-    startAtTimestamp: startAt.getTime(),
-    nowTimestamp: now.getTime(),
-    isPast: startAt <= now
-  })
+  try {
+    // Log detalhado para debug
+    console.log('[POST /api/bookings] Validação de datas - DEBUG:', {
+      startAtReceived: bookingData.startAt,
+      startAtUTC: startAt.toISOString(),
+      startAtGetUTCHours: startAt.getUTCHours(), // Hora UTC (6) que representa hora de Brasília
+      startAtBrazilTime: format(startAtBrazil, 'HH:mm', { timeZone }),
+      nowUTC: now.toISOString(),
+      nowBrazilTime: format(nowBrazil, 'HH:mm', { timeZone }),
+      isPast: startAtBrazil <= nowBrazil
+    })
+  } catch (dateTzError) {
+    console.error('[POST /api/bookings] Erro ao formatar datas:', dateTzError)
+  }
 
-  if (startAt <= now) {
-    console.log('[POST /api/bookings] ERRO: Data no passado')
-    return res.status(400).json({ error: 'Data de início deve ser no futuro' })
+  // Comparar startAt (como hora de Brasília) com now (convertido para Brasília)
+  if (startAtBrazil <= nowBrazil) {
+    console.log('[POST /api/bookings] ERRO: Data no passado (horário de Brasília)')
+    return res.status(400).json({ error: 'Data de início deve ser no futuro (horário de Brasília)' })
   }
 
   if (endAt <= startAt) {
@@ -565,17 +663,44 @@ router.post('/', requireAuth, requireRole(['STUDENT', 'ALUNO', 'TEACHER', 'PROFE
     return res.status(400).json({ error: 'Data de término deve ser após a data de início' })
   }
 
-  const booking = await bookingCanonicalService.createBooking({
+  // Usar academyId diretamente como franchise_id, ou converter unitId para academyId
+  let franchiseId: string
+  
+  if (bookingData.academyId) {
+    // Se academyId foi fornecido, usar diretamente
+    franchiseId = bookingData.academyId
+    console.log('[POST /api/bookings] Usando academyId diretamente como franchise_id:', franchiseId)
+  } else if (bookingData.unitId) {
+    // Se unitId foi fornecido, tratar como academyId (compatibilidade)
+    // O frontend pode estar enviando unitId quando na verdade é um academyId
+    franchiseId = bookingData.unitId
+    console.log('[POST /api/bookings] Convertendo unitId para franchise_id (compatibilidade):', franchiseId)
+  } else {
+    // Isso não deveria acontecer devido à validação do schema, mas por segurança:
+    return res.status(400).json({ error: 'academyId ou unitId é obrigatório' })
+  }
+
+  let booking
+  try {
+    booking = await bookingCanonicalService.createBooking({
     source: bookingData.source,
     studentId: bookingData.studentId,
     professorId: bookingData.professorId,
-    unitId: bookingData.unitId,
+      franchiseId: franchiseId, // Usar franchise_id diretamente (academyId)
     startAt: startAt,
     endAt: endAt,
+    cancellableUntil: cancellableUntil, // Calculado na rota preservando hora UTC
     status: bookingData.status,
     studentNotes: bookingData.studentNotes,
     professorNotes: bookingData.professorNotes
   })
+  } catch (error) {
+    console.error('[POST /api/bookings] Erro ao criar booking:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido ao criar agendamento'
+    return res.status(400).json({ 
+      error: errorMessage 
+    })
+  }
 
   try {
     const syncTasks = [addAcademyToContact(booking.professor_id, booking.unit_id)]

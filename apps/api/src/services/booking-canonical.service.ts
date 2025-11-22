@@ -60,9 +60,11 @@ export interface CreateBookingParams {
   source: 'ALUNO' | 'PROFESSOR';
   studentId?: string;
   professorId: string;
-  unitId: string;
+  franchiseId: string; // ID da academia (franchise_id)
+  unitId?: string; // Opcional, para compatibilidade
   startAt: Date;
   endAt: Date;
+  cancellableUntil?: Date; // Opcional, calculado na rota para preservar hora UTC
   status?: 'AVAILABLE' | 'RESERVED' | 'PAID' | 'DONE' | 'CANCELED';
   studentNotes?: string;
   professorNotes?: string;
@@ -87,7 +89,29 @@ export interface BookingCanonical {
 
 class BookingCanonicalService {
   async createBooking(params: CreateBookingParams): Promise<BookingCanonical> {
-    const cancellableUntil = new Date(params.startAt.getTime() - 4 * 60 * 60 * 1000);
+    // Usar cancellableUntil fornecido (calculado na rota) ou calcular aqui
+    // Se fornecido, já está processado com a mesma lógica de startAt/endAt (preservando hora UTC)
+    let cancellableUntil: Date
+    if (params.cancellableUntil) {
+      cancellableUntil = params.cancellableUntil
+    } else {
+      // Fallback: calcular preservando hora UTC (4 horas antes de startAt)
+      // startAt já está como Date UTC puro (processado com parseUtcDate)
+      // Subtrair 4 horas do timestamp UTC e criar Date UTC puro usando Date.UTC
+      const cancellableUntilTimestamp = params.startAt.getTime() - 4 * 60 * 60 * 1000
+      
+      // Extrair componentes UTC do timestamp resultante para criar Date UTC puro
+      const tempDate = new Date(cancellableUntilTimestamp)
+      const cancellableYear = tempDate.getUTCFullYear()
+      const cancellableMonth = tempDate.getUTCMonth()
+      const cancellableDay = tempDate.getUTCDate()
+      const cancellableHour = tempDate.getUTCHours()
+      const cancellableMinute = tempDate.getUTCMinutes()
+      const cancellableSecond = tempDate.getUTCSeconds()
+      
+      // Criar Date UTC puro usando Date.UTC (preserva hora como UTC, sem conversão de timezone)
+      cancellableUntil = new Date(Date.UTC(cancellableYear, cancellableMonth, cancellableDay, cancellableHour, cancellableMinute, cancellableSecond))
+    }
 
     if (params.source === 'ALUNO') {
       return this.createStudentLedBooking(params, cancellableUntil);
@@ -104,7 +128,8 @@ class BookingCanonicalService {
       throw new Error('studentId eh obrigatorio para agendamento aluno-led');
     }
 
-    const franqueadoraId = await fetchFranqueadoraIdFromUnit(params.unitId);
+    // Usar franchiseId diretamente para buscar franqueadora_id
+    const franqueadoraId = await fetchFranqueadoraIdFromUnit(params.franchiseId);
     const studentBalance = await balanceService.getStudentBalance(params.studentId, franqueadoraId);
     const availableClasses = getAvailableClasses(studentBalance);
 
@@ -112,15 +137,21 @@ class BookingCanonicalService {
       throw new Error('Saldo insuficiente de aulas');
     }
 
-    // Deletar horários AVAILABLE do mesmo professor no mesmo horário/unidade
-    await supabase
+    // Deletar horários AVAILABLE do mesmo professor no mesmo horário/franchise
+    const deleteQuery = supabase
       .from('bookings')
       .delete()
       .eq('teacher_id', params.professorId)
-      .eq('unit_id', params.unitId)
+      .eq('franchise_id', params.franchiseId)
       .eq('start_at', params.startAt.toISOString())
       .eq('status_canonical', 'AVAILABLE')
       .is('student_id', null);
+    
+    if (params.unitId) {
+      deleteQuery.eq('unit_id', params.unitId);
+    }
+    
+    await deleteQuery;
 
     const { data: booking, error: bookingError} = await supabase
       .from('bookings')
@@ -128,7 +159,8 @@ class BookingCanonicalService {
         source: params.source,
         student_id: params.studentId,
         teacher_id: params.professorId,
-        unit_id: params.unitId,
+        franchise_id: params.franchiseId, // Usar franchise_id diretamente
+        unit_id: params.unitId || null, // Opcional
         date: params.startAt.toISOString(),
         start_at: params.startAt.toISOString(),
         end_at: params.endAt.toISOString(),
@@ -152,7 +184,7 @@ class BookingCanonicalService {
       1,
       booking.id,
       {
-        unitId: params.unitId,
+        unitId: params.unitId || params.franchiseId, // Usar franchiseId como fallback
         source: 'ALUNO',
         metaJson: {
           booking_id: booking.id,
@@ -167,7 +199,7 @@ class BookingCanonicalService {
       franqueadoraId,
       1,
       {
-        unitId: params.unitId,
+        unitId: params.unitId || params.franchiseId, // Usar franchiseId como fallback
         source: 'SYSTEM',
         bookingId: booking.id,
         metaJson: {
@@ -177,7 +209,9 @@ class BookingCanonicalService {
       }
     );
 
-    await this.createOrUpdateStudentUnit(params.studentId, params.unitId, booking.id);
+    if (params.unitId) {
+      await this.createOrUpdateStudentUnit(params.studentId, params.unitId, booking.id);
+    }
 
     return booking;
   }
@@ -186,7 +220,8 @@ class BookingCanonicalService {
     params: CreateBookingParams,
     cancellableUntil: Date
   ): Promise<BookingCanonical> {
-    const franqueadoraId = await fetchFranqueadoraIdFromUnit(params.unitId);
+    // Usar franchiseId diretamente para buscar franqueadora_id
+    const franqueadoraId = await fetchFranqueadoraIdFromUnit(params.franchiseId);
     const hasStudent = Boolean(params.studentId);
 
     if (!hasStudent) {
@@ -198,7 +233,8 @@ class BookingCanonicalService {
           source: params.source,
           student_id: null,
           teacher_id: params.professorId,
-          unit_id: params.unitId,
+          franchise_id: params.franchiseId, // Usar franchise_id diretamente
+          unit_id: params.unitId || null, // Opcional
           date: params.startAt.toISOString(),
           start_at: params.startAt.toISOString(),
           end_at: params.endAt.toISOString(),
@@ -230,15 +266,21 @@ class BookingCanonicalService {
       throw new Error('Saldo de horas insuficiente');
     }
 
-    // Deletar horários AVAILABLE do mesmo professor no mesmo horário/unidade
-    await supabase
+    // Deletar horários AVAILABLE do mesmo professor no mesmo horário/franchise
+    const deleteQuery = supabase
       .from('bookings')
       .delete()
       .eq('teacher_id', params.professorId)
-      .eq('unit_id', params.unitId)
+      .eq('franchise_id', params.franchiseId)
       .eq('start_at', params.startAt.toISOString())
       .eq('status_canonical', 'AVAILABLE')
       .is('student_id', null);
+    
+    if (params.unitId) {
+      deleteQuery.eq('unit_id', params.unitId);
+    }
+    
+    await deleteQuery;
 
     const { data: booking, error: bookingError } = await supabase
       .from('bookings')
@@ -246,7 +288,8 @@ class BookingCanonicalService {
         source: params.source,
         student_id: params.studentId ?? null,
         teacher_id: params.professorId,
-        unit_id: params.unitId,
+        franchise_id: params.franchiseId, // Usar franchise_id diretamente
+        unit_id: params.unitId || null, // Opcional
         date: params.startAt.toISOString(),
         start_at: params.startAt.toISOString(),
         end_at: params.endAt.toISOString(),
@@ -287,7 +330,7 @@ class BookingCanonicalService {
       'CONSUME',
       1,
       {
-        unitId: params.unitId,
+        unitId: params.unitId || params.franchiseId, // Usar franchiseId como fallback
         source: 'PROFESSOR',
         bookingId: booking.id,
         metaJson: {
@@ -298,7 +341,7 @@ class BookingCanonicalService {
       }
     );
 
-    if (params.studentId) {
+    if (params.studentId && params.unitId) {
       await this.createOrUpdateStudentUnit(params.studentId, params.unitId, booking.id);
     }
 

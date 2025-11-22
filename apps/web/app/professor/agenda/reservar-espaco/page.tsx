@@ -264,7 +264,7 @@ export default function ReservarHorarioPage() {
           source: 'PROFESSOR',
           professorId: user?.id,
           studentId,
-          unitId: selectedFranchise,
+          academyId: selectedFranchise, // Usar academyId diretamente (franchise_id)
           startAt: bookingDate.toISOString(),
           endAt: endTime.toISOString(),
           professorNotes:
