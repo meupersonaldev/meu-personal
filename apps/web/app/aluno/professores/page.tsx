@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Users, Calendar, Star, Loader2, MapPin } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -43,6 +43,11 @@ export default function StudentProfessoresPage() {
   const [balanceLoading, setBalanceLoading] = useState<boolean>(false)
   const [balanceAvailable, setBalanceAvailable] = useState<number | null>(null)
   const [teacherBookings, setTeacherBookings] = useState<Record<string, any[]>>({})
+  // Estado para professores buscados por academy_id
+  const [academyTeachers, setAcademyTeachers] = useState<any[]>([])
+  const [academyTeachersLoading, setAcademyTeachersLoading] = useState<boolean>(false)
+  // ID da academia fixo conforme solicitado
+  const ACADEMY_ID = '3a25ffaf-1356-4862-adef-d9ca4ef69b38'
 
   useEffect(() => {
     if (user?.id) {
@@ -78,6 +83,41 @@ export default function StudentProfessoresPage() {
     loadBalance()
   }, [token])
 
+  // Função para buscar professores por academy_id
+  const loadTeachersByAcademy = useCallback(async (academyId: string) => {
+    if (!token) return
+    
+    setAcademyTeachersLoading(true)
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/teachers/by-academy-id?academy_id=${academyId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include'
+      })
+
+      if (!response.ok) {
+        throw new Error('Erro ao buscar professores')
+      }
+
+      const data = await response.json()
+      setAcademyTeachers(Array.isArray(data) ? data : [])
+    } catch (error) {
+      console.error('Erro ao buscar professores por academy_id:', error)
+      setAcademyTeachers([])
+    } finally {
+      setAcademyTeachersLoading(false)
+    }
+  }, [token])
+
+  // Carregar professores quando o step 3 for exibido
+  useEffect(() => {
+    if (currentStep === 2 && ACADEMY_ID && token) {
+      loadTeachersByAcademy(ACADEMY_ID)
+    }
+  }, [currentStep, ACADEMY_ID, token, loadTeachersByAcademy])
+
   // Lista unificada de academias disponíveis (derivadas das unidades)
   const allLocations = useMemo(() => {
     const map = new Map<string, { id: string; label: string; city?: string | null; state?: string | null }>()
@@ -106,7 +146,7 @@ export default function StudentProfessoresPage() {
   }, [units, availableUnits])
 
   const selectedLocation = useMemo(
-    () => allLocations.find((loc) => loc.id === selectedAcademyId),
+    () => (allLocations || []).find((loc) => loc.id === selectedAcademyId),
     [allLocations, selectedAcademyId],
   )
 
@@ -160,20 +200,20 @@ export default function StudentProfessoresPage() {
   }
 
   return (
-    <div className="w-full min-h-screen bg-gradient-to-br from-gray-50 via-white to-meu-primary/5">
-      <div className="max-w-6xl mx-auto flex flex-col gap-5 p-4 sm:gap-7 sm:p-6 md:p-8">
+    <div id="aluno-professores-page" className="w-full min-h-screen bg-gradient-to-br from-gray-50 via-white to-meu-primary/5">
+      <div id="aluno-professores-container" className="max-w-6xl mx-auto flex flex-col gap-5 p-4 sm:gap-7 sm:p-6 md:p-8">
         {/* Header */}
-        <div className="flex flex-col gap-2 sm:gap-3">
-          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 tracking-tight">
+        <div id="aluno-professores-header" className="flex flex-col gap-2 sm:gap-3">
+          <h1 id="aluno-professores-title" className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 tracking-tight">
             Encontre seu Professor
           </h1>
-          <p className="text-sm sm:text-base text-gray-600">
+          <p id="aluno-professores-subtitle" className="text-sm sm:text-base text-gray-600">
             Siga os passos abaixo para agendar sua aula personalizada
           </p>
         </div>
 
         {/* Stepper */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
+        <div id="aluno-professores-stepper-container" className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
         <WizardStepper
           steps={["Unidade", "Dia", "Professor"]}
           current={currentStep}
@@ -191,36 +231,36 @@ export default function StudentProfessoresPage() {
         </div>
 
         {/* Container único para todos os steps - apenas o ativo é exibido */}
-        <Card className="border-2 border-meu-primary/30 shadow-lg">
+        <Card id="aluno-professores-main-card" className="border-2 border-meu-primary/30 shadow-lg">
           {/* Step 1: Seletor de Unidade */}
           {currentStep === 0 && (
-            <div className="animate-in fade-in duration-300">
-              <CardHeader className="border-b-2 border-meu-primary/10 bg-gradient-to-r from-meu-primary/10 via-meu-primary/5 to-transparent py-4 px-4 sm:py-5 sm:px-6">
-                <CardTitle className="text-lg sm:text-xl flex items-center gap-3">
-                  <div className="p-2 bg-meu-primary/10 rounded-lg">
+            <div id="aluno-professores-step-1" className="animate-in fade-in duration-300">
+              <CardHeader id="aluno-professores-step-1-header" className="border-b-2 border-meu-primary/10 bg-gradient-to-r from-meu-primary/10 via-meu-primary/5 to-transparent py-4 px-4 sm:py-5 sm:px-6">
+                <CardTitle id="aluno-professores-step-1-title" className="text-lg sm:text-xl flex items-center gap-3">
+                  <div id="aluno-professores-step-1-icon" className="p-2 bg-meu-primary/10 rounded-lg">
                     <MapPin className="h-5 w-5 sm:h-6 sm:w-6 text-meu-primary" />
                   </div>
                   <span className="font-bold">Passo 1: Selecione sua Unidade</span>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-4 sm:p-6 md:p-8">
+              <CardContent id="aluno-professores-step-1-content" className="p-4 sm:p-6 md:p-8">
                 {isUnitsLoading ? (
-                  <div className="flex flex-col items-center justify-center py-12 sm:py-16 gap-3">
+                  <div id="aluno-professores-step-1-loading" className="flex flex-col items-center justify-center py-12 sm:py-16 gap-3">
                     <Loader2 className="h-8 w-8 sm:h-10 sm:w-10 animate-spin text-meu-primary" />
                     <p className="text-sm text-gray-500">Carregando unidades...</p>
                   </div>
                 ) : (
-                  <div className="space-y-4">
+                  <div id="aluno-professores-step-1-form" className="space-y-4">
                     <Select value={selectedAcademyId} onValueChange={(value) => {
                       setSelectedAcademyId(value)
                       setCurrentStep(1)
                     }}>
-                      <SelectTrigger className="w-full h-12 sm:h-14 text-sm sm:text-base border-2 hover:border-meu-primary/50 transition-colors">
-                        <SelectValue placeholder={allLocations.length ? 'Escolha a unidade onde deseja treinar...' : 'Nenhuma unidade disponível'} />
+                      <SelectTrigger id="aluno-professores-unit-select-trigger" className="w-full h-12 sm:h-14 text-sm sm:text-base border-2 hover:border-meu-primary/50 transition-colors">
+                        <SelectValue placeholder={(allLocations || []).length ? 'Escolha a unidade onde deseja treinar...' : 'Nenhuma unidade disponível'} />
                       </SelectTrigger>
-                      <SelectContent className="max-h-64 sm:max-h-80">
-                        {allLocations.map((u) => (
-                          <SelectItem key={u.id} value={u.id} className="text-sm sm:text-base py-3">
+                      <SelectContent id="aluno-professores-unit-select-content" className="max-h-64 sm:max-h-80">
+                        {(allLocations || []).map((u) => (
+                          <SelectItem key={u.id} id={`aluno-professores-unit-option-${u.id}`} value={u.id} className="text-sm sm:text-base py-3">
                             <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2">
                               <span className="font-semibold text-gray-900">{u.label}</span>
                               {(u.city || u.state) && (
@@ -234,8 +274,9 @@ export default function StudentProfessoresPage() {
                         ))}
                       </SelectContent>
                     </Select>
-                    <div className="flex justify-end mt-6">
+                    <div id="aluno-professores-step-1-actions" className="flex justify-end mt-6">
                       <Button
+                        id="aluno-professores-step-1-continue-btn"
                         disabled={!selectedAcademyId}
                         onClick={() => setCurrentStep(1)}
                         className="h-11 sm:h-12 px-6 sm:px-8 text-sm sm:text-base font-semibold bg-meu-primary hover:bg-meu-primary-dark text-white shadow-md hover:shadow-lg transition-all"
@@ -252,45 +293,47 @@ export default function StudentProfessoresPage() {
 
           {/* Step 2: Selecionar Dia */}
           {selectedAcademyId && currentStep === 1 && (
-            <div className="animate-in fade-in duration-300">
-              <CardHeader className="border-b-2 border-meu-primary/10 bg-gradient-to-r from-meu-primary/10 via-meu-primary/5 to-transparent py-4 px-4 sm:py-5 sm:px-6">
-                <CardTitle className="text-lg sm:text-xl flex items-center gap-3">
-                  <div className="p-2 bg-meu-primary/10 rounded-lg">
+            <div id="aluno-professores-step-2" className="animate-in fade-in duration-300">
+              <CardHeader id="aluno-professores-step-2-header" className="border-b-2 border-meu-primary/10 bg-gradient-to-r from-meu-primary/10 via-meu-primary/5 to-transparent py-4 px-4 sm:py-5 sm:px-6">
+                <CardTitle id="aluno-professores-step-2-title" className="text-lg sm:text-xl flex items-center gap-3">
+                  <div id="aluno-professores-step-2-icon" className="p-2 bg-meu-primary/10 rounded-lg">
                     <Calendar className="h-5 w-5 sm:h-6 sm:w-6 text-meu-primary" />
                   </div>
                   <div className="flex flex-col gap-1">
                     <span className="font-bold">Passo 2: Escolha o Dia</span>
                     {selectedLocation?.label && (
-                      <span className="text-xs sm:text-sm font-normal text-gray-500">para {selectedLocation.label}</span>
+                      <span id="aluno-professores-step-2-subtitle" className="text-xs sm:text-sm font-normal text-gray-500">para {selectedLocation.label}</span>
                     )}
                   </div>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-4 sm:p-6 md:p-8">
-                <div className="space-y-6">
-                  <div className="flex flex-col gap-3">
-                    <label className="text-sm font-semibold text-gray-700">Selecione a data da aula</label>
+              <CardContent id="aluno-professores-step-2-content" className="p-4 sm:p-6 md:p-8">
+                <div id="aluno-professores-step-2-form" className="space-y-6">
+                  <div id="aluno-professores-date-selector" className="flex flex-col gap-3">
+                    <label id="aluno-professores-date-label" className="text-sm font-semibold text-gray-700">Selecione a data da aula</label>
                     <input
+                      id="aluno-professores-date-input"
                       type="date"
                       value={selectedDate}
                       onChange={(e) => setSelectedDate(e.target.value)}
                       min={today}
                       className="border-2 rounded-lg px-4 py-3 w-full sm:w-auto text-sm sm:text-base hover:border-meu-primary/50 focus:border-meu-primary focus:ring-2 focus:ring-meu-primary/20 transition-all"
                     />
-                    <div className="text-xs sm:text-sm text-gray-600">
+                    <div id="aluno-professores-balance-info" className="text-xs sm:text-sm text-gray-600">
                       {balanceLoading ? (
-                        <span className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Verificando créditos...</span>
+                        <span id="aluno-professores-balance-loading" className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Verificando créditos...</span>
                       ) : balanceAvailable != null ? (
                         balanceAvailable > 0 ? (
-                          <span className="text-green-700">Créditos disponíveis: {balanceAvailable}</span>
+                          <span id="aluno-professores-balance-available" className="text-green-700">Créditos disponíveis: {balanceAvailable}</span>
                         ) : (
-                          <span className="text-red-600">Você não possui créditos suficientes</span>
+                          <span id="aluno-professores-balance-unavailable" className="text-red-600">Você não possui créditos suficientes</span>
                         )
                       ) : null}
                     </div>
                   </div>
-                  <div className="flex flex-col sm:flex-row gap-3 sm:justify-between sm:items-center pt-4 border-t">
+                  <div id="aluno-professores-step-2-actions" className="flex flex-col sm:flex-row gap-3 sm:justify-between sm:items-center pt-4 border-t">
                     <Button
+                      id="aluno-professores-step-2-back-btn"
                       variant="outline"
                       onClick={() => {
                         setCurrentStep(0)
@@ -303,6 +346,7 @@ export default function StudentProfessoresPage() {
                       Voltar para Unidade
                     </Button>
                     <Button
+                      id="aluno-professores-step-2-check-availability-btn"
                       onClick={async () => {
                         if (!selectedAcademyId || !selectedDate) return
                         try {
@@ -358,6 +402,7 @@ export default function StudentProfessoresPage() {
                     </Button>
                     {balanceAvailable !== null && balanceAvailable <= 0 && (
                       <Button
+                        id="aluno-professores-step-2-buy-credits-btn"
                         variant="outline"
                         onClick={() => router.push('/aluno/comprar')}
                         className="h-11 sm:h-12 px-6 text-sm sm:text-base"
@@ -367,8 +412,8 @@ export default function StudentProfessoresPage() {
                     )}
                   </div>
                   {availabilityError && (
-                    <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg">
-                      <p className="text-sm text-red-700 font-medium">{availabilityError}</p>
+                    <div id="aluno-professores-step-2-error" className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg">
+                      <p id="aluno-professores-step-2-error-message" className="text-sm text-red-700 font-medium">{availabilityError}</p>
                     </div>
                   )}
                 </div>
@@ -378,56 +423,58 @@ export default function StudentProfessoresPage() {
 
           {/* Step 3: Lista de Professores Disponíveis */}
           {selectedAcademyId && currentStep === 2 && (
-            <div className="animate-in fade-in duration-300">
-              <CardHeader className="border-b-2 border-meu-primary/10 bg-gradient-to-r from-meu-primary/10 via-meu-primary/5 to-transparent py-4 px-4 sm:py-5 sm:px-6">
-                <CardTitle className="text-lg sm:text-xl flex items-center gap-3">
-                  <div className="p-2 bg-meu-primary/10 rounded-lg">
+            <div id="aluno-professores-step-3" className="animate-in fade-in duration-300">
+              <CardHeader id="aluno-professores-step-3-header" className="border-b-2 border-meu-primary/10 bg-gradient-to-r from-meu-primary/10 via-meu-primary/5 to-transparent py-4 px-4 sm:py-5 sm:px-6">
+                <CardTitle id="aluno-professores-step-3-title" className="text-lg sm:text-xl flex items-center gap-3">
+                  <div id="aluno-professores-step-3-icon" className="p-2 bg-meu-primary/10 rounded-lg">
                     <Users className="h-5 w-5 sm:h-6 sm:w-6 text-meu-primary" />
                   </div>
                   <div className="flex flex-col gap-1">
                     <span className="font-bold">Passo 3: Professores Disponíveis</span>
                     {selectedLocation?.label && (
-                      <span className="text-xs sm:text-sm font-normal text-gray-500">
+                      <span id="aluno-professores-step-3-subtitle" className="text-xs sm:text-sm font-normal text-gray-500">
                         em {selectedLocation.label} {selectedDate ? `• ${new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}` : ''}
                       </span>
                     )}
                   </div>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-4 sm:p-6 md:p-8">
-              {isTeachersLoading || checkingAvailability ? (
-                <div className="flex items-center justify-center py-10 sm:py-12">
+              <CardContent id="aluno-professores-step-3-content" className="p-4 sm:p-6 md:p-8">
+              {academyTeachersLoading || checkingAvailability ? (
+                <div id="aluno-professores-step-3-loading" className="flex items-center justify-center py-10 sm:py-12">
                   <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-meu-primary" />
                 </div>
-              ) : activeTeachers.length === 0 ? (
-                <div className="text-center py-10 sm:py-12 text-gray-500">
+              ) : academyTeachers.length === 0 ? (
+                <div id="aluno-professores-step-3-empty" className="text-center py-10 sm:py-12 text-gray-500">
                   <Users className="h-12 w-12 sm:h-16 sm:w-16 mx-auto mb-3 sm:mb-4 text-gray-300" />
-                  <p className="text-base sm:text-lg font-medium">Nenhum professor disponível</p>
-                  <p className="text-xs sm:text-sm mt-1.5 sm:mt-2 px-4">
-                    Não há professores cadastrados nesta unidade no momento.
+                  <p id="aluno-professores-step-3-empty-title" className="text-base sm:text-lg font-medium">Nenhum professor disponível</p>
+                  <p id="aluno-professores-step-3-empty-message" className="text-xs sm:text-sm mt-1.5 sm:mt-2 px-4">
+                    Não há professores cadastrados nesta academia no momento.
                   </p>
                 </div>
               ) : (
                 (() => {
-                  const availableList = teachers.filter((t) => availableTeacherIds.has(t.id))
-                  if (availableList.length === 0) {
+                  // Usar todos os professores da academia (sem filtro de disponibilidade por enquanto)
+                  const teachersList = academyTeachers
+                  if (teachersList.length === 0) {
                     return (
-                      <div className="text-center py-10 sm:py-12 text-gray-500">
+                      <div id="aluno-professores-step-3-no-availability" className="text-center py-10 sm:py-12 text-gray-500">
                         <Users className="h-12 w-12 sm:h-16 sm:w-16 mx-auto mb-3 sm:mb-4 text-gray-300" />
-                        <p className="text-base sm:text-lg font-medium">Nenhum professor com horário livre nesta data</p>
-                        <p className="text-xs sm:text-sm mt-1.5 sm:mt-2 px-4">
-                          Tente escolher outro dia ou unidade.
+                        <p id="aluno-professores-step-3-no-availability-title" className="text-base sm:text-lg font-medium">Nenhum professor encontrado</p>
+                        <p id="aluno-professores-step-3-no-availability-message" className="text-xs sm:text-sm mt-1.5 sm:mt-2 px-4">
+                          Tente novamente mais tarde.
                         </p>
                       </div>
                     )
                   }
                   return (
                     <>
-                      <div className="flex items-center justify-between mb-6 pb-4 border-b">
-                        <p className="text-sm text-gray-600">
-                          <span className="font-semibold text-meu-primary">{availableList.length}</span> {availableList.length === 1 ? 'professor disponível' : 'professores disponíveis'}
+                      <div id="aluno-professores-step-3-header-actions" className="flex items-center justify-between mb-6 pb-4 border-b">
+                        <p id="aluno-professores-step-3-count" className="text-sm text-gray-600">
+                          <span className="font-semibold text-meu-primary">{teachersList.length}</span> {teachersList.length === 1 ? 'professor disponível' : 'professores disponíveis'}
                         </p>
                         <Button
+                          id="aluno-professores-step-3-change-date-btn"
                           variant="outline"
                           size="sm"
                           onClick={() => {
@@ -440,27 +487,28 @@ export default function StudentProfessoresPage() {
                           Alterar Data
                         </Button>
                       </div>
-                      <div className="grid gap-5 sm:gap-6 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
-                        {availableList.map((teacher) => (
+                      <div id="aluno-professores-step-3-grid" className="grid gap-5 sm:gap-6 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
+                        {teachersList.map((teacher) => (
                           <Card
                             key={teacher.id}
+                            id={`aluno-professores-teacher-card-${teacher.id}`}
                             className="group relative border-2 border-gray-200 hover:border-meu-primary/70 hover:shadow-2xl transition-all duration-300 overflow-hidden bg-white"
                           >
                             {/* Badge de disponibilidade flutuante */}
                             {teacher.teacher_profiles?.[0]?.is_available && (
-                              <div className="absolute top-4 right-4 z-10">
+                              <div id={`aluno-professores-teacher-badge-${teacher.id}`} className="absolute top-4 right-4 z-10">
                                 <Badge className="bg-green-500 text-white border-0 text-xs font-semibold shadow-lg px-3 py-1">
                                   ✓ Disponível
                                 </Badge>
                               </div>
                             )}
 
-                            <CardContent className="p-0">
+                            <CardContent id={`aluno-professores-teacher-card-content-${teacher.id}`} className="p-0">
                               <div className="flex flex-col h-full">
                                 {/* Header com Avatar - Design mais compacto */}
-                                <div className="relative bg-gradient-to-br from-meu-primary/5 via-meu-primary/3 to-transparent p-6 pb-8">
+                                <div id={`aluno-professores-teacher-header-${teacher.id}`} className="relative bg-gradient-to-br from-meu-primary/5 via-meu-primary/3 to-transparent p-6 pb-8">
                                   <div className="flex flex-col items-center text-center gap-3">
-                                    <Avatar className="h-24 w-24 border-4 border-white shadow-xl ring-4 ring-meu-primary/10 group-hover:ring-meu-primary/30 transition-all">
+                                    <Avatar id={`aluno-professores-teacher-avatar-${teacher.id}`} className="h-24 w-24 border-4 border-white shadow-xl ring-4 ring-meu-primary/10 group-hover:ring-meu-primary/30 transition-all">
                                       {teacher.avatar_url && (
                                         <AvatarImage src={teacher.avatar_url} alt={teacher.name} />
                                       )}
@@ -468,23 +516,23 @@ export default function StudentProfessoresPage() {
                                         {teacher.name.slice(0, 2).toUpperCase()}
                                       </AvatarFallback>
                                     </Avatar>
-                                    <div className="w-full">
-                                      <h3 className="font-bold text-lg text-gray-900 mb-1 line-clamp-1">{teacher.name}</h3>
+                                    <div id={`aluno-professores-teacher-info-${teacher.id}`} className="w-full">
+                                      <h3 id={`aluno-professores-teacher-name-${teacher.id}`} className="font-bold text-lg text-gray-900 mb-1 line-clamp-1">{teacher.name}</h3>
                                       {/* Avaliação logo abaixo do nome */}
-                                      <div className="flex items-center justify-center gap-1.5">
+                                      <div id={`aluno-professores-teacher-rating-${teacher.id}`} className="flex items-center justify-center gap-1.5">
                                         <div className="flex items-center gap-0.5">
                                           {Array.from({ length: 5 }).map((_, i) => {
                                             const idx = i + 1
                                             const filled = idx <= Math.round(teacher.rating_avg || 0)
                                             return (
-                                              <Star key={idx} className={`h-4 w-4 ${filled ? 'text-amber-400 fill-amber-400' : 'text-gray-300'}`} />
+                                              <Star key={idx} id={`aluno-professores-teacher-star-${teacher.id}-${idx}`} className={`h-4 w-4 ${filled ? 'text-amber-400 fill-amber-400' : 'text-gray-300'}`} />
                                             )
                                           })}
                                         </div>
-                                        <span className="text-sm font-bold text-gray-900">
+                                        <span id={`aluno-professores-teacher-rating-value-${teacher.id}`} className="text-sm font-bold text-gray-900">
                                           {typeof teacher.rating_avg === 'number' ? teacher.rating_avg.toFixed(1) : '0.0'}
                                         </span>
-                                        <span className="text-xs text-gray-500">
+                                        <span id={`aluno-professores-teacher-rating-count-${teacher.id}`} className="text-xs text-gray-500">
                                           ({teacher.rating_count || 0})
                                         </span>
                                       </div>
@@ -493,18 +541,19 @@ export default function StudentProfessoresPage() {
                                 </div>
 
                                 {/* Conteúdo - Mais espaçado */}
-                                <div className="p-5 flex-1 flex flex-col gap-5">
+                                <div id={`aluno-professores-teacher-body-${teacher.id}`} className="p-5 flex-1 flex flex-col gap-5">
                                   {/* Especialidades */}
                                   {teacher.teacher_profiles?.[0]?.specialties && teacher.teacher_profiles[0].specialties.length > 0 && (
-                                    <div className="space-y-2">
-                                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                                    <div id={`aluno-professores-teacher-specialties-${teacher.id}`} className="space-y-2">
+                                      <p id={`aluno-professores-teacher-specialties-label-${teacher.id}`} className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
                                         <span className="w-1 h-4 bg-meu-primary rounded-full"></span>
                                         Especialidades
                                       </p>
-                                      <div className="flex flex-wrap gap-2">
-                                        {teacher.teacher_profiles[0].specialties.slice(0, 3).map((specialty, idx) => (
+                                      <div id={`aluno-professores-teacher-specialties-list-${teacher.id}`} className="flex flex-wrap gap-2">
+                                        {teacher.teacher_profiles[0].specialties.slice(0, 3).map((specialty: string, idx: number) => (
                                           <Badge 
-                                            key={idx} 
+                                            key={idx}
+                                            id={`aluno-professores-teacher-specialty-${teacher.id}-${idx}`}
                                             variant="outline" 
                                             className="text-xs font-medium border-meu-primary/40 text-gray-700 bg-meu-primary/5 hover:bg-meu-primary/10 transition-colors px-3 py-1"
                                           >
@@ -512,7 +561,7 @@ export default function StudentProfessoresPage() {
                                           </Badge>
                                         ))}
                                         {teacher.teacher_profiles[0].specialties.length > 3 && (
-                                          <Badge variant="outline" className="text-xs text-gray-500 border-gray-300">
+                                          <Badge id={`aluno-professores-teacher-specialties-more-${teacher.id}`} variant="outline" className="text-xs text-gray-500 border-gray-300">
                                             +{teacher.teacher_profiles[0].specialties.length - 3}
                                           </Badge>
                                         )}
@@ -521,7 +570,7 @@ export default function StudentProfessoresPage() {
                                   )}
 
                                   {/* Botões de ação - Melhor hierarquia */}
-                                  <div className="flex flex-col gap-2.5 mt-auto pt-4 border-t border-gray-100">
+                                  <div id={`aluno-professores-teacher-actions-${teacher.id}`} className="flex flex-col gap-2.5 mt-auto pt-4 border-t border-gray-100">
                                       {teacherBookings[teacher.id]?.length ? (
                                         <p className="text-xs text-gray-500">
                                           {teacherBookings[teacher.id].length}{' '}
@@ -532,22 +581,18 @@ export default function StudentProfessoresPage() {
                                         </p>
                                       ) : null}
                                     <Button
+                                      id={`aluno-professores-teacher-book-btn-${teacher.id}`}
                                       className="w-full h-12 text-sm font-bold bg-gradient-to-r from-meu-primary to-meu-primary-dark text-white hover:shadow-xl hover:scale-[1.02] transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                                       disabled={balanceAvailable !== null && balanceAvailable <= 0}
                                       title={balanceAvailable !== null && balanceAvailable <= 0 ? 'Sem créditos suficientes' : 'Agendar aula'}
-                                      onClick={() =>
-                                        router.push(
-                                          `/aluno/agendar?teacher_id=${teacher.id}&academy_id=${selectedAcademyId}${
-                                            selectedDate ? `&date=${selectedDate}` : ''
-                                          }`,
-                                        )
-                                      }
+                                      onClick={() => router.push(`/aluno/agendar?teacher_id=${teacher.id}&academy_id=${selectedAcademyId}${selectedDate ? `&date=${selectedDate}` : ''}`)}
                                     >
                                       <Calendar className="mr-2 h-4 w-4" />
                                       Agendar Aula
                                     </Button>
                                     {balanceAvailable !== null && balanceAvailable <= 0 && (
                                       <Button
+                                        id={`aluno-professores-teacher-buy-credits-btn-${teacher.id}`}
                                         variant="outline"
                                         onClick={() => router.push('/aluno/comprar')}
                                         className="w-full h-10 text-xs font-semibold border-2 border-meu-primary/30 text-meu-primary hover:bg-meu-primary/5"

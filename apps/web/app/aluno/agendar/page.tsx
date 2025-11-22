@@ -22,7 +22,7 @@ export default function AgendarPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const teacherId = searchParams.get('teacher_id') || ''
-  const unitId = searchParams.get('unit_id') || ''
+  const academyId = searchParams.get('academy_id') || ''
   const { token, isAuthenticated } = useAuthStore()
 
   const today = useMemo(() => new Date().toISOString().slice(0, 10), [])
@@ -36,26 +36,62 @@ export default function AgendarPage() {
 
   useEffect(() => {
     const load = async () => {
-      if (!unitId || !date) return
+      if (!teacherId || !date || !token) return
       setLoading(true)
       setError(null)
       setSuccess(null)
       try {
-        const resp: any = await academiesAPI.getAvailableSlots(unitId, date, teacherId || undefined)
-        const list: Slot[] = Array.isArray(resp?.slots)
-          ? resp.slots
-          : Array.isArray(resp)
-            ? (resp as any[]).map((t: any) => ({
-                time: String(t),
-                max_capacity: 1,
-                current_occupancy: 0,
-                remaining: 1,
-                is_free: true,
-                slot_duration: 60,
-                slot_cost: 1,
-              }))
-            : []
-        setSlots(list)
+        // Buscar bookings disponíveis do professor para a data (NOT IN ('RESERVED', 'PAID', 'DONE'))
+        const bookingsResponse = await fetch(
+          `${API_BASE_URL}/api/teachers/${teacherId}/bookings-by-date?date=${date}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            credentials: 'include'
+          }
+        )
+
+        if (!bookingsResponse.ok) {
+          throw new Error('Erro ao buscar horários disponíveis')
+        }
+
+        const availableBookings: any[] = await bookingsResponse.json()
+
+        // Converter bookings disponíveis para slots
+        const slotsList: Slot[] = availableBookings.map((booking: any) => {
+          let timeStr = '00:00'
+          if (booking.start_time) {
+            const startDate = new Date(booking.start_time)
+            // Converter para timezone America/Sao_Paulo
+            const brazilDate = new Date(startDate.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }))
+            const hours = brazilDate.getHours()
+            const minutes = brazilDate.getMinutes()
+            timeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`
+          } else if (booking.date) {
+            const dateObj = new Date(booking.date)
+            const brazilDate = new Date(dateObj.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }))
+            const hours = brazilDate.getHours()
+            const minutes = brazilDate.getMinutes()
+            timeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`
+          }
+
+          return {
+            time: timeStr,
+            max_capacity: 1,
+            current_occupancy: 0,
+            remaining: 1,
+            is_free: true,
+            slot_duration: booking.duration || 60,
+            slot_cost: 1,
+          }
+        })
+
+        // Ordenar por horário
+        slotsList.sort((a, b) => a.time.localeCompare(b.time))
+
+        setSlots(slotsList)
       } catch (e: any) {
         setError(e?.message || 'Erro ao carregar horários disponíveis')
         setSlots([])
@@ -64,7 +100,7 @@ export default function AgendarPage() {
       }
     }
     load()
-  }, [unitId, date, teacherId])
+  }, [teacherId, date, token])
 
   async function handleBook(slot: string) {
     try {
@@ -72,13 +108,23 @@ export default function AgendarPage() {
         setError('Você precisa estar autenticado para agendar.')
         return
       }
-      if (!teacherId || !unitId) {
+      if (!teacherId || !academyId) {
         setError('Parâmetros inválidos para agendamento.')
         return
       }
 
       // Montar datas ISO em UTC (duração padrão 60 min)
-      const start = new Date(`${date}T${slot}:00Z`)
+      // O horário do slot já está no formato HH:MM (horário de Brasília)
+      // Precisamos criar a data UTC que representa esse horário em Brasília
+      const [hours, minutes] = slot.split(':').map(Number)
+      const start = new Date(Date.UTC(
+        new Date(date).getUTCFullYear(),
+        new Date(date).getUTCMonth(),
+        new Date(date).getUTCDate(),
+        hours,
+        minutes,
+        0
+      ))
       const end = new Date(start)
       end.setUTCMinutes(end.getUTCMinutes() + 60)
 
@@ -91,7 +137,7 @@ export default function AgendarPage() {
         body: JSON.stringify({
           source: 'ALUNO',
           professorId: teacherId,
-          unitId: unitId,
+          academyId: academyId, // Usar academyId diretamente
           startAt: start.toISOString(),
           endAt: end.toISOString(),
         }),
@@ -192,7 +238,7 @@ export default function AgendarPage() {
                 className="justify-center"
                 title={s.is_free ? `${s.remaining}/${s.max_capacity} vagas` : 'Indisponível'}
               >
-                {s.time} {s.remaining > 0 ? `(${s.remaining}/${s.max_capacity})` : '(lotado)'}
+                {s.time}
               </Button>
             ))}
             </div>

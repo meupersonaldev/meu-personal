@@ -66,12 +66,57 @@ export default function StudentDashboardPage() {
   const [saving, setSaving] = useState(false)
 
   // Aulas state
-  type BookingItem = { id: string; date: string; duration: number; status: string; teacherName?: string; franchiseName?: string; cancellableUntil?: string }
+  type BookingItem = { id: string; date: string; startAt?: string; endAt?: string; duration: number; status: string; teacherName?: string; franchiseName?: string; cancellableUntil?: string }
   const [bookings, setBookings] = useState<BookingItem[]>([])
   const [bookingsLoading, setBookingsLoading] = useState(false)
-  const now = useMemo(() => new Date(), [])
   const [balanceAvailable, setBalanceAvailable] = useState<number | null>(null)
   const [nextBooking, setNextBooking] = useState<BookingItem | null>(null)
+
+  // Função auxiliar para obter o tempo do booking (startAt ou date)
+  const getBookingTime = (booking: BookingItem): Date => {
+    if (!booking.date && !booking.startAt) {
+      return new Date(0) // Data inválida
+    }
+    return booking.startAt ? new Date(booking.startAt) : new Date(booking.date)
+  }
+
+  // Função auxiliar para verificar se um booking é futuro
+  // Compara considerando o timezone local do usuário (America/Sao_Paulo)
+  // O backend retorna datas em UTC, mas precisamos comparar no timezone local
+  const isBookingUpcoming = (booking: BookingItem): boolean => {
+    const bookingTime = getBookingTime(booking)
+    const now = new Date()
+    
+    // Obter a data/hora do booking no timezone de São Paulo
+    // Formato: "11/22/2025, 09:00:00 AM" ou "11/22/2025, 09:00:00"
+    const bookingBRParts = bookingTime.toLocaleString('en-US', { 
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    }).split(', ')
+    
+    // Obter a data/hora atual no timezone de São Paulo
+    const nowBRParts = now.toLocaleString('en-US', { 
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    }).split(', ')
+    
+    // Comparar: se a string completa do booking for maior que a atual, é futuro
+    // Isso funciona porque o formato é consistente: "MM/DD/YYYY, HH:MM:SS AM/PM"
+    const bookingBRStr = bookingBRParts.join(', ')
+    const nowBRStr = nowBRParts.join(', ')
+    
+    return bookingBRStr > nowBRStr
+  }
 
   const [ratingsMap, setRatingsMap] = useState<Record<string, { rating: number; comment?: string }>>({})
   const [ratingModal, setRatingModal] = useState<{ open: boolean; bookingId: string | null }>({ open: false, bookingId: null })
@@ -131,7 +176,7 @@ export default function StudentDashboardPage() {
 
   useEffect(() => {
     if (!token) return
-    const past = bookings.filter(b => new Date(b.date) < new Date()).slice(0, 3)
+    const past = bookings.filter(b => !isBookingUpcoming(b)).slice(0, 3)
     past.forEach(async (b) => {
       if (ratingsMap[b.id] !== undefined) return
       try {
@@ -156,19 +201,42 @@ export default function StudentDashboardPage() {
       const res = await fetch(`${API_BASE_URL}/api/bookings?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` }
       })
-      if (!res.ok) throw new Error('Erro ao carregar suas aulas')
+      if (!res.ok) {
+        const errorText = await res.text()
+        console.error('Erro ao buscar bookings:', res.status, errorText)
+        throw new Error('Erro ao carregar suas aulas')
+      }
       const json = await res.json()
-      const items: BookingItem[] = (json.bookings || []).map((b: any) => ({
-        id: b.id,
-        date: b.date,
-        duration: b.duration ?? 60,
-        status: String(b.status),
-        teacherName: b.teacherName,
-        franchiseName: b.franchiseName,
-        cancellableUntil: b.cancellableUntil
-      }))
+      console.log('Bookings recebidos do backend:', json)
+      console.log('Número de bookings:', json.bookings?.length || 0)
+      
+      if (!json.bookings || json.bookings.length === 0) {
+        console.warn('Nenhum booking retornado do backend')
+        setBookings([])
+        return
+      }
+      
+      const items: BookingItem[] = (json.bookings || []).map((b: any) => {
+        const item = {
+          id: b.id,
+          date: b.date,
+          startAt: b.startAt,
+          endAt: b.endAt,
+          duration: b.duration ?? 60,
+          status: String(b.status),
+          teacherName: b.teacherName,
+          franchiseName: b.franchiseName,
+          cancellableUntil: b.cancellableUntil
+        }
+        console.log('Mapeando booking:', b, '->', item)
+        return item
+      })
+      
+      console.log('Bookings mapeados:', items)
+      console.log('Bookings futuros:', items.filter(b => isBookingUpcoming(b)))
       setBookings(items)
     } catch (e) {
+      console.error('Erro ao buscar bookings:', e)
       // ignore error here, handled via UI state
       setBookings([])
     } finally {
@@ -201,14 +269,15 @@ export default function StudentDashboardPage() {
       const items: BookingItem[] = (json.bookings || []).map((b: any) => ({
         id: b.id, date: b.date, duration: b.duration ?? 60, status: String(b.status), teacherName: b.teacherName, franchiseName: b.franchiseName, cancellableUntil: b.cancellableUntil
       }))
-      const upcoming = items.filter(b => new Date(b.date) >= new Date())
-      upcoming.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      const upcoming = items.filter(b => isBookingUpcoming(b))
+      upcoming.sort((a, b) => getBookingTime(a).getTime() - getBookingTime(b).getTime())
       setNextBooking(upcoming[0] || null)
     } catch {}
   }
 
   const cutoffLabel = (b: BookingItem) => {
-    const cutoffIso = b.cancellableUntil || new Date(new Date(b.date).getTime() - 4 * 60 * 60 * 1000).toISOString()
+    const bookingTime = getBookingTime(b)
+    const cutoffIso = b.cancellableUntil || new Date(bookingTime.getTime() - 4 * 60 * 60 * 1000).toISOString()
     const cutoff = new Date(cutoffIso)
     const d = cutoff.toLocaleDateString('pt-BR')
     const t = cutoff.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
@@ -637,8 +706,8 @@ export default function StudentDashboardPage() {
   }
 
   if (section === 'aulas') {
-    const upcoming = bookings.filter(b => new Date(b.date) >= now)
-    const past = bookings.filter(b => new Date(b.date) < now)
+    const upcoming = bookings.filter(b => isBookingUpcoming(b))
+    const past = bookings.filter(b => !isBookingUpcoming(b))
     return (
       <div className="w-full flex flex-col gap-4 sm:gap-6 p-3 sm:p-4 md:p-6">
         <div className="flex flex-col gap-1.5 sm:gap-2">
@@ -665,7 +734,7 @@ export default function StudentDashboardPage() {
                   <div className="flex-1 space-y-1">
                     <div className="text-sm sm:text-base font-semibold text-gray-900">{b.teacherName || 'Professor'}</div>
                     <div className="text-xs sm:text-sm text-gray-600">
-                      {new Date(b.date).toLocaleDateString('pt-BR')} • {new Date(b.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} • {b.duration} min
+                      {getBookingTime(b).toLocaleDateString('pt-BR')} • {getBookingTime(b).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} • {b.duration} min
                     </div>
                     {b.franchiseName && (
                       <div className="text-xs text-gray-500">{b.franchiseName}</div>
@@ -701,7 +770,7 @@ export default function StudentDashboardPage() {
                 <div key={b.id} className="flex items-center justify-between rounded-lg border p-3">
                   <div>
                     <div className="text-sm font-semibold text-gray-900">{b.teacherName || 'Professor'}</div>
-                    <div className="text-xs text-gray-600">{new Date(b.date).toLocaleDateString('pt-BR')} • {new Date(b.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} • {b.duration} min</div>
+                    <div className="text-xs text-gray-600">{getBookingTime(b).toLocaleDateString('pt-BR')} • {getBookingTime(b).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} • {b.duration} min</div>
                   </div>
                   <div className="text-xs text-gray-500">{b.status}</div>
                 </div>
@@ -765,7 +834,7 @@ export default function StudentDashboardPage() {
         <div className="flex-1">
           <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900">Olá, {firstName}!</h1>
           <p className="text-xs sm:text-sm text-gray-500 mt-1">
-            {bookings.filter(b => new Date(b.date) >= now).length} aulas agendadas • {balanceAvailable ?? 0} créditos disponíveis
+            {bookings.filter(b => isBookingUpcoming(b)).length} aulas agendadas • {balanceAvailable ?? 0} créditos disponíveis
           </p>
         </div>
         <Button 
@@ -816,70 +885,109 @@ export default function StudentDashboardPage() {
               <Loader2 className="h-6 w-6 animate-spin text-gray-400 mx-auto mb-2" />
               <p className="text-sm text-gray-500">Carregando...</p>
             </div>
-          ) : bookings.filter(b => new Date(b.date) >= now).length === 0 ? (
-            <div className="text-center py-12">
-              <Calendar className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-              <p className="text-sm text-gray-600 mb-4">Nenhuma aula agendada</p>
-              <Button onClick={() => { window.location.href = '/aluno/professores' }}>
-                Encontrar Professor
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {bookings
-                .filter(b => new Date(b.date) >= now)
-                .slice(0, 4)
-                .map((booking) => (
-                  <div 
-                    key={booking.id} 
-                    className="flex items-center justify-between p-4 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-                  >
-                    <div className="flex items-center gap-3 flex-1">
-                      <div className="h-10 w-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-700 font-semibold text-sm">
-                        {(booking.teacherName || 'P').charAt(0).toUpperCase()}
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900">{booking.teacherName || 'Professor'}</p>
-                        <p className="text-sm text-gray-600">
-                          {new Date(booking.date).toLocaleDateString('pt-BR', { 
-                            weekday: 'short', 
-                            day: 'numeric', 
-                            month: 'short',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </p>
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {booking.franchiseName || '—'}
-                      </div>
-                    </div>
-                    <Button 
-                      variant="ghost" 
-                      size="sm"
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                      onClick={() => setConfirm({ open: true, bookingId: booking.id })}
-                    >
-                      Cancelar
+          ) : (() => {
+            const upcomingBookings = bookings.filter(b => {
+              const isUpcoming = isBookingUpcoming(b)
+              const bookingTime = getBookingTime(b)
+              const now = new Date()
+              console.log('Booking:', b.id, 'Date:', b.date, 'StartAt:', b.startAt, 'Time:', bookingTime.toISOString(), 'Now:', now.toISOString(), 'IsUpcoming:', isUpcoming, 'Diff:', bookingTime.getTime() - now.getTime(), 'ms')
+              return isUpcoming
+            })
+            console.log('Total bookings:', bookings.length, 'Upcoming:', upcomingBookings.length)
+            console.log('All bookings:', bookings.map(b => ({ 
+              id: b.id, 
+              date: b.date, 
+              startAt: b.startAt, 
+              time: getBookingTime(b).toISOString(),
+              isUpcoming: isBookingUpcoming(b)
+            })))
+            
+            if (upcomingBookings.length === 0) {
+              // Se não há bookings futuros, mas há bookings, mostrar mensagem diferente
+              if (bookings.length > 0) {
+                return (
+                  <div className="text-center py-12">
+                    <Calendar className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                    <p className="text-sm text-gray-600 mb-4">Nenhuma aula futura agendada</p>
+                    <p className="text-xs text-gray-500 mb-4">Você tem {bookings.length} aula(s) no histórico</p>
+                    <Button onClick={() => { window.location.href = '/aluno/professores' }}>
+                      Agendar Nova Aula
                     </Button>
                   </div>
-                ))}
+                )
+              }
+              return (
+                <div className="text-center py-12">
+                  <Calendar className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-sm text-gray-600 mb-4">Nenhuma aula agendada</p>
+                  <Button onClick={() => { window.location.href = '/aluno/professores' }}>
+                    Encontrar Professor
+                  </Button>
+                </div>
+              )
+            }
+            
+            return (
+              <div className="space-y-3">
+                {upcomingBookings
+                  .sort((a, b) => getBookingTime(a).getTime() - getBookingTime(b).getTime())
+                  .slice(0, 4)
+                  .map((booking) => {
+                    const displayDate = booking.startAt || booking.date
+                    console.log('Rendering booking:', booking.id, booking.teacherName, displayDate)
+                    return (
+                      <div 
+                        key={booking.id} 
+                        className="flex items-center justify-between p-4 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="flex items-center gap-3 flex-1">
+                          <div className="h-10 w-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-700 font-semibold text-sm">
+                            {(booking.teacherName || 'P').charAt(0).toUpperCase()}
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-medium text-gray-900">{booking.teacherName || 'Professor'}</p>
+                            <p className="text-sm text-gray-600">
+                              {new Date(displayDate).toLocaleDateString('pt-BR', { 
+                                weekday: 'short', 
+                                day: 'numeric', 
+                                month: 'short',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </p>
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {booking.franchiseName || '—'}
+                          </div>
+                        </div>
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => setConfirm({ open: true, bookingId: booking.id })}
+                        >
+                          Cancelar
+                        </Button>
+                      </div>
+                    )
+                  })}
               
-              {bookings.filter(b => new Date(b.date) >= now).length > 4 && (
-                <Button 
-                  variant="outline" 
-                  className="w-full"
-                  onClick={() => { const url = new URL(window.location.href); url.searchParams.set('section','aulas'); window.location.href = url.toString() }}
-                >
-                  Ver todas ({bookings.filter(b => new Date(b.date) >= now).length})
-                </Button>
-              )}
-            </div>
-          )}
+                {upcomingBookings.length > 4 && (
+                  <Button 
+                    variant="outline" 
+                    className="w-full"
+                    onClick={() => { const url = new URL(window.location.href); url.searchParams.set('section','aulas'); window.location.href = url.toString() }}
+                  >
+                    Ver todas ({upcomingBookings.length})
+                  </Button>
+                )}
+              </div>
+            )
+          })()}
         </CardContent>
       </Card>
 
-      {bookings.filter(b => new Date(b.date) < now).length > 0 && (
+      {bookings.filter(b => !isBookingUpcoming(b)).length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-lg font-semibold">Histórico Recente</CardTitle>
@@ -888,9 +996,12 @@ export default function StudentDashboardPage() {
           <CardContent>
             <div className="space-y-2">
               {bookings
-                .filter(b => new Date(b.date) < now)
+                .filter(b => !isBookingUpcoming(b))
+                .sort((a, b) => getBookingTime(b).getTime() - getBookingTime(a).getTime()) // Mais recentes primeiro
                 .slice(0, 3)
-                .map((booking) => (
+                .map((booking) => {
+                  const displayDate = booking.startAt || booking.date
+                  return (
                   <div 
                     key={booking.id} 
                     className="flex items-center justify-between p-3 rounded-lg bg-gray-50"
@@ -902,7 +1013,7 @@ export default function StudentDashboardPage() {
                       <div className="flex-1">
                         <p className="text-sm font-medium text-gray-900">{booking.teacherName || 'Professor'}</p>
                         <p className="text-xs text-gray-500">
-                          {new Date(booking.date).toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })}
+                          {new Date(displayDate).toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })}
                         </p>
                       </div>
                     </div>
@@ -930,7 +1041,8 @@ export default function StudentDashboardPage() {
                       )}
                     </div>
                   </div>
-                ))}
+                  )
+                })}
             </div>
           </CardContent>
         </Card>
