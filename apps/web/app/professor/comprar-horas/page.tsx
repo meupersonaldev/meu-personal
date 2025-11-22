@@ -24,6 +24,19 @@ interface HoursPackage {
   features: string[]
 }
 
+// Função para formatar valores no padrão brasileiro (vírgula como separador, sem zeros desnecessários)
+const formatPriceBR = (value: number): string => {
+  const formatted = value.toFixed(2).replace('.', ',')
+  // Remove zeros decimais desnecessários: ,00 ou ,0
+  if (formatted.endsWith(',00')) {
+    return formatted.slice(0, -3)
+  }
+  if (formatted.endsWith(',0')) {
+    return formatted.slice(0, -2)
+  }
+  return formatted
+}
+
 export default function ComprarHorasPage() {
   const { user } = useAuthStore()
   const { isNotApproved, approvalStatus } = useTeacherApproval()
@@ -288,10 +301,10 @@ export default function ComprarHorasPage() {
                     
                     <div className="mb-4">
                       <div className="text-4xl font-bold text-blue-600 mb-1">
-                        R$ {pkg.price.toFixed(2)}
+                        R$ {formatPriceBR(pkg.price / pkg.hours_included)}/hora
                       </div>
                       <div className="text-sm text-gray-500">
-                        R$ {(pkg.price / pkg.hours_included).toFixed(2)}/hora
+                        Total: R$ {formatPriceBR(pkg.price)}
                       </div>
                     </div>
 
