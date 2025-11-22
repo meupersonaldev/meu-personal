@@ -16,9 +16,9 @@ import {
 } from '@/components/ui/select'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { useStudentUnitsStore } from '@/lib/stores/student-units-store'
-import { useStudentStore } from '@/lib/stores/student-store'
+import type { Teacher } from '@/lib/stores/student-store'
 import WizardStepper from '@/components/franchise-form/WizardStepper'
-import { academiesAPI, API_BASE_URL } from '@/lib/api'
+import { academiesAPI, API_BASE_URL, teachersAPI } from '@/lib/api'
 
 
 export default function StudentProfessoresPage() {
@@ -31,8 +31,9 @@ export default function StudentProfessoresPage() {
     fetchUnits,
     fetchAvailableUnits,
   } = useStudentUnitsStore()
-  const { teachers, loading: isTeachersLoading, loadTeachers } = useStudentStore()
-  const [selectedUnitId, setSelectedUnitId] = useState<string>('')
+  const [teachers, setTeachers] = useState<Teacher[]>([])
+  const [isTeachersLoading, setIsTeachersLoading] = useState(false)
+  const [selectedAcademyId, setSelectedAcademyId] = useState<string>('')
   const [currentStep, setCurrentStep] = useState<number>(0)
   const today = useMemo(() => new Date().toISOString().slice(0, 10), [])
   const [selectedDate, setSelectedDate] = useState<string>(today)
@@ -41,6 +42,7 @@ export default function StudentProfessoresPage() {
   const [availabilityError, setAvailabilityError] = useState<string | null>(null)
   const [balanceLoading, setBalanceLoading] = useState<boolean>(false)
   const [balanceAvailable, setBalanceAvailable] = useState<number | null>(null)
+  const [teacherBookings, setTeacherBookings] = useState<Record<string, any[]>>({})
 
   useEffect(() => {
     if (user?.id) {
@@ -76,42 +78,82 @@ export default function StudentProfessoresPage() {
     loadBalance()
   }, [token])
 
-  useEffect(() => {
-    if (selectedUnitId) {
-      // Carregar professores usando a unidade vinculada selecionada, sem ativar automaticamente
-      loadTeachers(undefined, undefined, selectedUnitId)
-      // Avançar para o próximo passo (escolher o dia)
-      setCurrentStep(1)
-    }
-  }, [selectedUnitId, loadTeachers])
+  // Lista unificada de academias disponíveis (derivadas das unidades)
+  const allLocations = useMemo(() => {
+    const map = new Map<string, { id: string; label: string; city?: string | null; state?: string | null }>()
 
-  // Lista unificada de unidades (vinculadas + disponíveis)
-  const allUnits = useMemo(() => {
-    const seen = new Set<string>()
-    const list: { id: string; name: string; city?: string | null; state?: string | null }[] = []
+    const append = (academyId?: string | null, name?: string | null, city?: string | null, state?: string | null) => {
+      if (!academyId) return
+      if (map.has(academyId)) return
+      map.set(academyId, {
+        id: academyId,
+        label: name || 'Academia',
+        city,
+        state,
+      })
+    }
+
     for (const su of units) {
-      const uid = su.unit?.id || su.unit_id
-      if (uid && !seen.has(uid)) {
-        seen.add(uid)
-        list.push({ id: uid, name: su.unit?.name || '', city: su.unit?.city, state: su.unit?.state })
-      }
+      const academyId = (su.unit as any)?.academy_legacy_id || null
+      append(academyId, su.unit?.name, su.unit?.city, su.unit?.state)
     }
     for (const u of availableUnits) {
-      if (u.id && !seen.has(u.id)) {
-        seen.add(u.id)
-        list.push({ id: u.id, name: u.name, city: u.city, state: u.state })
-      }
+      const academyId = (u as any)?.academy_legacy_id || null
+      append(academyId, u.name, u.city, u.state)
     }
-    return list
+
+    return Array.from(map.values())
   }, [units, availableUnits])
 
-  const selectedUnit = units.find(u => u.unit_id === selectedUnitId)
-  const selectedUnitLabel = useMemo(() => {
-    const fromLinked = selectedUnit?.unit?.name
-    if (fromLinked) return fromLinked
-    const fromAvailable = availableUnits.find(u => u.id === selectedUnitId)?.name
-    return fromAvailable || ''
-  }, [selectedUnitId, selectedUnit, availableUnits])
+  const selectedLocation = useMemo(
+    () => allLocations.find((loc) => loc.id === selectedAcademyId),
+    [allLocations, selectedAcademyId],
+  )
+
+  const activeTeachers = useMemo(
+    () =>
+      teachers.filter(
+        (teacher) => teacher.is_active && (teacher.teacher_profiles?.[0]?.is_available ?? true),
+      ),
+    [teachers],
+  )
+
+  useEffect(() => {
+    if (!selectedAcademyId) {
+      setTeachers([])
+      return
+    }
+
+    let cancelled = false
+    const fetchTeachers = async () => {
+      try {
+        setIsTeachersLoading(true)
+        setAvailabilityError(null)
+        setAvailableTeacherIds(new Set())
+        const data = await teachersAPI.getAll({ academy_id: selectedAcademyId })
+        if (!cancelled) {
+          const list = Array.isArray(data) ? data : data?.teachers || []
+          setTeachers(
+            list.filter(
+              (teacher: Teacher) =>
+                teacher.is_active && (teacher.teacher_profiles?.[0]?.is_available ?? true),
+            ),
+          )
+        }
+      } catch (error) {
+        console.error('Erro ao carregar professores:', error)
+        if (!cancelled) {
+          setTeachers([])
+        }
+      } finally {
+        if (!cancelled) {
+          setIsTeachersLoading(false)
+        }
+      }
+    }
+
+    fetchTeachers()
+  }, [selectedAcademyId])
 
   if (!user || !isAuthenticated) {
     return null
@@ -169,15 +211,18 @@ export default function StudentProfessoresPage() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    <Select value={selectedUnitId} onValueChange={setSelectedUnitId}>
+                    <Select value={selectedAcademyId} onValueChange={(value) => {
+                      setSelectedAcademyId(value)
+                      setCurrentStep(1)
+                    }}>
                       <SelectTrigger className="w-full h-12 sm:h-14 text-sm sm:text-base border-2 hover:border-meu-primary/50 transition-colors">
-                        <SelectValue placeholder={allUnits.length ? 'Escolha a unidade onde deseja treinar...' : 'Nenhuma unidade disponível'} />
+                        <SelectValue placeholder={allLocations.length ? 'Escolha a unidade onde deseja treinar...' : 'Nenhuma unidade disponível'} />
                       </SelectTrigger>
                       <SelectContent className="max-h-64 sm:max-h-80">
-                        {allUnits.map((u) => (
+                        {allLocations.map((u) => (
                           <SelectItem key={u.id} value={u.id} className="text-sm sm:text-base py-3">
                             <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2">
-                              <span className="font-semibold text-gray-900">{u.name}</span>
+                              <span className="font-semibold text-gray-900">{u.label}</span>
                               {(u.city || u.state) && (
                                 <span className="text-xs sm:text-sm text-gray-500 flex items-center gap-1">
                                   <MapPin className="h-3 w-3" />
@@ -191,7 +236,7 @@ export default function StudentProfessoresPage() {
                     </Select>
                     <div className="flex justify-end mt-6">
                       <Button
-                        disabled={!selectedUnitId}
+                        disabled={!selectedAcademyId}
                         onClick={() => setCurrentStep(1)}
                         className="h-11 sm:h-12 px-6 sm:px-8 text-sm sm:text-base font-semibold bg-meu-primary hover:bg-meu-primary-dark text-white shadow-md hover:shadow-lg transition-all"
                       >
@@ -206,7 +251,7 @@ export default function StudentProfessoresPage() {
           )}
 
           {/* Step 2: Selecionar Dia */}
-          {selectedUnitId && currentStep === 1 && (
+          {selectedAcademyId && currentStep === 1 && (
             <div className="animate-in fade-in duration-300">
               <CardHeader className="border-b-2 border-meu-primary/10 bg-gradient-to-r from-meu-primary/10 via-meu-primary/5 to-transparent py-4 px-4 sm:py-5 sm:px-6">
                 <CardTitle className="text-lg sm:text-xl flex items-center gap-3">
@@ -215,8 +260,8 @@ export default function StudentProfessoresPage() {
                   </div>
                   <div className="flex flex-col gap-1">
                     <span className="font-bold">Passo 2: Escolha o Dia</span>
-                    {selectedUnitLabel && (
-                      <span className="text-xs sm:text-sm font-normal text-gray-500">para {selectedUnitLabel}</span>
+                    {selectedLocation?.label && (
+                      <span className="text-xs sm:text-sm font-normal text-gray-500">para {selectedLocation.label}</span>
                     )}
                   </div>
                 </CardTitle>
@@ -259,24 +304,35 @@ export default function StudentProfessoresPage() {
                     </Button>
                     <Button
                       onClick={async () => {
-                        if (!selectedUnitId || !selectedDate) return
+                        if (!selectedAcademyId || !selectedDate) return
                         try {
                           setAvailabilityError(null)
                           setCheckingAvailability(true)
                           // Para cada professor, verificar se há ao menos um horário livre neste dia
                           const results = await Promise.all(
-                            teachers.map(async (t) => {
+                            activeTeachers.map(async (t) => {
                               try {
-                                const resp = await academiesAPI.getAvailableSlots(selectedUnitId, selectedDate, t.id)
+                                const resp = await academiesAPI.getAvailableSlots(
+                                  selectedAcademyId,
+                                  selectedDate,
+                                  t.id,
+                                )
                                 const slots = Array.isArray(resp?.slots) ? resp.slots : []
+                                const dayBookings = Array.isArray(resp?.bookings) ? resp.bookings : []
                                 const anyFree = slots.some((s: any) => s?.is_free)
-                                return { id: t.id, available: anyFree }
-                              } catch {
-                                return { id: t.id, available: false }
+                                return { id: t.id, available: anyFree, bookings: dayBookings }
+                              } catch (error) {
+                                console.error('Erro ao verificar disponibilidade', error)
+                                return { id: t.id, available: false, bookings: [] }
                               }
-                            })
+                            }),
                           )
-                          const availIds = new Set(results.filter(r => r.available).map(r => r.id))
+                          const availIds = new Set(results.filter((r) => r.available).map((r) => r.id))
+                          const bookingsMap: Record<string, any[]> = {}
+                          results.forEach((res) => {
+                            bookingsMap[res.id] = res.bookings || []
+                          })
+                          setTeacherBookings(bookingsMap)
                           setAvailableTeacherIds(availIds)
                           setCurrentStep(2)
                         } catch (e: any) {
@@ -285,7 +341,7 @@ export default function StudentProfessoresPage() {
                           setCheckingAvailability(false)
                         }
                       }}
-                      disabled={!selectedDate || teachers.length === 0 || checkingAvailability}
+                      disabled={!selectedDate || activeTeachers.length === 0 || checkingAvailability}
                       className="h-11 sm:h-12 px-6 sm:px-8 text-sm sm:text-base font-semibold bg-meu-primary hover:bg-meu-primary-dark text-white shadow-md hover:shadow-lg transition-all disabled:opacity-50"
                     >
                       {checkingAvailability ? (
@@ -321,7 +377,7 @@ export default function StudentProfessoresPage() {
           )}
 
           {/* Step 3: Lista de Professores Disponíveis */}
-          {selectedUnitId && currentStep === 2 && (
+          {selectedAcademyId && currentStep === 2 && (
             <div className="animate-in fade-in duration-300">
               <CardHeader className="border-b-2 border-meu-primary/10 bg-gradient-to-r from-meu-primary/10 via-meu-primary/5 to-transparent py-4 px-4 sm:py-5 sm:px-6">
                 <CardTitle className="text-lg sm:text-xl flex items-center gap-3">
@@ -330,9 +386,9 @@ export default function StudentProfessoresPage() {
                   </div>
                   <div className="flex flex-col gap-1">
                     <span className="font-bold">Passo 3: Professores Disponíveis</span>
-                    {selectedUnitLabel && (
+                    {selectedLocation?.label && (
                       <span className="text-xs sm:text-sm font-normal text-gray-500">
-                        em {selectedUnitLabel} {selectedDate ? `• ${new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}` : ''}
+                        em {selectedLocation.label} {selectedDate ? `• ${new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}` : ''}
                       </span>
                     )}
                   </div>
@@ -343,7 +399,7 @@ export default function StudentProfessoresPage() {
                 <div className="flex items-center justify-center py-10 sm:py-12">
                   <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-meu-primary" />
                 </div>
-              ) : teachers.length === 0 ? (
+              ) : activeTeachers.length === 0 ? (
                 <div className="text-center py-10 sm:py-12 text-gray-500">
                   <Users className="h-12 w-12 sm:h-16 sm:w-16 mx-auto mb-3 sm:mb-4 text-gray-300" />
                   <p className="text-base sm:text-lg font-medium">Nenhum professor disponível</p>
@@ -466,11 +522,26 @@ export default function StudentProfessoresPage() {
 
                                   {/* Botões de ação - Melhor hierarquia */}
                                   <div className="flex flex-col gap-2.5 mt-auto pt-4 border-t border-gray-100">
+                                      {teacherBookings[teacher.id]?.length ? (
+                                        <p className="text-xs text-gray-500">
+                                          {teacherBookings[teacher.id].length}{' '}
+                                          {teacherBookings[teacher.id].length === 1
+                                            ? 'agendamento'
+                                            : 'agendamentos'}{' '}
+                                          já marcados nesta data.
+                                        </p>
+                                      ) : null}
                                     <Button
                                       className="w-full h-12 text-sm font-bold bg-gradient-to-r from-meu-primary to-meu-primary-dark text-white hover:shadow-xl hover:scale-[1.02] transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                                       disabled={balanceAvailable !== null && balanceAvailable <= 0}
                                       title={balanceAvailable !== null && balanceAvailable <= 0 ? 'Sem créditos suficientes' : 'Agendar aula'}
-                                      onClick={() => router.push(`/aluno/agendar?teacher_id=${teacher.id}&unit_id=${selectedUnitId}${selectedDate ? `&date=${selectedDate}` : ''}`)}
+                                      onClick={() =>
+                                        router.push(
+                                          `/aluno/agendar?teacher_id=${teacher.id}&academy_id=${selectedAcademyId}${
+                                            selectedDate ? `&date=${selectedDate}` : ''
+                                          }`,
+                                        )
+                                      }
                                     >
                                       <Calendar className="mr-2 h-4 w-4" />
                                       Agendar Aula

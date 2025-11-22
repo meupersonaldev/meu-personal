@@ -665,16 +665,37 @@ router.post('/', requireAuth, requireRole(['STUDENT', 'ALUNO', 'TEACHER', 'PROFE
 
   // Usar academyId diretamente como franchise_id, ou converter unitId para academyId
   let franchiseId: string
-  
+
   if (bookingData.academyId) {
     // Se academyId foi fornecido, usar diretamente
     franchiseId = bookingData.academyId
     console.log('[POST /api/bookings] Usando academyId diretamente como franchise_id:', franchiseId)
   } else if (bookingData.unitId) {
-    // Se unitId foi fornecido, tratar como academyId (compatibilidade)
-    // O frontend pode estar enviando unitId quando na verdade é um academyId
-    franchiseId = bookingData.unitId
-    console.log('[POST /api/bookings] Convertendo unitId para franchise_id (compatibilidade):', franchiseId)
+    // Se unitId foi fornecido, buscar o academy_legacy_id correspondente
+    console.log('[POST /api/bookings] Buscando academy_legacy_id para unitId:', bookingData.unitId)
+
+    const { data: unitData, error: unitError } = await supabase
+      .from('units')
+      .select('academy_legacy_id, name')
+      .eq('id', bookingData.unitId)
+      .single()
+
+    if (unitError || !unitData) {
+      console.error('[POST /api/bookings] Erro ao buscar unidade:', unitError)
+      return res.status(400).json({ error: 'Unidade não encontrada' })
+    }
+
+    if (!unitData.academy_legacy_id) {
+      console.error('[POST /api/bookings] Unidade não tem academy_legacy_id:', unitData)
+      return res.status(400).json({ error: 'Unidade não vinculada a uma academia' })
+    }
+
+    franchiseId = unitData.academy_legacy_id
+    console.log('[POST /api/bookings] Convertido unitId para academy_id:', {
+      unitId: bookingData.unitId,
+      unitName: unitData.name,
+      academyId: franchiseId
+    })
   } else {
     // Isso não deveria acontecer devido à validação do schema, mas por segurança:
     return res.status(400).json({ error: 'academyId ou unitId é obrigatório' })

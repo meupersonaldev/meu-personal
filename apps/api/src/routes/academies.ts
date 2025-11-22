@@ -406,8 +406,63 @@ router.get('/:id/available-slots', async (req, res) => {
       }
     })
 
+    let teacherDayBookings: any[] = []
+    if (teacher_id) {
+      const { data: teacherAvailable, error: teacherBookingsError } = await supabase
+        .from('bookings')
+        .select('id, start_at, end_at, date, duration, status_canonical, franchise_id')
+        .eq('teacher_id', teacher_id)
+        .eq('franchise_id', academyId)
+        .eq('status_canonical', 'AVAILABLE')
+        .gte('date', startISO)
+        .lte('date', endISO)
+        .order('start_at', { ascending: true })
+
+      if (teacherBookingsError) {
+        console.error('Erro ao buscar bookings disponíveis do professor:', teacherBookingsError)
+      } else {
+        const academyMap: Record<string, string> = {}
+        if (teacherAvailable && teacherAvailable.length > 0) {
+          const academyIds = Array.from(
+            new Set(teacherAvailable.map((booking: any) => booking.franchise_id).filter(Boolean)),
+          )
+          if (academyIds.length > 0) {
+            const { data: academyRows } = await supabase
+              .from('academies')
+              .select('id, name')
+              .in('id', academyIds)
+            for (const academy of academyRows || []) {
+              academyMap[academy.id] = academy.name
+            }
+          }
+        }
+
+        teacherDayBookings = (teacherAvailable || []).map((booking: any) => {
+          const baseStart = booking.start_at || booking.date
+          const startTime = baseStart ? new Date(baseStart).toISOString() : null
+          let endTime: string | null = null
+          if (booking.end_at) {
+            endTime = new Date(booking.end_at).toISOString()
+          } else if (baseStart) {
+            const durationMinutes = booking.duration ?? 60
+            endTime = new Date(new Date(baseStart).getTime() + durationMinutes * 60 * 1000).toISOString()
+          }
+          return {
+            id: booking.id,
+            start_time: startTime,
+            end_time: endTime,
+            duration: booking.duration ?? 60,
+            status: booking.status_canonical,
+            academy_id: booking.franchise_id,
+            academy_name: academyMap[booking.franchise_id] || null,
+          }
+        })
+      }
+    }
+
     res.json({ 
       slots: result,
+      bookings: teacherDayBookings,
       isOpen: true,
       daySchedule: daySchedule ? {
         openingTime: daySchedule.openingTime,
