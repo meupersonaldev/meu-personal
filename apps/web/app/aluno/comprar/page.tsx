@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { CreditCard, Barcode, QrCode, Check, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -20,6 +21,7 @@ interface Plan {
 }
 
 export default function ComprarCreditosPage() {
+  const router = useRouter()
   const { token, user } = useAuthStore()
   const {
     activeUnit,
@@ -35,6 +37,7 @@ export default function ComprarCreditosPage() {
   const [paymentMethod, setPaymentMethod] = useState<'PIX' | 'BOLETO' | 'CREDIT_CARD'>('PIX')
   const [loading, setLoading] = useState(false)
   const [paymentData, setPaymentData] = useState<any>(null)
+  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null)
   const [step, setStep] = useState<'select-plan' | 'payment' | 'success'>('select-plan')
   const [showCpfModal, setShowCpfModal] = useState(false)
   const [cpfInput, setCpfInput] = useState('')
@@ -109,9 +112,19 @@ export default function ComprarCreditosPage() {
       const data = await response.json().catch(() => ({}))
 
       if (response.ok) {
-        const checkoutUrl = data?.payment_intent?.checkout_url
-        if (checkoutUrl) {
-          window.open(checkoutUrl, '_blank')
+        const paymentIntentId = data?.payment_intent?.id
+        const url = data?.payment_intent?.checkout_url
+        
+        if (paymentIntentId && url) {
+          setCheckoutUrl(url)
+          // Redireciona para a página de iframe
+          router.push(`/aluno/pagamento/${paymentIntentId}`)
+          return
+        }
+        
+        // Se não tiver ID, mantém o fluxo antigo
+        if (url) {
+          setCheckoutUrl(url)
         }
         setPaymentData(data.payment_intent)
         setStep('success')
@@ -175,9 +188,20 @@ export default function ComprarCreditosPage() {
       })
       const data = await response.json().catch(() => ({}))
       if (response.ok) {
-        const checkoutUrl = data?.payment_intent?.checkout_url
-        if (checkoutUrl) {
-          window.open(checkoutUrl, '_blank')
+        const paymentIntentId = data?.payment_intent?.id
+        const url = data?.payment_intent?.checkout_url
+        
+        if (paymentIntentId && url) {
+          setCheckoutUrl(url)
+          setShowCpfModal(false)
+          // Redireciona para a página de iframe
+          router.push(`/aluno/pagamento/${paymentIntentId}`)
+          return
+        }
+        
+        // Se não tiver ID, mantém o fluxo antigo
+        if (url) {
+          setCheckoutUrl(url)
         }
         setPaymentData(data.payment_intent)
         setStep('success')
@@ -351,29 +375,50 @@ export default function ComprarCreditosPage() {
                 </div>
               </div>
 
-              <div className="flex gap-4">
-                <Button
-                  onClick={() => setStep('select-plan')}
-                  variant="outline"
-                  className="flex-1"
-                  disabled={loading}
-                >
-                  Voltar
-                </Button>
-                <Button
-                  onClick={handlePurchase}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Processando...
-                    </>
-                  ) : (
-                    'Finalizar Compra'
-                  )}
-                </Button>
+              <div className="space-y-3">
+                <div className="flex gap-4">
+                  <Button
+                    onClick={() => setStep('select-plan')}
+                    variant="outline"
+                    className="flex-1"
+                    disabled={loading}
+                  >
+                    Voltar
+                  </Button>
+                  <Button
+                    onClick={handlePurchase}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                    disabled={loading}
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Processando...
+                      </>
+                    ) : (
+                      'Finalizar Compra'
+                    )}
+                  </Button>
+                </div>
+                {checkoutUrl && paymentData?.id && (
+                  <div className="bg-green-50 border-2 border-green-200 rounded-lg p-3">
+                    <Button
+                      onClick={() => {
+                        if (paymentData?.id) {
+                          router.push(`/aluno/pagamento/${paymentData.id}`)
+                        } else if (checkoutUrl) {
+                          window.location.href = checkoutUrl
+                        }
+                      }}
+                      className="w-full bg-green-600 hover:bg-green-700 text-white font-medium"
+                    >
+                      {paymentMethod === 'PIX' && <QrCode className="h-4 w-4 mr-2" />}
+                      {paymentMethod === 'BOLETO' && <Barcode className="h-4 w-4 mr-2" />}
+                      {paymentMethod === 'CREDIT_CARD' && <CreditCard className="h-4 w-4 mr-2" />}
+                      Acessar Link de Pagamento
+                    </Button>
+                  </div>
+                )}
               </div>
             </Card>
           </div>
@@ -390,6 +435,35 @@ export default function ComprarCreditosPage() {
               <h2 className="text-2xl font-bold text-gray-900 mb-4">
                 Pagamento Criado com Sucesso!
               </h2>
+
+              {checkoutUrl && paymentData?.id && (
+                <div className="mb-6">
+                  <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-3">
+                    <p className="text-sm text-gray-700 mb-2 text-center">
+                      Clique no botão abaixo para finalizar o pagamento
+                    </p>
+                    <Button
+                      onClick={() => {
+                        if (paymentData?.id) {
+                          router.push(`/aluno/pagamento/${paymentData.id}`)
+                        } else if (checkoutUrl) {
+                          window.location.href = checkoutUrl
+                        }
+                      }}
+                      className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white py-3 px-4 text-sm font-semibold shadow-lg hover:shadow-xl transition-all duration-200"
+                    >
+                      <span className="flex items-center justify-center gap-2 text-center">
+                        {paymentMethod === 'PIX' && <QrCode className="h-4 w-4 flex-shrink-0" />}
+                        {paymentMethod === 'BOLETO' && <Barcode className="h-4 w-4 flex-shrink-0" />}
+                        {paymentMethod === 'CREDIT_CARD' && <CreditCard className="h-4 w-4 flex-shrink-0" />}
+                        <span>
+                          Pagamento {paymentMethod === 'PIX' ? 'via PIX' : paymentMethod === 'BOLETO' ? 'via Boleto' : 'via Cartão'}
+                        </span>
+                      </span>
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               {paymentMethod === 'PIX' && (
                 <div className="mb-6">
@@ -411,20 +485,10 @@ export default function ComprarCreditosPage() {
                       </div>
                     </div>
                   )}
-                  {!paymentData.pix_copy_paste && paymentData.checkout_url && (
-                    <div className="mt-4">
-                      <Button
-                        onClick={() => window.open(paymentData.checkout_url, '_blank')}
-                        className="bg-blue-600 hover:bg-blue-700"
-                      >
-                        Abrir Checkout
-                      </Button>
-                    </div>
-                  )}
                 </div>
               )}
 
-              {paymentMethod === 'BOLETO' && (paymentData.invoice_url || paymentData.payment_url || paymentData.checkout_url) && (
+              {paymentMethod === 'BOLETO' && !checkoutUrl && (paymentData.invoice_url || paymentData.payment_url || paymentData.checkout_url) && (
                 <div className="mb-6">
                   <p className="text-gray-600 mb-4">Seu boleto foi gerado!</p>
                   <Button

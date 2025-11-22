@@ -598,6 +598,37 @@ router.get('/student/balance', requireAuth, requireRole(['STUDENT', 'ALUNO']), a
   });
 }));
 
+// Buscar payment intent pelo ID (para iframe de pagamento)
+router.get('/payment-intent/:id', requireAuth, asyncErrorHandler(async (req, res) => {
+  const { id } = req.params;
+  const user = req.user;
+
+  const { data: paymentIntent, error } = await supabase
+    .from('payment_intents')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (error || !paymentIntent) {
+    return res.status(404).json({ error: 'Payment intent não encontrado' });
+  }
+
+  // Verificar se o usuário tem acesso a este payment intent
+  if (paymentIntent.actor_user_id !== user.userId) {
+    return res.status(403).json({ error: 'Acesso não autorizado' });
+  }
+
+  res.json({
+    payment_intent: {
+      id: paymentIntent.id,
+      checkout_url: paymentIntent.checkout_url,
+      status: paymentIntent.status,
+      type: paymentIntent.type,
+      amount_cents: paymentIntent.amount_cents
+    }
+  });
+}));
+
 router.get('/professor/balance', requireAuth, requireRole(['TEACHER', 'PROFESSOR']), asyncErrorHandler(async (req, res) => {
   const { franqueadora_id, unit_id } = req.query as { franqueadora_id?: string; unit_id?: string };
   const user = req.user;
