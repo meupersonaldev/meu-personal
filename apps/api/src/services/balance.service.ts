@@ -145,12 +145,13 @@ class BalanceService {
       unlockAt
     } = options;
 
+    // NÃO usar unit_id - sempre null para evitar erros de foreign key
     const { data, error } = await supabase
       .from('student_class_tx')
       .insert({
         student_id: studentId,
         franqueadora_id: franqueadoraId,
-        unit_id: unitId,
+        unit_id: null, // NÃO usar unit_id
         type,
         source,
         qty,
@@ -372,12 +373,13 @@ class BalanceService {
       unlockAt
     } = options;
 
+    // NÃO usar unit_id - sempre null para evitar erros de foreign key
     const { data, error } = await supabase
       .from('hour_tx')
       .insert({
         professor_id: professorId,
         franqueadora_id: franqueadoraId,
-        unit_id: unitId,
+        unit_id: null, // NÃO usar unit_id
         type,
         source,
         hours,

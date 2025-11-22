@@ -9,8 +9,8 @@ import { requireApprovedTeacher } from '../middleware/approval'
 import { createUserRateLimit, rateLimitConfig } from '../middleware/rateLimit'
 import { asyncErrorHandler } from '../middleware/errorHandler'
 import { normalizeBookingStatus } from '../utils/booking-status'
-import { utcToZonedTime, zonedTimeToUtc, format } from 'date-fns-tz'
-import { parse } from 'date-fns'
+import * as dateFnsTz from 'date-fns-tz'
+import { parse, format } from 'date-fns'
 
 const router = express.Router()
 
@@ -90,32 +90,63 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
       return res.status(403).json({ error: 'Acesso não autorizado a este aluno' })
     }
 
+    // Query ORM equivalente ao SQL fornecido
+    // SELECT * FROM bookings b
+    // LEFT JOIN users t ON t.id = b.teacher_id
+    // LEFT JOIN academies a ON a.id = b.franchise_id
+    // WHERE b.student_id = :studentId AND b.status_canonical IN ('PAID', 'RESERVED')
+    // ORDER BY COALESCE(b.start_at, b.date::timestamptz) ASC
+    
+    // Query ORM equivalente ao SQL fornecido
+    // Primeiro buscar os bookings
     const { data: studentBookings, error } = await supabase
       .from('bookings')
-      .select(`
-        id,
-        student_id,
-        teacher_id,
-        unit_id,
-        franchise_id,
-        date,
-        duration,
-        status,
-        status_canonical,
-        notes,
-        credits_cost,
-        cancellable_until
-      `)
+      .select('*')
       .eq('student_id', studentId)
+      .in('status_canonical', ['PAID', 'RESERVED']) // Apenas bookings confirmados
+      .order('start_at', { ascending: true, nullsFirst: false })
       .order('date', { ascending: true })
 
     if (error) {
-      console.error('Error fetching student bookings (legacy):', error)
+      console.error('Error fetching student bookings:', error)
       return res.status(500).json({ error: 'Erro ao buscar agendamentos' })
     }
 
+    console.log('Bookings raw from Supabase:', JSON.stringify(studentBookings, null, 2))
     let results = studentBookings || []
 
+    if (results.length === 0) {
+      console.log('Nenhum booking encontrado para student_id:', studentId)
+      return res.json({ bookings: [] })
+    }
+
+    // Buscar informações relacionadas (JOIN manual)
+    const teacherIds = [...new Set(results.map((b: any) => b.teacher_id).filter(Boolean))]
+    const franchiseIds = [...new Set(results.map((b: any) => b.franchise_id).filter(Boolean))]
+
+    const [teachersData, academiesData] = await Promise.all([
+      teacherIds.length > 0 
+        ? supabase.from('users').select('id, name, email').in('id', teacherIds)
+        : Promise.resolve({ data: [], error: null }),
+      franchiseIds.length > 0 
+        ? supabase.from('academies').select('id, name, city, state, address').in('id', franchiseIds)
+        : Promise.resolve({ data: [], error: null })
+    ])
+
+    const teachersMap = (teachersData.data || []).reduce((acc: any, teacher: any) => {
+      acc[teacher.id] = teacher
+      return acc
+    }, {})
+
+    const academiesMap = (academiesData.data || []).reduce((acc: any, academy: any) => {
+      acc[academy.id] = academy
+      return acc
+    }, {})
+
+    console.log('Teachers map:', teachersMap)
+    console.log('Academies map:', academiesMap)
+
+    // Aplicar filtros adicionais se fornecidos
     if (status) {
       const statusStr = Array.isArray(status) ? status[0] : String(status)
       const statusTarget = normalizeBookingStatus(statusStr, null)
@@ -128,70 +159,62 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
     if (from) {
       const fromDate = new Date(String(from))
       if (!Number.isNaN(fromDate.getTime())) {
-        results = results.filter((booking: any) => new Date(booking.date) >= fromDate)
+        results = results.filter((booking: any) => {
+          const bookingTime = booking.start_at ? new Date(booking.start_at) : new Date(booking.date)
+          return bookingTime >= fromDate
+        })
       }
     }
 
     if (to) {
       const toDate = new Date(String(to))
       if (!Number.isNaN(toDate.getTime())) {
-        results = results.filter((booking: any) => new Date(booking.date) <= toDate)
+        results = results.filter((booking: any) => {
+          const bookingTime = booking.start_at ? new Date(booking.start_at) : new Date(booking.date)
+          return bookingTime <= toDate
+        })
       }
     }
 
-    // Buscar informações relacionadas separadamente para simplificar a query
-    const teacherIds = [...new Set(results.map((b: any) => b.teacher_id).filter(Boolean))]
-    const unitIds = [...new Set(results.map((b: any) => b.unit_id).filter(Boolean))]
-    const franchiseIds = [...new Set(results.map((b: any) => b.franchise_id).filter(Boolean))]
-
-    const [teachersData, unitsData, academiesData] = await Promise.all([
-      teacherIds.length > 0 ? supabase.from('users').select('id, name').in('id', teacherIds) : Promise.resolve({ data: [] }),
-      unitIds.length > 0 ? supabase.from('units').select('id, name, city, state, address').in('id', unitIds) : Promise.resolve({ data: [] }),
-      franchiseIds.length > 0 ? supabase.from('academies').select('id, name, city, state, address').in('id', franchiseIds) : Promise.resolve({ data: [] })
-    ])
-
-    const teachersMap = (teachersData.data || []).reduce((acc, teacher) => {
-      acc[teacher.id] = teacher
-      return acc
-    }, {})
-
-    const unitsMap = (unitsData.data || []).reduce((acc, unit) => {
-      acc[unit.id] = unit
-      return acc
-    }, {})
-
-    const academiesMap = (academiesData.data || []).reduce((acc, academy) => {
-      acc[academy.id] = academy
-      return acc
-    }, {})
-
+    // Mapear resultados com os dados relacionados
     const bookings = results.map((booking: any) => {
       const teacher = teachersMap[booking.teacher_id] || {}
-      const unit = unitsMap[booking.unit_id] || {}
       const academy = academiesMap[booking.franchise_id] || {}
 
-      const franchiseName = unit.name || academy.name || null
-      const franchiseAddressParts = unit.id
-        ? [unit.address, unit.city, unit.state]
-        : [academy.address, academy.city, academy.state]
+      console.log('Processing booking:', booking.id, 'teacher:', teacher, 'academy:', academy)
 
-      return {
+      const franchiseName = academy.name || null
+      const franchiseAddressParts = academy.id
+        ? [academy.address, academy.city, academy.state].filter(Boolean)
+        : []
+
+      // Usar start_at se disponível, senão usar date
+      const startTime = booking.start_at || booking.date
+      const fallbackCutoff = startTime ? new Date(new Date(startTime).getTime() - 4 * 60 * 60 * 1000).toISOString() : undefined
+
+      const mapped = {
         id: booking.id,
         studentId: booking.student_id || undefined,
         teacherId: booking.teacher_id,
         teacherName: teacher.name || undefined,
         franchiseId: booking.franchise_id || undefined,
         franchiseName,
-        franchiseAddress: franchiseAddressParts.filter(Boolean).join(', ') || undefined,
+        franchiseAddress: franchiseAddressParts.join(', ') || undefined,
         date: booking.date,
+        startAt: booking.start_at || undefined,
+        endAt: booking.end_at || undefined,
         duration: booking.duration ?? 60,
         status: normalizeBookingStatus(booking.status, booking.status_canonical),
         notes: booking.notes || undefined,
         creditsCost: booking.credits_cost ?? 0,
-        cancellableUntil: booking.cancellable_until || (booking.date ? new Date(new Date(booking.date).getTime() - 4 * 60 * 60 * 1000).toISOString() : undefined)
+        cancellableUntil: booking.cancellable_until || fallbackCutoff
       }
+
+      console.log('Mapped booking:', mapped)
+      return mapped
     })
 
+    console.log('Final bookings array:', bookings)
     return res.json({ bookings })
   }
 
@@ -622,7 +645,7 @@ router.post('/', requireAuth, requireRole(['STUDENT', 'ALUNO', 'TEACHER', 'PROFE
   
   // Para validação: startAt (06:00 UTC) representa 06:00 de Brasília
   // Precisamos comparar 06:00 Brasília com now (convertido para Brasília)
-  const nowBrazil = utcToZonedTime(now, timeZone)
+  const nowBrazil = dateFnsTz.toZonedTime(now, timeZone)
   
   // startAt está como 06:00 UTC, mas representa 06:00 Brasília
   // Criar uma string ISO "naive" (sem timezone) com a hora de Brasília
@@ -632,10 +655,10 @@ router.post('/', requireAuth, requireRole(['STUDENT', 'ALUNO', 'TEACHER', 'PROFE
   // Parsear a string como data "naive" (sem timezone) usando parse do date-fns
   const startAtBrazilNaive = parse(startAtBrazilString, "yyyy-MM-dd'T'HH:mm:ss", new Date())
   
-  // zonedTimeToUtc interpreta a data naive como sendo em Brasília e converte para UTC
+  // fromZonedTime interpreta a data naive como sendo em Brasília e converte para UTC
   // Depois converter de volta para Brasília para comparar
-  const startAtAsBrazilUTC = zonedTimeToUtc(startAtBrazilNaive, timeZone)
-  const startAtBrazil = utcToZonedTime(startAtAsBrazilUTC, timeZone)
+  const startAtAsBrazilUTC = dateFnsTz.fromZonedTime(startAtBrazilNaive, timeZone)
+  const startAtBrazil = dateFnsTz.toZonedTime(startAtAsBrazilUTC, timeZone)
 
   try {
     // Log detalhado para debug
@@ -643,9 +666,9 @@ router.post('/', requireAuth, requireRole(['STUDENT', 'ALUNO', 'TEACHER', 'PROFE
       startAtReceived: bookingData.startAt,
       startAtUTC: startAt.toISOString(),
       startAtGetUTCHours: startAt.getUTCHours(), // Hora UTC (6) que representa hora de Brasília
-      startAtBrazilTime: format(startAtBrazil, 'HH:mm', { timeZone }),
+      startAtBrazilTime: dateFnsTz.formatInTimeZone(startAtBrazil, timeZone, 'HH:mm'),
       nowUTC: now.toISOString(),
-      nowBrazilTime: format(nowBrazil, 'HH:mm', { timeZone }),
+      nowBrazilTime: dateFnsTz.formatInTimeZone(nowBrazil, timeZone, 'HH:mm'),
       isPast: startAtBrazil <= nowBrazil
     })
   } catch (dateTzError) {

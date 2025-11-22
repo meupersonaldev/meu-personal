@@ -5,47 +5,24 @@ import {
   ProfHourBalance
 } from './balance.service';
 
-async function fetchFranqueadoraIdFromUnit(unitId: string): Promise<string> {
-  console.log(`🔍 Buscando franqueadora_id para unitId: ${unitId}`)
+async function fetchFranqueadoraIdFromAcademy(academyId: string): Promise<string> {
+  console.log(`🔍 Buscando franqueadora_id para academyId: ${academyId}`)
   
-  const { data: academyDirect, error: academyError } = await supabase
+  const { data: academy, error: academyError } = await supabase
     .from('academies')
     .select('franqueadora_id, name')
-    .eq('id', unitId)
+    .eq('id', academyId)
     .single();
 
-  console.log('📍 Resultado academies:', { academyDirect, academyError })
+  console.log('📍 Resultado academies:', { academy, academyError })
 
-  if (academyDirect?.franqueadora_id) {
-    console.log(`✅ Franqueadora encontrada direto: ${academyDirect.franqueadora_id}`)
-    return academyDirect.franqueadora_id;
+  if (academy?.franqueadora_id) {
+    console.log(`✅ Franqueadora encontrada: ${academy.franqueadora_id}`)
+    return academy.franqueadora_id;
   }
 
-  const { data: unitData, error: unitError } = await supabase
-    .from('units')
-    .select('academy_legacy_id')
-    .eq('id', unitId)
-    .single();
-
-  console.log('📍 Resultado units:', { unitData, unitError })
-
-  if (unitData?.academy_legacy_id) {
-    const { data: legacyAcademy } = await supabase
-      .from('academies')
-      .select('franqueadora_id, name')
-      .eq('id', unitData.academy_legacy_id)
-      .single();
-
-    console.log('📍 Resultado legacy academy:', legacyAcademy)
-
-    if (legacyAcademy?.franqueadora_id) {
-      console.log(`✅ Franqueadora encontrada via legacy: ${legacyAcademy.franqueadora_id}`)
-      return legacyAcademy.franqueadora_id;
-    }
-  }
-
-  console.error(`❌ Franqueadora não encontrada para unitId: ${unitId}`)
-  throw new Error(`Academia inválida ou sem franqueadora configurada (ID: ${unitId}). Por favor, selecione outra academia nas configurações.`);
+  console.error(`❌ Franqueadora não encontrada para academyId: ${academyId}`)
+  throw new Error(`Academia inválida ou sem franqueadora configurada (ID: ${academyId}). Por favor, selecione outra academia nas configurações.`);
 }
 
 function getAvailableClasses(balance: StudentClassBalance): number {
@@ -128,8 +105,8 @@ class BookingCanonicalService {
       throw new Error('studentId eh obrigatorio para agendamento aluno-led');
     }
 
-    // Usar franchiseId diretamente para buscar franqueadora_id
-    const franqueadoraId = await fetchFranqueadoraIdFromUnit(params.franchiseId);
+    // Usar franchiseId (academyId) diretamente para buscar franqueadora_id
+    const franqueadoraId = await fetchFranqueadoraIdFromAcademy(params.franchiseId);
     const studentBalance = await balanceService.getStudentBalance(params.studentId, franqueadoraId);
     const availableClasses = getAvailableClasses(studentBalance);
 
@@ -138,7 +115,7 @@ class BookingCanonicalService {
     }
 
     // Deletar horários AVAILABLE do mesmo professor no mesmo horário/franchise
-    const deleteQuery = supabase
+    await supabase
       .from('bookings')
       .delete()
       .eq('teacher_id', params.professorId)
@@ -146,12 +123,6 @@ class BookingCanonicalService {
       .eq('start_at', params.startAt.toISOString())
       .eq('status_canonical', 'AVAILABLE')
       .is('student_id', null);
-    
-    if (params.unitId) {
-      deleteQuery.eq('unit_id', params.unitId);
-    }
-    
-    await deleteQuery;
 
     const { data: booking, error: bookingError} = await supabase
       .from('bookings')
@@ -160,7 +131,7 @@ class BookingCanonicalService {
         student_id: params.studentId,
         teacher_id: params.professorId,
         franchise_id: params.franchiseId, // Usar franchise_id diretamente
-        unit_id: params.unitId || null, // Opcional
+        unit_id: null, // NÃO usar unit_id
         date: params.startAt.toISOString(),
         start_at: params.startAt.toISOString(),
         end_at: params.endAt.toISOString(),
@@ -178,13 +149,14 @@ class BookingCanonicalService {
     }
 
     // Como o booking já é criado como PAID (confirmado), consumir créditos direto
+    // NÃO passar unitId - sempre null
     await balanceService.consumeStudentClasses(
       params.studentId,
       franqueadoraId,
       1,
       booking.id,
       {
-        unitId: params.unitId || params.franchiseId, // Usar franchiseId como fallback
+        unitId: null, // NÃO usar unit_id
         source: 'ALUNO',
         metaJson: {
           booking_id: booking.id,
@@ -194,12 +166,13 @@ class BookingCanonicalService {
     );
 
     // Professor recebe as horas direto (já confirmado)
+    // NÃO passar unitId - sempre null
     await balanceService.purchaseProfessorHours(
       params.professorId,
       franqueadoraId,
       1,
       {
-        unitId: params.unitId || params.franchiseId, // Usar franchiseId como fallback
+        unitId: null, // NÃO usar unit_id
         source: 'SYSTEM',
         bookingId: booking.id,
         metaJson: {
@@ -209,10 +182,6 @@ class BookingCanonicalService {
       }
     );
 
-    if (params.unitId) {
-      await this.createOrUpdateStudentUnit(params.studentId, params.unitId, booking.id);
-    }
-
     return booking;
   }
 
@@ -220,8 +189,8 @@ class BookingCanonicalService {
     params: CreateBookingParams,
     cancellableUntil: Date
   ): Promise<BookingCanonical> {
-    // Usar franchiseId diretamente para buscar franqueadora_id
-    const franqueadoraId = await fetchFranqueadoraIdFromUnit(params.franchiseId);
+    // Usar franchiseId (academyId) diretamente para buscar franqueadora_id
+    const franqueadoraId = await fetchFranqueadoraIdFromAcademy(params.franchiseId);
     const hasStudent = Boolean(params.studentId);
 
     if (!hasStudent) {
@@ -267,7 +236,7 @@ class BookingCanonicalService {
     }
 
     // Deletar horários AVAILABLE do mesmo professor no mesmo horário/franchise
-    const deleteQuery = supabase
+    await supabase
       .from('bookings')
       .delete()
       .eq('teacher_id', params.professorId)
@@ -275,12 +244,6 @@ class BookingCanonicalService {
       .eq('start_at', params.startAt.toISOString())
       .eq('status_canonical', 'AVAILABLE')
       .is('student_id', null);
-    
-    if (params.unitId) {
-      deleteQuery.eq('unit_id', params.unitId);
-    }
-    
-    await deleteQuery;
 
     const { data: booking, error: bookingError } = await supabase
       .from('bookings')
@@ -289,7 +252,7 @@ class BookingCanonicalService {
         student_id: params.studentId ?? null,
         teacher_id: params.professorId,
         franchise_id: params.franchiseId, // Usar franchise_id diretamente
-        unit_id: params.unitId || null, // Opcional
+        unit_id: null, // NÃO usar unit_id
         date: params.startAt.toISOString(),
         start_at: params.startAt.toISOString(),
         end_at: params.endAt.toISOString(),
@@ -330,7 +293,7 @@ class BookingCanonicalService {
       'CONSUME',
       1,
       {
-        unitId: params.unitId || params.franchiseId, // Usar franchiseId como fallback
+        unitId: null, // NÃO usar unit_id
         source: 'PROFESSOR',
         bookingId: booking.id,
         metaJson: {
@@ -340,10 +303,6 @@ class BookingCanonicalService {
         }
       }
     );
-
-    if (params.studentId && params.unitId) {
-      await this.createOrUpdateStudentUnit(params.studentId, params.unitId, booking.id);
-    }
 
     return booking;
   }
@@ -385,7 +344,8 @@ class BookingCanonicalService {
       return booking;
     }
 
-    const franqueadoraId = await fetchFranqueadoraIdFromUnit(booking.unit_id);
+    // Usar franchise_id (academyId) ao invés de unit_id
+    const franqueadoraId = await fetchFranqueadoraIdFromAcademy(booking.franchise_id);
 
     // Verificar quem fez o agendamento (source) para aplicar política de cancelamento
     const hasStudent = Boolean(booking.student_id);
@@ -404,7 +364,7 @@ class BookingCanonicalService {
           1,
           bookingId,
           {
-            unitId: booking.unit_id,
+            unitId: null, // NÃO usar unit_id
             source: 'SYSTEM',
             metaJson: {
               booking_id: bookingId,
@@ -421,7 +381,7 @@ class BookingCanonicalService {
           1,
           bookingId,
           {
-            unitId: booking.unit_id,
+            unitId: null, // NÃO usar unit_id
             source: 'ALUNO',
             metaJson: {
               booking_id: bookingId,
@@ -452,7 +412,7 @@ class BookingCanonicalService {
         'REFUND',
         1,
         {
-          unitId: booking.unit_id,
+          unitId: null, // NÃO usar unit_id
           source: 'SYSTEM',
           bookingId: bookingId,
           metaJson: {
@@ -532,7 +492,8 @@ class BookingCanonicalService {
       throw fetchError || new Error('Booking nao encontrado');
     }
 
-    const franqueadoraId = await fetchFranqueadoraIdFromUnit(booking.unit_id);
+    // Usar franchise_id (academyId) ao invés de unit_id
+    const franqueadoraId = await fetchFranqueadoraIdFromAcademy(booking.franchise_id);
 
     if (booking.student_id) {
       await balanceService.consumeStudentClasses(
@@ -541,7 +502,7 @@ class BookingCanonicalService {
         1,
         bookingId,
         {
-          unitId: booking.unit_id,
+          unitId: null, // NÃO usar unit_id
           source: 'ALUNO',
           metaJson: {
             booking_id: bookingId,
