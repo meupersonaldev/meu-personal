@@ -18,6 +18,7 @@ export interface PaymentProvider {
     dueDate: string
     description: string
     externalReference?: string
+    split?: Array<{ walletId: string; fixedValue?: number; percentualValue?: number }>
   }): Promise<{ success: boolean; data?: any; error?: any }>
 
   generatePaymentLink(paymentId: string): Promise<{
@@ -32,14 +33,39 @@ export interface PaymentProvider {
 function getAsaasProvider(): PaymentProvider {
   return {
     createCustomer: (data) => asaasService.createCustomer(data),
-    createPayment: (data) => asaasService.createPayment({
-      customer: data.customer,
-      billingType: data.billingType,
-      value: data.value,
-      dueDate: data.dueDate,
-      description: data.description,
-      externalReference: data.externalReference
-    }),
+    createPayment: (data) => {
+      console.log('[PAYMENT PROVIDER] 🔍 Recebendo dados para createPayment:', {
+        hasCustomer: !!data.customer,
+        hasSplit: !!data.split,
+        splitLength: data.split?.length,
+        split: data.split,
+        value: data.value
+      })
+      
+      if (!data.split || !Array.isArray(data.split) || data.split.length < 1) {
+        console.error('[PAYMENT PROVIDER] ❌❌❌ SPLIT INVÁLIDO - BLOQUEANDO PAGAMENTO:', {
+          split: data.split,
+          isArray: Array.isArray(data.split),
+          length: data.split?.length
+        })
+        return Promise.resolve({
+          success: false,
+          error: 'Split de pagamento não configurado corretamente. É necessário pelo menos um walletId no split.'
+        })
+      }
+
+      console.log('[PAYMENT PROVIDER] ✅ Split validado, chamando asaasService.createPayment...')
+      
+      return asaasService.createPayment({
+        customer: data.customer,
+        billingType: data.billingType,
+        value: data.value,
+        dueDate: data.dueDate,
+        description: data.description,
+        externalReference: data.externalReference,
+        split: data.split
+      })
+    },
     generatePaymentLink: (paymentId) => asaasService.generatePaymentLink(paymentId),
     parseWebhook: (event: any) => {
       const ev = String(event?.event || '')

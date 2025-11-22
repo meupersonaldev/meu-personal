@@ -1,59 +1,6 @@
-import { clsx, type ClassValue } from 'clsx'
-import { twMerge } from 'tailwind-merge'
-
-export function cn (...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
-}
-
-export function formatCurrency (value: number): string {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL'
-  }).format(value)
-}
-
-export function isStrongPassword (password: string): boolean {
-  if (!password || password.length < 6) return false
-  const hasLower = /[a-z]/.test(password)
-  const hasUpper = /[A-Z]/.test(password)
-  const hasDigit = /\d/.test(password)
-  const hasSymbol = /[^A-Za-z0-9]/.test(password)
-  return hasLower && hasUpper && hasDigit && hasSymbol
-}
-
 /**
- * Formata CPF ou CNPJ
- * CPF: ###.###.###-## (11 dígitos)
- * CNPJ: ##.###.###/####-## (14 dígitos)
+ * Utilitários de validação
  */
-export function formatCpfCnpj(value: string): string {
-  // Remove todos os caracteres não numéricos
-  const digits = value.replace(/\D/g, '');
-  
-  if (digits.length <= 11) {
-    // CPF Format: ###.###.###-##
-    return digits
-      .replace(/(\d{3})(\d)/, '$1.$2')
-      .replace(/(\d{3})(\d)/, '$1.$2')
-      .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
-  } else {
-    // CNPJ Format: ##.###.###/####-##
-    // Limita a 14 dígitos no máximo
-    const cnpjDigits = digits.slice(0, 14);
-    return cnpjDigits
-      .replace(/(\d{2})(\d)/, '$1.$2')
-      .replace(/(\d{3})(\d)/, '$1.$2')
-      .replace(/(\d{3})(\d)/, '$1/$2')
-      .replace(/(\d{4})(\d{1,2})$/, '$1-$2');
-  }
-}
-
-/**
- * Remove todos os caracteres de formatação, deixando apenas dígitos
- */
-export function unformatCpfCnpj(value: string): string {
-  return value.replace(/\D/g, '');
-}
 
 /**
  * Valida se um CPF ou CNPJ é válido (verifica dígitos verificadores)
@@ -152,3 +99,4 @@ function validateCnpj(cnpj: string): boolean {
 
   return true;
 }
+

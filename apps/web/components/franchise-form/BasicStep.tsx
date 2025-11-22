@@ -1,16 +1,23 @@
 "use client"
 
+import { useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { formatCpfCnpj, unformatCpfCnpj, validateCpfCnpj } from '@/lib/utils'
 
 export interface BasicStepData {
   name: string
   email: string
   phone: string
   address: string
+  address_number: string
+  province: string
   zip_code: string
   city: string
   state: string
+  cpf_cnpj: string
+  company_type: string
+  birth_date: string
   manager_name: string
   manager_phone: string
   manager_email: string
@@ -39,6 +46,45 @@ const formatCep = (value: string) => {
 }
 
 export default function BasicStep({ data, states, errors, onChange, onNext }: Props) {
+  const [isCpfCnpjFocused, setIsCpfCnpjFocused] = useState<boolean>(false)
+
+  const handleCpfCnpjChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let newValue = e.target.value
+    newValue = unformatCpfCnpj(newValue)
+    // Limita a 14 dígitos (CNPJ)
+    newValue = newValue.slice(0, 14)
+    onChange('cpf_cnpj', newValue)
+  }
+
+  const handleCpfCnpjFocus = () => {
+    setIsCpfCnpjFocused(true)
+  }
+
+  const handleCpfCnpjBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    setIsCpfCnpjFocused(false)
+    const currentValue = e.target.value
+    const unformatted = unformatCpfCnpj(currentValue)
+    
+    // Validar apenas se tiver valor
+    if (unformatted && unformatted.length > 0) {
+      const isValid = validateCpfCnpj(unformatted)
+      if (!isValid) {
+        // Trigger error via onChange com valor especial ou usar callback de erro
+        // Por enquanto, vamos apenas não atualizar se inválido
+        // O erro será mostrado na validação do formulário
+      }
+    }
+    
+    onChange('cpf_cnpj', unformatted)
+  }
+
+  const displayCpfCnpj = isCpfCnpjFocused ? data.cpf_cnpj : formatCpfCnpj(data.cpf_cnpj)
+  
+  // Determinar se é CPF (11 dígitos) ou CNPJ (14 dígitos)
+  const cpfCnpjDigits = data.cpf_cnpj.replace(/\D/g, '')
+  const isCpf = cpfCnpjDigits.length === 11
+  const isCnpj = cpfCnpjDigits.length === 14
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -70,12 +116,34 @@ export default function BasicStep({ data, states, errors, onChange, onNext }: Pr
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Endereço</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Endereço *</label>
           <Input
             value={data.address}
             onChange={(e) => onChange('address', e.target.value)}
-            placeholder="Rua Exemplo, 123 - Bairro"
+            placeholder="Rua Exemplo"
+            className={errors?.address ? 'border-red-500' : ''}
           />
+          {errors?.address && <p className="text-xs text-red-600 mt-1">{errors.address}</p>}
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Número *</label>
+          <Input
+            value={data.address_number}
+            onChange={(e) => onChange('address_number', e.target.value)}
+            placeholder="123"
+            className={errors?.address_number ? 'border-red-500' : ''}
+          />
+          {errors?.address_number && <p className="text-xs text-red-600 mt-1">{errors.address_number}</p>}
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Bairro *</label>
+          <Input
+            value={data.province}
+            onChange={(e) => onChange('province', e.target.value)}
+            placeholder="Centro"
+            className={errors?.province ? 'border-red-500' : ''}
+          />
+          {errors?.province && <p className="text-xs text-red-600 mt-1">{errors.province}</p>}
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">CEP</label>
@@ -94,6 +162,50 @@ export default function BasicStep({ data, states, errors, onChange, onNext }: Pr
           />
           {errors?.city && <p className="text-xs text-red-600 mt-1">{errors.city}</p>}
         </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">CPF/CNPJ *</label>
+          <Input
+            value={displayCpfCnpj}
+            onChange={handleCpfCnpjChange}
+            onFocus={handleCpfCnpjFocus}
+            onBlur={handleCpfCnpjBlur}
+            placeholder="000.000.000-00 ou 00.000.000/0000-00"
+            maxLength={18}
+            className={errors?.cpf_cnpj ? 'border-red-500' : ''}
+          />
+          {errors?.cpf_cnpj && <p className="text-xs text-red-600 mt-1">{errors.cpf_cnpj}</p>}
+        </div>
+        {isCpf && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Data de Nascimento *</label>
+            <Input
+              type="date"
+              value={data.birth_date}
+              onChange={(e) => onChange('birth_date', e.target.value)}
+              className={errors?.birth_date ? 'border-red-500' : ''}
+              max={new Date().toISOString().split('T')[0]}
+            />
+            {errors?.birth_date && <p className="text-xs text-red-600 mt-1">{errors.birth_date}</p>}
+          </div>
+        )}
+        {isCnpj && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de Empresa *</label>
+            <select
+              value={data.company_type}
+              onChange={(e) => onChange('company_type', e.target.value)}
+              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-meu-primary ${
+                errors?.company_type ? 'border-red-500' : 'border-gray-300'
+              }`}
+            >
+              <option value="">Selecione o tipo de empresa</option>
+              <option value="MEI">MEI - Microempreendedor Individual</option>
+              <option value="LIMITED">LTDA - Sociedade Limitada</option>
+              <option value="ASSOCIATION">Associação</option>
+            </select>
+            {errors?.company_type && <p className="text-xs text-red-600 mt-1">{errors.company_type}</p>}
+          </div>
+        )}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Estado *</label>
           <select

@@ -58,9 +58,14 @@ export interface CreateAcademyPayload {
   email: string
   phone?: string | null
   address?: string | null
+  address_number: string
+  province: string
   city: string
   state: string
   zip_code?: string | null
+  cpf_cnpj: string
+  company_type?: string | null
+  birth_date?: string | null
   franchise_fee: number
   royalty_percentage: number
   monthly_revenue: number
@@ -532,15 +537,26 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
         try {
           const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           const token = get().token
+          
+          // Sanitizar CPF/CNPJ (remover formatação) antes de enviar
+          const cpfCnpjSanitized = academyData.cpf_cnpj 
+            ? academyData.cpf_cnpj.replace(/\D/g, '') 
+            : null
+          
           const academyPayload = {
             franqueadora_id: academyData.franqueadora_id,
             name: academyData.name,
             email: academyData.email,
             phone: academyData.phone ?? null,
             address: academyData.address ?? null,
+            address_number: academyData.address_number,
+            province: academyData.province,
             city: academyData.city,
             state: academyData.state,
             zip_code: academyData.zip_code ?? null,
+            cpf_cnpj: cpfCnpjSanitized,
+            company_type: academyData.company_type ?? null,
+            birth_date: academyData.birth_date ?? null,
             franchise_fee: academyData.franchise_fee,
             royalty_percentage: academyData.royalty_percentage,
             monthly_revenue: academyData.monthly_revenue,

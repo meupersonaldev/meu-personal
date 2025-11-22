@@ -12,6 +12,7 @@ import WizardStepper from '@/components/franchise-form/WizardStepper'
 import BasicStep from '@/components/franchise-form/BasicStep'
 import FinancialStep from '@/components/franchise-form/FinancialStep'
 import ContractAdminStep from '@/components/franchise-form/ContractAdminStep'
+import { validateCpfCnpj } from '@/lib/utils'
 
 interface FranchiseFormData {
   name: string
@@ -20,7 +21,12 @@ interface FranchiseFormData {
   city: string
   state: string
   address: string
+  address_number: string
+  province: string
   zip_code: string
+  cpf_cnpj: string
+  company_type: string
+  birth_date: string
   franchise_fee: number
   royalty_percentage: number
   monthly_revenue: number
@@ -56,7 +62,12 @@ export default function AddFranchisePage() {
     city: '',
     state: '',
     address: '',
+    address_number: '',
+    province: '',
     zip_code: '',
+    cpf_cnpj: '',
+    company_type: '',
+    birth_date: '',
     franchise_fee: 0,
     royalty_percentage: 0,
     monthly_revenue: 0,
@@ -88,6 +99,38 @@ export default function AddFranchisePage() {
     else if (!emailRegex.test(formData.email)) e.email = 'Email inválido'
     if (!formData.city) e.city = 'Cidade é obrigatória'
     if (!formData.state) e.state = 'Estado é obrigatório'
+    if (!formData.address) e.address = 'Endereço é obrigatório'
+    if (!formData.address_number) e.address_number = 'Número é obrigatório'
+    if (!formData.province) e.province = 'Bairro é obrigatório'
+    
+    // CPF/CNPJ é obrigatório
+    if (!formData.cpf_cnpj || formData.cpf_cnpj.trim() === '') {
+      e.cpf_cnpj = 'CPF/CNPJ é obrigatório'
+    } else if (!validateCpfCnpj(formData.cpf_cnpj)) {
+      e.cpf_cnpj = 'CPF ou CNPJ inválido. Verifique os dígitos verificadores.'
+    } else {
+      // Determinar se é CPF (11 dígitos) ou CNPJ (14 dígitos)
+      const cpfCnpjDigits = formData.cpf_cnpj.replace(/\D/g, '')
+      const isCpf = cpfCnpjDigits.length === 11
+      const isCnpj = cpfCnpjDigits.length === 14
+      
+      // Data de nascimento é obrigatória para CPF (pessoa física)
+      if (isCpf) {
+        if (!formData.birth_date || formData.birth_date.trim() === '') {
+          e.birth_date = 'Data de nascimento é obrigatória para pessoa física (CPF)'
+        }
+      }
+      
+      // Tipo de empresa é obrigatório para CNPJ (pessoa jurídica)
+      if (isCnpj) {
+        if (!formData.company_type || formData.company_type.trim() === '') {
+          e.company_type = 'Tipo de empresa é obrigatório para pessoa jurídica (CNPJ)'
+        } else if (!['MEI', 'LIMITED', 'ASSOCIATION'].includes(formData.company_type)) {
+          e.company_type = 'Tipo de empresa inválido. Para CNPJ, deve ser: MEI, LIMITED ou ASSOCIATION.'
+        }
+      }
+    }
+    
     setErrors(e)
     return Object.keys(e).length === 0
   }
@@ -157,15 +200,30 @@ export default function AddFranchisePage() {
       }
 
       // Criar objeto da franquia
+      // CPF/CNPJ já está sem formatação (removida no BasicStep)
+      // Mas vamos garantir que não seja null (já validado acima)
+      const cpfCnpjValue = formData.cpf_cnpj?.trim() || ''
+      
+      if (!cpfCnpjValue) {
+        toast.error('CPF/CNPJ é obrigatório')
+        setCurrentStep(0)
+        return
+      }
+
       const newFranchise = {
         franqueadora_id: franqueadora.id,
         name: formData.name,
         email: formData.email,
         phone: formData.phone || null,
         address: formData.address || null,
+        address_number: formData.address_number,
+        province: formData.province,
         city: formData.city,
         state: formData.state,
         zip_code: formData.zip_code || null,
+        cpf_cnpj: cpfCnpjValue, // Já validado e sem formatação
+        company_type: formData.company_type || null,
+        birth_date: formData.birth_date || null,
         franchise_fee: formData.franchise_fee,
         royalty_percentage: formData.royalty_percentage,
         monthly_revenue: formData.monthly_revenue,
@@ -233,9 +291,14 @@ export default function AddFranchisePage() {
                     email: formData.email,
                     phone: formData.phone,
                     address: formData.address,
+                    address_number: formData.address_number,
+                    province: formData.province,
                     zip_code: formData.zip_code,
                     city: formData.city,
                     state: formData.state,
+                    cpf_cnpj: formData.cpf_cnpj,
+                    company_type: formData.company_type,
+                    birth_date: formData.birth_date,
                     manager_name: formData.manager_name,
                     manager_phone: formData.manager_phone,
                     manager_email: formData.manager_email,

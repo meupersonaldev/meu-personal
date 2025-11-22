@@ -2,6 +2,7 @@ import { supabase } from '../lib/supabase';
 import { CustomError } from '../middleware/errorHandler';
 import { getPaymentProvider } from './payments/provider';
 import { balanceService } from './balance.service';
+import { asaasService } from './asaas.service';
 
 export interface PaymentIntent {
   id: string;
@@ -56,15 +57,41 @@ class PaymentIntentService {
       });
 
       if (!customerResult.success) {
-        const message = Array.isArray(customerResult.error)
-          ? (customerResult.error[0]?.description || 'Erro ao criar cliente no provedor de pagamento')
-          : (customerResult.error || 'Erro ao criar cliente no provedor de pagamento');
+        // Extrair mensagem de erro de forma mais robusta
+        let message = 'Erro retornado pelo provedor Asaas ao criar cliente';
+        
+        if (Array.isArray(customerResult.error)) {
+          message = customerResult.error[0]?.description || customerResult.error[0] || message;
+        } else if (typeof customerResult.error === 'string') {
+          message = customerResult.error;
+        } else if (customerResult.error && typeof customerResult.error === 'object') {
+          message = customerResult.error.description || customerResult.error.message || message;
+        }
+        
         const isCpfError = typeof message === 'string' && message.toLowerCase().includes('cpf');
+        const isApiKeyError = typeof message === 'string' && (
+          message.toLowerCase().includes('chave') || 
+          message.toLowerCase().includes('api') ||
+          message.toLowerCase().includes('asaas_api_key')
+        );
+        
+        // Log detalhado para debug
+        console.error('[ASAAS] Erro retornado pelo provedor ao criar cliente:', {
+          respostaAsaas: customerResult.error,
+          mensagem: message,
+          asaasEnv: process.env.ASAAS_ENV,
+          hasApiKey: !!process.env.ASAAS_API_KEY,
+          apiKeyLength: process.env.ASAAS_API_KEY?.length || 0
+        });
+        
+        // Garantir que a mensagem tenha o prefixo [ASAAS] se não tiver
+        const finalMessage = message.startsWith('[ASAAS]') ? message : `[ASAAS] ${message}`;
+        
         throw new CustomError(
-          message,
-          isCpfError ? 400 : 502,
+          finalMessage,
+          isCpfError ? 400 : (isApiKeyError ? 500 : 502),
           true,
-          isCpfError ? 'BUSINESS_RULE_VIOLATION' : 'EXTERNAL_PROVIDER_ERROR',
+          isCpfError ? 'BUSINESS_RULE_VIOLATION' : (isApiKeyError ? 'CONFIGURATION_ERROR' : 'EXTERNAL_PROVIDER_ERROR'),
           { provider: process.env.PAYMENT_PROVIDER || 'ASAAS', step: 'createCustomer' }
         );
       }
@@ -81,13 +108,40 @@ class PaymentIntentService {
       ? (requestedMethod as 'PIX' | 'BOLETO' | 'CREDIT_CARD')
       : 'PIX';
 
+    // Configurar split de pagamento - apenas para franquia (subconta)
+    // 90% para franquia, 10% fica automaticamente na franqueadora (conta principal)
+    const FRANCHISE_WALLET_ID = '03223ec1-c254-43a9-bcdd-6f54acac0609' // 90%
+
+    const finalSplit: Array<{ walletId: string; percentualValue: number }> = [
+      { walletId: FRANCHISE_WALLET_ID, percentualValue: 90.00 }
+      // Os 10% restantes ficam automaticamente na conta principal (franqueadora)
+    ]
+
+    console.log('[PAYMENT INTENT] ✅ Split configurado (apenas franquia):', {
+      franchiseWalletId: FRANCHISE_WALLET_ID,
+      franchisorPercent: '10% (automático - conta principal)',
+      type: params.type,
+      franqueadoraId: params.franqueadoraId,
+      unitId: params.unitId
+    })
+
+
+    console.log('[PAYMENT INTENT] 🚀 CHAMANDO provider.createPayment COM SPLIT:', {
+      hasSplit: !!finalSplit,
+      splitLength: finalSplit.length,
+      split: finalSplit,
+      customer: asaasCustomerId,
+      value: params.amountCents / 100
+    })
+
     const paymentResult = await provider.createPayment({
       customer: asaasCustomerId,
       billingType,
       value: params.amountCents / 100,
       dueDate: dueDate,
       description: this.getPaymentDescription(params.type, params.metadata),
-      externalReference: `meupersonal_${params.type}_${params.actorUserId}_${Date.now()}`
+      externalReference: `meupersonal_${params.type}_${params.actorUserId}_${Date.now()}`,
+      split: finalSplit
     });
 
     if (!paymentResult.success) {

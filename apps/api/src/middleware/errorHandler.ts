@@ -167,6 +167,18 @@ export const errorHandler = (
     return
   }
 
+  // Tratar CustomError especificamente
+  if (err instanceof CustomError) {
+    const statusCode = err.statusCode || 500
+    res.status(statusCode).json({
+      success: false,
+      error: err.code || 'CUSTOM_ERROR',
+      message: err.message,
+      details: err.details
+    })
+    return
+  }
+
   // Erro padrão (fallback)
   const statusCode = error.statusCode || 500
   const message = process.env.NODE_ENV === 'production' 
