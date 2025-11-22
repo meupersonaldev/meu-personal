@@ -133,7 +133,7 @@ export function RegisterTemplate({
     }
 
     if (!isStrongPassword(formData.password)) {
-      toast.error('Senha fraca. Use no mínimo 6 caracteres, com letras maiúsculas, minúsculas, números e símbolos.')
+      toast.error('Senha deve ter no mínimo 6 caracteres.')
       return
     }
 

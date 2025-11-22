@@ -45,12 +45,9 @@ async function isPasswordPwned (password: string): Promise<boolean> {
 }
 
 function isStrongPassword (password: string): boolean {
+  // Validação simplificada: apenas verifica comprimento mínimo
   if (!password || password.length < 6) return false
-  const hasLower = /[a-z]/.test(password)
-  const hasUpper = /[A-Z]/.test(password)
-  const hasDigit = /\d/.test(password)
-  const hasSymbol = /[^A-Za-z0-9]/.test(password)
-  return hasLower && hasUpper && hasDigit && hasSymbol
+  return true
 }
 
 function normalizeCref (v?: string | null) {
@@ -255,17 +252,17 @@ router.post(
         return res
           .status(400)
           .json({
-            message:
-              'Senha fraca. Mínimo 6 caracteres, com dígito, minúscula, maiúscula e símbolo.'
+            message: 'Senha deve ter no mínimo 6 caracteres.'
           })
       }
-      if (await isPasswordPwned(userData.password)) {
-        return res
-          .status(400)
-          .json({
-            message: 'Senha vazada ou muito comum. Escolha outra senha.'
-          })
-      }
+      // Verificação de senha vazada desabilitada para maior flexibilidade
+      // if (await isPasswordPwned(userData.password)) {
+      //   return res
+      //     .status(400)
+      //     .json({
+      //       message: 'Senha vazada ou muito comum. Escolha outra senha.'
+      //     })
+      // }
       const sanitizedCpf = userData.cpf.replace(/\D/g, '')
 
       // Verificar se email já existe
@@ -632,17 +629,17 @@ router.post(
         return res
           .status(400)
           .json({
-            message:
-              'Senha fraca. Mínimo 6 caracteres, com dígito, minúscula, maiúscula e símbolo.'
+            message: 'Senha deve ter no mínimo 6 caracteres.'
           })
       }
-      if (await isPasswordPwned(password)) {
-        return res
-          .status(400)
-          .json({
-            message: 'Senha vazada ou muito comum. Escolha outra senha.'
-          })
-      }
+      // Verificação de senha vazada desabilitada para maior flexibilidade
+      // if (await isPasswordPwned(password)) {
+      //   return res
+      //     .status(400)
+      //     .json({
+      //       message: 'Senha vazada ou muito comum. Escolha outra senha.'
+      //     })
+      // }
 
       // Hash da nova senha
       const passwordHash = await bcrypt.hash(password, 10)
