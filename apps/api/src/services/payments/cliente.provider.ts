@@ -8,7 +8,7 @@ export function getClienteProvider(): PaymentProvider {
       return { success: false, error: 'CLIENTE provider: createCustomer não implementado' }
     },
 
-    async createPayment(data: { customer: string; billingType: BillingType; value: number; dueDate: string; description: string; externalReference?: string }) {
+    async createPayment(data: { customer: string; billingType: BillingType; value: number; dueDate: string; description: string; externalReference?: string; split?: Array<{ walletId: string; fixedValue?: number; percentualValue?: number }> }) {
       // TODO: Implementar criação de pagamento (retornar id do pagamento e status)
       return { success: false, error: 'CLIENTE provider: createPayment não implementado' }
     },

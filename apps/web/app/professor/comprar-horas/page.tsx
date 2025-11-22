@@ -100,10 +100,19 @@ export default function ComprarHorasPage() {
         setStep('success')
       } else {
         const errMsg = (data?.error || data?.message || '').toString()
+        const errorCode = data?.error || ''
+        
         if (response.status === 400 && errMsg.toLowerCase().includes('cpf')) {
           setShowCpfModal(true)
           return
         }
+        
+        // Tratamento específico para erro de criação de conta Asaas
+        if (errorCode === 'ASAAS_ACCOUNT_CREATION_FAILED') {
+          toast.error('Não foi possível configurar a conta de pagamento da franquia. Por favor, entre em contato com o suporte ou tente novamente mais tarde.')
+          return
+        }
+        
         toast.error('Erro ao processar pagamento: ' + errMsg)
       }
     } catch {
@@ -157,6 +166,14 @@ export default function ComprarHorasPage() {
         setShowCpfModal(false)
       } else {
         const errMsg = (data?.error || data?.message || 'Erro ao processar pagamento').toString()
+        const errorCode = data?.error || ''
+        
+        // Tratamento específico para erro de criação de conta Asaas
+        if (errorCode === 'ASAAS_ACCOUNT_CREATION_FAILED') {
+          toast.error('Não foi possível configurar a conta de pagamento da franquia. Por favor, entre em contato com o suporte ou tente novamente mais tarde.')
+          return
+        }
+        
         toast.error(errMsg)
       }
     } catch {

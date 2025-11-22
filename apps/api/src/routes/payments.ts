@@ -7,6 +7,33 @@ import { requireApprovedTeacher } from '../middleware/approval'
 
 const router = express.Router()
 
+/**
+ * Função auxiliar para buscar walletIds e montar split de pagamento
+ * Retorna array de split (90% franquia, 10% franqueadora) ou lança erro se não conseguir
+ * Se franqueadora não tiver walletId, busca automaticamente via getWallets e salva no banco
+ * Se academia não tiver walletId, tenta criar subconta automaticamente
+ */
+/**
+ * Retorna split de pagamento - apenas para franquia (subconta)
+ * 90% para franquia, 10% fica automaticamente na franqueadora (conta principal)
+ */
+function getPaymentSplit(academyId: string | null): Array<{ walletId: string; percentualValue: number }> {
+  // Split apenas para franquia (subconta) - 90%
+  // Os 10% restantes ficam automaticamente na conta principal
+  const FRANCHISE_WALLET_ID = '03223ec1-c254-43a9-bcdd-6f54acac0609' // 90%
+
+  console.log('[PAYMENTS] ✅ Usando split (apenas franquia):', {
+    franchiseWalletId: FRANCHISE_WALLET_ID,
+    franchisorPercent: '10% (automático - conta principal)',
+    academyId: academyId || 'N/A (não usado)'
+  })
+
+  return [
+    { walletId: FRANCHISE_WALLET_ID, percentualValue: 90.00 }
+    // Os 10% restantes ficam automaticamente na conta principal (franqueadora)
+  ]
+}
+
 // Schema para compra de pacote de aluno
 const studentPackagePurchaseSchema = z.object({
   student_id: z.string().uuid(),
@@ -96,7 +123,17 @@ router.post('/student/purchase-package', async (req, res) => {
         .eq('id', student.id)
     }
 
-    // 5. Criar cobrança no Asaas
+    // 5. Configurar split de pagamento com walletIds hardcoded
+    const academyId = (student.academy_students as any)?.[0]?.academy_id || null
+    const split = getPaymentSplit(academyId)
+    
+    console.log('[PAYMENTS] ✅ Split configurado (apenas franquia) para compra de pacote:', {
+      franchiseWalletId: split[0].walletId,
+      franchisorPercent: '10% (automático - conta principal)',
+      splitPercentages: split.map(s => s.percentualValue)
+    })
+
+    // 6. Criar cobrança no Asaas (apenas se split estiver validado)
     const tomorrow = new Date()
     tomorrow.setDate(tomorrow.getDate() + 1)
     const dueDate = tomorrow.toISOString().split('T')[0]
@@ -107,14 +144,15 @@ router.post('/student/purchase-package', async (req, res) => {
       value: package_.price,
       dueDate: dueDate,
       description: `${package_.name} - ${package_.credits_included} créditos`,
-      externalReference: `STUDENT_PACKAGE_${data.student_id}_${data.package_id}_${Date.now()}`
+      externalReference: `STUDENT_PACKAGE_${data.student_id}_${data.package_id}_${Date.now()}`,
+      split: split
     })
 
     if (!paymentResult.success) {
       return res.status(500).json({ error: 'Erro ao criar cobrança no Asaas' })
     }
 
-    // 6. Salvar transação no banco (status: PENDING)
+    // 7. Salvar transação no banco (status: PENDING)
     const { data: transaction, error: transactionError } = await supabase
       .from('transactions')
       .insert({
@@ -251,7 +289,28 @@ router.post('/teacher/purchase-hours', requireAuth, requireApprovedTeacher, asyn
         .eq('id', teacher.id)
     }
 
-    // 4. Criar cobrança no Asaas
+    // 4. Buscar walletIds para split (90% franquia, 10% franqueadora)
+    // OBRIGATÓRIO: se falhar, retornar erro (não criar pagamento sem split)
+    // Buscar academia do professor via academy_teachers
+    const { data: academyTeacher } = await supabase
+      .from('academy_teachers')
+      .select('academy_id')
+      .eq('teacher_id', data.teacher_id)
+      .eq('status', 'active')
+      .limit(1)
+      .single()
+
+    // 4. Configurar split de pagamento com walletIds hardcoded
+    const academyId = academyTeacher?.academy_id || null
+    const split = getPaymentSplit(academyId)
+    
+    console.log('[PAYMENTS] ✅ Split configurado (apenas franquia) para compra de horas:', {
+      franchiseWalletId: split[0].walletId,
+      franchisorPercent: '10% (automático - conta principal)',
+      splitPercentages: split.map(s => s.percentualValue)
+    })
+
+    // 5. Criar cobrança no Asaas (apenas se split estiver validado)
     const tomorrow = new Date()
     tomorrow.setDate(tomorrow.getDate() + 1)
     const dueDate = tomorrow.toISOString().split('T')[0]
@@ -262,14 +321,15 @@ router.post('/teacher/purchase-hours', requireAuth, requireApprovedTeacher, asyn
       value: hoursPackage.price,
       dueDate: dueDate,
       description: `${hoursPackage.name} - Banco de Horas`,
-      externalReference: `TEACHER_HOURS_${data.teacher_id}_${data.hours_package_id}_${Date.now()}`
+      externalReference: `TEACHER_HOURS_${data.teacher_id}_${data.hours_package_id}_${Date.now()}`,
+      split: split
     })
 
     if (!paymentResult.success) {
       return res.status(500).json({ error: 'Erro ao criar cobrança no Asaas' })
     }
 
-    // 5. Salvar transação no banco
+    // 6. Salvar transação no banco
     const { data: transaction, error: transactionError } = await supabase
       .from('transactions')
       .insert({

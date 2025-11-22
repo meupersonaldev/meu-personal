@@ -3,6 +3,8 @@ import { supabase } from '../lib/supabase'
 import bcrypt from 'bcryptjs'
 import { requireAuth, requireRole } from '../middleware/auth'
 import { auditService } from '../services/audit.service'
+import { asaasService } from '../services/asaas.service'
+import { validateCpfCnpj } from '../utils/validation'
 
 const router = Router()
 
@@ -27,6 +29,21 @@ router.post('/create', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN'])
       }
     }
 
+    // Validação de CPF/CNPJ (obrigatório)
+    if (!academy?.cpf_cnpj || academy.cpf_cnpj.trim() === '') {
+      return res.status(400).json({
+        error: 'MISSING_CPF_CNPJ',
+        message: 'CPF/CNPJ é obrigatório para criar uma franquia.'
+      })
+    }
+
+    if (!validateCpfCnpj(academy.cpf_cnpj)) {
+      return res.status(400).json({
+        error: 'INVALID_CPF_CNPJ',
+        message: 'CPF ou CNPJ inválido. Verifique os dígitos verificadores.'
+      })
+    }
+
     // 1. Criar usuário admin
     const hashedPassword = await bcrypt.hash(admin.password, 10)
 
@@ -47,8 +64,180 @@ router.post('/create', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN'])
       throw new Error('Erro ao criar usuário admin')
     }
 
-    // 2. Criar academia
-    const { data: newAcademy, error: academyError } = await supabase
+    // Validação dos novos campos obrigatórios
+    if (!academy?.address_number || academy.address_number.trim() === '') {
+      return res.status(400).json({
+        error: 'MISSING_ADDRESS_NUMBER',
+        message: 'Número do endereço é obrigatório.'
+      })
+    }
+
+    if (!academy?.province || academy.province.trim() === '') {
+      return res.status(400).json({
+        error: 'MISSING_PROVINCE',
+        message: 'Bairro é obrigatório.'
+      })
+    }
+
+    // Sanitizar CPF/CNPJ para determinar se é CPF ou CNPJ
+    const cpfCnpjSanitized = academy.cpf_cnpj.replace(/\D/g, '')
+    const isCpf = cpfCnpjSanitized.length === 11
+    const isCnpj = cpfCnpjSanitized.length === 14
+
+    // Validação condicional: birthDate obrigatório para CPF, companyType obrigatório para CNPJ
+    if (isCpf) {
+      if (!academy?.birth_date || academy.birth_date.trim() === '') {
+        return res.status(400).json({
+          error: 'MISSING_BIRTH_DATE',
+          message: 'Data de nascimento é obrigatória para pessoa física (CPF).'
+        })
+      }
+      // Validar se a data de nascimento é válida
+      const birthDate = new Date(academy.birth_date)
+      if (isNaN(birthDate.getTime())) {
+        return res.status(400).json({
+          error: 'INVALID_BIRTH_DATE',
+          message: 'Data de nascimento inválida.'
+        })
+      }
+      // Validar se a data não é futura
+      if (birthDate > new Date()) {
+        return res.status(400).json({
+          error: 'INVALID_BIRTH_DATE',
+          message: 'Data de nascimento não pode ser futura.'
+        })
+      }
+    }
+
+    if (isCnpj) {
+      if (!academy?.company_type || academy.company_type.trim() === '') {
+        return res.status(400).json({
+          error: 'MISSING_COMPANY_TYPE',
+          message: 'Tipo de empresa é obrigatório para pessoa jurídica (CNPJ).'
+        })
+      }
+
+      if (!['MEI', 'LIMITED', 'ASSOCIATION'].includes(academy.company_type)) {
+        return res.status(400).json({
+          error: 'INVALID_COMPANY_TYPE',
+          message: 'Tipo de empresa inválido. Para CNPJ, deve ser: MEI, LIMITED ou ASSOCIATION.'
+        })
+      }
+    }
+
+    // Validação de campos obrigatórios para criação de conta Asaas
+    if (!academy?.address || academy.address.trim() === '') {
+      return res.status(400).json({
+        error: 'MISSING_ADDRESS',
+        message: 'Endereço é obrigatório para criar conta Asaas.'
+      })
+    }
+
+    if (!academy?.zip_code || academy.zip_code.trim() === '') {
+      return res.status(400).json({
+        error: 'MISSING_POSTAL_CODE',
+        message: 'CEP é obrigatório para criar conta Asaas.'
+      })
+    }
+
+    if (!academy?.phone || academy.phone.trim() === '') {
+      return res.status(400).json({
+        error: 'MISSING_PHONE',
+        message: 'Telefone é obrigatório para criar conta Asaas.'
+      })
+    }
+
+    if (!academy?.monthly_revenue || academy.monthly_revenue <= 0) {
+      return res.status(400).json({
+        error: 'MISSING_OR_INVALID_INCOME_VALUE',
+        message: 'Receita mensal é obrigatória e deve ser maior que zero para criar conta Asaas.'
+      })
+    }
+
+    // CPF/CNPJ já foi sanitizado acima
+
+    // 2. Garantir que franqueadora tem walletId (obrigatório)
+    const { data: franqueadora } = await supabase
+      .from('franqueadora')
+      .select('id, name, email, cnpj, phone, address, city, state, zip_code, asaas_wallet_id')
+      .eq('id', academy.franqueadora_id)
+      .single()
+
+    if (!franqueadora) {
+      return res.status(400).json({
+        error: 'FRANQUEADORA_NOT_FOUND',
+        message: 'Franqueadora não encontrada.'
+      })
+    }
+
+    // Garantir que franqueadora tem walletId (obrigatório)
+    let franchisorWalletId = franqueadora.asaas_wallet_id
+    if (!franchisorWalletId) {
+      const franchisorWallet = await asaasService.getFranchisorWalletId(franqueadora.id)
+      if (!franchisorWallet.success || !franchisorWallet.walletId) {
+        return res.status(500).json({
+          error: 'FRANCHISOR_WALLET_ID_FAILED',
+          message: 'Não foi possível obter o walletId da franqueadora. A franqueadora deve ter uma conta Asaas configurada.'
+        })
+      }
+      franchisorWalletId = franchisorWallet.walletId
+    }
+
+    // 3. Criar conta no Asaas PRIMEIRO (antes de criar no banco)
+    const accountData: any = {
+      name: academy.name,
+      email: academy.email,
+      cpfCnpj: cpfCnpjSanitized,
+      mobilePhone: academy.phone,
+      incomeValue: academy.monthly_revenue,
+      address: academy.address,
+      addressNumber: academy.address_number,
+      province: academy.province,
+      postalCode: academy.zip_code,
+      phone: academy.phone
+    }
+
+    // Adicionar campos condicionais
+    if (isCpf && academy.birth_date) {
+      accountData.birthDate = academy.birth_date
+    }
+    if (isCnpj && academy.company_type) {
+      accountData.companyType = academy.company_type
+    }
+
+    const accountResult = await asaasService.createAccount(accountData)
+
+    if (!accountResult.success || !accountResult.data) {
+      console.error('[FRANCHISES] ❌ Erro ao criar conta Asaas:', accountResult.error)
+      // Rollback: deletar usuário
+      await supabase.from('users').delete().eq('id', user.id)
+      return res.status(500).json({
+        error: 'ASAAS_ACCOUNT_CREATION_FAILED',
+        message: accountResult.error || 'Erro ao criar conta no Asaas. Não foi possível criar a franquia.'
+      })
+    }
+
+    // Extrair accountId e walletId da resposta
+    const asaasAccountId = accountResult.data.id
+    const asaasWalletId = accountResult.data.walletId || asaasAccountId // Fallback se walletId não vier
+
+    if (!asaasAccountId || !asaasWalletId) {
+      console.error('[FRANCHISES] ❌ Conta Asaas criada mas sem accountId ou walletId:', accountResult.data)
+      // Rollback: deletar usuário
+      await supabase.from('users').delete().eq('id', user.id)
+      return res.status(500).json({
+        error: 'ASAAS_ACCOUNT_INCOMPLETE',
+        message: 'Conta Asaas criada mas sem accountId ou walletId. Não foi possível criar a franquia.'
+      })
+    }
+
+    console.log('[FRANCHISES] ✅ Conta Asaas criada:', {
+      accountId: asaasAccountId,
+      walletId: asaasWalletId
+    })
+
+    // 4. Criar academia no banco COM os IDs do Asaas (obrigatórios)
+    let { data: newAcademy, error: academyError } = await supabase
       .from('academies')
       .insert({
         franqueadora_id: academy.franqueadora_id,
@@ -56,15 +245,23 @@ router.post('/create', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN'])
         email: academy.email,
         phone: academy.phone,
         address: academy.address,
+        address_number: academy.address_number,
+        province: academy.province,
         city: academy.city,
         state: academy.state,
         zip_code: academy.zip_code,
+        cpf_cnpj: cpfCnpjSanitized,
+        company_type: academy.company_type || null,
+        birth_date: academy.birth_date || null,
         franchise_fee: academy.franchise_fee || 0,
         royalty_percentage: academy.royalty_percentage || 0,
         monthly_revenue: academy.monthly_revenue || 0,
         contract_start_date: academy.contract_start_date,
         contract_end_date: academy.contract_end_date,
-        is_active: academy.is_active ?? true
+        is_active: academy.is_active ?? true,
+        // IDs do Asaas (obrigatórios)
+        asaas_account_id: asaasAccountId,
+        asaas_wallet_id: asaasWalletId
       })
       .select()
       .single()
@@ -73,10 +270,11 @@ router.post('/create', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN'])
       console.error('Error creating academy:', academyError)
       // Rollback: deletar usuário
       await supabase.from('users').delete().eq('id', user.id)
+      // Nota: Não podemos deletar a conta Asaas criada, mas ela ficará órfã
       throw new Error('Erro ao criar academia')
     }
 
-    // 3. Criar vínculo franchise_admin
+    // 5. Criar vínculo franchise_admin
     const { error: franchiseAdminError } = await supabase
       .from('franchise_admins')
       .insert({
@@ -91,6 +289,12 @@ router.post('/create', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN'])
       await supabase.from('academies').delete().eq('id', newAcademy.id)
       throw new Error('Erro ao vincular admin à academia')
     }
+
+    console.log('[FRANCHISES] ✅ Franquia criada com sucesso:', {
+      academyId: newAcademy.id,
+      asaasAccountId,
+      asaasWalletId
+    })
 
     res.status(201).json({
       academy: newAcademy,
@@ -188,9 +392,14 @@ router.post('/', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN']), asyn
       email,
       phone,
       address,
+      address_number,
+      province,
       city,
       state,
       zip_code,
+      cpf_cnpj,
+      company_type,
+      birth_date,
       franchise_fee,
       royalty_percentage,
       monthly_revenue,
@@ -211,6 +420,67 @@ router.post('/', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN']), asyn
       }
     }
 
+    // Validação de CPF/CNPJ (obrigatório)
+    if (!cpf_cnpj || cpf_cnpj.trim() === '') {
+      return res.status(400).json({
+        error: 'MISSING_CPF_CNPJ',
+        message: 'CPF/CNPJ é obrigatório para criar uma franquia.'
+      })
+    }
+
+    if (!validateCpfCnpj(cpf_cnpj)) {
+      return res.status(400).json({
+        error: 'INVALID_CPF_CNPJ',
+        message: 'CPF ou CNPJ inválido. Verifique os dígitos verificadores.'
+      })
+    }
+
+    // Sanitizar CPF/CNPJ (remover formatação)
+    const cpfCnpjSanitized = cpf_cnpj.replace(/\D/g, '')
+    const isCpf = cpfCnpjSanitized.length === 11
+    const isCnpj = cpfCnpjSanitized.length === 14
+
+    // Validação condicional: birthDate obrigatório para CPF, companyType obrigatório para CNPJ
+    if (isCpf) {
+      if (!birth_date || birth_date.trim() === '') {
+        return res.status(400).json({
+          error: 'MISSING_BIRTH_DATE',
+          message: 'Data de nascimento é obrigatória para pessoa física (CPF).'
+        })
+      }
+      // Validar se a data de nascimento é válida
+      const birthDateObj = new Date(birth_date)
+      if (isNaN(birthDateObj.getTime())) {
+        return res.status(400).json({
+          error: 'INVALID_BIRTH_DATE',
+          message: 'Data de nascimento inválida.'
+        })
+      }
+      // Validar se a data não é futura
+      if (birthDateObj > new Date()) {
+        return res.status(400).json({
+          error: 'INVALID_BIRTH_DATE',
+          message: 'Data de nascimento não pode ser futura.'
+        })
+      }
+    }
+
+    if (isCnpj) {
+      if (!company_type || company_type.trim() === '') {
+        return res.status(400).json({
+          error: 'MISSING_COMPANY_TYPE',
+          message: 'Tipo de empresa é obrigatório para pessoa jurídica (CNPJ).'
+        })
+      }
+
+      if (!['MEI', 'LIMITED', 'ASSOCIATION'].includes(company_type)) {
+        return res.status(400).json({
+          error: 'INVALID_COMPANY_TYPE',
+          message: 'Tipo de empresa inválido. Para CNPJ, deve ser: MEI, LIMITED ou ASSOCIATION.'
+        })
+      }
+    }
+
     const { data, error } = await supabase
       .from('academies')
       .insert({
@@ -219,9 +489,14 @@ router.post('/', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN']), asyn
         email,
         phone,
         address,
+        address_number,
+        province,
         city,
         state,
         zip_code,
+        cpf_cnpj: cpfCnpjSanitized,
+        company_type: company_type || null,
+        birth_date: birth_date || null,
         franchise_fee,
         royalty_percentage,
         monthly_revenue: monthly_revenue || 0,

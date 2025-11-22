@@ -5,6 +5,24 @@ import path from 'path'
 // IMPORTANTE: Esta deve ser a primeira coisa a ser executada
 dotenv.config({ path: path.resolve(__dirname, '../.env') })
 
+// Exibir configuração do Asaas ao iniciar o servidor
+const asaasApiKey = process.env.ASAAS_API_KEY
+const asaasEnv = process.env.ASAAS_ENV || 'sandbox'
+if (asaasApiKey) {
+  const maskedKey = asaasApiKey.length > 30 
+    ? asaasApiKey.substring(0, 30) + '...' + asaasApiKey.substring(asaasApiKey.length - 15)
+    : asaasApiKey.substring(0, 15) + '...'
+  console.log('🔑 ASAAS_API_KEY carregada:', {
+    ambiente: asaasEnv,
+    url: asaasEnv === 'production' ? 'https://api.asaas.com/v3' : 'https://sandbox.asaas.com/api/v3',
+    keyPreview: maskedKey,
+    keyLength: asaasApiKey.length,
+    keyPrefix: asaasApiKey.substring(0, 15)
+  })
+} else {
+  console.warn('⚠️ ASAAS_API_KEY não configurada no .env')
+}
+
 import express from 'express'
 import cors from 'cors'
 import type { CorsOptions } from 'cors'
@@ -163,7 +181,9 @@ import academiesRoutes from './routes/academies'
 import studentUnitsRoutes from './routes/student-units'
 import studentsRoutes from './routes/students'
 import franchisorPoliciesRoutes from './routes/franchisor-policies'
+import asaasRoutes from './routes/asaas'
 import { bookingScheduler } from './jobs/booking-scheduler'
+import { asaasSyncService } from './services/asaas-sync.service'
 
 // SEGURANÇA CRÍTICA: Rate limit específico para auth (mais restritivo)
 app.use('/api/auth', authRateLimit, authRoutes)
@@ -188,6 +208,7 @@ app.use('/api/webhooks', webhooksRoutes)
 app.use('/api/franqueadora', franqueadoraRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/franchisor/policies', franchisorPoliciesRoutes)
+app.use('/api/asaas', asaasRoutes)
 
 // SEGURANÇA CRÍTICA: Middleware para rotas não encontradas (deve vir antes do errorHandler)
 app.use(notFoundHandler)
@@ -244,5 +265,14 @@ if (process.env.NODE_ENV !== 'test') {
     console.log(
       `✅ Scheduler configurado para rodar a cada ${schedulerInterval} minutos`
     )
+
+    // Sincronizar subcontas Asaas na inicialização (assíncrono, não bloqueia)
+    setTimeout(async () => {
+      try {
+        await asaasSyncService.syncAll()
+      } catch (error: any) {
+        console.error('Erro na sincronização de subcontas Asaas:', error)
+      }
+    }, 2000) // Delay de 2s para garantir que o servidor está totalmente iniciado
   })
 }

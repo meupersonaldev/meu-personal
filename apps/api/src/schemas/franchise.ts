@@ -28,7 +28,17 @@ export const createFranchiseSchema = z.object({
     .optional(),
   zipCode: z.string()
     .regex(/^\d{5}-?\d{3}$/, 'CEP inválido')
-    .optional()
+    .optional(),
+  cpfCnpj: z.string()
+    .min(11, 'CPF/CNPJ deve ter pelo menos 11 dígitos')
+    .max(18, 'CPF/CNPJ inválido')
+    .refine((val) => {
+      // Remove formatação e valida
+      const digits = val.replace(/\D/g, '');
+      return digits.length === 11 || digits.length === 14;
+    }, {
+      message: 'CPF/CNPJ deve ter 11 dígitos (CPF) ou 14 dígitos (CNPJ)'
+    })
 })
 
 export const updateFranchiseSchema = z.object({
