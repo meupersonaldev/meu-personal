@@ -512,23 +512,48 @@ router.get('/', requireAuth, async (req, res) => {
       return res.status(403).json({ error: 'Acesso negado' })
     }
 
-    const { academy_id, city, state, unit_id } = req.query
+    const { academy_id, city, state, unit_id } = req.query as {
+      academy_id?: string
+      city?: string
+      state?: string
+      unit_id?: string
+    }
 
-    // Se unit_id for fornecido, buscar professores vinculados à unidade
+    // Normalizar parâmetros
+    const unitIdParam = typeof unit_id === 'string' && unit_id.trim().length > 0 ? unit_id : null
+    let resolvedAcademyId: string | null = typeof academy_id === 'string' && academy_id.trim().length > 0 ? academy_id : null
     let teacherIds: string[] = []
-    if (unit_id) {
-      const { data: professorUnits } = await supabase
+
+    if (unitIdParam) {
+      // Buscar vínculos diretos em professor_units (nova estrutura)
+      const { data: professorUnits, error: professorUnitsError } = await supabase
         .from('professor_units')
         .select('professor_id, active')
-        .eq('unit_id', unit_id)
-      
-      if (professorUnits) {
-        const activeProfessors = professorUnits.filter(pu => pu.active)
-        teacherIds = activeProfessors.map(pu => pu.professor_id)
+        .eq('unit_id', unitIdParam)
+
+      if (professorUnitsError) {
+        console.error('Erro ao buscar vínculos professor_units:', professorUnitsError)
+      } else if (professorUnits) {
+        teacherIds = professorUnits
+          .filter((pu: any) => pu.active !== false)
+          .map((pu: any) => pu.professor_id)
       }
-      
-      // Se não houver professores na unidade, retornar vazio
-      if (teacherIds.length === 0) {
+
+      // Buscar unidade para mapear academy_legacy_id (compatibilidade com academies)
+      const { data: unitRecord, error: unitError } = await supabase
+        .from('units')
+        .select('id, academy_legacy_id')
+        .eq('id', unitIdParam)
+        .maybeSingle()
+
+      if (unitError) {
+        console.error('Erro ao buscar unidade:', unitError)
+      } else if (unitRecord?.academy_legacy_id) {
+        resolvedAcademyId = unitRecord.academy_legacy_id
+      }
+
+      // Se não encontramos nenhum professor e não conseguimos resolver academy, retornar vazio
+      if (!resolvedAcademyId && teacherIds.length === 0) {
         return res.json([])
       }
     }
@@ -566,12 +591,14 @@ router.get('/', requireAuth, async (req, res) => {
       .eq('academy_teachers.status', 'active')
       .order('created_at', { ascending: false })
 
-    if (academy_id) {
+    if (resolvedAcademyId) {
+      query = query.eq('academy_teachers.academy_id', resolvedAcademyId)
+    } else if (academy_id) {
       query = query.eq('academy_teachers.academy_id', academy_id)
     }
 
     // Se unit_id foi fornecido, filtrar pelos IDs dos professores
-    if (unit_id && teacherIds.length > 0) {
+    if (unitIdParam && teacherIds.length > 0) {
       query = query.in('id', teacherIds)
     }
 

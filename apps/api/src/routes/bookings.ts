@@ -9,7 +9,7 @@ import { requireApprovedTeacher } from '../middleware/approval'
 import { createUserRateLimit, rateLimitConfig } from '../middleware/rateLimit'
 import { asyncErrorHandler } from '../middleware/errorHandler'
 import { normalizeBookingStatus } from '../utils/booking-status'
-import { toZonedTime, fromZonedTime, format } from 'date-fns-tz'
+import { utcToZonedTime, zonedTimeToUtc, format } from 'date-fns-tz'
 import { parse } from 'date-fns'
 
 const router = express.Router()
@@ -622,7 +622,7 @@ router.post('/', requireAuth, requireRole(['STUDENT', 'ALUNO', 'TEACHER', 'PROFE
   
   // Para validação: startAt (06:00 UTC) representa 06:00 de Brasília
   // Precisamos comparar 06:00 Brasília com now (convertido para Brasília)
-  const nowBrazil = toZonedTime(now, timeZone)
+  const nowBrazil = utcToZonedTime(now, timeZone)
   
   // startAt está como 06:00 UTC, mas representa 06:00 Brasília
   // Criar uma string ISO "naive" (sem timezone) com a hora de Brasília
@@ -632,10 +632,10 @@ router.post('/', requireAuth, requireRole(['STUDENT', 'ALUNO', 'TEACHER', 'PROFE
   // Parsear a string como data "naive" (sem timezone) usando parse do date-fns
   const startAtBrazilNaive = parse(startAtBrazilString, "yyyy-MM-dd'T'HH:mm:ss", new Date())
   
-  // fromZonedTime interpreta a data naive como sendo em Brasília e converte para UTC
+  // zonedTimeToUtc interpreta a data naive como sendo em Brasília e converte para UTC
   // Depois converter de volta para Brasília para comparar
-  const startAtAsBrazilUTC = fromZonedTime(startAtBrazilNaive, timeZone)
-  const startAtBrazil = toZonedTime(startAtAsBrazilUTC, timeZone)
+  const startAtAsBrazilUTC = zonedTimeToUtc(startAtBrazilNaive, timeZone)
+  const startAtBrazil = utcToZonedTime(startAtAsBrazilUTC, timeZone)
 
   try {
     // Log detalhado para debug

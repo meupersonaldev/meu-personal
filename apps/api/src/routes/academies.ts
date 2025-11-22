@@ -220,6 +220,43 @@ router.get('/:id/available-slots', async (req, res) => {
       return res.status(400).json({ error: 'date é obrigatório (YYYY-MM-DD)' })
     }
 
+    // Compatibilidade: permitir passar unit_id ou academy_id
+    let academyId = id
+    let unitId = id
+
+    // Verificar se o ID pertence a uma unidade (nova arquitetura)
+    const { data: unitRecord, error: unitError } = await supabase
+      .from('units')
+      .select('id, academy_legacy_id')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (unitError) {
+      console.error('Erro ao buscar unidade para available-slots:', unitError)
+    }
+
+    if (unitRecord) {
+      unitId = unitRecord.id
+      if (unitRecord.academy_legacy_id) {
+        academyId = unitRecord.academy_legacy_id
+      }
+    } else {
+      // Caso tenha vindo o ID da academia diretamente, tentar descobrir uma unidade vinculada
+      const { data: fallbackUnit, error: fallbackError } = await supabase
+        .from('units')
+        .select('id')
+        .eq('academy_legacy_id', id)
+        .maybeSingle()
+
+      if (fallbackError) {
+        console.error('Erro ao buscar unidade vinculada ao academy:', fallbackError)
+      }
+
+      if (fallbackUnit?.id) {
+        unitId = fallbackUnit.id
+      }
+    }
+
     // Calcular dia da semana (0-6, domingo = 0)
     const reqDate = new Date(`${date}T00:00:00Z`)
     const dow = reqDate.getUTCDay()
@@ -229,7 +266,7 @@ router.get('/:id/available-slots', async (req, res) => {
     const { data: academy, error: academyError } = await supabase
       .from('academies')
       .select('schedule, credits_per_class, class_duration_minutes')
-      .eq('id', id)
+      .eq('id', academyId)
       .single()
 
     if (academyError) throw academyError
@@ -270,7 +307,7 @@ router.get('/:id/available-slots', async (req, res) => {
     const { data: slots, error: slotsError } = await supabase
       .from('academy_time_slots')
       .select('time, max_capacity, is_available')
-      .eq('academy_id', id)
+      .eq('academy_id', academyId)
       .eq('day_of_week', dow)
       .eq('is_available', true)
       .order('time')
@@ -303,7 +340,7 @@ router.get('/:id/available-slots', async (req, res) => {
     const { data: bookings, error: bookingsError } = await supabase
       .from('bookings')
       .select('id, date, status, status_canonical, teacher_id, student_id')
-      .eq('unit_id', id)
+      .eq('unit_id', unitId)
       .gte('date', startISO)
       .lte('date', endISO)
       .neq('status_canonical', 'CANCELED')
