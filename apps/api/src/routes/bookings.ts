@@ -9,7 +9,7 @@ import { requireApprovedTeacher } from '../middleware/approval'
 import { createUserRateLimit, rateLimitConfig } from '../middleware/rateLimit'
 import { asyncErrorHandler } from '../middleware/errorHandler'
 import { normalizeBookingStatus } from '../utils/booking-status'
-import * as dateFnsTz from 'date-fns-tz'
+import { utcToZonedTime, zonedTimeToUtc, formatInTimeZone } from 'date-fns-tz'
 import { parse, format } from 'date-fns'
 
 const router = express.Router()
@@ -645,7 +645,7 @@ router.post('/', requireAuth, requireRole(['STUDENT', 'ALUNO', 'TEACHER', 'PROFE
   
   // Para validação: startAt (06:00 UTC) representa 06:00 de Brasília
   // Precisamos comparar 06:00 Brasília com now (convertido para Brasília)
-  const nowBrazil = dateFnsTz.toZonedTime(now, timeZone)
+  const nowBrazil = utcToZonedTime(now, timeZone)
   
   // startAt está como 06:00 UTC, mas representa 06:00 Brasília
   // Criar uma string ISO "naive" (sem timezone) com a hora de Brasília
@@ -655,10 +655,10 @@ router.post('/', requireAuth, requireRole(['STUDENT', 'ALUNO', 'TEACHER', 'PROFE
   // Parsear a string como data "naive" (sem timezone) usando parse do date-fns
   const startAtBrazilNaive = parse(startAtBrazilString, "yyyy-MM-dd'T'HH:mm:ss", new Date())
   
-  // fromZonedTime interpreta a data naive como sendo em Brasília e converte para UTC
+  // zonedTimeToUtc interpreta a data naive como sendo em Brasília e converte para UTC
   // Depois converter de volta para Brasília para comparar
-  const startAtAsBrazilUTC = dateFnsTz.fromZonedTime(startAtBrazilNaive, timeZone)
-  const startAtBrazil = dateFnsTz.toZonedTime(startAtAsBrazilUTC, timeZone)
+  const startAtAsBrazilUTC = zonedTimeToUtc(startAtBrazilNaive, timeZone)
+  const startAtBrazil = utcToZonedTime(startAtAsBrazilUTC, timeZone)
 
   try {
     // Log detalhado para debug
@@ -666,9 +666,9 @@ router.post('/', requireAuth, requireRole(['STUDENT', 'ALUNO', 'TEACHER', 'PROFE
       startAtReceived: bookingData.startAt,
       startAtUTC: startAt.toISOString(),
       startAtGetUTCHours: startAt.getUTCHours(), // Hora UTC (6) que representa hora de Brasília
-      startAtBrazilTime: dateFnsTz.formatInTimeZone(startAtBrazil, timeZone, 'HH:mm'),
+      startAtBrazilTime: formatInTimeZone(startAtBrazil, timeZone, 'HH:mm'),
       nowUTC: now.toISOString(),
-      nowBrazilTime: dateFnsTz.formatInTimeZone(nowBrazil, timeZone, 'HH:mm'),
+      nowBrazilTime: formatInTimeZone(nowBrazil, timeZone, 'HH:mm'),
       isPast: startAtBrazil <= nowBrazil
     })
   } catch (dateTzError) {
