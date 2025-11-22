@@ -308,7 +308,7 @@ export default function ComprarHorasPage() {
                       </div>
                     </div>
 
-                    <Badge className="bg-green-100 text-green-800 text-lg px-4 py-2">
+                    <Badge variant="outline" className="bg-green-100 text-green-800 text-lg px-4 py-2 border-green-200 hover:bg-green-100 hover:text-green-800">
                       {pkg.hours_included} horas
                     </Badge>
                     <div className="text-xs text-gray-500 mt-2">
