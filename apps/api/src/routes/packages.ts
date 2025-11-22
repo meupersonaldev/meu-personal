@@ -80,6 +80,24 @@ async function resolveFranqueadoraId(options: {
   return resolveDefaultFranqueadoraId();
 }
 
+/**
+ * Valida o preço do pacote conforme regras do Asaas:
+ * - Aceita 0 (grátis) OU >= R$ 5,00 (500 centavos)
+ * - Não aceita valores entre 0 e 5 reais
+ */
+function validatePackagePrice(priceCents: number): { valid: boolean; error?: string } {
+  // Aceita 0 (grátis) ou valores >= R$ 5,00
+  if (priceCents === 0 || priceCents >= 500) {
+    return { valid: true };
+  }
+
+  // Rejeita valores entre 0 e 5 reais
+  return {
+    valid: false,
+    error: 'O valor do pacote deve ser R$ 0,00 (grátis) ou no mínimo R$ 5,00. Esta é uma regra do Asaas para processamento de pagamentos.'
+  };
+}
+
 async function ensureStudentAccessToUnit(studentId: string, unitId: string): Promise<boolean> {
   const { data, error } = await supabase
     .from('student_units')
@@ -746,6 +764,12 @@ router.post(
   asyncErrorHandler(async (req, res) => {
     const payload = manageStudentPackageSchema.parse(req.body ?? {});
 
+    // Validar preço: deve ser 0 (grátis) ou >= R$ 5,00 (regra do Asaas)
+    const priceValidation = validatePackagePrice(payload.price_cents);
+    if (!priceValidation.valid) {
+      return res.status(400).json({ error: priceValidation.error });
+    }
+
     const franqueadoraId = await resolveFranqueadoraId({
       franqueadoraId: (req.body && req.body.franqueadora_id) || null,
       contextFranqueadoraId: getContextFranqueadoraId(req),
@@ -792,6 +816,12 @@ router.put(
   asyncErrorHandler(async (req, res) => {
     const { id } = req.params;
     const payload = manageStudentPackageSchema.parse(req.body ?? {});
+
+    // Validar preço: deve ser 0 (grátis) ou >= R$ 5,00 (regra do Asaas)
+    const priceValidation = validatePackagePrice(payload.price_cents);
+    if (!priceValidation.valid) {
+      return res.status(400).json({ error: priceValidation.error });
+    }
 
     // Verificar se o pacote existe e pertence à franqueadora
     const { data: existingPackage, error: fetchError } = await supabase
@@ -965,6 +995,12 @@ router.post(
   asyncErrorHandler(async (req, res) => {
     const payload = manageHourPackageSchema.parse(req.body ?? {});
 
+    // Validar preço: deve ser 0 (grátis) ou >= R$ 5,00 (regra do Asaas)
+    const priceValidation = validatePackagePrice(payload.price_cents);
+    if (!priceValidation.valid) {
+      return res.status(400).json({ error: priceValidation.error });
+    }
+
     const franqueadoraId = await resolveFranqueadoraId({
       franqueadoraId: (req.body && req.body.franqueadora_id) || null,
       contextFranqueadoraId: getContextFranqueadoraId(req),
@@ -1011,6 +1047,12 @@ router.put(
   asyncErrorHandler(async (req, res) => {
     const { id } = req.params;
     const payload = manageHourPackageSchema.parse(req.body ?? {});
+
+    // Validar preço: deve ser 0 (grátis) ou >= R$ 5,00 (regra do Asaas)
+    const priceValidation = validatePackagePrice(payload.price_cents);
+    if (!priceValidation.valid) {
+      return res.status(400).json({ error: priceValidation.error });
+    }
 
     // Verificar se o pacote existe e pertence à franqueadora
     const { data: existingPackage, error: fetchError } = await supabase

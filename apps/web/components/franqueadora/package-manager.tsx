@@ -153,6 +153,13 @@ export function FranqueadoraPackageManager({ variant = DEFAULT_VARIANT }: Franqu
       return
     }
 
+    // Validar: deve ser 0 (grátis) ou >= R$ 5,00 (regra do Asaas)
+    if (priceCents > 0 && priceCents < 500) {
+      const { toast } = await import('sonner')
+      toast.error('O valor do pacote deve ser R$ 0,00 (grátis) ou no mínimo R$ 5,00. Esta é uma regra do Asaas para processamento de pagamentos.')
+      return
+    }
+
     if (!qty || qty <= 0) {
       const { toast } = await import('sonner')
       toast.error('Informe a quantidade de treinos.')
@@ -186,6 +193,13 @@ export function FranqueadoraPackageManager({ variant = DEFAULT_VARIANT }: Franqu
     if (!priceCents && priceCents !== 0) {
       const { toast } = await import('sonner')
       toast.error('Informe um valor de pacote valido.')
+      return
+    }
+
+    // Validar: deve ser 0 (grátis) ou >= R$ 5,00 (regra do Asaas)
+    if (priceCents > 0 && priceCents < 500) {
+      const { toast } = await import('sonner')
+      toast.error('O valor do pacote deve ser R$ 0,00 (grátis) ou no mínimo R$ 5,00. Esta é uma regra do Asaas para processamento de pagamentos.')
       return
     }
 
@@ -247,6 +261,13 @@ export function FranqueadoraPackageManager({ variant = DEFAULT_VARIANT }: Franqu
       return
     }
 
+    // Validar: deve ser 0 (grátis) ou >= R$ 5,00 (regra do Asaas)
+    if (priceCents > 0 && priceCents < 500) {
+      const { toast } = await import('sonner')
+      toast.error('O valor do pacote deve ser R$ 0,00 (grátis) ou no mínimo R$ 5,00. Esta é uma regra do Asaas para processamento de pagamentos.')
+      return
+    }
+
     if (!qty || qty <= 0) {
       const { toast } = await import('sonner')
       toast.error('Informe a quantidade de treinos.')
@@ -282,6 +303,13 @@ export function FranqueadoraPackageManager({ variant = DEFAULT_VARIANT }: Franqu
     if (!priceCents && priceCents !== 0) {
       const { toast } = await import('sonner')
       toast.error('Informe um valor de pacote valido.')
+      return
+    }
+
+    // Validar: deve ser 0 (grátis) ou >= R$ 5,00 (regra do Asaas)
+    if (priceCents > 0 && priceCents < 500) {
+      const { toast } = await import('sonner')
+      toast.error('O valor do pacote deve ser R$ 0,00 (grátis) ou no mínimo R$ 5,00. Esta é uma regra do Asaas para processamento de pagamentos.')
       return
     }
 
@@ -662,11 +690,14 @@ export function FranqueadoraPackageManager({ variant = DEFAULT_VARIANT }: Franqu
                   <Input
                     id="student-price-modal"
                     inputMode="decimal"
-                    placeholder="Ex: 349,90"
+                    placeholder="Ex: 0,00 (grátis) ou 5,00"
                     value={studentForm.price}
                     onChange={(event) => setStudentForm((prev) => ({ ...prev, price: event.target.value }))}
                     required
                   />
+                  <p className="text-xs text-gray-500">
+                    O valor deve ser R$ 0,00 (grátis) ou no mínimo R$ 5,00. Esta é uma regra do Asaas para processamento de pagamentos.
+                  </p>
                 </div>
               </div>
               <div className="space-y-1.5">
@@ -731,11 +762,14 @@ export function FranqueadoraPackageManager({ variant = DEFAULT_VARIANT }: Franqu
                   <Input
                     id="hour-price-modal"
                     inputMode="decimal"
-                    placeholder="Ex: 325,00"
+                    placeholder="Ex: 0,00 (grátis) ou 5,00"
                     value={hourForm.price}
                     onChange={(event) => setHourForm((prev) => ({ ...prev, price: event.target.value }))}
                     required
                   />
+                  <p className="text-xs text-gray-500">
+                    O valor deve ser R$ 0,00 (grátis) ou no mínimo R$ 5,00. Esta é uma regra do Asaas para processamento de pagamentos.
+                  </p>
                 </div>
               </div>
               <div className="space-y-1.5">
