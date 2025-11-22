@@ -13,8 +13,12 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-COPY --from=deps /app/node_modules ./node_modules
 COPY package*.json ./
+COPY apps/api/package*.json ./apps/api/
+
+# Instalar dependências no stage builder também para garantir que TypeScript encontra os módulos
+RUN npm install --legacy-peer-deps
+
 COPY apps/api ./apps/api
 
 ENV NODE_ENV=production
