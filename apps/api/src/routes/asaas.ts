@@ -43,7 +43,54 @@ const createAccountSchema = z.object({
  */
 router.post('/accounts', requireAuth, async (req, res) => {
   try {
-    const data = createAccountSchema.parse(req.body)
+    const parsed = createAccountSchema.parse(req.body)
+    
+    // Type assertion: o Zod schema garante que os campos obrigatórios estão presentes
+    const data = {
+      name: parsed.name,
+      email: parsed.email,
+      cpfCnpj: parsed.cpfCnpj,
+      mobilePhone: parsed.mobilePhone,
+      incomeValue: parsed.incomeValue,
+      address: parsed.address,
+      addressNumber: parsed.addressNumber,
+      province: parsed.province,
+      postalCode: parsed.postalCode,
+      ...(parsed.loginEmail && { loginEmail: parsed.loginEmail }),
+      ...(parsed.birthDate && { birthDate: parsed.birthDate }),
+      ...(parsed.companyType && { companyType: parsed.companyType }),
+      ...(parsed.phone && { phone: parsed.phone }),
+      ...(parsed.site && { site: parsed.site }),
+      ...(parsed.complement && { complement: parsed.complement }),
+      ...(parsed.webhooks && { webhooks: parsed.webhooks })
+    } as {
+      name: string
+      email: string
+      cpfCnpj: string
+      mobilePhone: string
+      incomeValue: number
+      address: string
+      addressNumber: string
+      province: string
+      postalCode: string
+      loginEmail?: string
+      birthDate?: string
+      companyType?: string
+      phone?: string
+      site?: string
+      complement?: string
+      webhooks?: Array<{
+        name: string
+        url: string
+        email?: string
+        enabled?: boolean
+        interrupted?: boolean
+        apiVersion?: number
+        authToken?: string
+        sendType?: 'SEQUENTIALLY' | 'PARALLEL'
+        events?: string[]
+      }>
+    }
 
     const result = await asaasService.createAccount(data)
 
