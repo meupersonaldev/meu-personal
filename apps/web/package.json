@@ -4,8 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
+    "prebuild": "node scripts/copy-docs.js",
     "build": "next build",
-    "build:production": "next build",
+    "build:production": "node scripts/copy-docs.js && next build",
     "start": "next start",
     "start:production": "next start",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx"

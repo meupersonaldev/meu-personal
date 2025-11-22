@@ -1171,7 +1171,25 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             return false
           }
 
+          // Atualização otimista: remover o pacote da lista imediatamente
+          const currentPackages = get().studentPackages
+          const filteredPackages = currentPackages.filter((pkg) => pkg.id !== id)
+          set({ 
+            studentPackages: filteredPackages
+          })
+
+          // Recarregar para garantir sincronização com o backend (agora filtra apenas ativos)
           await get().fetchStudentPackages()
+          
+          // Verificar se o pacote foi realmente removido após o reload
+          const afterReload = get().studentPackages
+          if (afterReload.some(pkg => pkg.id === id)) {
+            // Se ainda está presente, pode ser que foi apenas inativado
+            // Forçar remoção da lista novamente
+            set({ 
+              studentPackages: afterReload.filter((pkg) => pkg.id !== id)
+            })
+          }
           try {
             const { toast } = await import('sonner')
             toast.success('Pacote de aluno excluído com sucesso.')
@@ -1272,6 +1290,13 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             return false
           }
 
+          // Atualização otimista: remover o pacote da lista imediatamente
+          const currentPackages = get().hourPackages
+          set({ 
+            hourPackages: currentPackages.filter((pkg) => pkg.id !== id)
+          })
+
+          // Recarregar para garantir sincronização com o backend
           await get().fetchHourPackages()
           try {
             const { toast } = await import('sonner')

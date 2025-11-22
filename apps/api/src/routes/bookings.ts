@@ -17,12 +17,15 @@ const createBookingSchema = z.object({
   source: z.enum(['ALUNO', 'PROFESSOR']),
   studentId: z.string().uuid().nullable().optional(),
   professorId: z.string().uuid(),
-  unitId: z.string().uuid(),
+  unitId: z.string().uuid().optional(),
+  academyId: z.string().uuid().optional(), // Aceitar academyId como alternativa
   startAt: z.string().datetime(),
   endAt: z.string().datetime(),
   status: z.enum(['AVAILABLE', 'RESERVED', 'PAID', 'DONE', 'CANCELED']).optional(),
   studentNotes: z.string().optional(),
   professorNotes: z.string().optional()
+}).refine(data => data.unitId || data.academyId, {
+  message: "unitId ou academyId é obrigatório"
 })
 
 // Schema de validação para atualização de status
@@ -565,11 +568,47 @@ router.post('/', requireAuth, requireRole(['STUDENT', 'ALUNO', 'TEACHER', 'PROFE
     return res.status(400).json({ error: 'Data de término deve ser após a data de início' })
   }
 
+  // Resolver unitId se academyId foi fornecido
+  let resolvedUnitId = bookingData.unitId
+  if (!resolvedUnitId && bookingData.academyId) {
+    // Buscar unit pelo academy_legacy_id
+    const { data: unit } = await supabase
+      .from('units')
+      .select('id')
+      .eq('academy_legacy_id', bookingData.academyId)
+      .eq('is_active', true)
+      .single()
+    
+    if (unit) {
+      resolvedUnitId = unit.id
+    } else {
+      // Fallback: verificar se academy.id é um unit.id válido
+      const { data: unitById } = await supabase
+        .from('units')
+        .select('id')
+        .eq('id', bookingData.academyId)
+        .eq('is_active', true)
+        .single()
+      
+      if (unitById) {
+        resolvedUnitId = unitById.id
+      } else {
+        return res.status(400).json({ 
+          error: `Unidade não encontrada para a academia ${bookingData.academyId}. Verifique se a unidade está configurada corretamente.` 
+        })
+      }
+    }
+  }
+  
+  if (!resolvedUnitId) {
+    return res.status(400).json({ error: 'unitId ou academyId válido é obrigatório' })
+  }
+
   const booking = await bookingCanonicalService.createBooking({
     source: bookingData.source,
     studentId: bookingData.studentId,
     professorId: bookingData.professorId,
-    unitId: bookingData.unitId,
+    unitId: resolvedUnitId,
     startAt: startAt,
     endAt: endAt,
     status: bookingData.status,

@@ -186,7 +186,7 @@ export default function ProfessorAgendaPage() {
   // Carrega bloqueios do dia
   useEffect(() => {
     fetchBlocks()
-  }, [user?.id, token, selectedFranchise, selectedDate])
+  }, [user?.id, token, selectedFranchise, selectedDate, teacherAcademies])
 
   const fetchData = async () => {
     if (!user?.id || !token) return
@@ -807,6 +807,8 @@ export default function ProfessorAgendaPage() {
                           try {
                             if (selectedFranchise === 'todas') {
                               let totalCreated = 0
+                              let errors = 0
+                              
                               for (const academy of teacherAcademies) {
                                 for (const hora of selectedHoursToAvailable) {
                                   const bookingDate = new Date(selectedDate + 'T' + hora + ':00')
@@ -817,16 +819,28 @@ export default function ProfessorAgendaPage() {
                                     body: JSON.stringify({
                                       source: 'PROFESSOR',
                                       professorId: user?.id,
-                                      unitId: academy.id,
+                                      academyId: academy.id, // Usar academyId - backend vai resolver unit_id
                                       startAt: bookingDate.toISOString(),
                                       endAt: endTime.toISOString(),
                                       professorNotes: 'Horário disponível'
                                     })
                                   })
-                                  if (res.ok) totalCreated++
+                                  if (res.ok) {
+                                    totalCreated++
+                                  } else {
+                                    const errorData = await res.json().catch(() => ({}))
+                                    console.error(`Erro ao criar booking para ${academy.name}:`, errorData)
+                                    errors++
+                                  }
                                 }
                               }
-                              toast.success(`${totalCreated} horário(s) disponibilizado(s)!`)
+                              
+                              if (totalCreated > 0) {
+                                toast.success(`${totalCreated} horário(s) disponibilizado(s)!`)
+                              }
+                              if (errors > 0) {
+                                toast.error(`${errors} erro(s) ao criar horários. Verifique se as unidades estão configuradas corretamente.`)
+                              }
                             } else {
                               let created = 0
                               for (const hora of selectedHoursToAvailable) {
@@ -850,6 +864,8 @@ export default function ProfessorAgendaPage() {
                             }
                             setSelectedHoursToAvailable([])
                             await fetchData()
+                            await fetchBlocks()
+                            await fetchSlots()
                           } catch {
                             toast.error('Erro ao disponibilizar horários')
                           }
@@ -1008,6 +1024,8 @@ export default function ProfessorAgendaPage() {
                           await fetchData()
                           await fetchBlocks()
                           await fetchSlots()
+                          // Forçar atualização da UI
+                          setCurrentDate(new Date(currentDate))
                         } else {
                           // Bloquear apenas na unidade selecionada
                           const res = await authFetch(`${API_URL}/api/teachers/${user?.id}/blocks/custom`, {

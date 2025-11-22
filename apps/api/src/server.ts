@@ -163,6 +163,7 @@ import academiesRoutes from './routes/academies'
 import studentUnitsRoutes from './routes/student-units'
 import studentsRoutes from './routes/students'
 import franchisorPoliciesRoutes from './routes/franchisor-policies'
+import invoicesRoutes from './routes/invoices'
 import { bookingScheduler } from './jobs/booking-scheduler'
 
 // SEGURANÇA CRÍTICA: Rate limit específico para auth (mais restritivo)
@@ -188,6 +189,7 @@ app.use('/api/webhooks', webhooksRoutes)
 app.use('/api/franqueadora', franqueadoraRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/franchisor/policies', franchisorPoliciesRoutes)
+app.use('/api/invoices', invoicesRoutes)
 
 // SEGURANÇA CRÍTICA: Middleware para rotas não encontradas (deve vir antes do errorHandler)
 app.use(notFoundHandler)

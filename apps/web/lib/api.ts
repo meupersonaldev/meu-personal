@@ -4,7 +4,7 @@ export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
 // Função helper genérica para chamadas à API
-async function apiRequest(endpoint: string, options: RequestInit = {}) {
+async function apiRequest (endpoint: string, options: RequestInit = {}) {
   const token = useAuthStore.getState().token
   const url = `${API_BASE_URL}${endpoint}`
 
@@ -14,13 +14,13 @@ async function apiRequest(endpoint: string, options: RequestInit = {}) {
   const headers: Record<string, string> = {
     ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
     ...(options.headers as Record<string, string> | undefined),
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {})
   }
 
   const config: RequestInit = {
     credentials: 'include',
     ...options,
-    headers,
+    headers
   }
 
   try {
@@ -34,11 +34,9 @@ async function apiRequest(endpoint: string, options: RequestInit = {}) {
         return new Promise<never>(() => {})
       }
 
-      const error = await response
-        .json()
-        .catch(() => ({
-          message: `Erro na requisição: ${response.status} ${response.statusText}`,
-        }))
+      const error = await response.json().catch(() => ({
+        message: `Erro na requisição: ${response.status} ${response.statusText}`
+      }))
 
       throw new Error(error.message || `Erro na requisição: ${response.status}`)
     }
@@ -47,7 +45,7 @@ async function apiRequest(endpoint: string, options: RequestInit = {}) {
   } catch (error) {
     if (error instanceof Error && error.message.includes('fetch')) {
       throw new Error(
-        'Não foi possível conectar ao servidor. Verifique se o backend está rodando.',
+        'Não foi possível conectar ao servidor. Verifique se o backend está rodando.'
       )
     }
     throw error
@@ -56,14 +54,14 @@ async function apiRequest(endpoint: string, options: RequestInit = {}) {
 
 // Auth API
 export const authAPI = {
-  async login(email: string, password: string) {
+  async login (email: string, password: string) {
     return apiRequest('/api/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password })
     })
   },
 
-  async register(userData: {
+  async register (userData: {
     name: string
     email: string
     password: string
@@ -74,29 +72,29 @@ export const authAPI = {
   }) {
     return apiRequest('/api/auth/register', {
       method: 'POST',
-      body: JSON.stringify(userData),
+      body: JSON.stringify(userData)
     })
   },
 
-  async me() {
+  async me () {
     return apiRequest('/api/auth/me')
   },
 
-  async logout() {
+  async logout () {
     return apiRequest('/api/auth/logout', { method: 'POST' })
   },
 
-  async resetPassword(token: string, password: string) {
+  async resetPassword (token: string, password: string) {
     return apiRequest('/api/auth/reset-password', {
       method: 'POST',
-      body: JSON.stringify({ token, password }),
+      body: JSON.stringify({ token, password })
     })
-  },
+  }
 }
 
 // Teachers API
 export const teachersAPI = {
-  async getAll(params?: { academy_id?: string }) {
+  async getAll (params?: { academy_id?: string }) {
     const query = new URLSearchParams()
     if (params?.academy_id) query.append('academy_id', params.academy_id)
     const path = `/api/teachers${
@@ -105,64 +103,58 @@ export const teachersAPI = {
     return apiRequest(path)
   },
 
-  async getById(id: string) {
+  async getById (id: string) {
     return apiRequest(`/api/teachers/${id}`)
   },
 
-  async getAcademies(id: string) {
+  async getAcademies (id: string) {
     return apiRequest(`/api/teachers/${id}/academies`)
   },
 
-  async update(id: string, data: any) {
+  async update (id: string, data: any) {
     return apiRequest(`/api/teachers/${id}`, {
       method: 'PUT',
-      body: JSON.stringify(data),
+      body: JSON.stringify(data)
     })
   },
 
-  async getPreferences(id: string) {
+  async getPreferences (id: string) {
     return apiRequest(`/api/teachers/${id}/preferences`)
   },
 
-  async updatePreferences(id: string, data: { academy_ids: string[] }) {
+  async updatePreferences (id: string, data: { academy_ids: string[] }) {
     return apiRequest(`/api/teachers/${id}/preferences`, {
       method: 'PUT',
-      body: JSON.stringify(data),
+      body: JSON.stringify(data)
     })
-  },
+  }
 }
 
 // Academies API
 export const academiesAPI = {
-  async getAll() {
+  async getAll () {
     return apiRequest('/api/academies')
   },
 
-  async getAvailableSlots(
-    academyId: string,
-    date: string,
-    teacherId?: string,
-  ) {
+  async getAvailableSlots (academyId: string, date: string, teacherId?: string) {
     const query = new URLSearchParams({ date })
     if (teacherId) query.append('teacher_id', teacherId)
     return apiRequest(
-      `/api/academies/${academyId}/available-slots?${query.toString()}`,
+      `/api/academies/${academyId}/available-slots?${query.toString()}`
     )
-  },
+  }
 }
 
 // Bookings API
 export const bookingsAPI = {
-  async getAll(params?: {
+  async getAll (params?: {
     student_id?: string
     teacher_id?: string
     status?: string
   }) {
     const queryParams = new URLSearchParams()
-    if (params?.student_id)
-      queryParams.append('student_id', params.student_id)
-    if (params?.teacher_id)
-      queryParams.append('teacher_id', params.teacher_id)
+    if (params?.student_id) queryParams.append('student_id', params.student_id)
+    if (params?.teacher_id) queryParams.append('teacher_id', params.teacher_id)
     if (params?.status) queryParams.append('status', params.status)
     const endpoint = `/api/bookings${
       queryParams.toString() ? '?' + queryParams.toString() : ''
@@ -170,11 +162,11 @@ export const bookingsAPI = {
     return apiRequest(endpoint)
   },
 
-  async getById(id: string) {
+  async getById (id: string) {
     return apiRequest(`/api/bookings/${id}`)
   },
 
-  async create(data: {
+  async create (data: {
     student_id: string
     teacher_id: string
     date: string
@@ -184,31 +176,31 @@ export const bookingsAPI = {
   }) {
     return apiRequest('/api/bookings', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify(data)
     })
   },
 
-  async update(
+  async update (
     id: string,
     data: {
       status?: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED'
       notes?: string
-    },
+    }
   ) {
     return apiRequest(`/api/bookings/${id}`, {
       method: 'PUT',
-      body: JSON.stringify(data),
+      body: JSON.stringify(data)
     })
   },
 
-  async cancel(id: string) {
+  async cancel (id: string) {
     return apiRequest(`/api/bookings/${id}`, {
-      method: 'DELETE',
+      method: 'DELETE'
     })
   },
 
   // Agendamento feito pelo aluno (confirma e debita créditos do aluno)
-  async createStudent(data: {
+  async createStudent (data: {
     student_id: string
     teacher_id: string
     franchise_id: string
@@ -218,96 +210,96 @@ export const bookingsAPI = {
   }) {
     return apiRequest('/api/bookings/student', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify(data)
     })
   },
 
   // Cancelamento com política (>= 4h reembolsa aluno se student_credits)
-  async cancelWithPolicy(id: string) {
+  async cancelWithPolicy (id: string) {
     return apiRequest(`/api/bookings/${id}/cancel`, {
-      method: 'POST',
+      method: 'POST'
     })
-  },
+  }
 }
 
 // Users API
 export const usersAPI = {
-  async update(id: string, data: any) {
+  async update (id: string, data: any) {
     return apiRequest(`/api/users/${id}`, {
       method: 'PUT',
-      body: JSON.stringify(data),
+      body: JSON.stringify(data)
     })
   },
 
-  async updatePassword(id: string, data: any) {
+  async updatePassword (id: string, data: any) {
     return apiRequest(`/api/users/${id}/password`, {
       method: 'PUT',
-      body: JSON.stringify(data),
+      body: JSON.stringify(data)
     })
   },
 
-  async uploadAvatar(id: string, formData: FormData) {
+  async uploadAvatar (id: string, formData: FormData) {
     return apiRequest(`/api/users/${id}/avatar`, {
       method: 'POST',
-      body: formData,
+      body: formData
     })
-  },
+  }
 }
 
 // Packages API
 export const packagesAPI = {
-  async getStudentBalance() {
+  async getStudentBalance () {
     return apiRequest('/api/packages/student/balance')
-  },
+  }
 }
 
 // Notifications API
 export const notificationsAPI = {
-  async getAll(params: { user_id: string; unread?: boolean }) {
+  async getAll (params: { user_id: string; unread?: boolean }) {
     const query = new URLSearchParams()
     query.append('user_id', params.user_id)
     if (params.unread) query.append('unread', 'true')
     return apiRequest(`/api/notifications?${query.toString()}`)
   },
 
-  async markAsRead(notificationId: string) {
+  async markAsRead (notificationId: string) {
     return apiRequest(`/api/notifications/${notificationId}/read`, {
-      method: 'PUT',
+      method: 'PUT'
     })
-  },
+  }
 }
 
 // Student Units API
 export const studentUnitsAPI = {
-  async getUnits() {
+  async getUnits () {
     return apiRequest(`/api/student-units?_ts=${Date.now()}`)
   },
 
-  async getAvailableUnits() {
+  async getAvailableUnits () {
     return apiRequest(`/api/student-units/available?_ts=${Date.now()}`)
   },
 
-  async getActiveUnit() {
+  async getActiveUnit () {
     return apiRequest(`/api/student-units/active?_ts=${Date.now()}`)
   },
 
-  async activateUnit(unitId: string) {
+  async activateUnit (unitId: string) {
     return apiRequest(`/api/student-units/${unitId}/activate`, {
-      method: 'POST',
+      method: 'POST'
     })
   },
 
-  async joinUnit(unitId: string) {
+  async joinUnit (unitId: string) {
     return apiRequest('/api/student-units/join', {
       method: 'POST',
-      body: JSON.stringify({ unitId }),
+      body: JSON.stringify({ unitId })
     })
-  },
+  }
 }
 
 // Check-ins API
 export const checkinsAPI = {
-  async getAll(params?: { teacher_id?: string; student_id?: string }) {
+  async getAll (params?: { teacher_id?: string; student_id?: string }) {
     const query = new URLSearchParams()
     if (params?.teacher_id) query.append('teacher_id', params.teacher_id)
     if (params?.student_id) query.append('student_id', params.student_id)
@@ -315,7 +307,86 @@ export const checkinsAPI = {
       query.toString() ? `?${query.toString()}` : ''
     }`
     return apiRequest(path)
+  }
+}
+
+// Invoices API
+export const invoicesAPI = {
+  async getSalesWithoutInvoice (params?: {
+    franqueadora_id?: string
+    unit_id?: string
+    start_date?: string
+    end_date?: string
+    limit?: number
+    offset?: number
+  }) {
+    const query = new URLSearchParams()
+    if (params?.franqueadora_id)
+      query.append('franqueadora_id', params.franqueadora_id)
+    if (params?.unit_id) query.append('unit_id', params.unit_id)
+    if (params?.start_date) query.append('start_date', params.start_date)
+    if (params?.end_date) query.append('end_date', params.end_date)
+    if (params?.limit) query.append('limit', params.limit.toString())
+    if (params?.offset) query.append('offset', params.offset.toString())
+    return apiRequest(`/api/invoices/sales-without-invoice?${query.toString()}`)
   },
+
+  async getInvoices (params?: {
+    payment_intent_id?: string
+    status?: string
+    start_date?: string
+    end_date?: string
+    limit?: number
+    offset?: number
+  }) {
+    const query = new URLSearchParams()
+    if (params?.payment_intent_id)
+      query.append('payment_intent_id', params.payment_intent_id)
+    if (params?.status) query.append('status', params.status)
+    if (params?.start_date) query.append('start_date', params.start_date)
+    if (params?.end_date) query.append('end_date', params.end_date)
+    if (params?.limit) query.append('limit', params.limit.toString())
+    if (params?.offset) query.append('offset', params.offset.toString())
+    return apiRequest(`/api/invoices?${query.toString()}`)
+  },
+
+  async getInvoice (id: string) {
+    return apiRequest(`/api/invoices/${id}`)
+  },
+
+  async createInvoice (data: {
+    payment_intent_id: string
+    type?: 'NFE' | 'NFC_E'
+    service_code?: string
+  }) {
+    return apiRequest('/api/invoices', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    })
+  },
+
+  async issueInvoice (id: string) {
+    return apiRequest(`/api/invoices/${id}/issue`, {
+      method: 'POST'
+    })
+  },
+
+  async cancelInvoice (id: string) {
+    return apiRequest(`/api/invoices/${id}/cancel`, {
+      method: 'POST'
+    })
+  },
+
+  async batchIssue (data: {
+    payment_intent_ids: string[]
+    type?: 'NFE' | 'NFC_E'
+    service_code?: string
+  }) {
+    return apiRequest('/api/invoices/batch-issue', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    })
+  }
 }
 
 const api = {
@@ -328,7 +399,7 @@ const api = {
   packages: packagesAPI,
   notifications: notificationsAPI,
   studentUnits: studentUnitsAPI,
+  invoices: invoicesAPI
 }
 
 export default api
-

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useFranqueadoraStore, CreateStudentPackageInput, CreateHourPackageInput } from '@/lib/stores/franqueadora-store'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -135,10 +135,9 @@ export function FranqueadoraPackageManager({ variant = DEFAULT_VARIANT }: Franqu
     }
   }, [showStudent, showHour, fetchStudentPackages, fetchHourPackages])
 
-  const displayedStudentPackages = useMemo(() => studentPackages, [studentPackages])
-  const displayedHourPackages = useMemo(() => hourPackages, [hourPackages])
-  const hasStudentPackages = displayedStudentPackages.length > 0
-  const hasHourPackages = displayedHourPackages.length > 0
+  // Remover useMemo desnecessário - usar diretamente do store para garantir reatividade
+  const hasStudentPackages = studentPackages.length > 0
+  const hasHourPackages = hourPackages.length > 0
 
   const handleCreateStudentPackage = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -247,6 +246,14 @@ export function FranqueadoraPackageManager({ variant = DEFAULT_VARIANT }: Franqu
       return
     }
 
+    // Validação: valor mínimo de R$ 5,00 (regra do Asaas)
+    const MIN_PRICE_CENTS = 500 // R$ 5,00
+    if (priceCents < MIN_PRICE_CENTS) {
+      const { toast } = await import('sonner')
+      toast.error(`O valor mínimo do pacote é R$ 5,00 (regra do Asaas).`)
+      return
+    }
+
     if (!qty || qty <= 0) {
       const { toast } = await import('sonner')
       toast.error('Informe a quantidade de treinos.')
@@ -285,6 +292,14 @@ export function FranqueadoraPackageManager({ variant = DEFAULT_VARIANT }: Franqu
       return
     }
 
+    // Validação: valor mínimo de R$ 5,00 (regra do Asaas)
+    const MIN_PRICE_CENTS = 500 // R$ 5,00
+    if (priceCents < MIN_PRICE_CENTS) {
+      const { toast } = await import('sonner')
+      toast.error(`O valor mínimo do pacote é R$ 5,00 (regra do Asaas).`)
+      return
+    }
+
     if (!qty || qty <= 0) {
       const { toast } = await import('sonner')
       toast.error('Informe a quantidade de horas.')
@@ -313,12 +328,27 @@ export function FranqueadoraPackageManager({ variant = DEFAULT_VARIANT }: Franqu
   const handleDeleteStudentPackage = async () => {
     if (!deletingStudentPackage || isDeletingStudent) return
 
+    const packageId = deletingStudentPackage.id
     setIsDeletingStudent(true)
-    const deleted = await deleteStudentPackage(deletingStudentPackage.id)
-    setIsDeletingStudent(false)
-
-    if (deleted) {
-      setDeletingStudentPackage(null)
+    
+    try {
+      const deleted = await deleteStudentPackage(packageId)
+      
+      if (deleted) {
+        setDeletingStudentPackage(null)
+        // Forçar recarregamento dos pacotes para garantir que a UI seja atualizada
+        await fetchStudentPackages()
+        
+        // Verificar se o pacote foi realmente removido
+        const currentPackages = useFranqueadoraStore.getState().studentPackages
+        if (currentPackages.some(pkg => pkg.id === packageId)) {
+          console.warn('Pacote ainda presente após exclusão, forçando atualização...')
+          // Forçar nova atualização
+          await fetchStudentPackages()
+        }
+      }
+    } finally {
+      setIsDeletingStudent(false)
     }
   }
 
@@ -331,6 +361,8 @@ export function FranqueadoraPackageManager({ variant = DEFAULT_VARIANT }: Franqu
 
     if (deleted) {
       setDeletingHourPackage(null)
+      // Forçar recarregamento dos pacotes para garantir que a UI seja atualizada
+      await fetchHourPackages()
     }
   }
 
@@ -433,7 +465,7 @@ export function FranqueadoraPackageManager({ variant = DEFAULT_VARIANT }: Franqu
               <p className="text-sm text-gray-500">Nenhum pacote cadastrado.</p>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {displayedStudentPackages.map((pkg) => (
+                {studentPackages.map((pkg) => (
                   <Card key={pkg.id} className="p-4">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
@@ -576,7 +608,7 @@ export function FranqueadoraPackageManager({ variant = DEFAULT_VARIANT }: Franqu
               <p className="text-sm text-gray-500">Nenhum pacote cadastrado.</p>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {displayedHourPackages.map((pkg) => (
+                {hourPackages.map((pkg) => (
                   <Card key={pkg.id} className="p-4">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
@@ -663,10 +695,13 @@ export function FranqueadoraPackageManager({ variant = DEFAULT_VARIANT }: Franqu
                     id="student-price-modal"
                     inputMode="decimal"
                     placeholder="Ex: 349,90"
+                    min="5.00"
+                    step="0.01"
                     value={studentForm.price}
                     onChange={(event) => setStudentForm((prev) => ({ ...prev, price: event.target.value }))}
                     required
                   />
+                  <p className="text-xs text-gray-500">Valor mínimo: R$ 5,00 (regra do Asaas)</p>
                 </div>
               </div>
               <div className="space-y-1.5">
@@ -732,10 +767,13 @@ export function FranqueadoraPackageManager({ variant = DEFAULT_VARIANT }: Franqu
                     id="hour-price-modal"
                     inputMode="decimal"
                     placeholder="Ex: 325,00"
+                    min="5.00"
+                    step="0.01"
                     value={hourForm.price}
                     onChange={(event) => setHourForm((prev) => ({ ...prev, price: event.target.value }))}
                     required
                   />
+                  <p className="text-xs text-gray-500">Valor mínimo: R$ 5,00 (regra do Asaas)</p>
                 </div>
               </div>
               <div className="space-y-1.5">

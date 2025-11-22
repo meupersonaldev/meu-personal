@@ -16,7 +16,34 @@ interface DocPageProps {
 }
 
 async function getDocContent(slug: string) {
-    const docsDir = path.join(process.cwd(), '../../docs/cliente')
+    // Tentar diferentes caminhos possíveis
+    const cwd = process.cwd()
+    const possiblePaths = [
+        // Produção: arquivos copiados para public/docs
+        path.join(cwd, 'public/docs'),
+        // Desenvolvimento local (monorepo)
+        path.join(cwd, '../../docs/cliente'),
+        // Produção (se docs estiver na raiz)
+        path.join(cwd, 'docs/cliente'),
+        // Alternativa (se estiver em outro lugar)
+        path.join(cwd, '../docs/cliente'),
+        // Caminho absoluto a partir da raiz do projeto
+        path.resolve(process.cwd(), 'docs/cliente'),
+    ]
+
+    let docsDir: string | null = null
+    for (const possiblePath of possiblePaths) {
+        if (fs.existsSync(possiblePath)) {
+            docsDir = possiblePath
+            break
+        }
+    }
+
+    if (!docsDir) {
+        console.error('Diretório de documentação não encontrado. Tentou:', possiblePaths)
+        return null
+    }
+
     const filePath = path.join(docsDir, `${slug}.md`)
 
     try {

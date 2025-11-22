@@ -529,6 +529,7 @@ router.get(
       .from('student_packages')
       .select('*')
       .eq('franqueadora_id', franqueadoraId)
+      .eq('status', 'active')
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -554,6 +555,14 @@ router.post(
 
     if (!franqueadoraId) {
       return res.status(400).json({ error: 'franqueadora_id eh obrigatorio' });
+    }
+
+    // Validação: valor mínimo de R$ 5,00 (regra do Asaas)
+    const MIN_PRICE_CENTS = 500; // R$ 5,00
+    if (payload.price_cents < MIN_PRICE_CENTS) {
+      return res.status(400).json({ 
+        error: `O valor mínimo do pacote é R$ 5,00 (regra do Asaas). Valor informado: R$ ${(payload.price_cents / 100).toFixed(2)}` 
+      });
     }
 
     const metadataJson = {
@@ -612,6 +621,14 @@ router.put(
 
     if (!franqueadoraId || existingPackage.franqueadora_id !== franqueadoraId) {
       return res.status(403).json({ error: 'Acesso não autorizado a este pacote' });
+    }
+
+    // Validação: valor mínimo de R$ 5,00 (regra do Asaas)
+    const MIN_PRICE_CENTS = 500; // R$ 5,00
+    if (payload.price_cents < MIN_PRICE_CENTS) {
+      return res.status(400).json({ 
+        error: `O valor mínimo do pacote é R$ 5,00 (regra do Asaas). Valor informado: R$ ${(payload.price_cents / 100).toFixed(2)}` 
+      });
     }
 
     const metadataJson = {
@@ -774,6 +791,14 @@ router.post(
       return res.status(400).json({ error: 'franqueadora_id eh obrigatorio' });
     }
 
+    // Validação: valor mínimo de R$ 5,00 (regra do Asaas)
+    const MIN_PRICE_CENTS = 500; // R$ 5,00
+    if (payload.price_cents < MIN_PRICE_CENTS) {
+      return res.status(400).json({ 
+        error: `O valor mínimo do pacote é R$ 5,00 (regra do Asaas). Valor informado: R$ ${(payload.price_cents / 100).toFixed(2)}` 
+      });
+    }
+
     const metadataJson = {
       ...(payload.metadata || {}),
       ...(payload.description ? { description: payload.description } : {})
@@ -830,6 +855,14 @@ router.put(
 
     if (!franqueadoraId || existingPackage.franqueadora_id !== franqueadoraId) {
       return res.status(403).json({ error: 'Acesso não autorizado a este pacote' });
+    }
+
+    // Validação: valor mínimo de R$ 5,00 (regra do Asaas)
+    const MIN_PRICE_CENTS = 500; // R$ 5,00
+    if (payload.price_cents < MIN_PRICE_CENTS) {
+      return res.status(400).json({ 
+        error: `O valor mínimo do pacote é R$ 5,00 (regra do Asaas). Valor informado: R$ ${(payload.price_cents / 100).toFixed(2)}` 
+      });
     }
 
     const metadataJson = {

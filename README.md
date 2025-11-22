@@ -61,6 +61,13 @@ DEFAULT_CREDITS_PER_CLASS=1
 # Pagamentos (opcional para MVP)
 # ASAAS_BASE_URL=https://sandbox.asaas.com/api/v3
 # ASAAS_API_KEY=
+
+# Notas Fiscais
+# Recomendado: Use ASAAS (já configurado para pagamentos)
+INVOICE_PROVIDER=ASAAS
+# Ou use NFe.io como alternativa:
+# INVOICE_PROVIDER=NFE_IO
+# NFE_IO_API_KEY=sua_api_key_aqui
 ```
 
 ## 🎯 Como Executar
