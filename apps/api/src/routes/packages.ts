@@ -230,6 +230,106 @@ router.post('/student/checkout', requireAuth, requireRole(['STUDENT', 'ALUNO']),
     return res.status(409).json({ error: 'Pacote sem franqueadora associada' });
   }
 
+  // Verificar se é pacote grátis (price_cents <= 1)
+  const isFreePackage = packageData.price_cents <= 1;
+
+  if (isFreePackage) {
+    // Pacote grátis - creditar diretamente sem passar pelo Asaas
+    console.log('🎁 Processando pacote grátis (aluno):', {
+      packageId: package_id,
+      userId: user.userId,
+      classesQty: packageData.classes_qty,
+      priceCents: packageData.price_cents
+    });
+
+    try {
+      // 1. Creditar aulas diretamente
+      const balanceResult = await balanceService.purchaseStudentClasses(
+        user.userId,
+        franqueadoraId,
+        packageData.classes_qty,
+        {
+          unitId: unit_id || null,
+          source: 'ALUNO',
+          metaJson: {
+            package_id: packageData.id,
+            package_title: packageData.title,
+            is_free: true,
+            free_reason: 'Aula inaugural grátis'
+          }
+        }
+      );
+
+      // 2. Criar payment_intent com status PAID para histórico
+      const { data: freeIntent, error: intentError } = await supabase
+        .from('payment_intents')
+        .insert({
+          type: 'STUDENT_PACKAGE',
+          provider: 'FREE',
+          provider_id: `free_${Date.now()}_${user.userId}`,
+          amount_cents: packageData.price_cents,
+          status: 'PAID', // Já pago (grátis)
+          checkout_url: null,
+          payload_json: {
+            package_id: packageData.id,
+            package_title: packageData.title,
+            classes_qty: packageData.classes_qty,
+            payment_method: 'FREE',
+            is_free: true,
+            free_reason: 'Aula inaugural grátis'
+          },
+          actor_user_id: user.userId,
+          franqueadora_id: franqueadoraId,
+          unit_id: unit_id || null
+        })
+        .select()
+        .single();
+
+      if (intentError) {
+        console.error('⚠️ Erro ao criar payment intent grátis (crédito já foi feito):', intentError);
+        // Não falhar - o crédito já foi feito
+      }
+
+      console.log('✅ Pacote grátis creditado (aluno):', {
+        userId: user.userId,
+        classesQty: packageData.classes_qty,
+        balance: balanceResult.balance,
+        transactionId: balanceResult.transaction.id,
+        intentId: freeIntent?.id
+      });
+
+      return res.status(201).json({
+        message: 'Aula grátis creditada com sucesso!',
+        payment_intent: freeIntent ? {
+          id: freeIntent.id,
+          type: freeIntent.type,
+          status: freeIntent.status,
+          checkout_url: null,
+          created_at: freeIntent.created_at
+        } : null,
+        package: {
+          title: packageData.title,
+          classes_qty: packageData.classes_qty,
+          price_cents: packageData.price_cents,
+          franqueadora_id: franqueadoraId
+        },
+        balance: {
+          total_purchased: balanceResult.balance.total_purchased,
+          total_consumed: balanceResult.balance.total_consumed,
+          locked_qty: balanceResult.balance.locked_qty,
+          available: balanceResult.balance.total_purchased - balanceResult.balance.total_consumed - balanceResult.balance.locked_qty
+        }
+      });
+    } catch (error: any) {
+      console.error('❌ Erro ao processar pacote grátis:', error);
+      return res.status(500).json({ 
+        error: 'Erro ao processar aula grátis',
+        details: error.message 
+      });
+    }
+  }
+
+  // Fluxo normal para pacotes pagos
   const paymentIntent = await paymentIntentService.createPaymentIntent({
     type: 'STUDENT_PACKAGE',
     actorUserId: user.userId,
@@ -308,6 +408,105 @@ router.post('/professor/checkout', requireAuth, requireRole(['TEACHER', 'PROFESS
     return res.status(409).json({ error: 'Pacote sem franqueadora associada' });
   }
 
+  // Verificar se é pacote grátis (price_cents <= 1)
+  const isFreePackage = packageData.price_cents <= 1;
+
+  if (isFreePackage) {
+    // Pacote grátis - creditar diretamente sem passar pelo Asaas
+    console.log('🎁 Processando pacote grátis (professor):', {
+      packageId: package_id,
+      userId: user.userId,
+      hoursQty: packageData.hours_qty,
+      priceCents: packageData.price_cents
+    });
+
+    try {
+      // 1. Creditar horas diretamente
+      const balanceResult = await balanceService.purchaseProfessorHours(
+        user.userId,
+        franqueadoraId,
+        packageData.hours_qty,
+        {
+          unitId: unit_id || null,
+          source: 'PROFESSOR',
+          metaJson: {
+            package_id: packageData.id,
+            package_title: packageData.title,
+            is_free: true,
+            free_reason: 'Horas grátis promocionais'
+          }
+        }
+      );
+
+      // 2. Criar payment_intent com status PAID para histórico
+      const { data: freeIntent, error: intentError } = await supabase
+        .from('payment_intents')
+        .insert({
+          type: 'PROF_HOURS',
+          provider: 'FREE',
+          provider_id: `free_${Date.now()}_${user.userId}`,
+          amount_cents: packageData.price_cents,
+          status: 'PAID', // Já pago (grátis)
+          checkout_url: null,
+          payload_json: {
+            package_id: packageData.id,
+            package_title: packageData.title,
+            hours_qty: packageData.hours_qty,
+            payment_method: 'FREE',
+            is_free: true,
+            free_reason: 'Horas grátis promocionais'
+          },
+          actor_user_id: user.userId,
+          franqueadora_id: franqueadoraId,
+          unit_id: unit_id || null
+        })
+        .select()
+        .single();
+
+      if (intentError) {
+        console.error('⚠️ Erro ao criar payment intent grátis (crédito já foi feito):', intentError);
+        // Não falhar - o crédito já foi feito
+      }
+
+      console.log('✅ Pacote grátis creditado (professor):', {
+        userId: user.userId,
+        hoursQty: packageData.hours_qty,
+        balance: balanceResult.balance,
+        transactionId: balanceResult.transaction.id,
+        intentId: freeIntent?.id
+      });
+
+      return res.status(201).json({
+        message: 'Horas grátis creditadas com sucesso!',
+        payment_intent: freeIntent ? {
+          id: freeIntent.id,
+          type: freeIntent.type,
+          status: freeIntent.status,
+          checkout_url: null,
+          created_at: freeIntent.created_at
+        } : null,
+        package: {
+          title: packageData.title,
+          hours_qty: packageData.hours_qty,
+          price_cents: packageData.price_cents,
+          franqueadora_id: franqueadoraId
+        },
+        balance: {
+          available_hours: balanceResult.balance.available_hours,
+          locked_hours: balanceResult.balance.locked_hours,
+          total_available: balanceResult.balance.available_hours - balanceResult.balance.locked_hours
+        }
+      });
+    } catch (error: any) {
+      console.error('❌ Erro ao processar pacote grátis:', error);
+      return res.status(500).json({ 
+        error: 'Erro ao processar horas grátis',
+        details: error.message 
+      });
+    }
+  }
+
+  // Fluxo normal para pacotes pagos
   const paymentIntent = await paymentIntentService.createPaymentIntent({
     type: 'PROF_HOURS',
     actorUserId: user.userId,
@@ -529,6 +728,7 @@ router.get(
       .from('student_packages')
       .select('*')
       .eq('franqueadora_id', franqueadoraId)
+      .eq('status', 'active') // Filtrar apenas pacotes ativos
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -747,6 +947,7 @@ router.get(
       .from('hour_packages')
       .select('*')
       .eq('franqueadora_id', franqueadoraId)
+      .eq('status', 'active') // Filtrar apenas pacotes ativos
       .order('created_at', { ascending: false });
 
     if (error) {

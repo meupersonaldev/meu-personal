@@ -1187,6 +1187,12 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             return false
           }
 
+          // Atualização otimista: remover o pacote da lista imediatamente
+          set((state) => ({
+            studentPackages: state.studentPackages.filter((pkg) => pkg.id !== id)
+          }))
+
+          // Recarregar para garantir sincronização com o backend
           await get().fetchStudentPackages()
           try {
             const { toast } = await import('sonner')
@@ -1288,6 +1294,12 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             return false
           }
 
+          // Atualização otimista: remover o pacote da lista imediatamente
+          set((state) => ({
+            hourPackages: state.hourPackages.filter((pkg) => pkg.id !== id)
+          }))
+
+          // Recarregar para garantir sincronização com o backend
           await get().fetchHourPackages()
           try {
             const { toast } = await import('sonner')
