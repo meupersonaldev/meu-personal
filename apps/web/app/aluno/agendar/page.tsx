@@ -33,6 +33,8 @@ export default function AgendarPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [errorCode, setErrorCode] = useState<string | null>(null)
+  const [isBooking, setIsBooking] = useState<boolean>(false)
+  const [bookingSlot, setBookingSlot] = useState<string | null>(null)
 
   useEffect(() => {
     const load = async () => {
@@ -103,6 +105,9 @@ export default function AgendarPage() {
   }, [teacherId, date, token])
 
   async function handleBook(slot: string) {
+    // Prevenir múltiplos cliques
+    if (isBooking) return
+
     try {
       if (!isAuthenticated || !token) {
         setError('Você precisa estar autenticado para agendar.')
@@ -112,6 +117,12 @@ export default function AgendarPage() {
         setError('Parâmetros inválidos para agendamento.')
         return
       }
+
+      // Bloquear todos os botões e marcar o slot sendo processado
+      setIsBooking(true)
+      setBookingSlot(slot)
+      setError(null)
+      setSuccess(null)
 
       // Montar datas ISO em UTC (duração padrão 60 min)
       // O horário do slot já está no formato HH:MM (horário de Brasília)
@@ -154,6 +165,11 @@ export default function AgendarPage() {
       setSuccess('Agendamento criado com sucesso!')
       // Pequeno delay para feedback antes de redirecionar
       setTimeout(() => router.push('/aluno/inicio'), 900)
+      // Liberar os botões após um tempo maior, caso o redirecionamento não aconteça
+      setTimeout(() => {
+        setIsBooking(false)
+        setBookingSlot(null)
+      }, 2000)
     } catch (e: any) {
       const msg: string = e?.message || 'Erro ao criar agendamento'
       setErrorCode(/saldo insuficiente/i.test(msg) ? 'INSUFFICIENT_CREDITS' : null)
@@ -161,6 +177,9 @@ export default function AgendarPage() {
         ? 'Você não possui créditos suficientes para agendar esta aula.'
         : msg
       )
+      // Liberar os botões em caso de erro
+      setIsBooking(false)
+      setBookingSlot(null)
     }
   }
 
@@ -229,18 +248,28 @@ export default function AgendarPage() {
             <p className="text-gray-600">Nenhum horário disponível para esta data.</p>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {slots.map((s, i) => (
-              <Button
-                key={`${s.time}-${i}`}
-                variant={s.is_free ? 'outline' : 'secondary'}
-                disabled={!s.is_free || s.remaining <= 0}
-                onClick={() => handleBook(s.time)}
-                className="justify-center"
-                title={s.is_free ? `${s.remaining}/${s.max_capacity} vagas` : 'Indisponível'}
-              >
-                {s.time}
-              </Button>
-            ))}
+              {slots.map((s, i) => {
+                const isCurrentSlotBooking = bookingSlot === s.time && isBooking
+                return (
+                  <Button
+                    key={`${s.time}-${i}`}
+                    variant={s.is_free ? 'outline' : 'secondary'}
+                    disabled={!s.is_free || s.remaining <= 0 || isBooking}
+                    onClick={() => handleBook(s.time)}
+                    className="justify-center"
+                    title={s.is_free ? `${s.remaining}/${s.max_capacity} vagas` : 'Indisponível'}
+                  >
+                    {isCurrentSlotBooking ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        {s.time}
+                      </>
+                    ) : (
+                      s.time
+                    )}
+                  </Button>
+                )
+              })}
             </div>
           )}
         </CardContent>
