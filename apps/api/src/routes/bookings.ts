@@ -17,17 +17,10 @@ const router = express.Router()
 // Schema de validação para criação de booking canônico
 const createBookingSchema = z.object({
   source: z.enum(['ALUNO', 'PROFESSOR']),
+  bookingId: z.string().uuid(), // ID do booking existente para atualizar (obrigatório)
   studentId: z.string().uuid().nullable().optional(),
-  professorId: z.string().uuid(),
-  academyId: z.string().uuid().optional(), // Aceitar academyId ou unitId
-  unitId: z.string().uuid().optional(), // Aceitar unitId para compatibilidade (será convertido para academyId)
-  startAt: z.string().datetime(),
-  endAt: z.string().datetime(),
-  status: z.enum(['AVAILABLE', 'RESERVED', 'PAID', 'DONE', 'CANCELED']).optional(),
   studentNotes: z.string().optional(),
   professorNotes: z.string().optional()
-}).refine(data => data.academyId || data.unitId, {
-  message: "academyId ou unitId é obrigatório"
 })
 
 // Schema de validação para atualização de status
@@ -38,23 +31,23 @@ const updateBookingSchema = z.object({
 
 // GET /api/bookings - Listar agendamentos (endpoint canônico)
 router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
-  const { unit_id, status, from, to, teacher_id, student_id } = req.query
+  const { franchise_id, academy_id, status, from, to, teacher_id, student_id } = req.query
   const user = req.user
 
-  const unitId = Array.isArray(unit_id) ? unit_id[0] : unit_id
+  // franchise_id e academy_id são o mesmo campo, aceitar ambos
+  const franchiseId = Array.isArray(franchise_id) ? franchise_id[0] : franchise_id
+  const academyId = Array.isArray(academy_id) ? academy_id[0] : academy_id
+  const finalFranchiseId = franchiseId || academyId
   const teacherId = Array.isArray(teacher_id) ? teacher_id[0] : teacher_id
   const studentId = Array.isArray(student_id) ? student_id[0] : student_id
 
   const formatBooking = (booking: any) => {
-    const unit = booking.unit || {}
     const academy = booking.academy || {}
     const student = booking.student || {}
     const teacher = booking.teacher || {}
 
-    const franchiseName = unit.name || academy.name || null
-    const franchiseAddressParts = unit.id
-      ? [unit.address, unit.city, unit.state]
-      : [academy.city, academy.state]
+    const franchiseName = academy.name || null
+    const franchiseAddressParts = [academy.address, academy.city, academy.state].filter(Boolean)
 
     // Determinar limite de cancelamento (fallback: 4h antes de date)
     const startIso = booking.start_at || booking.date
@@ -70,22 +63,25 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
       franchiseName,
       franchiseAddress: franchiseAddressParts.filter(Boolean).join(', ') || undefined,
       date: booking.date,
+      startAt: booking.start_at || undefined,
+      endAt: booking.end_at || undefined,
       duration: booking.duration ?? 60,
       status: normalizeBookingStatus(booking.status, booking.status_canonical),
       notes: booking.notes || undefined,
       creditsCost: booking.credits_cost ?? 0,
       source: booking.source || undefined,
       hourlyRate: booking.hourly_rate || undefined,
-      cancellableUntil: booking.cancellable_until || fallbackCutoff
+      cancellableUntil: booking.cancellable_until || fallbackCutoff,
+      updatedAt: booking.updated_at || undefined
     }
   }
 
-  if (!unitId && !teacherId && !studentId) {
-    return res.status(400).json({ error: 'unit_id é obrigatório' })
+  if (!finalFranchiseId && !teacherId && !studentId) {
+    return res.status(400).json({ error: 'franchise_id ou academy_id é obrigatório (ou teacher_id/student_id)' })
   }
 
   // Compatibilidade: permitir consultas apenas por student_id (legado)
-  if (!unitId && !teacherId && studentId) {
+  if (!finalFranchiseId && !teacherId && studentId) {
     if ((user.role === 'STUDENT' || user.role === 'ALUNO') && user.userId !== studentId) {
       return res.status(403).json({ error: 'Acesso não autorizado a este aluno' })
     }
@@ -103,7 +99,7 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
       .from('bookings')
       .select('*')
       .eq('student_id', studentId)
-      .in('status_canonical', ['PAID', 'RESERVED']) // Apenas bookings confirmados
+      .in('status_canonical', ['PAID', 'RESERVED', 'CANCELED']) // Incluir cancelados também
       .order('start_at', { ascending: true, nullsFirst: false })
       .order('date', { ascending: true })
 
@@ -207,7 +203,8 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
         status: normalizeBookingStatus(booking.status, booking.status_canonical),
         notes: booking.notes || undefined,
         creditsCost: booking.credits_cost ?? 0,
-        cancellableUntil: booking.cancellable_until || fallbackCutoff
+        cancellableUntil: booking.cancellable_until || fallbackCutoff,
+        updatedAt: booking.updated_at || undefined
       }
 
       console.log('Mapped booking:', mapped)
@@ -219,7 +216,7 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
   }
 
   // Compatibilidade: permitir consultas apenas por teacher_id (legado)
-  if (!unitId && teacherId) {
+  if (!finalFranchiseId && teacherId) {
     if ((user.role === 'TEACHER' || user.role === 'PROFESSOR') && user.userId !== teacherId) {
       return res.status(403).json({ error: 'Acesso não autorizado a este professor' })
     }
@@ -230,9 +227,10 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
         id,
         student_id,
         teacher_id,
-        unit_id,
         franchise_id,
         date,
+        start_at,
+        end_at,
         duration,
         status,
         status_canonical,
@@ -282,14 +280,6 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
       )
     )
 
-    const unitIds = Array.from(
-      new Set(
-        results
-          .map((booking: any) => booking.unit_id)
-          .filter((id: string | null | undefined): id is string => Boolean(id))
-      )
-    )
-
     const franchiseIds = Array.from(
       new Set(
         results
@@ -299,7 +289,6 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
     )
 
     let studentsMap: Record<string, { id: string; name?: string }> = {}
-    let unitsMap: Record<string, { id: string; name?: string; city?: string; state?: string; address?: string | null }> = {}
     let academiesMap: Record<string, { id: string; name?: string; city?: string; state?: string; address?: string | null }> = {}
     let studentRatesMap: Record<string, number> = {}
     let professorRateMap: Record<string, number> = {}
@@ -352,20 +341,6 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
     
     const professorHourlyRate = profProfile?.hourly_rate || 0
 
-    if (unitIds.length > 0) {
-      const { data: unitsData } = await supabase
-        .from('units')
-        .select('id, name, city, state, address')
-        .in('id', unitIds)
-
-      if (unitsData) {
-        unitsMap = unitsData.reduce((acc, curr) => {
-          acc[curr.id] = curr
-          return acc
-        }, {} as typeof unitsMap)
-      }
-    }
-
     if (franchiseIds.length > 0) {
       const { data: academiesData } = await supabase
         .from('academies')
@@ -382,13 +357,10 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
 
     const bookings = results.map((booking: any) => {
       const student = booking.student_id ? studentsMap[booking.student_id] : undefined
-      const unit = booking.unit_id ? unitsMap[booking.unit_id] : undefined
       const academy = booking.franchise_id ? academiesMap[booking.franchise_id] : undefined
 
-      const franchiseName = unit?.name || academy?.name || null
-      const franchiseAddressParts = unit?.id
-        ? [unit.address, unit.city, unit.state]
-        : [academy?.address, academy?.city, academy?.state]
+      const franchiseName = academy?.name || null
+      const franchiseAddressParts = [academy?.address, academy?.city, academy?.state].filter(Boolean)
 
       // Determinar hourly_rate baseado no source
       let hourlyRate = undefined
@@ -409,53 +381,68 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
         franchiseName,
         franchiseAddress: franchiseAddressParts.filter(Boolean).join(', ') || undefined,
         date: booking.date,
+        startAt: booking.start_at || undefined,
+        endAt: booking.end_at || undefined,
         duration: booking.duration ?? 60,
         status: normalizeBookingStatus(booking.status, booking.status_canonical),
         notes: booking.notes || undefined,
         creditsCost: booking.credits_cost ?? 0,
         source: booking.source || undefined,
         hourlyRate,
-        cancellableUntil: booking.cancellable_until || (booking.date ? new Date(new Date(booking.date).getTime() - 4 * 60 * 60 * 1000).toISOString() : undefined)
+        cancellableUntil: booking.cancellable_until || (booking.date ? new Date(new Date(booking.date).getTime() - 4 * 60 * 60 * 1000).toISOString() : undefined),
+        updatedAt: booking.updated_at || undefined
       }
     })
 
     return res.json({ bookings })
   }
 
-  // Verificar se o usuário tem acesso à unidade
+  // Verificar se o usuário tem acesso à academia/franquia
   if (user.role === 'STUDENT' || user.role === 'ALUNO') {
-    const { data: userUnits } = await supabase
-      .from('student_units')
-      .select('unit_id')
+    const { data: studentAcademies } = await supabase
+      .from('academy_students')
+      .select('academy_id')
       .eq('student_id', user.userId)
-      .eq('unit_id', unitId)
+      .eq('academy_id', finalFranchiseId)
 
-    if (!userUnits || userUnits.length === 0) {
-      return res.status(403).json({ error: 'Acesso não autorizado a esta unidade' })
+    if (!studentAcademies || studentAcademies.length === 0) {
+      // Verificar também via academy_teachers se o aluno está vinculado
+      const { data: studentBookings } = await supabase
+        .from('bookings')
+        .select('franchise_id')
+        .eq('student_id', user.userId)
+        .eq('franchise_id', finalFranchiseId)
+        .limit(1)
+
+      if (!studentBookings || studentBookings.length === 0) {
+        return res.status(403).json({ error: 'Acesso não autorizado a esta academia' })
+      }
     }
   }
 
   if (user.role === 'TEACHER' || user.role === 'PROFESSOR') {
-    const { data: teacherUnits } = await supabase
-      .from('teacher_units')
-      .select('unit_id')
+    const { data: teacherAcademies } = await supabase
+      .from('academy_teachers')
+      .select('academy_id')
       .eq('teacher_id', user.userId)
-      .eq('unit_id', unitId)
+      .eq('academy_id', finalFranchiseId)
+      .eq('status', 'active')
 
-    if (!teacherUnits || teacherUnits.length === 0) {
-      return res.status(403).json({ error: 'Acesso não autorizado a esta unidade' })
+    if (!teacherAcademies || teacherAcademies.length === 0) {
+      return res.status(403).json({ error: 'Acesso não autorizado a esta academia' })
     }
   }
 
-  const { data: unitBookings, error } = await supabase
+  const { data: franchiseBookings, error } = await supabase
     .from('bookings')
     .select(`
       id,
       student_id,
       teacher_id,
-      unit_id,
       franchise_id,
       date,
+      start_at,
+      end_at,
       duration,
       status,
       status_canonical,
@@ -464,18 +451,17 @@ router.get('/', requireAuth, asyncErrorHandler(async (req, res) => {
       cancellable_until,
       student:users!bookings_student_id_fkey (id, name),
       teacher:users!bookings_teacher_id_fkey (id, name),
-      unit:units!bookings_unit_id_fk (id, name, city, state, address),
       academy:academies!bookings_franchise_id_fkey (id, name, city, state, address)
     `)
-    .or(`unit_id.eq.${unitId},franchise_id.eq.${unitId}`)
+    .eq('franchise_id', finalFranchiseId)
     .order('date', { ascending: true })
 
   if (error) {
-    console.error('Error fetching bookings by unit:', error)
+    console.error('Error fetching bookings by franchise:', error)
     return res.status(500).json({ error: 'Erro ao buscar agendamentos' })
   }
 
-  let results = unitBookings || []
+  let results = franchiseBookings || []
 
   if (user.role === 'TEACHER' || user.role === 'PROFESSOR') {
     results = results.filter((booking: any) => booking.teacher_id === user.userId)
@@ -569,220 +555,37 @@ router.post('/', requireAuth, requireRole(['STUDENT', 'ALUNO', 'TEACHER', 'PROFE
     bookingData.studentId = user.userId // Aluno está criando para si mesmo
   }
 
-  // Receber datas do frontend e preservar valores de hora original como UTC
-  // O frontend envia ISO string com Z (UTC), extraímos os componentes e criamos Date UTC puro
-  // Isso preserva a hora original (ex: 06:00) como 06:00 UTC, sem conversão de timezone
-  const timeZone = 'America/Sao_Paulo'
-  const now = new Date()
+  // Atualizar booking existente usando bookingId
+  console.log('[POST /api/bookings] Atualizando booking existente:', bookingData.bookingId)
   
-  // Extrair componentes da string ISO e criar Date UTC puro
-  // Exemplo: '2025-11-22T06:00:00.000Z' -> Date UTC com 06:00 UTC (não 03:00 local)
-  const parseUtcDate = (isoString: string): Date => {
-    // Remover o Z e milissegundos
-    const cleanString = isoString.replace(/\.\d{3}Z?$/, '').replace(/Z$/, '')
-    // Extrair componentes: YYYY-MM-DDTHH:mm:ss
-    const [datePart, timePart] = cleanString.split('T')
-    const [year, month, day] = datePart.split('-').map(Number)
-    const [hour, minute, second = 0] = timePart.split(':').map(Number)
-    
-    // Log para debug
-    console.log('[parseUtcDate] Parseando:', {
-      isoString,
-      cleanString,
-      year, month, day, hour, minute, second
-    })
-    
-    // Criar Date UTC puro usando Date.UTC
-    const utcTimestamp = Date.UTC(year, month - 1, day, hour, minute, second)
-    const date = new Date(utcTimestamp)
-    
-    console.log('[parseUtcDate] Resultado:', {
-      utcTimestamp,
-      dateISO: date.toISOString(),
-      dateUTCString: date.toUTCString(),
-      getUTCHours: date.getUTCHours(),
-      getHours: date.getHours()
-    })
-    
-    return date
-  }
-  
-  const startAt = parseUtcDate(bookingData.startAt)
-  const endAt = parseUtcDate(bookingData.endAt)
-  
-  // Calcular cancellable_until usando a mesma lógica de startAt/endAt (preservar hora UTC)
-  // Extrair componentes UTC de startAt, subtrair 4 horas, e criar Date UTC puro
-  const startAtYear = startAt.getUTCFullYear()
-  const startAtMonth = startAt.getUTCMonth()
-  const startAtDay = startAt.getUTCDate()
-  const startAtHour = startAt.getUTCHours()
-  const startAtMinute = startAt.getUTCMinutes()
-  const startAtSecond = startAt.getUTCSeconds()
-  
-  // Calcular hora de cancellable_until (4 horas antes)
-  let cancellableHour = startAtHour - 4
-  let cancellableDay = startAtDay
-  let cancellableMonth = startAtMonth
-  let cancellableYear = startAtYear
-  
-  // Ajustar se a subtração mudou o dia
-  if (cancellableHour < 0) {
-    cancellableHour += 24
-    cancellableDay -= 1
-    if (cancellableDay < 1) {
-      cancellableMonth -= 1
-      if (cancellableMonth < 0) {
-        cancellableMonth = 11
-        cancellableYear -= 1
-      }
-      // Pegar último dia do mês anterior
-      cancellableDay = new Date(Date.UTC(cancellableYear, cancellableMonth + 1, 0)).getUTCDate()
-    }
-  }
-  
-  // Criar Date UTC puro usando Date.UTC (preserva hora como UTC, sem conversão de timezone)
-  const cancellableUntil = new Date(Date.UTC(cancellableYear, cancellableMonth, cancellableDay, cancellableHour, startAtMinute, startAtSecond))
-  
-  // Para validação: startAt (06:00 UTC) representa 06:00 de Brasília
-  // Precisamos comparar 06:00 Brasília com now (convertido para Brasília)
-  const nowBrazil = toZonedTime(now, timeZone)
-  
-  // startAt está como 06:00 UTC, mas representa 06:00 Brasília
-  // Criar uma string ISO "naive" (sem timezone) com a hora de Brasília
-  // Formato: YYYY-MM-DDTHH:mm:ss (usar startAtMonth + 1 para string, pois é 0-indexed)
-  const startAtBrazilString = `${startAtYear}-${String(startAtMonth + 1).padStart(2, '0')}-${String(startAtDay).padStart(2, '0')}T${String(startAtHour).padStart(2, '0')}:${String(startAtMinute).padStart(2, '0')}:${String(startAtSecond).padStart(2, '0')}`
-  
-  // Parsear a string como data "naive" (sem timezone) usando parse do date-fns
-  const startAtBrazilNaive = parse(startAtBrazilString, "yyyy-MM-dd'T'HH:mm:ss", new Date())
-  
-  // fromZonedTime interpreta a data naive como sendo em Brasília e converte para UTC
-  // Depois converter de volta para Brasília para comparar
-  const startAtAsBrazilUTC = fromZonedTime(startAtBrazilNaive, timeZone)
-  const startAtBrazil = toZonedTime(startAtAsBrazilUTC, timeZone)
-
-  try {
-    // Log detalhado para debug
-    console.log('[POST /api/bookings] Validação de datas - DEBUG:', {
-      startAtReceived: bookingData.startAt,
-      startAtUTC: startAt.toISOString(),
-      startAtGetUTCHours: startAt.getUTCHours(), // Hora UTC (6) que representa hora de Brasília
-      startAtBrazilTime: formatInTimeZone(startAtBrazil, timeZone, 'HH:mm'),
-      nowUTC: now.toISOString(),
-      nowBrazilTime: formatInTimeZone(nowBrazil, timeZone, 'HH:mm'),
-      isPast: startAtBrazil <= nowBrazil
-    })
-  } catch (dateTzError) {
-    console.error('[POST /api/bookings] Erro ao formatar datas:', dateTzError)
-  }
-
-  // Comparar startAt (como hora de Brasília) com now (convertido para Brasília)
-  if (startAtBrazil <= nowBrazil) {
-    console.log('[POST /api/bookings] ERRO: Data no passado (horário de Brasília)')
-    return res.status(400).json({ error: 'Data de início deve ser no futuro (horário de Brasília)' })
-  }
-
-  if (endAt <= startAt) {
-    console.log('[POST /api/bookings] ERRO: endAt <= startAt')
-    return res.status(400).json({ error: 'Data de término deve ser após a data de início' })
-  }
-
-  // Usar academyId diretamente como franchise_id, ou converter unitId para academyId
-  let franchiseId: string
-
-  if (bookingData.academyId) {
-    // Se academyId foi fornecido, usar diretamente
-    franchiseId = bookingData.academyId
-    console.log('[POST /api/bookings] Usando academyId diretamente como franchise_id:', franchiseId)
-  } else if (bookingData.unitId) {
-    // Se unitId foi fornecido, buscar o academy_legacy_id correspondente
-    console.log('[POST /api/bookings] Buscando academy_legacy_id para unitId:', bookingData.unitId)
-
-    const { data: unitData, error: unitError } = await supabase
-      .from('units')
-      .select('academy_legacy_id, name')
-      .eq('id', bookingData.unitId)
-      .single()
-
-    if (unitError || !unitData) {
-      console.error('[POST /api/bookings] Erro ao buscar unidade:', unitError)
-      return res.status(400).json({ error: 'Unidade não encontrada' })
-    }
-
-    if (!unitData.academy_legacy_id) {
-      console.error('[POST /api/bookings] Unidade não tem academy_legacy_id:', unitData)
-      return res.status(400).json({ error: 'Unidade não vinculada a uma academia' })
-    }
-
-    franchiseId = unitData.academy_legacy_id
-    console.log('[POST /api/bookings] Convertido unitId para academy_id:', {
-      unitId: bookingData.unitId,
-      unitName: unitData.name,
-      academyId: franchiseId
-    })
-  } else {
-    // Isso não deveria acontecer devido à validação do schema, mas por segurança:
-    return res.status(400).json({ error: 'academyId ou unitId é obrigatório' })
-  }
-
   let booking
   try {
-    booking = await bookingCanonicalService.createBooking({
-    source: bookingData.source,
-    studentId: bookingData.studentId,
-    professorId: bookingData.professorId,
-      franchiseId: franchiseId, // Usar franchise_id diretamente (academyId)
-    startAt: startAt,
-    endAt: endAt,
-    cancellableUntil: cancellableUntil, // Calculado na rota preservando hora UTC
-    status: bookingData.status,
-    studentNotes: bookingData.studentNotes,
-    professorNotes: bookingData.professorNotes
-  })
+    booking = await bookingCanonicalService.updateBookingToStudent({
+      bookingId: bookingData.bookingId,
+      studentId: bookingData.studentId || user.userId,
+      source: bookingData.source,
+      studentNotes: bookingData.studentNotes,
+      professorNotes: bookingData.professorNotes
+    })
   } catch (error) {
-    console.error('[POST /api/bookings] Erro ao criar booking:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido ao criar agendamento'
+    console.error('[POST /api/bookings] Erro ao atualizar booking:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido ao atualizar agendamento'
     return res.status(400).json({ 
       error: errorMessage 
     })
   }
 
   try {
-    const syncTasks = [addAcademyToContact(booking.professor_id, booking.unit_id)]
+    const syncTasks = [addAcademyToContact(booking.teacher_id, booking.franchise_id)]
     if (booking.student_id) {
-      syncTasks.push(addAcademyToContact(booking.student_id, booking.unit_id))
+      syncTasks.push(addAcademyToContact(booking.student_id, booking.franchise_id))
     }
     await Promise.all(syncTasks)
   } catch (syncError) {
     console.warn('Erro ao sincronizar contato da franqueadora após agendamento:', syncError)
   }
 
-  // Criar notificações
-  try {
-    if (booking.student_id) {
-      await createUserNotification(
-        booking.student_id,
-        'booking_created',
-        'Agendamento criado',
-        'Seu agendamento foi criado com sucesso.',
-        { booking_id: booking.id }
-      )
-    }
-
-    await createUserNotification(
-      booking.professor_id,
-      'booking_created',
-      'Novo agendamento',
-      'Um novo agendamento foi criado.',
-      { booking_id: booking.id }
-    )
-  } catch (error) {
-    console.error('Erro ao criar notificações:', error)
-  }
-
-  res.status(201).json({
-    message: 'Agendamento criado com sucesso',
-    booking
-  })
+  return res.status(200).json({ booking })
 }))
 
 // PATCH /api/bookings/:id - Atualizar status do agendamento (endpoint canônico)

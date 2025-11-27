@@ -361,14 +361,21 @@ router.get('/:id/available-slots', async (req, res) => {
       // Se estamos buscando para um professor específico
       if (teacher_id) {
         // Bloquear horários onde ESTE professor já tem agendamento ativo ou bloqueio
+        // IMPORTANTE: bloquear se tem student_id não nulo (já ocupado por aluno)
         if (b.teacher_id === teacher_id) {
-          if (b.status === 'CONFIRMED' || b.status === 'PENDING' || b.status === 'PAID' || b.status === 'BLOCKED') {
+          // Bloquear se tem student_id não nulo OU se tem status que indica ocupação
+          const hasStudent = b.student_id !== null && b.student_id !== undefined
+          const isOccupiedStatus = b.status === 'CONFIRMED' || b.status === 'PENDING' || b.status === 'PAID' || b.status === 'BLOCKED'
+          
+          if (hasStudent || isOccupiedStatus) {
             teacherOccupiedSlots.add(hhmm)
           }
         }
       } else {
         // Sem teacher_id: contar ocupação geral (capacidade da academia)
-        if (b.status === 'CONFIRMED' || b.status === 'PENDING' || b.status === 'PAID') {
+        // Contar apenas bookings com student_id não nulo (ocupados por alunos)
+        const hasStudent = b.student_id !== null && b.student_id !== undefined
+        if (hasStudent && (b.status === 'CONFIRMED' || b.status === 'PENDING' || b.status === 'PAID')) {
           occ[hhmm] = (occ[hhmm] || 0) + 1
         }
       }

@@ -10,6 +10,7 @@ import { academiesAPI, API_BASE_URL } from '@/lib/api'
 
 type Slot = {
   time: string
+  booking_id: string | null
   max_capacity: number
   current_occupancy: number
   remaining: number
@@ -61,34 +62,39 @@ export default function AgendarPage() {
 
         const availableBookings: any[] = await bookingsResponse.json()
 
-        // Converter bookings disponíveis para slots
-        const slotsList: Slot[] = availableBookings.map((booking: any) => {
-          let timeStr = '00:00'
-          if (booking.start_time) {
-            const startDate = new Date(booking.start_time)
-            // Converter para timezone America/Sao_Paulo
-            const brazilDate = new Date(startDate.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }))
-            const hours = brazilDate.getHours()
-            const minutes = brazilDate.getMinutes()
-            timeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`
-          } else if (booking.date) {
-            const dateObj = new Date(booking.date)
-            const brazilDate = new Date(dateObj.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }))
-            const hours = brazilDate.getHours()
-            const minutes = brazilDate.getMinutes()
-            timeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`
-          }
+        // CORREÇÃO: O endpoint já filtra horários ocupados, então todos os bookings retornados são disponíveis
+        // Converter bookings disponíveis para slots - apenas os que realmente estão disponíveis
+        const slotsList: Slot[] = availableBookings
+          .filter((booking: any) => {
+            // Garantir que só incluímos bookings realmente disponíveis
+            // O endpoint já filtra, mas vamos garantir aqui também
+            return booking && (booking.start_time || booking.date)
+          })
+          .map((booking: any) => {
+            let timeStr = '00:00'
+            if (booking.start_time) {
+              const startDate = new Date(booking.start_time)
+              const hours = startDate.getHours()
+              const minutes = startDate.getMinutes()
+              timeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`
+            } else if (booking.date) {
+              const dateObj = new Date(booking.date)
+              const hours = dateObj.getHours()
+              const minutes = dateObj.getMinutes()
+              timeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`
+            }
 
-          return {
-            time: timeStr,
-            max_capacity: 1,
-            current_occupancy: 0,
-            remaining: 1,
-            is_free: true,
-            slot_duration: booking.duration || 60,
-            slot_cost: 1,
-          }
-        })
+            return {
+              time: timeStr,
+              booking_id: booking.id || null,
+              max_capacity: 1,
+              current_occupancy: 0,
+              remaining: 1,
+              is_free: true, // Todos os slots retornados pelo endpoint são livres (já filtrados)
+              slot_duration: booking.duration || 60,
+              slot_cost: 1,
+            }
+          })
 
         // Ordenar por horário
         slotsList.sort((a, b) => a.time.localeCompare(b.time))
@@ -104,7 +110,7 @@ export default function AgendarPage() {
     load()
   }, [teacherId, date, token])
 
-  async function handleBook(slot: string) {
+  async function handleBook(slot: Slot) {
     // Prevenir múltiplos cliques
     if (isBooking) return
 
@@ -113,31 +119,16 @@ export default function AgendarPage() {
         setError('Você precisa estar autenticado para agendar.')
         return
       }
-      if (!teacherId || !academyId) {
-        setError('Parâmetros inválidos para agendamento.')
+      if (!slot.booking_id) {
+        setError('Erro: booking_id não encontrado. Por favor, recarregue a página.')
         return
       }
 
       // Bloquear todos os botões e marcar o slot sendo processado
       setIsBooking(true)
-      setBookingSlot(slot)
+      setBookingSlot(slot.time)
       setError(null)
       setSuccess(null)
-
-      // Montar datas ISO em UTC (duração padrão 60 min)
-      // O horário do slot já está no formato HH:MM (horário de Brasília)
-      // Precisamos criar a data UTC que representa esse horário em Brasília
-      const [hours, minutes] = slot.split(':').map(Number)
-      const start = new Date(Date.UTC(
-        new Date(date).getUTCFullYear(),
-        new Date(date).getUTCMonth(),
-        new Date(date).getUTCDate(),
-        hours,
-        minutes,
-        0
-      ))
-      const end = new Date(start)
-      end.setUTCMinutes(end.getUTCMinutes() + 60)
 
       const resp = await fetch(`${API_BASE_URL}/api/bookings`, {
         method: 'POST',
@@ -147,10 +138,7 @@ export default function AgendarPage() {
         },
         body: JSON.stringify({
           source: 'ALUNO',
-          professorId: teacherId,
-          academyId: academyId, // Usar academyId diretamente
-          startAt: start.toISOString(),
-          endAt: end.toISOString(),
+          bookingId: slot.booking_id, // Enviar o ID do booking que foi clicado
         }),
       })
 
@@ -192,7 +180,7 @@ export default function AgendarPage() {
 
       {/* Aviso regra de cancelamento (4h) */}
       <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-        Lembrete: cancelamento gratuito até 4 horas antes do horário agendado. Após esse prazo, 1 crédito será consumido.
+        <strong className="block sm:inline">Cancelamento gratuito</strong> até 4 horas antes do horário agendado. Se cancelar antes desse prazo, o crédito será estornado. Após esse prazo, o crédito não será estornado.
       </div>
 
       {/* Filtros básicos */}
@@ -248,28 +236,30 @@ export default function AgendarPage() {
             <p className="text-gray-600">Nenhum horário disponível para esta data.</p>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {slots.map((s, i) => {
-                const isCurrentSlotBooking = bookingSlot === s.time && isBooking
-                return (
-                  <Button
-                    key={`${s.time}-${i}`}
-                    variant={s.is_free ? 'outline' : 'secondary'}
-                    disabled={!s.is_free || s.remaining <= 0 || isBooking}
-                    onClick={() => handleBook(s.time)}
-                    className="justify-center"
-                    title={s.is_free ? `${s.remaining}/${s.max_capacity} vagas` : 'Indisponível'}
-                  >
-                    {isCurrentSlotBooking ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        {s.time}
-                      </>
-                    ) : (
-                      s.time
-                    )}
-                  </Button>
-                )
-              })}
+              {slots
+                .filter((s) => s.is_free && s.remaining > 0) // CORREÇÃO: Filtrar apenas slots realmente disponíveis
+                .map((s, i) => {
+                  const isCurrentSlotBooking = bookingSlot === s.time && isBooking
+                  return (
+                    <Button
+                      key={`${s.time}-${i}`}
+                      variant="outline"
+                      disabled={isBooking || !s.booking_id} // Desabilitar se não tiver booking_id
+                      onClick={() => handleBook(s)}
+                      className="justify-center hover:bg-meu-primary hover:text-white hover:border-meu-primary"
+                      title={`${s.remaining}/${s.max_capacity} vagas disponíveis`}
+                    >
+                      {isCurrentSlotBooking ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          {s.time}
+                        </>
+                      ) : (
+                        s.time
+                      )}
+                    </Button>
+                  )
+                })}
             </div>
           )}
         </CardContent>

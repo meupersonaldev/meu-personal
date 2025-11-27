@@ -36,6 +36,7 @@ export default function StudentDashboardPage() {
   const section = useMemo(() => searchParams.get("section"), [searchParams])
   const { user, isAuthenticated, token, updateUser } = useAuthStore()
   const [confirm, setConfirm] = useState<{ open: boolean; bookingId: string | null }>({ open: false, bookingId: null })
+  const [cancellingBookingId, setCancellingBookingId] = useState<string | null>(null)
 
   // Dashboard state
   const [stats, setStats] = useState<StudentStats>({
@@ -66,56 +67,94 @@ export default function StudentDashboardPage() {
   const [saving, setSaving] = useState(false)
 
   // Aulas state
-  type BookingItem = { id: string; date: string; startAt?: string; endAt?: string; duration: number; status: string; teacherName?: string; franchiseName?: string; cancellableUntil?: string }
+  type BookingItem = { id: string; date: string; startAt?: string; endAt?: string; duration: number; status: string; teacherName?: string; franchiseName?: string; cancellableUntil?: string; updatedAt?: string }
   const [bookings, setBookings] = useState<BookingItem[]>([])
   const [bookingsLoading, setBookingsLoading] = useState(false)
   const [balanceAvailable, setBalanceAvailable] = useState<number | null>(null)
   const [nextBooking, setNextBooking] = useState<BookingItem | null>(null)
 
   // Função auxiliar para obter o tempo do booking (startAt ou date)
+  // IMPORTANTE: O sistema armazena horários em UTC, mas a hora UTC representa diretamente a hora de Brasília
+  // Exemplo: 11:00 UTC armazenado = 11:00 BRT (não 08:00 BRT)
+  // Quando criamos new Date() com string UTC (com Z), o JavaScript converte para hora local
+  // Então getHours() retorna a hora correta de Brasília (11:00 UTC vira 11:00 local se o navegador estiver em BRT)
   const getBookingTime = (booking: BookingItem): Date => {
     if (!booking.date && !booking.startAt) {
       return new Date(0) // Data inválida
     }
-    return booking.startAt ? new Date(booking.startAt) : new Date(booking.date)
+    const timeString = booking.startAt || booking.date
+    if (!timeString) {
+      return new Date(0)
+    }
+    
+    // Se a string já tem Z (timezone UTC), usar diretamente
+    // O JavaScript vai converter automaticamente para o timezone local
+    if (timeString.endsWith('Z')) {
+      return new Date(timeString)
+    }
+    
+    // Se tem timezone offset (+03:00, -03:00), usar diretamente
+    if (timeString.includes('+') || (timeString.includes('-') && timeString.length > 19 && timeString[10] === 'T' && (timeString[19] === '-' || timeString[19] === '+'))) {
+      return new Date(timeString)
+    }
+    
+    // Se não tem timezone, assumir que é UTC e adicionar Z
+    // Formato esperado: "2025-11-28T11:00:00" ou "2025-11-28T11:00:00.000"
+    const isoString = `${timeString}Z`
+    return new Date(isoString)
   }
 
   // Função auxiliar para verificar se um booking é futuro
-  // Compara considerando o timezone local do usuário (America/Sao_Paulo)
-  // O backend retorna datas em UTC, mas precisamos comparar no timezone local
+  // IMPORTANTE: O sistema armazena horários em UTC, mas a hora UTC representa diretamente a hora de Brasília
+  // Exemplo: 18:00 UTC armazenado = 18:00 BRT (não 15:00 BRT)
+  // Por isso, usamos getUTCHours() para obter a hora "real" de Brasília
   const isBookingUpcoming = (booking: BookingItem): boolean => {
     const bookingTime = getBookingTime(booking)
     const now = new Date()
     
-    // Obter a data/hora do booking no timezone de São Paulo
-    // Formato: "11/22/2025, 09:00:00 AM" ou "11/22/2025, 09:00:00"
-    const bookingBRParts = bookingTime.toLocaleString('en-US', { 
+    // Obter componentes UTC do booking (que representam a hora de Brasília)
+    const bookingYear = bookingTime.getUTCFullYear()
+    const bookingMonth = bookingTime.getUTCMonth()
+    const bookingDay = bookingTime.getUTCDate()
+    const bookingHour = bookingTime.getUTCHours()
+    const bookingMinute = bookingTime.getUTCMinutes()
+    const bookingSecond = bookingTime.getUTCSeconds()
+    
+    // Obter componentes da data atual em Brasília usando toLocaleString
+    const nowBRString = now.toLocaleString('en-US', { 
       timeZone: 'America/Sao_Paulo',
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
       hour: '2-digit',
       minute: '2-digit',
-      second: '2-digit'
-    }).split(', ')
+      second: '2-digit',
+      hour12: false
+    })
     
-    // Obter a data/hora atual no timezone de São Paulo
-    const nowBRParts = now.toLocaleString('en-US', { 
-      timeZone: 'America/Sao_Paulo',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
-    }).split(', ')
+    // Parsear a string: "MM/DD/YYYY, HH:MM:SS"
+    const [datePart, timePart] = nowBRString.split(', ')
+    const [month, day, year] = datePart.split('/').map(Number)
+    const [hour, minute, second] = timePart.split(':').map(Number)
     
-    // Comparar: se a string completa do booking for maior que a atual, é futuro
-    // Isso funciona porque o formato é consistente: "MM/DD/YYYY, HH:MM:SS AM/PM"
-    const bookingBRStr = bookingBRParts.join(', ')
-    const nowBRStr = nowBRParts.join(', ')
-    
-    return bookingBRStr > nowBRStr
+    // Comparar ano, mês, dia, hora, minuto, segundo
+    if (bookingYear !== year) return bookingYear > year
+    if (bookingMonth !== month - 1) return bookingMonth > month - 1 // month é 1-indexed no toLocaleString
+    if (bookingDay !== day) return bookingDay > day
+    if (bookingHour !== hour) return bookingHour > hour
+    if (bookingMinute !== minute) return bookingMinute > minute
+    return bookingSecond > second
+  }
+
+  // Função auxiliar para verificar se um booking deve aparecer como "passado"
+  // Cancelados sempre aparecem como passados, mesmo que ainda não tenham passado
+  const isBookingPast = (booking: BookingItem): boolean => {
+    // Se foi cancelado, sempre é considerado passado
+    if (booking.status === 'CANCELED' || booking.status === 'CANCELLED') {
+      return true
+    }
+    // Caso contrário, verifica se já passou
+    return !isBookingUpcoming(booking)
   }
 
   const [ratingsMap, setRatingsMap] = useState<Record<string, { rating: number; comment?: string }>>({})
@@ -176,7 +215,7 @@ export default function StudentDashboardPage() {
 
   useEffect(() => {
     if (!token) return
-    const past = bookings.filter(b => !isBookingUpcoming(b)).slice(0, 3)
+    const past = bookings.filter(b => isBookingPast(b)).slice(0, 3)
     past.forEach(async (b) => {
       if (ratingsMap[b.id] !== undefined) return
       try {
@@ -226,7 +265,8 @@ export default function StudentDashboardPage() {
           status: String(b.status),
           teacherName: b.teacherName,
           franchiseName: b.franchiseName,
-          cancellableUntil: b.cancellableUntil
+          cancellableUntil: b.cancellableUntil,
+          updatedAt: b.updatedAt || b.updated_at
         }
         console.log('Mapeando booking:', b, '->', item)
         return item
@@ -279,13 +319,17 @@ export default function StudentDashboardPage() {
     const bookingTime = getBookingTime(b)
     const cutoffIso = b.cancellableUntil || new Date(bookingTime.getTime() - 4 * 60 * 60 * 1000).toISOString()
     const cutoff = new Date(cutoffIso)
+    // Usar getUTCHours/getUTCMinutes porque a hora UTC armazenada representa diretamente a hora de Brasília
+    const hour = String(cutoff.getUTCHours()).padStart(2, '0')
+    const minute = String(cutoff.getUTCMinutes()).padStart(2, '0')
     const d = cutoff.toLocaleDateString('pt-BR')
-    const t = cutoff.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-    return `${d} ${t}`
+    return `${d} ${hour}:${minute}`
   }
 
   const cancelBooking = async (id: string) => {
-    if (!token) return
+    if (!token || cancellingBookingId) return // Prevenir múltiplos cliques
+    
+    setCancellingBookingId(id)
     try {
       const res = await fetch(`${API_BASE_URL}/api/bookings/${id}`, {
         method: 'DELETE',
@@ -298,10 +342,13 @@ export default function StudentDashboardPage() {
       }
       toast.success('Agendamento cancelado com sucesso')
       setBookings(prev => prev.map(b => (b.id === id ? { ...b, status: 'CANCELLED' } : b)))
+      // Recarregar balance após cancelamento
+      await fetchBalance()
     } catch {
       toast.error('Erro ao cancelar')
     } finally {
       setConfirm({ open: false, bookingId: null })
+      setCancellingBookingId(null)
     }
   }
 
@@ -706,8 +753,19 @@ export default function StudentDashboardPage() {
   }
 
   if (section === 'aulas') {
-    const upcoming = bookings.filter(b => isBookingUpcoming(b))
-    const past = bookings.filter(b => !isBookingUpcoming(b))
+    // Remover duplicatas antes de filtrar
+    const uniqueBookings = bookings.filter((booking, index, self) => 
+      index === self.findIndex(b => b.id === booking.id)
+    )
+    const upcoming = uniqueBookings.filter(b => isBookingUpcoming(b) && !(b.status === 'CANCELED' || b.status === 'CANCELLED'))
+    const past = uniqueBookings
+      .filter(b => isBookingPast(b))
+      .sort((a, b) => {
+        // Ordenar por updatedAt (mais recentemente atualizado primeiro), com fallback para data/hora do agendamento
+        const aUpdated = a.updatedAt ? new Date(a.updatedAt).getTime() : getBookingTime(a).getTime()
+        const bUpdated = b.updatedAt ? new Date(b.updatedAt).getTime() : getBookingTime(b).getTime()
+        return bUpdated - aUpdated // Mais recentemente atualizados primeiro
+      })
     return (
       <div className="w-full flex flex-col gap-4 sm:gap-6 p-3 sm:p-4 md:p-6">
         <div className="flex flex-col gap-1.5 sm:gap-2">
@@ -715,8 +773,8 @@ export default function StudentDashboardPage() {
           <p className="text-xs sm:text-sm text-gray-600">Gerencie suas aulas e cancelamentos</p>
         </div>
 
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 sm:p-4 text-xs sm:text-sm text-amber-900">
-          <strong className="block sm:inline">Cancelamento gratuito</strong> até 4 horas antes do horário agendado. Após esse prazo, 1 crédito será consumido.
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 sm:p-4 text-xs sm:text-sm text-amber-900">
+          <strong className="block sm:inline">Cancelamento gratuito</strong> até 4 horas antes do horário agendado. Se cancelar antes desse prazo, o crédito será estornado. Após esse prazo, o crédito não será estornado.
         </div>
 
         <Card className="border-2 border-gray-200">
@@ -734,7 +792,13 @@ export default function StudentDashboardPage() {
                   <div className="flex-1 space-y-1">
                     <div className="text-sm sm:text-base font-semibold text-gray-900">{b.teacherName || 'Professor'}</div>
                     <div className="text-xs sm:text-sm text-gray-600">
-                      {getBookingTime(b).toLocaleDateString('pt-BR')} • {getBookingTime(b).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} • {b.duration} min
+                      {(() => {
+                        const date = getBookingTime(b)
+                        // IMPORTANTE: Usar getHours() (hora local) porque o sistema armazena UTC que representa BRT
+                        const hour = String(date.getHours()).padStart(2, '0')
+                        const minute = String(date.getMinutes()).padStart(2, '0')
+                        return `${date.toLocaleDateString('pt-BR')} • ${hour}:${minute} • ${b.duration} min`
+                      })()}
                     </div>
                     {b.franchiseName && (
                       <div className="text-xs text-gray-500">{b.franchiseName}</div>
@@ -746,8 +810,16 @@ export default function StudentDashboardPage() {
                       variant="outline" 
                       className="w-full sm:w-auto h-10 sm:h-9 text-sm text-red-600 border-red-200 hover:bg-red-50" 
                       onClick={() => setConfirm({ open: true, bookingId: b.id })}
+                      disabled={cancellingBookingId === b.id}
                     >
-                      Cancelar
+                      {cancellingBookingId === b.id ? (
+                        <>
+                          <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                          Cancelando...
+                        </>
+                      ) : (
+                        'Cancelar'
+                      )}
                     </Button>
                   </div>
                 </div>
@@ -770,7 +842,15 @@ export default function StudentDashboardPage() {
                 <div key={b.id} className="flex items-center justify-between rounded-lg border p-3">
                   <div>
                     <div className="text-sm font-semibold text-gray-900">{b.teacherName || 'Professor'}</div>
-                    <div className="text-xs text-gray-600">{getBookingTime(b).toLocaleDateString('pt-BR')} • {getBookingTime(b).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} • {b.duration} min</div>
+                    <div className="text-xs text-gray-600">
+                      {(() => {
+                        const date = getBookingTime(b)
+                        // IMPORTANTE: Usar getHours() (hora local) porque o sistema armazena UTC que representa BRT
+                        const hour = String(date.getHours()).padStart(2, '0')
+                        const minute = String(date.getMinutes()).padStart(2, '0')
+                        return `${date.toLocaleDateString('pt-BR')} • ${hour}:${minute} • ${b.duration} min`
+                      })()}
+                    </div>
                   </div>
                   <div className="text-xs text-gray-500">{b.status}</div>
                 </div>
@@ -781,29 +861,119 @@ export default function StudentDashboardPage() {
 
         {(() => {
           const b = bookings.find(x => x.id === confirm.bookingId)
-          const text = b ? cutoffLabel(b) : '4 horas antes do horário agendado'
-          const desc = `Cancelamento gratuito até ${text}. Após esse prazo, 1 crédito será consumido. Confirmar cancelamento?`
+          if (!b) {
+            const desc = 'Confirmar cancelamento?'
+            return (
+              <div>
+                {/* Lightweight inline confirm dialog - reuse existing dialog if available */}
+                {confirm.open && (
+                  <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-5 sm:p-6">
+                      <h3 className="text-base sm:text-lg font-bold text-gray-900 mb-2">Cancelar aula</h3>
+                      <p className="text-sm text-gray-600 mb-4">{desc}</p>
+                      <div className="flex gap-3">
+                        <Button
+                          variant="outline"
+                          className="flex-1"
+                          onClick={() => setConfirm({ open: false, bookingId: null })}
+                          disabled={!!cancellingBookingId}
+                        >
+                          Cancelar
+                        </Button>
+                        <Button
+                          className="flex-1 bg-red-600 hover:bg-red-700"
+                          onClick={() => confirm.bookingId && cancelBooking(confirm.bookingId)}
+                          disabled={cancellingBookingId === confirm.bookingId}
+                        >
+                          {cancellingBookingId === confirm.bookingId ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Cancelando...
+                            </>
+                          ) : (
+                            'Confirmar'
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          }
+          const text = cutoffLabel(b)
+          const now = new Date()
+          const cutoff = b?.cancellableUntil ? new Date(b.cancellableUntil) : (b ? new Date(getBookingTime(b).getTime() - 4 * 60 * 60 * 1000) : new Date())
+          const isBeforeCutoff = now <= cutoff
+          
+          // Mensagem para período de cancelamento gratuito
+          const freeCancelMessage = (
+            <div className="space-y-2">
+              <p className="text-xs sm:text-sm text-gray-700 leading-relaxed">
+                Você está dentro do período de <strong className="text-green-600">cancelamento gratuito</strong>.
+              </p>
+              <p className="text-xs sm:text-sm text-gray-600">
+                Prazo: até {text}
+              </p>
+              <p className="text-xs sm:text-sm text-green-700 font-medium">
+                ✓ Seu crédito será estornado automaticamente.
+              </p>
+              <p className="text-xs sm:text-sm text-gray-700 mt-3">
+                Deseja confirmar o cancelamento?
+              </p>
+            </div>
+          )
+          
+          // Mensagem para período após cancelamento gratuito
+          const lateCancelMessage = (
+            <div className="space-y-2">
+              <p className="text-xs sm:text-sm text-gray-700 leading-relaxed">
+                O período de <strong className="text-amber-600">cancelamento gratuito</strong> já passou.
+              </p>
+              <p className="text-xs sm:text-sm text-gray-600">
+                Prazo era: até {text}
+              </p>
+              <p className="text-xs sm:text-sm text-amber-700 font-medium">
+                ⚠️ Seu crédito não será estornado.
+              </p>
+              <p className="text-xs sm:text-sm text-gray-700 mt-3">
+                Deseja confirmar o cancelamento mesmo assim?
+              </p>
+            </div>
+          )
+          
           return (
             <div>
               {/* Lightweight inline confirm dialog - reuse existing dialog if available */}
               {confirm.open && (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
                   <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-5 sm:p-6">
-                    <h3 className="text-base sm:text-lg font-bold text-gray-900 mb-2">Cancelar aula</h3>
-                    <p className="text-xs sm:text-sm text-gray-700 mb-5 sm:mb-6 leading-relaxed">{desc}</p>
+                    <h3 className="text-base sm:text-lg font-bold text-gray-900 mb-4">Cancelar aula</h3>
+                    <div className="mb-5 sm:mb-6">
+                      {isBeforeCutoff ? freeCancelMessage : lateCancelMessage}
+                    </div>
                     <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
                       <Button 
                         variant="outline" 
                         className="w-full sm:w-auto h-11 sm:h-10 order-2 sm:order-1" 
                         onClick={() => setConfirm({ open: false, bookingId: null })}
+                        disabled={!!cancellingBookingId}
                       >
                         Voltar
                       </Button>
                       <Button 
                         className="w-full sm:w-auto h-11 sm:h-10 bg-red-600 hover:bg-red-700 text-white order-1 sm:order-2" 
                         onClick={() => confirm.bookingId && cancelBooking(confirm.bookingId)}
+                        disabled={cancellingBookingId === confirm.bookingId}
                       >
-                        Confirmar Cancelamento
+                        {cancellingBookingId === confirm.bookingId ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Cancelando...
+                          </>
+                        ) : (
+                          'Confirmar Cancelamento'
+                        )}
                       </Button>
                     </div>
                   </div>
@@ -834,7 +1004,7 @@ export default function StudentDashboardPage() {
         <div className="flex-1">
           <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900">Olá, {firstName}!</h1>
           <p className="text-xs sm:text-sm text-gray-500 mt-1">
-            {bookings.filter(b => isBookingUpcoming(b)).length} aulas agendadas • {balanceAvailable ?? 0} créditos disponíveis
+            {bookings.filter(b => isBookingUpcoming(b) && !(b.status === 'CANCELED' || b.status === 'CANCELLED')).length} aulas agendadas • {balanceAvailable ?? 0} créditos disponíveis
           </p>
         </div>
         <Button 
@@ -887,12 +1057,20 @@ export default function StudentDashboardPage() {
             </div>
           ) : (() => {
             const upcomingBookings = bookings.filter(b => {
+              // Excluir cancelados, igual à seção "aulas"
+              if (b.status === 'CANCELED' || b.status === 'CANCELLED') {
+                return false
+              }
               const isUpcoming = isBookingUpcoming(b)
               const bookingTime = getBookingTime(b)
               const now = new Date()
               console.log('Booking:', b.id, 'Date:', b.date, 'StartAt:', b.startAt, 'Time:', bookingTime.toISOString(), 'Now:', now.toISOString(), 'IsUpcoming:', isUpcoming, 'Diff:', bookingTime.getTime() - now.getTime(), 'ms')
               return isUpcoming
             })
+            // Remover duplicatas baseado no ID
+            const uniqueUpcomingBookings = upcomingBookings.filter((booking, index, self) => 
+              index === self.findIndex(b => b.id === booking.id)
+            )
             console.log('Total bookings:', bookings.length, 'Upcoming:', upcomingBookings.length)
             console.log('All bookings:', bookings.map(b => ({ 
               id: b.id, 
@@ -929,12 +1107,11 @@ export default function StudentDashboardPage() {
             
             return (
               <div className="space-y-3">
-                {upcomingBookings
+                {uniqueUpcomingBookings
                   .sort((a, b) => getBookingTime(a).getTime() - getBookingTime(b).getTime())
                   .slice(0, 4)
                   .map((booking) => {
-                    const displayDate = booking.startAt || booking.date
-                    console.log('Rendering booking:', booking.id, booking.teacherName, displayDate)
+                    console.log('Rendering booking:', booking.id, booking.teacherName, booking.startAt || booking.date)
                     return (
                       <div 
                         key={booking.id} 
@@ -947,13 +1124,21 @@ export default function StudentDashboardPage() {
                           <div className="flex-1">
                             <p className="font-medium text-gray-900">{booking.teacherName || 'Professor'}</p>
                             <p className="text-sm text-gray-600">
-                              {new Date(displayDate).toLocaleDateString('pt-BR', { 
-                                weekday: 'short', 
-                                day: 'numeric', 
-                                month: 'short',
-                                hour: '2-digit',
-                                minute: '2-digit'
-                              })}
+                              {(() => {
+                                // Usar getBookingTime que já trata corretamente startAt ou date
+                                const date = getBookingTime(booking)
+                                const weekday = date.toLocaleDateString('pt-BR', { weekday: 'short' })
+                                const dayMonth = date.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })
+                                // IMPORTANTE: Usar getHours() (hora local) porque o sistema armazena UTC que representa BRT
+                                // Quando criamos new Date() com string UTC, o JavaScript converte para hora local
+                                // Então getHours() retorna a hora correta de Brasília
+                                const hour = String(date.getHours()).padStart(2, '0')
+                                const minute = String(date.getMinutes()).padStart(2, '0')
+                                return `${weekday}, ${dayMonth} às ${hour}:${minute}`
+                              })()}
+                            </p>
+                            <p className="text-[10px] sm:text-[11px] text-amber-700 font-medium mt-1">
+                              Cancelamento gratuito até {cutoffLabel(booking)}
                             </p>
                           </div>
                           <div className="text-xs text-gray-500">
@@ -972,13 +1157,13 @@ export default function StudentDashboardPage() {
                     )
                   })}
               
-                {upcomingBookings.length > 4 && (
+                {uniqueUpcomingBookings.length > 0 && (
                   <Button 
                     variant="outline" 
-                    className="w-full"
+                    className="w-full mt-3"
                     onClick={() => { const url = new URL(window.location.href); url.searchParams.set('section','aulas'); window.location.href = url.toString() }}
                   >
-                    Ver todas ({upcomingBookings.length})
+                    Ver todas ({uniqueUpcomingBookings.length})
                   </Button>
                 )}
               </div>
@@ -987,7 +1172,7 @@ export default function StudentDashboardPage() {
         </CardContent>
       </Card>
 
-      {bookings.filter(b => !isBookingUpcoming(b)).length > 0 && (
+      {bookings.filter(b => isBookingPast(b)).length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-lg font-semibold">Histórico Recente</CardTitle>
@@ -996,11 +1181,15 @@ export default function StudentDashboardPage() {
           <CardContent>
             <div className="space-y-2">
               {bookings
-                .filter(b => !isBookingUpcoming(b))
-                .sort((a, b) => getBookingTime(b).getTime() - getBookingTime(a).getTime()) // Mais recentes primeiro
+                .filter(b => isBookingPast(b))
+                .sort((a, b) => {
+                  // Ordenar por updatedAt (mais recentemente atualizado primeiro), com fallback para data/hora do agendamento
+                  const aUpdated = a.updatedAt ? new Date(a.updatedAt).getTime() : getBookingTime(a).getTime()
+                  const bUpdated = b.updatedAt ? new Date(b.updatedAt).getTime() : getBookingTime(b).getTime()
+                  return bUpdated - aUpdated // Mais recentemente atualizados primeiro
+                })
                 .slice(0, 3)
                 .map((booking) => {
-                  const displayDate = booking.startAt || booking.date
                   return (
                   <div 
                     key={booking.id} 
@@ -1013,7 +1202,16 @@ export default function StudentDashboardPage() {
                       <div className="flex-1">
                         <p className="text-sm font-medium text-gray-900">{booking.teacherName || 'Professor'}</p>
                         <p className="text-xs text-gray-500">
-                          {new Date(displayDate).toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })}
+                          {(() => {
+                            // Usar getBookingTime que já trata corretamente startAt ou date
+                            const date = getBookingTime(booking)
+                            // IMPORTANTE: Usar getHours() (hora local) porque o sistema armazena UTC que representa BRT
+                            // Quando criamos new Date() com string UTC, o JavaScript converte para hora local
+                            // Então getHours() retorna a hora correta de Brasília
+                            const hour = String(date.getHours()).padStart(2, '0')
+                            const minute = String(date.getMinutes()).padStart(2, '0')
+                            return `${date.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })} às ${hour}:${minute}`
+                          })()}
                         </p>
                       </div>
                     </div>
@@ -1049,23 +1247,115 @@ export default function StudentDashboardPage() {
       )}
 
       {/* Inline confirm dialog for cancel */}
-      {confirm.open && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Cancelar aula</h3>
-            <p className="text-sm text-gray-700 mb-6">
-              {(() => {
-                const txt = nextBooking ? `Cancelamento gratuito até ${cutoffLabel(nextBooking)}.` : 'Cancelamento gratuito até 4 horas antes do horário agendado.'
-                return `Tem certeza que deseja cancelar? ${txt}`
-              })()}
+      {confirm.open && (() => {
+        const b = bookings.find(x => x.id === confirm.bookingId) || nextBooking
+        if (!b) {
+          return (
+            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Cancelar aula</h3>
+                <p className="text-sm text-gray-700 mb-6">Tem certeza que deseja cancelar?</p>
+                <div className="flex justify-end gap-3">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setConfirm({ open: false, bookingId: null })}
+                    disabled={!!cancellingBookingId}
+                  >
+                    Não
+                  </Button>
+                  <Button 
+                    className="bg-red-600 hover:bg-red-700" 
+                    onClick={() => confirm.bookingId && cancelBooking(confirm.bookingId)}
+                    disabled={cancellingBookingId === confirm.bookingId}
+                  >
+                    {cancellingBookingId === confirm.bookingId ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Cancelando...
+                      </>
+                    ) : (
+                      'Sim, cancelar'
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )
+        }
+        
+        const text = cutoffLabel(b)
+        const now = new Date()
+        const cutoff = b?.cancellableUntil ? new Date(b.cancellableUntil) : new Date(getBookingTime(b).getTime() - 4 * 60 * 60 * 1000)
+        const isBeforeCutoff = now <= cutoff
+        
+        const freeCancelMessage = (
+          <div className="space-y-2">
+            <p className="text-sm text-gray-700 leading-relaxed">
+              Você está dentro do período de <strong className="text-green-600">cancelamento gratuito</strong>.
             </p>
-            <div className="flex justify-end gap-3">
-              <Button variant="outline" onClick={() => setConfirm({ open: false, bookingId: null })}>Voltar</Button>
-              <Button className="bg-amber-600 hover:bg-amber-700 text-white" onClick={() => confirm.bookingId && cancelBooking(confirm.bookingId!)}>Cancelar Aula</Button>
+            <p className="text-sm text-gray-600">
+              Prazo: até {text}
+            </p>
+            <p className="text-sm text-green-700 font-medium">
+              ✓ Seu crédito será estornado automaticamente.
+            </p>
+            <p className="text-sm text-gray-700 mt-3">
+              Deseja confirmar o cancelamento?
+            </p>
+          </div>
+        )
+        
+        const lateCancelMessage = (
+          <div className="space-y-2">
+            <p className="text-sm text-gray-700 leading-relaxed">
+              O período de <strong className="text-amber-600">cancelamento gratuito</strong> já passou.
+            </p>
+            <p className="text-sm text-gray-600">
+              Prazo era: até {text}
+            </p>
+            <p className="text-sm text-amber-700 font-medium">
+              ⚠️ Seu crédito não será estornado.
+            </p>
+            <p className="text-sm text-gray-700 mt-3">
+              Deseja confirmar o cancelamento mesmo assim?
+            </p>
+          </div>
+        )
+        
+        return (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Cancelar aula</h3>
+              <div className="mb-6">
+                {isBeforeCutoff ? freeCancelMessage : lateCancelMessage}
+              </div>
+              <div className="flex justify-end gap-3">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setConfirm({ open: false, bookingId: null })}
+                  disabled={!!cancellingBookingId}
+                >
+                  Voltar
+                </Button>
+                <Button 
+                  className="bg-amber-600 hover:bg-amber-700 text-white" 
+                  onClick={() => confirm.bookingId && cancelBooking(confirm.bookingId!)}
+                  disabled={cancellingBookingId === confirm.bookingId}
+                >
+                  {cancellingBookingId === confirm.bookingId ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Cancelando...
+                    </>
+                  ) : (
+                    'Cancelar Aula'
+                  )}
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* Modal de Avaliação */}
       {ratingModal.open && (

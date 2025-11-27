@@ -130,6 +130,10 @@ export const teachersAPI = {
       body: JSON.stringify(data),
     })
   },
+
+  async getBookingsByDate(teacherId: string, date: string) {
+    return apiRequest(`/api/teachers/${teacherId}/bookings-by-date?date=${date}`)
+  },
 }
 
 // Academies API

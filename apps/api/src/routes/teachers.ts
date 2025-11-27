@@ -161,7 +161,6 @@ router.get('/by-academy-id', requireAuth, async (req, res) => {
 // GET /api/teachers/:id/bookings-by-date - Buscar bookings disponíveis do professor por data
 router.get('/:id/bookings-by-date', requireAuth, async (req, res) => {
   try {
-    // Permitir acesso para ADMIN e STUDENT
     const user = req.user
     if (!user || (user.role !== 'ADMIN' && user.role !== 'STUDENT')) {
       return res.status(403).json({ error: 'Acesso negado' })
@@ -174,53 +173,17 @@ router.get('/:id/bookings-by-date', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'date é obrigatório (YYYY-MM-DD)' })
     }
 
-    // Query ORM equivalente ao SQL fornecido
-    // Buscar bookings DISPONÍVEIS (status_canonical = 'AVAILABLE')
-    // SEM usar unit_id - apenas franchise_id (academy_id)
-    // Filtros: teacher_id, student_id IS NULL, status_canonical = 'AVAILABLE',
-    //          data específica, e apenas horários futuros
-    
     const targetDate = String(date)
-    
-    // Timestamp atual para filtrar apenas horários futuros
     const nowUtc = new Date()
-    
-    // Construir range de data para filtrar (início e fim do dia no timezone de São Paulo)
-    const dateStart = new Date(`${targetDate}T00:00:00-03:00`) // Início do dia em São Paulo
-    const dateEnd = new Date(`${targetDate}T23:59:59-03:00`) // Fim do dia em São Paulo
-    
-    // Query base com filtros do Supabase
-    let query = supabase
+    const dateStart = new Date(`${targetDate}T00:00:00-03:00`)
+    const dateEnd = new Date(`${targetDate}T23:59:59-03:00`)
+
+    // Uma única query: bookings disponíveis (student_id IS NULL e não cancelados)
+    const { data: bookings, error } = await supabase
       .from('bookings')
       .select(`
         id,
-        start_at,
-        end_at,
-        date,
-        duration,
-        status_canonical,
-        franchise_id,
-        academies:franchise_id (
-          name
-        )
-      `)
-      .eq('teacher_id', id)
-      .is('student_id', null) // student_id IS NULL
-      .eq('status_canonical', 'AVAILABLE')
-      .gte('start_at', dateStart.toISOString()) // Filtrar por data (start_at >= início do dia)
-      .lte('start_at', dateEnd.toISOString()) // Filtrar por data (start_at <= fim do dia)
-      .gt('start_at', nowUtc.toISOString()) // Apenas horários futuros
-      .order('start_at', { ascending: true, nullsFirst: false })
-
-    // Buscar também bookings que usam apenas 'date' (sem start_at)
-    // Como o Supabase não suporta OR diretamente, vamos fazer duas queries e combinar
-    const { data: bookingsWithStartAt, error: error1 } = await query
-
-    // Segunda query para bookings que têm apenas 'date' (start_at é null)
-    const { data: bookingsWithDateOnly, error: error2 } = await supabase
-      .from('bookings')
-      .select(`
-        id,
+        student_id,
         start_at,
         end_at,
         date,
@@ -233,82 +196,26 @@ router.get('/:id/bookings-by-date', requireAuth, async (req, res) => {
       `)
       .eq('teacher_id', id)
       .is('student_id', null)
-      .eq('status_canonical', 'AVAILABLE')
-      .is('start_at', null) // Apenas os que não têm start_at
-      .gte('date', `${targetDate}T00:00:00`) // Filtrar por date
-      .lte('date', `${targetDate}T23:59:59`) // Filtrar por date
-      .gt('date', nowUtc.toISOString()) // Apenas horários futuros
-      .order('date', { ascending: true, nullsFirst: false })
+      .neq('status_canonical', 'CANCELED')
+      .gte('start_at', dateStart.toISOString())
+      .lte('start_at', dateEnd.toISOString())
+      .gt('start_at', nowUtc.toISOString())
+      .order('start_at', { ascending: true })
 
-    if (error1 || error2) {
-      console.error('Erro ao buscar bookings:', error1 || error2)
+    if (error) {
+      console.error('Erro ao buscar bookings:', error)
       return res.status(500).json({ error: 'Erro interno do servidor' })
     }
 
-    // Combinar resultados e remover duplicatas
-    const allBookings = [
-      ...(bookingsWithStartAt || []),
-      ...(bookingsWithDateOnly || [])
-    ]
-
-    // Filtrar manualmente por data específica (para garantir precisão com timezone)
-    // e apenas futuros
-    const targetDateStr = targetDate
-    const filteredBookings = allBookings.filter((booking: any) => {
-      let bookingDateStr: string | null = null
-      let startTime: Date | null = null
-
-      if (booking.start_at) {
-        const startDate = new Date(booking.start_at)
-        const brazilTimeStr = startDate.toLocaleString('en-US', { 
-          timeZone: 'America/Sao_Paulo',
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit'
-        })
-        const [month, day, year] = brazilTimeStr.split('/')
-        bookingDateStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
-        startTime = startDate
-      } else if (booking.date) {
-        const bookingDate = new Date(booking.date)
-        const brazilTimeStr = bookingDate.toLocaleString('en-US', { 
-          timeZone: 'America/Sao_Paulo',
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit'
-        })
-        const [month, day, year] = brazilTimeStr.split('/')
-        bookingDateStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
-        startTime = bookingDate
-      }
-
-      // Verificar se é a data correta e se é futuro
-      if (bookingDateStr !== targetDateStr || !startTime) {
-        return false
-      }
-
-      // Verificar se é futuro comparando com NOW no timezone de São Paulo
-      const nowBrazilTime = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }))
-      return startTime > nowBrazilTime
-    })
-
-    // Normalizar os dados e ordenar por start_time
-    const normalizedBookings = filteredBookings
+    // Normalizar os dados
+    const normalizedBookings = (bookings || [])
       .map((booking: any) => {
-        const startTime = booking.start_at 
-          ? new Date(booking.start_at)
-          : booking.date 
-            ? new Date(booking.date)
-            : null
-
-        const endTime = booking.end_at
+        const startTime = booking.start_at ? new Date(booking.start_at) : booking.date ? new Date(booking.date) : null
+        const endTime = booking.end_at 
           ? new Date(booking.end_at)
           : startTime && booking.duration
             ? new Date(startTime.getTime() + booking.duration * 60 * 1000)
             : null
-
-        const academyName = booking.academies?.name || null
-        const academyId = booking.franchise_id || null
 
         return {
           id: booking.id,
@@ -316,8 +223,9 @@ router.get('/:id/bookings-by-date', requireAuth, async (req, res) => {
           end_time: endTime?.toISOString() || null,
           duration: booking.duration || 60,
           status_canonical: booking.status_canonical,
-          academy_name: academyName,
-          academy_id: academyId
+          academy_name: booking.academies?.name || null,
+          academy_id: booking.franchise_id || null,
+          student_id: booking.student_id || null
         }
       })
       .sort((a, b) => {

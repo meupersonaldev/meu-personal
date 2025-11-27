@@ -353,17 +353,19 @@ export default function StudentProfessoresPage() {
                           setAvailabilityError(null)
                           setCheckingAvailability(true)
                           // Para cada professor, verificar se há ao menos um horário livre neste dia
+                          // Usar o endpoint bookings-by-date que já tem a lógica correta de filtrar horários ocupados
                           const results = await Promise.all(
                             activeTeachers.map(async (t) => {
                               try {
-                                const resp = await academiesAPI.getAvailableSlots(
-                                  selectedAcademyId,
-                                  selectedDate,
-                                  t.id,
-                                )
-                                const slots = Array.isArray(resp?.slots) ? resp.slots : []
-                                const dayBookings = Array.isArray(resp?.bookings) ? resp.bookings : []
-                                const anyFree = slots.some((s: any) => s?.is_free)
+                                // Usar o endpoint correto que já filtra horários ocupados
+                                const bookings = await teachersAPI.getBookingsByDate(t.id, selectedDate)
+                                const bookingsList = Array.isArray(bookings) ? bookings : []
+                                // Se há pelo menos um booking disponível (retornado pelo endpoint), o professor está disponível
+                                const anyFree = bookingsList.length > 0
+                                
+                                // Para compatibilidade, manter a estrutura de bookings
+                                const dayBookings = bookingsList
+                                
                                 return { id: t.id, available: anyFree, bookings: dayBookings }
                               } catch (error) {
                                 console.error('Erro ao verificar disponibilidade', error)
@@ -495,13 +497,25 @@ export default function StudentProfessoresPage() {
                             className="group relative border-2 border-gray-200 hover:border-meu-primary/70 hover:shadow-2xl transition-all duration-300 overflow-hidden bg-white"
                           >
                             {/* Badge de disponibilidade flutuante */}
-                            {teacher.teacher_profiles?.[0]?.is_available && (
-                              <div id={`aluno-professores-teacher-badge-${teacher.id}`} className="absolute top-4 right-4 z-10">
-                                <Badge className="bg-green-500 text-white border-0 text-xs font-semibold shadow-lg px-3 py-1">
-                                  ✓ Disponível
-                                </Badge>
-                              </div>
-                            )}
+                            {(() => {
+                              // CORREÇÃO: Usar a mesma lógica do endpoint bookings-by-date
+                              // Só mostrar tag se houver verificação de disponibilidade E houver horários realmente disponíveis
+                              // O endpoint já filtra horários ocupados (com student_id não nulo)
+                              const hasAvailableSlots = availableTeacherIds.size > 0 
+                                ? availableTeacherIds.has(teacher.id)
+                                : false // Não mostrar tag se ainda não foi feita a verificação
+                              
+                              // Mostrar badge apenas se realmente há horários disponíveis na data selecionada
+                              if (!hasAvailableSlots) return null
+                              
+                              return (
+                                <div id={`aluno-professores-teacher-badge-${teacher.id}`} className="absolute top-4 right-4 z-10">
+                                  <Badge className="bg-green-500 text-white border-0 text-xs font-semibold shadow-lg px-3 py-1">
+                                    ✓ Disponível
+                                  </Badge>
+                                </div>
+                              )
+                            })()}
 
                             <CardContent id={`aluno-professores-teacher-card-content-${teacher.id}`} className="p-0">
                               <div className="flex flex-col h-full">
