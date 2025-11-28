@@ -138,6 +138,34 @@ function getContextFranqueadoraId(req: any): string | null {
   );
 }
 
+function serializePaymentIntent(intent: any) {
+  if (!intent) return null;
+
+  const payload = intent.payload_json || {};
+
+  // Priorizar checkout_url do intent, depois buscar no payload
+  const checkoutUrl = intent.checkout_url || payload.checkout_url || payload.payment_url || payload.invoice_url || null;
+  const invoiceUrl = payload.invoice_url || payload.payment_url || intent.checkout_url || null;
+  const bankSlipUrl = payload.bank_slip_url || null;
+  const paymentUrl = payload.payment_url || payload.invoice_url || intent.checkout_url || null;
+
+  return {
+    id: intent.id,
+    type: intent.type,
+    status: intent.status,
+    checkout_url: checkoutUrl,
+    created_at: intent.created_at,
+    amount_cents: intent.amount_cents,
+    payment_method: payload.payment_method,
+    invoice_url: invoiceUrl,
+    bank_slip_url: bankSlipUrl,
+    payment_url: paymentUrl,
+    pix_copy_paste: payload.pix_copy_paste || null,
+    pix_qr_code: payload.pix_qr_code || null,
+    provider_id: intent.provider_id || null // Incluir provider_id para possível busca futura
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Catalogo de pacotes - alunos
 router.get('/student', requireAuth, requireRole(['STUDENT', 'FRANQUIA', 'FRANQUEADORA']), asyncErrorHandler(async (req, res) => {
@@ -376,13 +404,7 @@ router.post('/student/checkout', requireAuth, requireRole(['STUDENT', 'ALUNO']),
 
   res.status(201).json({
     message: 'Pagamento criado com sucesso',
-    payment_intent: {
-      id: paymentIntent.id,
-      type: paymentIntent.type,
-      status: paymentIntent.status,
-      checkout_url: paymentIntent.checkout_url,
-      created_at: paymentIntent.created_at
-    },
+    payment_intent: serializePaymentIntent(paymentIntent),
     package: {
       title: packageData.title,
       classes_qty: packageData.classes_qty,
@@ -553,13 +575,7 @@ router.post('/professor/checkout', requireAuth, requireRole(['TEACHER', 'PROFESS
 
   res.status(201).json({
     message: 'Pagamento criado com sucesso',
-    payment_intent: {
-      id: paymentIntent.id,
-      type: paymentIntent.type,
-      status: paymentIntent.status,
-      checkout_url: paymentIntent.checkout_url,
-      created_at: paymentIntent.created_at
-    },
+    payment_intent: serializePaymentIntent(paymentIntent),
     package: {
       title: packageData.title,
       hours_qty: packageData.hours_qty,
@@ -619,13 +635,7 @@ router.get('/payment-intent/:id', requireAuth, asyncErrorHandler(async (req, res
   }
 
   res.json({
-    payment_intent: {
-      id: paymentIntent.id,
-      checkout_url: paymentIntent.checkout_url,
-      status: paymentIntent.status,
-      type: paymentIntent.type,
-      amount_cents: paymentIntent.amount_cents
-    }
+    payment_intent: serializePaymentIntent(paymentIntent)
   });
 }));
 
@@ -653,6 +663,18 @@ router.get('/professor/balance', requireAuth, requireRole(['TEACHER', 'PROFESSOR
       franqueadora_id: franqueadoraId,
       available_hours: Math.max(0, availableHours)
     }
+  });
+}));
+
+// Histórico de pagamentos do usuário
+router.get('/payment-history', requireAuth, asyncErrorHandler(async (req, res) => {
+  const user = req.user;
+  const { status } = req.query as { status?: string };
+
+  const intents = await paymentIntentService.getPaymentIntentsByUser(user.userId, status);
+
+  res.json({
+    payment_intents: intents.map(intent => serializePaymentIntent(intent))
   });
 }));
 
