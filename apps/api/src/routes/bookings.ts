@@ -609,7 +609,7 @@ router.patch('/:id', requireAuth, asyncErrorHandler(async (req, res) => {
   const hasPermission =
     booking.student_id === user.userId ||
     booking.teacher_id === user.userId ||
-    ['FRANQUIA', 'FRANQUEADORA', 'ADMIN'].includes(user.role)
+    ['FRANQUIA', 'FRANCHISE_ADMIN', 'FRANQUEADORA', 'ADMIN', 'SUPER_ADMIN'].includes(user.role)
 
   if (!hasPermission) {
     return res.status(403).json({ error: 'Acesso não autorizado' })
