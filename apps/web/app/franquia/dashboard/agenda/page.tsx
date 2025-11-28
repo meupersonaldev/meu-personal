@@ -95,14 +95,27 @@ export default function AgendaAcademiaPage() {
 
       const data = await response.json()
       
-      // Converter para formato do calendário (corrigir timezone)
+      // Converter para formato do calendário (corrigir timezone e normalizar status)
       const calendarEvents = data.events.map((event: any) => {
         // Usar função utilitária para conversão de timezone
         const startLocal = utcToLocal(event.start)
         const endLocal = utcToLocal(event.end)
         
+        // Normalizar status para garantir consistência
+        let normalizedStatus = event.status
+        if (event.status === 'PAID' || event.status_canonical === 'PAID') {
+          normalizedStatus = 'CONFIRMED'
+        } else if (event.status === 'DONE' || event.status_canonical === 'DONE') {
+          normalizedStatus = 'COMPLETED'
+        } else if (event.status === 'CANCELED' || event.status_canonical === 'CANCELED') {
+          normalizedStatus = 'CANCELLED'
+        } else if (event.status === 'RESERVED' || event.status_canonical === 'RESERVED') {
+          normalizedStatus = 'CONFIRMED'
+        }
+        
         return {
           ...event,
+          status: normalizedStatus,
           start: startLocal,
           end: endLocal
         }
