@@ -52,6 +52,7 @@ export default function DadosFranquiasPage() {
   })
   const [showPasswordModal, setShowPasswordModal] = useState(false)
   const [franchiseAdmin, setFranchiseAdmin] = useState<{ id: string; name: string; email: string } | null>(null)
+  const [editingFranchiseAdmin, setEditingFranchiseAdmin] = useState<{ id: string; name: string; email: string } | null>(null)
   const [passwordData, setPasswordData] = useState({
     newPassword: '',
     confirmPassword: ''
@@ -59,6 +60,7 @@ export default function DadosFranquiasPage() {
   const [passwordLoading, setPasswordLoading] = useState(false)
   const [resetPasswordLoading, setResetPasswordLoading] = useState(false)
   const [loadingAdmin, setLoadingAdmin] = useState(false)
+  const [loadingEditingAdmin, setLoadingEditingAdmin] = useState(false)
 
   // Hydration fix
   const [hydrated, setHydrated] = useState(false)
@@ -90,7 +92,7 @@ export default function DadosFranquiasPage() {
     router.push(`/franqueadora/dashboard/franquia/${franchise.id}`)
   }
 
-  const handleEditFranchise = (franchise: Academy) => {
+  const handleEditFranchise = async (franchise: Academy) => {
     setEditingFranchise({
       id: franchise.id,
       name: franchise.name,
@@ -103,6 +105,24 @@ export default function DadosFranquiasPage() {
       monthly_revenue: franchise.monthly_revenue,
       is_active: franchise.is_active
     })
+    
+    // Buscar o admin da franquia ao abrir o modal de edição
+    setEditingFranchiseAdmin(null)
+    setLoadingEditingAdmin(true)
+    try {
+      const admin = await fetchFranchiseAdmin(franchise.id)
+      if (admin && admin.id && admin.email) {
+        setEditingFranchiseAdmin({
+          id: admin.id,
+          name: admin.name || 'Admin',
+          email: admin.email
+        })
+      }
+    } catch (error) {
+      console.error('[handleEditFranchise] Erro ao buscar admin:', error)
+    } finally {
+      setLoadingEditingAdmin(false)
+    }
   }
 
   const handleSaveEdit = async () => {
@@ -138,6 +158,7 @@ export default function DadosFranquiasPage() {
 
   const handleCancelEdit = () => {
     setEditingFranchise(null)
+    setEditingFranchiseAdmin(null)
   }
 
   const handleDeleteFranchise = (franchise: Academy) => {
@@ -718,6 +739,28 @@ export default function DadosFranquiasPage() {
                 {/* Ações de Senha do Admin */}
                 <div className="border-t pt-4 mt-6">
                   <h4 className="text-sm font-medium text-gray-900 mb-3">Gerenciar Senha do Admin</h4>
+                  
+                  {/* Exibir email do admin */}
+                  {loadingEditingAdmin ? (
+                    <div className="mb-3 text-sm text-gray-500">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600 inline-block mr-2"></div>
+                      Carregando dados do admin...
+                    </div>
+                  ) : editingFranchiseAdmin ? (
+                    <div className="mb-3 p-3 bg-gray-50 rounded-md">
+                      <p className="text-sm text-gray-600">
+                        <span className="font-medium">Admin:</span> {editingFranchiseAdmin.name}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        <span className="font-medium">Email:</span> {editingFranchiseAdmin.email}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="mb-3 text-sm text-amber-600">
+                      ⚠️ Admin não encontrado para esta franquia
+                    </div>
+                  )}
+                  
                   <div className="flex flex-wrap gap-3">
                     <Button
                       variant="outline"
