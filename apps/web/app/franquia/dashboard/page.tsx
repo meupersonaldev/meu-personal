@@ -713,6 +713,58 @@ export default function FranquiaDashboard() {
     setDeleteConfirm({ isOpen: false, type: null, id: null, name: '' })
   }
 
+  const handleCleanupOrphans = async () => {
+    if (!franquiaUser?.academyId) {
+      toast.error('Academia não identificada')
+      return
+    }
+
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+
+      // Primeiro validar
+      const validateResp = await fetch(`${API_URL}/api/bookings/validate-orphans?franchise_id=${franquiaUser.academyId}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      })
+
+      if (!validateResp.ok) {
+        throw new Error('Erro ao validar órfãos')
+      }
+
+      const { orphans } = await validateResp.json()
+
+      if (orphans.length === 0) {
+        toast.success('Nenhum agendamento órfão encontrado')
+        return
+      }
+
+      // Confirmar antes de deletar
+      if (!confirm(`Encontrados ${orphans.length} agendamentos órfãos. Deseja excluí-los?`)) {
+        return
+      }
+
+      // Deletar órfãos
+      const deleteResp = await fetch(`${API_URL}/api/bookings/cleanup-orphans?franchise_id=${franquiaUser.academyId}`, {
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      })
+
+      if (!deleteResp.ok) {
+        throw new Error('Erro ao excluir órfãos')
+      }
+
+      const result = await deleteResp.json()
+      toast.success(`${result.deleted || orphans.length} agendamentos órfãos excluídos com sucesso`)
+      
+      // Recarregar analytics
+      await fetchAnalytics()
+    } catch (error: any) {
+      console.error('[handleCleanupOrphans] Erro:', error)
+      toast.error(error.message || 'Erro ao limpar agendamentos órfãos')
+    }
+  }
+
   if (!hydrated || !storeHydrated) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
