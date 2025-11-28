@@ -24,6 +24,16 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  // Reduzir uso de cache para economizar espaço em disco
+  experimental: {
+    turbo: {
+      resolveAlias: {
+        // Reduzir cache do Turbopack
+      },
+    },
+  },
+  // Desabilitar geração de source maps em desenvolvimento para economizar espaço
+  productionBrowserSourceMaps: false,
   async rewrites() {
     return [
       {
