@@ -15,7 +15,7 @@ const sizeClasses = {
   md: 'h-40 w-40',
   lg: 'h-56 w-56',
   xl: 'h-72 w-72',
-  header: 'h-24 w-48 lg:transform lg:scale-125 lg:origin-left relative lg:top-6'
+  header: 'h-24 w-48 lg:transform lg:scale-100 lg:origin-left relative lg:top-6'
 }
 
 const textSizeClasses = {
