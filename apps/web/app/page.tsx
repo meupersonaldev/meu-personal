@@ -80,7 +80,7 @@ export default function Home() {
 
             {/* Botão e Mobile Menu - Direita */}
             <div className="flex items-center gap-4">
-              <Link href="/cadastro" className="hidden md:block">
+              <Link href="/cadastro" className="hidden md:block no-underline">
                 <Button size="sm" className="bg-meu-accent text-meu-primary hover:bg-meu-accent/90">
                   Comece agora
                 </Button>
