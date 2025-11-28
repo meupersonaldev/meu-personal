@@ -367,11 +367,14 @@ export default function ComprarHorasPage() {
                     <p className="text-sm text-gray-600 mb-4">{pkg.description}</p>
                     
                     <div className="mb-4">
+                      {/* Valor por hora em destaque */}
                       <div className="text-4xl font-bold text-blue-600 mb-1">
-                        R$ {pkg.price.toFixed(2)}
+                        R$ {(pkg.price / pkg.hours_included).toFixed(2)}
+                        <span className="text-2xl font-semibold">/hora</span>
                       </div>
-                      <div className="text-sm text-gray-500">
-                        R$ {(pkg.price / pkg.hours_included).toFixed(2)}/hora
+                      {/* Valor total menor */}
+                      <div className="text-sm text-gray-500 mt-2">
+                        Total: R$ {pkg.price.toFixed(2)}
                       </div>
                     </div>
 
