@@ -80,11 +80,11 @@ export default function Home() {
 
             {/* Botão e Mobile Menu - Direita */}
             <div className="flex items-center gap-4">
-              <Button asChild size="sm" className="hidden md:block bg-meu-accent text-meu-primary hover:bg-meu-accent/90 w-full md:w-auto">
-                <Link href="/login" className="no-underline flex items-center justify-center w-full h-full text-center">
+              <Link href="/login" className="hidden md:block no-underline">
+                <Button size="sm" className="bg-meu-accent text-meu-primary hover:bg-meu-accent/90 px-4 py-2">
                   Comece agora
-                </Link>
-              </Button>
+                </Button>
+              </Link>
               
               {/* Mobile Menu Button */}
               <div className="md:hidden">
@@ -136,11 +136,11 @@ export default function Home() {
                 Como Funciona
               </Link>
               <div className="pt-3 border-t border-meu-primary-dark space-y-3">
-                <Button asChild size="sm" className="bg-meu-accent text-meu-primary hover:bg-meu-accent/90 w-full">
-                  <Link href="/login" onClick={() => setMobileMenuOpen(false)} className="no-underline flex items-center justify-center w-full h-full text-center">
+                <Link href="/login" onClick={() => setMobileMenuOpen(false)} className="no-underline block">
+                  <Button size="sm" className="bg-meu-accent text-meu-primary hover:bg-meu-accent/90 w-full">
                     Comece agora
-                  </Link>
-                </Button>
+                  </Button>
+                </Link>
               </div>
             </nav>
           </div>
