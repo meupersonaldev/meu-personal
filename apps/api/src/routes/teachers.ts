@@ -219,6 +219,13 @@ router.get('/by-academy-id', requireAuth, async (req, res) => {
   }
 })
 
+// GET /api/teachers/by-academy - Alias para /by-academy-id (compatibilidade)
+router.get('/by-academy', requireAuth, async (req, res) => {
+  // Redirecionar para a mesma lógica de /by-academy-id
+  req.url = '/by-academy-id'
+  return router.handle(req, res)
+})
+
 // GET /api/teachers/:id/bookings-by-date - Buscar bookings disponíveis do professor por data
 router.get('/:id/bookings-by-date', requireAuth, async (req, res) => {
   try {
