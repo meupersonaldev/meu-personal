@@ -4,7 +4,7 @@ export default function SiteFooter() {
   return (
     <footer className="py-12 lg:py-16 bg-meu-primary-dark border-t border-meu-accent/20">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-8 lg:mb-12">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 mb-8 lg:mb-12">
           <div>
             <h4 className="font-semibold mb-4 lg:mb-6 text-white text-lg">Para Alunos</h4>
             <ul className="space-y-3 text-gray-300">
@@ -21,15 +21,6 @@ export default function SiteFooter() {
               <li><Link href="/professor/login" className="hover:text-meu-cyan transition-colors">Login</Link></li>
               <li><Link href="#para-professores" className="hover:text-meu-cyan transition-colors">Benefícios</Link></li>
               <li><Link href="#" className="hover:text-meu-cyan transition-colors">Academias Parceiras</Link></li>
-            </ul>
-          </div>
-          <div>
-            <h4 className="font-semibold mb-4 lg:mb-6 text-white text-lg">Franquias</h4>
-            <ul className="space-y-3 text-gray-300">
-              <li><Link href="/seja-franqueado" className="hover:text-meu-accent transition-colors">Seja Franqueado</Link></li>
-              <li><Link href="#franquias" className="hover:text-meu-accent transition-colors">Modelo de Negócio</Link></li>
-              <li><Link href="#como-funciona" className="hover:text-meu-accent transition-colors">Como Funciona</Link></li>
-              <li><Link href="#" className="hover:text-meu-accent transition-colors">Contato</Link></li>
             </ul>
           </div>
           <div>
