@@ -10,7 +10,7 @@ import { ensureFranqueadoraContact } from '../services/franqueadora-contacts.ser
 import { auditAuthEvent, auditSensitiveOperation } from '../middleware/audit'
 import { auditService } from '../services/audit.service'
 import { emailService } from '../services/email.service'
-import { validateCpfCnpj } from '../utils/validation'
+import { validateCpfCnpj, validateCpfWithAPI } from '../utils/validation'
 
 const router = express.Router()
 
@@ -272,6 +272,22 @@ router.post(
       // Validar CPF (verificar dígitos verificadores)
       if (!validateCpfCnpj(sanitizedCpf)) {
         return res.status(400).json({ message: 'CPF inválido. Verifique os dígitos e tente novamente.' })
+      }
+
+      // Validar CPF via API externa (se configurado)
+      // Isso confirma se o CPF existe na Receita Federal
+      if (process.env.ENABLE_CPF_API_VALIDATION === 'true') {
+        try {
+          const apiValidation = await validateCpfWithAPI(sanitizedCpf)
+          if (!apiValidation.valid) {
+            return res.status(400).json({ 
+              message: apiValidation.error || 'CPF não encontrado nos registros oficiais. Verifique o número e tente novamente.' 
+            })
+          }
+        } catch (apiError: any) {
+          // Se API falhar, aceita se dígitos estão corretos (não bloqueia cadastro)
+          console.warn('Erro ao validar CPF via API, mas dígitos estão corretos:', apiError.message)
+        }
       }
 
       // Verificar se email já existe
