@@ -2,70 +2,11 @@ import express from 'express'
 import { z } from 'zod'
 import { supabase } from '../lib/supabase'
 import { asaasService } from '../services/asaas.service'
+import { cacheService } from '../services/cache.service'
 import { requireAuth } from '../middleware/auth'
 import { requireApprovedTeacher } from '../middleware/approval'
 
 const router = express.Router()
-
-// Cache simples em memória para dados financeiros
-interface CacheEntry<T> {
-  data: T
-  timestamp: number
-  ttl: number // Time to live em milissegundos
-}
-
-class SimpleCache {
-  private cache = new Map<string, CacheEntry<any>>()
-
-  set<T>(key: string, data: T, ttlMs: number = 5 * 60 * 1000) { // 5 minutos por padrão
-    this.cache.set(key, {
-      data,
-      timestamp: Date.now(),
-      ttl: ttlMs
-    })
-  }
-
-  get<T>(key: string): T | null {
-    const entry = this.cache.get(key)
-    if (!entry) return null
-
-    const now = Date.now()
-    const age = now - entry.timestamp
-
-    if (age > entry.ttl) {
-      // Cache expirado
-      this.cache.delete(key)
-      return null
-    }
-
-    return entry.data as T
-  }
-
-  clear(key?: string) {
-    if (key) {
-      this.cache.delete(key)
-    } else {
-      this.cache.clear()
-    }
-  }
-
-  // Limpar entradas expiradas periodicamente
-  cleanup() {
-    const now = Date.now()
-    for (const [key, entry] of this.cache.entries()) {
-      if (now - entry.timestamp > entry.ttl) {
-        this.cache.delete(key)
-      }
-    }
-  }
-}
-
-const financeCache = new SimpleCache()
-
-// Limpar cache expirado a cada 10 minutos
-setInterval(() => {
-  financeCache.cleanup()
-}, 10 * 60 * 1000)
 
 /**
  * Função auxiliar para buscar walletIds e montar split de pagamento
@@ -463,14 +404,17 @@ router.get('/franchise/:academy_id/asaas', requireAuth, async (req, res) => {
     const { status, start_date, end_date, limit = 100, force_refresh } = req.query
 
     // Criar chave de cache baseada nos parâmetros
-    const cacheKey = `franchise_${academy_id}_${status || 'all'}_${start_date || ''}_${end_date || ''}_${limit}`
+    const cacheKey = `franchise_payments_${academy_id}_${status || 'all'}_${start_date || ''}_${end_date || ''}_${limit}`
     
     // Verificar cache (a menos que force_refresh seja true)
     if (force_refresh !== 'true') {
-      const cached = financeCache.get(cacheKey)
+      const cached = await cacheService.get(cacheKey)
       if (cached) {
         console.log(`[payments/franchise/asaas] Retornando dados do cache para ${academy_id}`)
-        return res.json(cached)
+        return res.json({
+          ...cached,
+          cached: true
+        })
       }
     }
 
@@ -673,7 +617,7 @@ router.get('/franchise/:academy_id/asaas', requireAuth, async (req, res) => {
     }
 
     // Salvar no cache (TTL de 5 minutos para dados financeiros)
-    financeCache.set(cacheKey, response, 5 * 60 * 1000)
+    await cacheService.set(cacheKey, response, 5 * 60 * 1000)
     console.log(`[payments/franchise/asaas] Dados salvos no cache para ${academy_id}`)
 
     res.json(response)
