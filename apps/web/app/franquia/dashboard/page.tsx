@@ -801,6 +801,14 @@ export default function FranquiaDashboard() {
               <p className="text-sm uppercase tracking-wide text-gray-500">Painel</p>
               <h1 className="text-3xl font-bold text-gray-900">Dashboard da Franquia</h1>
             </div>
+            <Button
+              onClick={handleCleanupOrphans}
+              variant="outline"
+              className="text-red-600 hover:bg-red-50 border-red-200"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Limpar Agendamentos Órfãos
+            </Button>
           </div>
 
         <div className="space-y-4 sm:space-y-6">
