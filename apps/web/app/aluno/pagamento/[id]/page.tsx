@@ -72,7 +72,7 @@ export default function PagamentoPage() {
     fetchPaymentIntent()
   }, [token, paymentIntentId, router])
 
-  // Abrir pagamento em nova aba automaticamente
+  // Abrir pagamento - estratégia diferente para iOS
   useEffect(() => {
     if (!paymentIntent?.checkout_url || opened) return
 
@@ -90,18 +90,37 @@ export default function PagamentoPage() {
     
     const openTimer = setTimeout(() => {
       try {
-        console.log('🔄 Abrindo pagamento em nova aba:', url)
-        const newWindow = window.open(url, '_blank', 'noopener,noreferrer')
-        
-        if (newWindow) {
-          setPaymentWindow(newWindow)
+        if (isIOS) {
+          // No iOS, window.open é frequentemente bloqueado
+          // Usa redirecionamento direto e inicia polling
+          console.log('🔄 iOS detectado - redirecionando diretamente:', url)
           setOpened(true)
           setPolling(true)
-          toast.success('Página de pagamento aberta em nova aba. Aguardando confirmação...')
+          toast.success('Redirecionando para página de pagamento. Aguardando confirmação...')
+          // Pequeno delay antes de redirecionar para garantir que o estado foi atualizado
+          setTimeout(() => {
+            window.location.href = url
+          }, 100)
         } else {
-          // Se popup foi bloqueado, usa redirecionamento direto
-          console.warn('⚠️ Popup bloqueado, redirecionando diretamente...')
-          window.location.href = url
+          // Em outros dispositivos, tenta abrir em nova aba
+          console.log('🔄 Abrindo pagamento em nova aba:', url)
+          const newWindow = window.open(url, '_blank', 'noopener,noreferrer')
+          
+          if (newWindow && !newWindow.closed) {
+            setPaymentWindow(newWindow)
+            setOpened(true)
+            setPolling(true)
+            toast.success('Página de pagamento aberta em nova aba. Aguardando confirmação...')
+          } else {
+            // Se popup foi bloqueado, usa redirecionamento direto
+            console.warn('⚠️ Popup bloqueado, redirecionando diretamente...')
+            setOpened(true)
+            setPolling(true)
+            toast.success('Redirecionando para página de pagamento. Aguardando confirmação...')
+            setTimeout(() => {
+              window.location.href = url
+            }, 100)
+          }
         }
       } catch (e) {
         console.error('❌ Erro ao abrir link:', e)
@@ -110,13 +129,13 @@ export default function PagamentoPage() {
     }, delay)
 
     return () => clearTimeout(openTimer)
-  }, [paymentIntent?.checkout_url, opened])
+  }, [paymentIntent?.checkout_url, opened, isIOS])
 
   // Polling do status do pagamento
   useEffect(() => {
     if (!polling || !paymentIntentId || !token) return
 
-    const pollInterval = setInterval(async () => {
+    const checkPaymentStatus = async () => {
       try {
         const response = await fetch(`${API_BASE_URL}/api/packages/payment-intent/${paymentIntentId}`, {
           headers: {
@@ -151,9 +170,30 @@ export default function PagamentoPage() {
       } catch (error) {
         console.error('Erro ao verificar status:', error)
       }
-    }, 3000) // Verifica a cada 3 segundos
+    }
 
-    return () => clearInterval(pollInterval)
+    // Verifica imediatamente
+    checkPaymentStatus()
+
+    // Verifica a cada 3 segundos
+    const pollInterval = setInterval(checkPaymentStatus, 3000)
+
+    // No iOS, quando a página volta ao foco (usuário voltou do Asaas), verifica imediatamente
+    const handleFocus = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('📱 Página voltou ao foco - verificando status do pagamento...')
+        checkPaymentStatus()
+      }
+    }
+
+    window.addEventListener('focus', handleFocus)
+    document.addEventListener('visibilitychange', handleFocus)
+
+    return () => {
+      clearInterval(pollInterval)
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleFocus)
+    }
   }, [polling, paymentIntentId, token, paymentWindow, router])
 
   if (loading) {
@@ -216,16 +256,30 @@ export default function PagamentoPage() {
               <div className="space-y-3">
                 <Button
                   onClick={() => {
-                    if (paymentWindow && !paymentWindow.closed) {
-                      paymentWindow.focus()
-                    } else if (paymentIntent.checkout_url) {
-                      window.open(paymentIntent.checkout_url, '_blank', 'noopener,noreferrer')
+                    if (!paymentIntent.checkout_url) return
+                    
+                    if (isIOS) {
+                      // No iOS, sempre usa redirecionamento direto
+                      window.location.href = paymentIntent.checkout_url
+                    } else {
+                      // Em outros dispositivos, tenta nova aba
+                      if (paymentWindow && !paymentWindow.closed) {
+                        paymentWindow.focus()
+                      } else {
+                        const newWindow = window.open(paymentIntent.checkout_url, '_blank', 'noopener,noreferrer')
+                        if (newWindow) {
+                          setPaymentWindow(newWindow)
+                        } else {
+                          // Fallback se popup for bloqueado
+                          window.location.href = paymentIntent.checkout_url
+                        }
+                      }
                     }
                   }}
                   variant="outline"
                   className="w-full"
                 >
-                  Abrir Página de Pagamento Novamente
+                  {isIOS ? 'Ir para Página de Pagamento' : 'Abrir Página de Pagamento Novamente'}
                 </Button>
                 <Button
                   onClick={() => {
@@ -247,30 +301,48 @@ export default function PagamentoPage() {
               </h3>
               <p className="text-sm text-gray-600 mb-6">
                 {isIOS 
-                  ? 'A página de pagamento será aberta em instantes.'
+                  ? 'Você será redirecionado para a página de pagamento em instantes. Após concluir, você será redirecionado de volta automaticamente.'
                   : 'A página de pagamento será aberta em uma nova aba em instantes.'}
               </p>
-              {paymentIntent.checkout_url && (
-                <Button
-                  onClick={() => {
-                    const url = paymentIntent.checkout_url!
-                    console.log('Clique manual - abrindo em nova aba:', url)
-                    const newWindow = window.open(url, '_blank', 'noopener,noreferrer')
-                    if (newWindow) {
-                      setPaymentWindow(newWindow)
-                      setOpened(true)
-                      setPolling(true)
-                      toast.success('Página de pagamento aberta. Aguardando confirmação...')
-                    } else {
-                      // Fallback se popup for bloqueado
-                      window.location.href = url
-                    }
-                  }}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 text-lg font-semibold"
-                >
-                  Abrir Link de Pagamento
-                </Button>
-              )}
+                {paymentIntent.checkout_url && (
+                  <Button
+                    onClick={() => {
+                      const url = paymentIntent.checkout_url!
+                      
+                      if (isIOS) {
+                        // No iOS, sempre usa redirecionamento direto
+                        console.log('Clique manual - iOS - redirecionando:', url)
+                        setOpened(true)
+                        setPolling(true)
+                        toast.success('Redirecionando para página de pagamento. Aguardando confirmação...')
+                        setTimeout(() => {
+                          window.location.href = url
+                        }, 100)
+                      } else {
+                        // Em outros dispositivos, tenta nova aba
+                        console.log('Clique manual - abrindo em nova aba:', url)
+                        const newWindow = window.open(url, '_blank', 'noopener,noreferrer')
+                        if (newWindow && !newWindow.closed) {
+                          setPaymentWindow(newWindow)
+                          setOpened(true)
+                          setPolling(true)
+                          toast.success('Página de pagamento aberta. Aguardando confirmação...')
+                        } else {
+                          // Fallback se popup for bloqueado
+                          setOpened(true)
+                          setPolling(true)
+                          toast.success('Redirecionando para página de pagamento. Aguardando confirmação...')
+                          setTimeout(() => {
+                            window.location.href = url
+                          }, 100)
+                        }
+                      }
+                    }}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 text-lg font-semibold"
+                  >
+                    {isIOS ? 'Ir para Pagamento' : 'Abrir Link de Pagamento'}
+                  </Button>
+                )}
             </>
           )}
         </div>
