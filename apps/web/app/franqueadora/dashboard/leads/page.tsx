@@ -489,10 +489,12 @@ export default function FranchiseLeadsPage() {
             </Card>
 
             {/* Pagination */}
-            {totalPages > 1 && (
+            {total > 0 && (
               <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="text-sm text-gray-600">
-                  Mostrando {((page - 1) * limit) + 1} a {Math.min(page * limit, total)} de {total} leads
+                  Mostrando <span className="font-medium">{((page - 1) * limit) + 1}</span> a{' '}
+                  <span className="font-medium">{Math.min(page * limit, total)}</span> de{' '}
+                  <span className="font-medium">{total}</span> leads
                 </div>
                 <div className="flex items-center gap-2">
                   <Button
@@ -500,18 +502,61 @@ export default function FranchiseLeadsPage() {
                     size="sm"
                     onClick={() => setPage(p => Math.max(1, p - 1))}
                     disabled={page === 1 || isLoading}
+                    className="rounded-l-md"
                   >
                     <ChevronLeft className="h-4 w-4" />
                     Anterior
                   </Button>
-                  <span className="text-sm text-gray-600 px-2">
-                    Página {page} de {totalPages}
-                  </span>
+                  
+                  {/* Page Numbers */}
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                      let pageNum: number
+                      if (totalPages <= 5) {
+                        pageNum = i + 1
+                      } else if (page <= 3) {
+                        pageNum = i + 1
+                      } else if (page >= totalPages - 2) {
+                        pageNum = totalPages - 4 + i
+                      } else {
+                        pageNum = page - 2 + i
+                      }
+                      
+                      return (
+                        <Button
+                          key={pageNum}
+                          variant={page === pageNum ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setPage(pageNum)}
+                          disabled={isLoading}
+                          className="min-w-[40px]"
+                        >
+                          {pageNum}
+                        </Button>
+                      )
+                    })}
+                    {totalPages > 5 && page < totalPages - 2 && (
+                      <>
+                        <span className="px-2 text-gray-400">...</span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setPage(totalPages)}
+                          disabled={isLoading}
+                          className="min-w-[40px]"
+                        >
+                          {totalPages}
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                  
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                     disabled={page === totalPages || isLoading}
+                    className="rounded-r-md"
                   >
                     Próxima
                     <ChevronRight className="h-4 w-4" />
