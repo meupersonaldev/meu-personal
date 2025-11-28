@@ -1,11 +1,13 @@
 import { Router } from 'express'
 import bcrypt from 'bcryptjs'
+import jwt from 'jsonwebtoken'
 import { supabase } from '../lib/supabase'
 import multer from 'multer'
 import { randomUUID } from 'crypto'
 import path from 'path'
-import { requireAuth } from '../middleware/auth'
+import { requireAuth, requireRole } from '../middleware/auth'
 import { validateCpfCnpj } from '../utils/validation'
+import { emailService } from '../services/email.service'
 
 // Cliente Supabase centralizado importado de ../lib/supabase
 
@@ -347,44 +349,55 @@ router.patch('/:id', requireAuth, async (req, res) => {
   }
 })
 
-// PUT /api/users/:id/password - Alterar senha
+// PUT /api/users/:id/password - Alterar senha (próprio usuário ou admin)
 router.put('/:id/password', requireAuth, async (req, res) => {
   try {
     const { id } = req.params
     const { currentPassword, newPassword } = req.body as { currentPassword?: string; newPassword?: string }
     const user = (req as any).user
+    const isAdmin = ['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN', 'FRANCHISE_ADMIN'].includes(user?.role)
+    const isOwner = user?.userId === id
 
-    if (user?.userId !== id) {
+    // Apenas o próprio usuário ou admin pode alterar senha
+    if (!isAdmin && !isOwner) {
       return res.status(403).json({ error: 'Forbidden' })
     }
 
-    if (typeof currentPassword !== 'string' || typeof newPassword !== 'string') {
-      return res.status(400).json({ error: 'Parâmetros inválidos' })
+    if (typeof newPassword !== 'string') {
+      return res.status(400).json({ error: 'Nova senha é obrigatória' })
     }
 
     if (newPassword.length < 6) {
       return res.status(400).json({ error: 'Nova senha deve ter pelo menos 6 caracteres' })
     }
 
-    const { data: dbUser, error: fetchError } = await supabase
-      .from('users')
-      .select('password, password_hash')
-      .eq('id', id)
-      .single()
+    // Se for o próprio usuário (não admin), precisa da senha atual
+    if (!isAdmin && isOwner) {
+      if (typeof currentPassword !== 'string') {
+        return res.status(400).json({ error: 'Senha atual é obrigatória' })
+      }
 
-    if (fetchError || !dbUser) throw fetchError || new Error('Usuário não encontrado')
+      const { data: dbUser, error: fetchError } = await supabase
+        .from('users')
+        .select('password, password_hash')
+        .eq('id', id)
+        .single()
 
-    let validPassword = false
-    if (dbUser.password_hash) {
-      validPassword = await bcrypt.compare(currentPassword, dbUser.password_hash)
-    } else if (dbUser.password) {
-      validPassword = dbUser.password === currentPassword
+      if (fetchError || !dbUser) throw fetchError || new Error('Usuário não encontrado')
+
+      let validPassword = false
+      if (dbUser.password_hash) {
+        validPassword = await bcrypt.compare(currentPassword, dbUser.password_hash)
+      } else if (dbUser.password) {
+        validPassword = dbUser.password === currentPassword
+      }
+
+      if (!validPassword) {
+        return res.status(401).json({ error: 'Senha atual incorreta' })
+      }
     }
 
-    if (!validPassword) {
-      return res.status(401).json({ error: 'Senha atual incorreta' })
-    }
-
+    // Admin pode alterar sem senha atual, apenas precisa da nova senha
     const newHash = await bcrypt.hash(newPassword, 10)
 
     const { error: updateError } = await supabase
@@ -401,6 +414,85 @@ router.put('/:id/password', requireAuth, async (req, res) => {
     res.json({ message: 'Senha alterada com sucesso' })
   } catch (error: any) {
     console.error('Error updating password:', error)
+    res.status(500).json({ error: error.message || 'Erro interno do servidor' })
+  }
+})
+
+// POST /api/users/:id/reset-password - Resetar senha de usuário (apenas admin) e enviar por email
+router.post('/:id/reset-password', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN', 'FRANCHISE_ADMIN']), async (req, res) => {
+  try {
+    const { id } = req.params
+    const user = (req as any).user
+
+    // Buscar usuário para resetar senha
+    const { data: targetUser, error: fetchError } = await supabase
+      .from('users')
+      .select('id, name, email, is_active')
+      .eq('id', id)
+      .single()
+
+    if (fetchError || !targetUser) {
+      return res.status(404).json({ error: 'Usuário não encontrado' })
+    }
+
+    if (!targetUser.is_active) {
+      return res.status(400).json({ error: 'Não é possível resetar senha de usuário inativo' })
+    }
+
+    // Gerar token de reset de senha
+    const jwtSecret = process.env.JWT_SECRET
+    if (!jwtSecret) {
+      return res.status(500).json({ error: 'JWT_SECRET não está configurado' })
+    }
+
+    const resetToken = jwt.sign(
+      { userId: targetUser.id, email: targetUser.email, type: 'password_reset' },
+      jwtSecret,
+      { expiresIn: '1h' }
+    )
+
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000'
+    const resetUrl = new URL('/redefinir-senha', frontendUrl)
+    resetUrl.searchParams.set('token', resetToken)
+    const resetLink = resetUrl.toString()
+
+    // Enviar email
+    try {
+      await emailService.sendEmail({
+        to: targetUser.email,
+        subject: 'Redefinição de senha - Meu Personal',
+        html: `
+          <p>Olá ${targetUser.name || ''},</p>
+          <p>Um administrador solicitou a redefinição da sua senha na plataforma Meu Personal.</p>
+          <p><a href="${resetLink}" target="_blank" rel="noopener noreferrer">Clique aqui para criar uma nova senha</a>.</p>
+          <p>Este link expira em 1 hora.</p>
+          <p>Se você não solicitou essa alteração, entre em contato com o suporte imediatamente.</p>
+          <p>Atenciosamente,<br>Equipe Meu Personal</p>
+        `,
+        text: [
+          `Olá ${targetUser.name || ''},`,
+          '',
+          'Um administrador solicitou a redefinição da sua senha na plataforma Meu Personal.',
+          `Acesse o link a seguir para criar uma nova senha: ${resetLink}`,
+          '',
+          'Este link expira em 1 hora.',
+          'Se você não solicitou essa alteração, entre em contato com o suporte imediatamente.',
+          '',
+          'Atenciosamente,',
+          'Equipe Meu Personal'
+        ].join('\n')
+      })
+    } catch (sendError) {
+      console.error('Erro ao enviar email de redefinição de senha:', sendError)
+      return res.status(500).json({ error: 'Erro ao enviar email de redefinição de senha' })
+    }
+
+    res.json({ 
+      message: 'Email de redefinição de senha enviado com sucesso',
+      email: targetUser.email 
+    })
+  } catch (error: any) {
+    console.error('Error resetting password:', error)
     res.status(500).json({ error: error.message || 'Erro interno do servidor' })
   }
 })

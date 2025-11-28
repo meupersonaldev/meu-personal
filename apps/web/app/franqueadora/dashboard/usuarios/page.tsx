@@ -24,7 +24,10 @@ import {
   Edit,
   Trash2,
   Save,
-  X
+  X,
+  Lock,
+  KeyRound,
+  Mail
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -63,6 +66,13 @@ function UsuariosPageContent() {
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [userToDelete, setUserToDelete] = useState<User | null>(null)
+  const [showPasswordModal, setShowPasswordModal] = useState(false)
+  const [passwordData, setPasswordData] = useState({
+    newPassword: '',
+    confirmPassword: ''
+  })
+  const [passwordLoading, setPasswordLoading] = useState(false)
+  const [resetPasswordLoading, setResetPasswordLoading] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -339,6 +349,82 @@ function UsuariosPageContent() {
       toast.error(error.message || `Erro ao ${userModalMode === 'create' ? 'criar' : 'atualizar'} usuário`)
     } finally {
       setUserLoading(false)
+    }
+  }
+
+  const handleChangePassword = async () => {
+    if (!selectedUser) return
+
+    if (!passwordData.newPassword || !passwordData.confirmPassword) {
+      toast.error('Preencha todos os campos')
+      return
+    }
+
+    if (passwordData.newPassword.length < 6) {
+      toast.error('A senha deve ter no mínimo 6 caracteres')
+      return
+    }
+
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      toast.error('As senhas não coincidem')
+      return
+    }
+
+    setPasswordLoading(true)
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const response = await fetch(`${API_URL}/api/users/${selectedUser.id}/password`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          newPassword: passwordData.newPassword
+        })
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Erro ao alterar senha')
+      }
+
+      toast.success('Senha alterada com sucesso!')
+      setShowPasswordModal(false)
+      setPasswordData({ newPassword: '', confirmPassword: '' })
+    } catch (error: any) {
+      toast.error(error.message || 'Erro ao alterar senha')
+    } finally {
+      setPasswordLoading(false)
+    }
+  }
+
+  const handleResetPassword = async () => {
+    if (!selectedUser) return
+
+    setResetPasswordLoading(true)
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const response = await fetch(`${API_URL}/api/users/${selectedUser.id}/reset-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Erro ao resetar senha')
+      }
+
+      toast.success(`Email de redefinição de senha enviado para ${data.email || selectedUser.email}`)
+    } catch (error: any) {
+      toast.error(error.message || 'Erro ao resetar senha')
+    } finally {
+      setResetPasswordLoading(false)
     }
   }
 
@@ -1412,9 +1498,132 @@ function UsuariosPageContent() {
                   )}
                 </div>
 
+                {/* Ações de Senha */}
+                <div className="border-t pt-4 mt-6">
+                  <h4 className="text-sm font-medium text-gray-900 mb-3">Gerenciar Senha</h4>
+                  <div className="flex flex-wrap gap-3">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setPasswordData({ newPassword: '', confirmPassword: '' })
+                        setShowPasswordModal(true)
+                      }}
+                      className="flex items-center gap-2"
+                    >
+                      <KeyRound className="h-4 w-4" />
+                      Alterar Senha
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={handleResetPassword}
+                      disabled={resetPasswordLoading}
+                      className="flex items-center gap-2"
+                    >
+                      {resetPasswordLoading ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
+                          Enviando...
+                        </>
+                      ) : (
+                        <>
+                          <Mail className="h-4 w-4" />
+                          Resetar e Enviar por Email
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
                 <div className="flex justify-end mt-6">
                   <Button variant="outline" onClick={() => setShowUserDetails(false)}>
                     Fechar
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Modal de Alterar Senha */}
+          {showPasswordModal && selectedUser && (
+            <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+              <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-1/2 lg:w-1/3 shadow-lg rounded-md bg-white">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Alterar Senha - {selectedUser.name}
+                  </h3>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setShowPasswordModal(false)
+                      setPasswordData({ newPassword: '', confirmPassword: '' })
+                    }}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Nova Senha *
+                    </label>
+                    <Input
+                      type="password"
+                      value={passwordData.newPassword}
+                      onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                      placeholder="Mínimo 6 caracteres"
+                      className="w-full"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Confirmar Nova Senha *
+                    </label>
+                    <Input
+                      type="password"
+                      value={passwordData.confirmPassword}
+                      onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                      placeholder="Digite a senha novamente"
+                      className="w-full"
+                    />
+                  </div>
+
+                  <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+                    <p className="text-sm text-blue-800">
+                      <strong>Observação:</strong> Como administrador, você pode alterar a senha de qualquer usuário sem precisar da senha atual.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 mt-6">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowPasswordModal(false)
+                      setPasswordData({ newPassword: '', confirmPassword: '' })
+                    }}
+                    disabled={passwordLoading}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    onClick={handleChangePassword}
+                    disabled={passwordLoading || !passwordData.newPassword || !passwordData.confirmPassword}
+                    className="bg-meu-primary hover:bg-meu-primary/90 text-white"
+                  >
+                    {passwordLoading ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Alterando...
+                      </>
+                    ) : (
+                      <>
+                        <Lock className="h-4 w-4 mr-2" />
+                        Alterar Senha
+                      </>
+                    )}
                   </Button>
                 </div>
               </div>
