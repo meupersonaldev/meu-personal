@@ -147,9 +147,20 @@ export default function AgendaAcademiaPage() {
   }
 
   const eventStyleGetter = (event: CalendarEvent) => {
+    // Definir cor baseada no status
+    let backgroundColor = event.color
+    
+    if (event.status === 'CANCELLED') {
+      backgroundColor = '#ef4444' // Vermelho (red-500 do Tailwind)
+    } else if (event.status === 'COMPLETED') {
+      backgroundColor = event.color || '#3b82f6' // Azul para concluídos
+    } else if (event.status === 'CONFIRMED') {
+      backgroundColor = event.color || '#10b981' // Verde para confirmados
+    }
+    
     return {
       style: {
-        backgroundColor: event.color,
+        backgroundColor,
         borderRadius: '5px',
         opacity: 0.8,
         color: 'white',
