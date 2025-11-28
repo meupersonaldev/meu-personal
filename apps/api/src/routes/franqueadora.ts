@@ -463,13 +463,16 @@ router.post('/leads', asyncErrorHandler(async (req, res) => {
       message
     } = req.body
 
+    console.log('[LEADS] Recebido formulário:', { name, email, phone, city })
+
     // Validação básica
     if (!name || !email) {
+      console.log('[LEADS] Validação falhou: nome ou email faltando')
       return res.status(400).json({ error: 'Nome e email são obrigatórios' })
     }
 
-    // Buscar franqueadora padrão (primeira ativa)
-    const { data: defaultFranqueadora, error: franqueadoraError } = await supabase
+    // Buscar franqueadora padrão (primeira ativa ou qualquer uma se não houver ativa)
+    let { data: defaultFranqueadora, error: franqueadoraError } = await supabase
       .from('franqueadora')
       .select('id')
       .eq('is_active', true)
@@ -477,31 +480,55 @@ router.post('/leads', asyncErrorHandler(async (req, res) => {
       .limit(1)
       .single()
 
+    // Se não encontrar ativa, buscar qualquer uma
     if (franqueadoraError || !defaultFranqueadora) {
-      console.error('Erro ao buscar franqueadora padrão:', franqueadoraError)
-      return res.status(500).json({ error: 'Erro ao processar solicitação. Tente novamente mais tarde.' })
+      console.log('[LEADS] Não encontrou franqueadora ativa, buscando qualquer uma...')
+      const { data: anyFranqueadora, error: anyError } = await supabase
+        .from('franqueadora')
+        .select('id')
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .single()
+      
+      if (anyError || !anyFranqueadora) {
+        console.error('[LEADS] Erro ao buscar franqueadora:', anyError || franqueadoraError)
+        console.error('[LEADS] Nenhuma franqueadora encontrada no banco de dados')
+        return res.status(500).json({ 
+          error: 'Erro ao processar solicitação. Sistema temporariamente indisponível.' 
+        })
+      }
+      defaultFranqueadora = anyFranqueadora
     }
 
+    console.log('[LEADS] Franqueadora encontrada:', defaultFranqueadora.id)
+
     // Criar lead
+    const leadData = {
+      franqueadora_id: defaultFranqueadora.id,
+      name,
+      email,
+      phone: phone || null,
+      city: city || null,
+      investment_capacity: investment_capacity || null,
+      message: message || null,
+      status: 'NEW'
+    }
+
+    console.log('[LEADS] Tentando inserir lead:', leadData)
+
     const { data, error } = await supabase
       .from('franchise_leads')
-      .insert({
-        franqueadora_id: defaultFranqueadora.id,
-        name,
-        email,
-        phone: phone || null,
-        city: city || null,
-        investment_capacity: investment_capacity || null,
-        message: message || null,
-        status: 'NEW'
-      })
+      .insert(leadData)
       .select()
       .single()
 
     if (error) {
-      console.error('Erro ao criar lead:', error)
+      console.error('[LEADS] Erro ao criar lead:', error)
+      console.error('[LEADS] Detalhes do erro:', JSON.stringify(error, null, 2))
       throw error
     }
+
+    console.log('[LEADS] Lead criado com sucesso:', data?.id)
 
     return res.status(201).json({ 
       success: true,
@@ -509,8 +536,12 @@ router.post('/leads', asyncErrorHandler(async (req, res) => {
       lead: data 
     })
   } catch (error: any) {
-    console.error('Error creating franchise lead:', error)
-    return res.status(500).json({ error: error.message || 'Erro ao processar solicitação' })
+    console.error('[LEADS] Error creating franchise lead:', error)
+    console.error('[LEADS] Stack:', error.stack)
+    return res.status(500).json({ 
+      error: error.message || 'Erro ao processar solicitação',
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    })
   }
 }))
 

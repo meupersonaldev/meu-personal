@@ -65,7 +65,10 @@ export default function FranchiseLeadsPage() {
   const limit = 10
 
   const fetchLeads = async () => {
-    if (!isAuthenticated || !user || !token) return
+    if (!isAuthenticated || !user || !token) {
+      console.log('[LEADS PAGE] Não autenticado ou sem token')
+      return
+    }
 
     setIsLoading(true)
     try {
@@ -82,6 +85,8 @@ export default function FranchiseLeadsPage() {
         params.append('name', searchTerm)
       }
 
+      console.log('[LEADS PAGE] Buscando leads:', `${API_URL}/api/franqueadora/leads?${params}`)
+
       const response = await fetch(`${API_URL}/api/franqueadora/leads?${params}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -89,12 +94,20 @@ export default function FranchiseLeadsPage() {
         }
       })
 
+      console.log('[LEADS PAGE] Resposta status:', response.status)
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
+        console.error('[LEADS PAGE] Erro na resposta:', errorData)
         throw new Error(errorData.error || `Erro ${response.status}: ${response.statusText}`)
       }
 
       const data = await response.json()
+      console.log('[LEADS PAGE] Dados recebidos:', { 
+        success: data.success, 
+        total: data.pagination?.total,
+        leadsCount: data.data?.length 
+      })
       
       if (data.success) {
         setLeads(data.data || [])
@@ -104,7 +117,7 @@ export default function FranchiseLeadsPage() {
         throw new Error(data.error || 'Erro ao processar resposta')
       }
     } catch (error: any) {
-      console.error('Erro ao buscar leads:', error)
+      console.error('[LEADS PAGE] Erro ao buscar leads:', error)
       const errorMessage = error.message || 'Erro ao carregar leads. Tente novamente.'
       toast.error(errorMessage)
       // Limpar dados em caso de erro
