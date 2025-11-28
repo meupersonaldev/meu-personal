@@ -29,7 +29,6 @@ import {
   Mail
 } from 'lucide-react'
 import { useFranqueadoraStore, type Academy } from '@/lib/stores/franqueadora-store'
-import { Input } from '@/components/ui/input'
 
 interface EditingFranchise extends Partial<Academy> {
   id: string
