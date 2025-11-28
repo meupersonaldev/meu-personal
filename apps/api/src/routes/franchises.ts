@@ -405,15 +405,39 @@ router.get(
   async (req, res) => {
     try {
       const { id } = req.params
-      console.log('[GET /api/franchises/:id/admin] Buscando admin para franquia ID:', id)
+      console.log(
+        '[GET /api/franchises/:id/admin] Buscando admin para franquia ID:',
+        id
+      )
+
+      // Verificar se a academia existe primeiro
+      const { data: academy, error: academyCheckError } = await supabase
+        .from('academies')
+        .select('id, name, email')
+        .eq('id', id)
+        .single()
+
+      if (academyCheckError || !academy) {
+        console.error(
+          '[GET /api/franchises/:id/admin] Academia não encontrada:',
+          id,
+          academyCheckError
+        )
+        return res
+          .status(404)
+          .json({ error: 'Academia não encontrada' })
+      }
+
+      console.log(
+        '[GET /api/franchises/:id/admin] Academia encontrada:',
+        { id: academy.id, name: academy.name, email: academy.email }
+      )
 
       // Buscar admin da franquia
-      const { data: franchiseAdmin, error: adminError } = await supabase
+      const { data: franchiseAdmins, error: adminError } = await supabase
         .from('franchise_admins')
-        .select('user_id')
+        .select('user_id, academy_id')
         .eq('academy_id', id)
-        .limit(1)
-        .maybeSingle()
 
       if (adminError) {
         console.error(
@@ -425,14 +449,34 @@ router.get(
           .json({ error: 'Erro ao buscar admin da franquia' })
       }
 
-      if (!franchiseAdmin || !franchiseAdmin.user_id) {
-        console.log('[GET /api/franchises/:id/admin] Admin não encontrado para franquia:', id)
+      if (!franchiseAdmins || franchiseAdmins.length === 0) {
+        console.log(
+          '[GET /api/franchises/:id/admin] Admin não encontrado para franquia:',
+          id
+        )
         return res
           .status(404)
           .json({ error: 'Admin da franquia não encontrado' })
       }
 
-      console.log('[GET /api/franchises/:id/admin] Admin encontrado, user_id:', franchiseAdmin.user_id)
+      // Se houver múltiplos admins, usar o primeiro
+      const franchiseAdmin = franchiseAdmins[0]
+      
+      if (franchiseAdmins.length > 1) {
+        console.warn(
+          '[GET /api/franchises/:id/admin] Múltiplos admins encontrados para franquia:',
+          id,
+          'Usando o primeiro:',
+          franchiseAdmin.user_id
+        )
+      }
+
+      console.log(
+        '[GET /api/franchises/:id/admin] Admin encontrado, user_id:',
+        franchiseAdmin.user_id,
+        'Total de admins:',
+        franchiseAdmins.length
+      )
 
       // Buscar dados do usuário admin
       const { data: user, error: userError } = await supabase
@@ -452,11 +496,18 @@ router.get(
       }
 
       if (!user) {
-        console.log('[GET /api/franchises/:id/admin] Usuário não encontrado, user_id:', franchiseAdmin.user_id)
+        console.log(
+          '[GET /api/franchises/:id/admin] Usuário não encontrado, user_id:',
+          franchiseAdmin.user_id
+        )
         return res.status(404).json({ error: 'Usuário admin não encontrado' })
       }
 
-      console.log('[GET /api/franchises/:id/admin] Retornando admin:', { id: user.id, email: user.email, name: user.name })
+      console.log('[GET /api/franchises/:id/admin] Retornando admin:', {
+        id: user.id,
+        email: user.email,
+        name: user.name
+      })
       res.json(user)
     } catch (error: any) {
       console.error('[GET /api/franchises/:id/admin] Erro:', error)

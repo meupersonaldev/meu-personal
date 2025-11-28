@@ -70,6 +70,14 @@ export default function DadosFranquiasPage() {
     }
   }, [hydrated, fetchAcademies])
 
+  // Limpar estado do admin quando o modal for fechado
+  useEffect(() => {
+    if (!showPasswordModal) {
+      setFranchiseAdmin(null)
+      setPasswordData({ newPassword: '', confirmPassword: '' })
+    }
+  }, [showPasswordModal])
+
   const handleBack = () => {
     router.push('/franqueadora/dashboard')
   }
@@ -253,11 +261,29 @@ export default function DadosFranquiasPage() {
         adminId: admin.id,
         adminEmail: admin.email,
         adminName: admin.name,
-        franchiseId: franchise.id
+        franchiseId: franchise.id,
+        franchiseName: franchise.name
       })
+      
+      // Verificar se o admin retornado corresponde à franquia correta
+      if (admin.email === 'franquia@gmail.com') {
+        console.warn('[handleOpenPasswordModal] ATENÇÃO: Email genérico detectado! Verificando se é o admin correto...')
+      }
+      
+      // Aguardar um tick para garantir que o estado anterior foi limpo
+      await new Promise(resolve => setTimeout(resolve, 50))
+      
       // Só abrir o modal depois que o admin for carregado
-      setFranchiseAdmin(admin)
-      setShowPasswordModal(true)
+      setFranchiseAdmin({
+        id: admin.id,
+        name: admin.name || 'Admin',
+        email: admin.email
+      })
+      
+      // Aguardar mais um tick antes de abrir o modal
+      setTimeout(() => {
+        setShowPasswordModal(true)
+      }, 100)
     } else {
       console.error('[handleOpenPasswordModal] Admin não encontrado ou dados incompletos:', admin)
       toast.error('Não foi possível encontrar o admin desta franquia')
@@ -764,13 +790,16 @@ export default function DadosFranquiasPage() {
         )}
 
         {/* Modal de Alterar Senha do Admin */}
-        {showPasswordModal && franchiseAdmin && (
+        {showPasswordModal && franchiseAdmin && franchiseAdmin.id && franchiseAdmin.email && (
           <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
             <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-1/2 lg:w-1/3 shadow-lg rounded-md bg-white">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">
                   Alterar Senha do Admin - {franchiseAdmin.name || 'N/A'}
                 </h3>
+                <div className="text-xs text-gray-500">
+                  ID: {franchiseAdmin.id}
+                </div>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -796,7 +825,13 @@ export default function DadosFranquiasPage() {
                     disabled
                     className="w-full bg-gray-50"
                     placeholder={loadingAdmin ? 'Carregando...' : 'Email não encontrado'}
+                    readOnly
                   />
+                  {franchiseAdmin?.email && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Admin ID: {franchiseAdmin.id}
+                    </p>
+                  )}
                 </div>
 
                 <div>
