@@ -398,7 +398,13 @@ router.get('/leads',
   extractFilters(['status', 'name', 'email', 'phone']),
   addPaginationHeaders,
   asyncErrorHandler(async (req, res) => {
-    if (!req.franqueadoraAdmin?.franqueadora_id) {
+    const franqueadoraId = req.franqueadoraAdmin?.franqueadora_id
+    console.log('[LEADS GET] Franqueadora ID do admin:', franqueadoraId)
+    console.log('[LEADS GET] User ID:', req.user?.userId)
+    console.log('[LEADS GET] User Role:', req.user?.role)
+    
+    if (!franqueadoraId) {
+      console.log('[LEADS GET] ⚠️ Nenhum franqueadora_id encontrado, retornando array vazio')
       return res.json({
         success: true,
         data: [],
@@ -414,12 +420,13 @@ router.get('/leads',
     }
 
     const { pagination, filters } = req as any
+    console.log('[LEADS GET] Buscando leads para franqueadora_id:', franqueadoraId)
 
     // Construir consulta base
     let query = supabase
       .from('franchise_leads')
       .select('*', { count: 'exact' })
-      .eq('franqueadora_id', req.franqueadoraAdmin.franqueadora_id)
+      .eq('franqueadora_id', franqueadoraId)
 
     // Aplicar filtros
     query = buildFilterClauses(filters, query)
@@ -434,8 +441,12 @@ router.get('/leads',
     const { data, error, count } = await query
 
     if (error) {
+      console.error('[LEADS GET] Erro na query:', error)
       throw new Error(`Erro ao buscar leads: ${error.message}`)
     }
+
+    console.log('[LEADS GET] Leads encontrados:', count || 0)
+    console.log('[LEADS GET] Dados retornados:', data?.length || 0, 'registros')
 
     const response = buildPaginatedResponse(
       data || [],

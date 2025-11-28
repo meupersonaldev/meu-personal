@@ -178,6 +178,26 @@ export async function requireFranqueadoraAdmin(req: Request, res: Response, next
       }
     }
 
+    // Se for SUPER_ADMIN e não tiver franqueadora específica, buscar a primeira ativa
+    if (!franqueadoraId && canonicalRole === 'SUPER_ADMIN') {
+      try {
+        const { data: defaultFranqueadora, error: defaultError } = await supabase
+          .from('franqueadora')
+          .select('id')
+          .eq('is_active', true)
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .single()
+        
+        if (!defaultError && defaultFranqueadora?.id) {
+          franqueadoraId = defaultFranqueadora.id
+          console.log('[AUTH] SUPER_ADMIN sem franqueadora específica, usando primeira ativa:', franqueadoraId)
+        }
+      } catch (err) {
+        console.warn('[AUTH] Erro ao buscar franqueadora padrão para SUPER_ADMIN:', err)
+      }
+    }
+
     if (!franqueadoraId && !elevated) {
       return res.status(403).json({ message: 'Forbidden' })
     }
