@@ -394,6 +394,7 @@ router.post('/teacher/purchase-hours', requireAuth, requireApprovedTeacher, asyn
 /**
  * GET /api/payments/academy/:academy_id
  * Listar todos os pagamentos de uma academia (para dashboard de finanças)
+ * Busca de payment_intents relacionados à academia via unit_id
  */
 router.get('/academy/:academy_id', async (req, res) => {
   try {
@@ -406,18 +407,29 @@ router.get('/academy/:academy_id', async (req, res) => {
       offset = '0'
     } = req.query
 
-    // Buscar pagamentos da tabela payments
+    console.log(`[payments/academy] Buscando pagamentos para academia ${academy_id}`)
+
+    // Buscar payment_intents relacionados à academia via unit_id
     let query = supabase
-      .from('payments')
+      .from('payment_intents')
       .select(`
         *,
-        user:users(id, name, email, role)
+        user:users!payment_intents_actor_user_id_fkey(id, name, email, role)
       `)
-      .eq('academy_id', academy_id)
+      .eq('unit_id', academy_id)
       .order('created_at', { ascending: false })
 
     if (status) {
-      query = query.eq('status', status)
+      // Mapear status da API para status do payment_intents
+      const statusMap: Record<string, string> = {
+        'PENDING': 'PENDING',
+        'CONFIRMED': 'PAID',
+        'RECEIVED': 'PAID',
+        'OVERDUE': 'PENDING',
+        'REFUNDED': 'CANCELED'
+      }
+      const mappedStatus = statusMap[status as string] || status
+      query = query.eq('status', mappedStatus)
     }
 
     if (start_date) {
@@ -433,28 +445,89 @@ router.get('/academy/:academy_id', async (req, res) => {
       parseInt(offset as string) + parseInt(limit as string) - 1
     )
 
-    const { data: payments, error } = await query
+    const { data: paymentIntents, error } = await query
 
-    if (error) throw error
+    if (error) {
+      console.error('[payments/academy] Erro ao buscar payment_intents:', error)
+      throw error
+    }
 
-    // Calcular resumo financeiro
-    const { data: allPayments } = await supabase
-      .from('payments')
-      .select('status, amount, type')
-      .eq('academy_id', academy_id)
+    console.log(`[payments/academy] Encontrados ${paymentIntents?.length || 0} payment_intents`)
+
+    // Transformar payment_intents para formato esperado pelo frontend
+    const payments = (paymentIntents || []).map((intent: any) => {
+      const payload = intent.payload_json || {}
+      const amount = intent.amount_cents / 100 // Converter centavos para reais
+      
+      // Mapear status
+      let mappedStatus = intent.status
+      if (intent.status === 'PAID') {
+        mappedStatus = 'RECEIVED'
+      } else if (intent.status === 'FAILED') {
+        mappedStatus = 'OVERDUE'
+      }
+
+      // Determinar tipo
+      let type = 'PLAN_PURCHASE'
+      if (intent.type === 'PROF_HOURS') {
+        type = 'SUBSCRIPTION'
+      }
+
+      // Determinar billing_type
+      const billingType = payload.payment_method || payload.billing_type || 'PIX'
+
+      return {
+        id: intent.id,
+        user: intent.user || {
+          id: intent.actor_user_id,
+          name: 'Usuário não encontrado',
+          email: '',
+          role: ''
+        },
+        type,
+        billing_type: billingType.toUpperCase(),
+        status: mappedStatus,
+        amount: amount.toFixed(2),
+        description: payload.package_title || payload.description || `${intent.type} - R$ ${amount.toFixed(2)}`,
+        due_date: payload.due_date || intent.created_at,
+        payment_date: intent.status === 'PAID' ? intent.updated_at : null,
+        invoice_url: payload.invoice_url || payload.payment_url || null,
+        pix_code: payload.pix_copy_paste || payload.pix_qr_code || null,
+        created_at: intent.created_at
+      }
+    })
+
+    // Buscar todos os payment_intents para calcular estatísticas
+    let statsQuery = supabase
+      .from('payment_intents')
+      .select('status, amount_cents, type, payload_json')
+      .eq('unit_id', academy_id)
+
+    if (start_date) {
+      statsQuery = statsQuery.gte('created_at', start_date)
+    }
+
+    if (end_date) {
+      statsQuery = statsQuery.lte('created_at', end_date)
+    }
+
+    const { data: allIntents } = await statsQuery
 
     const summary = {
-      total_received: allPayments?.filter(p => p.status === 'RECEIVED' || p.status === 'CONFIRMED')
-        .reduce((sum, p) => sum + parseFloat(p.amount as any), 0) || 0,
-      total_pending: allPayments?.filter(p => p.status === 'PENDING')
-        .reduce((sum, p) => sum + parseFloat(p.amount as any), 0) || 0,
-      total_overdue: allPayments?.filter(p => p.status === 'OVERDUE')
-        .reduce((sum, p) => sum + parseFloat(p.amount as any), 0) || 0,
-      total_payments: allPayments?.length || 0,
+      total_received: (allIntents || [])
+        .filter(p => p.status === 'PAID')
+        .reduce((sum, p) => sum + (p.amount_cents / 100), 0),
+      total_pending: (allIntents || [])
+        .filter(p => p.status === 'PENDING')
+        .reduce((sum, p) => sum + (p.amount_cents / 100), 0),
+      total_overdue: (allIntents || [])
+        .filter(p => p.status === 'FAILED')
+        .reduce((sum, p) => sum + (p.amount_cents / 100), 0),
+      total_payments: allIntents?.length || 0,
       by_type: {
-        plan_purchase: allPayments?.filter(p => p.type === 'PLAN_PURCHASE').length || 0,
-        booking_payment: allPayments?.filter(p => p.type === 'BOOKING_PAYMENT').length || 0,
-        subscription: allPayments?.filter(p => p.type === 'SUBSCRIPTION').length || 0
+        plan_purchase: (allIntents || []).filter(p => p.type === 'STUDENT_PACKAGE').length,
+        booking_payment: 0, // Não há booking_payment em payment_intents
+        subscription: (allIntents || []).filter(p => p.type === 'PROF_HOURS').length
       }
     }
 
@@ -467,7 +540,7 @@ router.get('/academy/:academy_id', async (req, res) => {
       }
     })
   } catch (error: any) {
-    console.error('Error fetching academy payments:', error)
+    console.error('[payments/academy] Erro:', error)
     res.status(500).json({ error: error.message })
   }
 })
@@ -475,16 +548,19 @@ router.get('/academy/:academy_id', async (req, res) => {
 /**
  * GET /api/payments/stats/:academy_id
  * Estatísticas de pagamentos para dashboard
+ * Busca de payment_intents relacionados à academia via unit_id
  */
 router.get('/stats/:academy_id', async (req, res) => {
   try {
     const { academy_id } = req.params
     const { start_date, end_date } = req.query
 
+    console.log(`[payments/stats] Buscando estatísticas para academia ${academy_id}`)
+
     let query = supabase
-      .from('payments')
-      .select('*')
-      .eq('academy_id', academy_id)
+      .from('payment_intents')
+      .select('status, amount_cents, type, payload_json, created_at')
+      .eq('unit_id', academy_id)
 
     if (start_date) {
       query = query.gte('created_at', start_date)
@@ -496,41 +572,59 @@ router.get('/stats/:academy_id', async (req, res) => {
 
     const { data, error } = await query
 
-    if (error) throw error
+    if (error) {
+      console.error('[payments/stats] Erro ao buscar payment_intents:', error)
+      throw error
+    }
+
+    console.log(`[payments/stats] Encontrados ${data?.length || 0} payment_intents`)
 
     // Calcular estatísticas
+    const paidIntents = data?.filter(p => p.status === 'PAID') || []
+    const pendingIntents = data?.filter(p => p.status === 'PENDING') || []
+    const failedIntents = data?.filter(p => p.status === 'FAILED') || []
+
     const stats = {
-      total_revenue: data?.filter(p => p.status === 'RECEIVED' || p.status === 'CONFIRMED')
-        .reduce((sum, p) => sum + parseFloat(p.amount as any), 0) || 0,
-      pending_revenue: data?.filter(p => p.status === 'PENDING')
-        .reduce((sum, p) => sum + parseFloat(p.amount as any), 0) || 0,
-      overdue_revenue: data?.filter(p => p.status === 'OVERDUE')
-        .reduce((sum, p) => sum + parseFloat(p.amount as any), 0) || 0,
+      total_revenue: paidIntents.reduce((sum, p) => sum + (p.amount_cents / 100), 0),
+      pending_revenue: pendingIntents.reduce((sum, p) => sum + (p.amount_cents / 100), 0),
+      overdue_revenue: failedIntents.reduce((sum, p) => sum + (p.amount_cents / 100), 0),
       total_transactions: data?.length || 0,
       by_status: {
-        pending: data?.filter(p => p.status === 'PENDING').length || 0,
-        confirmed: data?.filter(p => p.status === 'CONFIRMED').length || 0,
-        received: data?.filter(p => p.status === 'RECEIVED').length || 0,
-        overdue: data?.filter(p => p.status === 'OVERDUE').length || 0,
-        refunded: data?.filter(p => p.status === 'REFUNDED').length || 0
+        pending: pendingIntents.length,
+        confirmed: paidIntents.length, // PAID = confirmado
+        received: paidIntents.length, // PAID = recebido
+        overdue: failedIntents.length,
+        refunded: (data?.filter(p => p.status === 'CANCELED').length || 0)
       },
       by_type: {
-        plan_purchase: data?.filter(p => p.type === 'PLAN_PURCHASE').length || 0,
-        booking_payment: data?.filter(p => p.type === 'BOOKING_PAYMENT').length || 0,
-        subscription: data?.filter(p => p.type === 'SUBSCRIPTION').length || 0
+        plan_purchase: (data?.filter(p => p.type === 'STUDENT_PACKAGE').length || 0),
+        booking_payment: 0, // Não há booking_payment em payment_intents
+        subscription: (data?.filter(p => p.type === 'PROF_HOURS').length || 0)
       },
       by_billing_type: {
-        pix: data?.filter(p => p.billing_type === 'PIX').length || 0,
-        boleto: data?.filter(p => p.billing_type === 'BOLETO').length || 0,
-        credit_card: data?.filter(p => p.billing_type === 'CREDIT_CARD').length || 0
+        pix: (data?.filter(p => {
+          const payload = p.payload_json || {}
+          const method = (payload.payment_method || payload.billing_type || '').toUpperCase()
+          return method === 'PIX'
+        }).length || 0),
+        boleto: (data?.filter(p => {
+          const payload = p.payload_json || {}
+          const method = (payload.payment_method || payload.billing_type || '').toUpperCase()
+          return method === 'BOLETO'
+        }).length || 0),
+        credit_card: (data?.filter(p => {
+          const payload = p.payload_json || {}
+          const method = (payload.payment_method || payload.billing_type || '').toUpperCase()
+          return method === 'CREDIT_CARD' || method === 'CREDITCARD'
+        }).length || 0)
       },
       // Receita por mês (últimos 12 meses)
-      monthly_revenue: getMonthlyRevenue(data || [])
+      monthly_revenue: getMonthlyRevenueFromIntents(data || [])
     }
 
     res.json({ stats })
   } catch (error: any) {
-    console.error('Error fetching payment stats:', error)
+    console.error('[payments/stats] Erro:', error)
     res.status(500).json({ error: error.message })
   }
 })
