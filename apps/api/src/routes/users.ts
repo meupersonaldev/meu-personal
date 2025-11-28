@@ -5,6 +5,7 @@ import multer from 'multer'
 import { randomUUID } from 'crypto'
 import path from 'path'
 import { requireAuth } from '../middleware/auth'
+import { validateCpfCnpj } from '../utils/validation'
 
 // Cliente Supabase centralizado importado de ../lib/supabase
 
@@ -41,11 +42,20 @@ router.post('/', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Email já cadastrado' })
     }
 
+    // Validar CPF antes de verificar duplicidade
+    const cpfSanitized = cpf.replace(/\D/g, '')
+    if (cpfSanitized.length !== 11) {
+      return res.status(400).json({ error: 'CPF deve conter 11 dígitos' })
+    }
+    if (!validateCpfCnpj(cpfSanitized)) {
+      return res.status(400).json({ error: 'CPF inválido. Verifique os dígitos e tente novamente.' })
+    }
+
     // Verificar se CPF já existe
     const { data: existingCpf } = await supabase
       .from('users')
       .select('id')
-      .eq('cpf', cpf.replace(/\D/g, ''))
+      .eq('cpf', cpfSanitized)
       .single()
 
     if (existingCpf) {
@@ -199,8 +209,12 @@ router.put('/:id', requireAuth, async (req, res) => {
     if (isAdmin) {
       if (cpf !== undefined) {
         const cpfSanitized = String(cpf).replace(/\D/g, '')
-        if (process.env.ASAAS_ENV === 'production' && cpfSanitized.length < 11) {
-          return res.status(400).json({ error: 'CPF inválido' })
+        if (cpfSanitized.length !== 11) {
+          return res.status(400).json({ error: 'CPF deve conter 11 dígitos' })
+        }
+        // Validar dígitos verificadores do CPF
+        if (!validateCpfCnpj(cpfSanitized)) {
+          return res.status(400).json({ error: 'CPF inválido. Verifique os dígitos e tente novamente.' })
         }
         updates.cpf = cpfSanitized
       }
@@ -304,8 +318,12 @@ router.patch('/:id', requireAuth, async (req, res) => {
     if (gender !== undefined) updateData.gender = gender
     if (cpf !== undefined) {
       const cpfSanitized = String(cpf).replace(/\D/g, '')
-      if (process.env.ASAAS_ENV === 'production' && cpfSanitized.length < 11) {
-        return res.status(400).json({ error: 'CPF inválido' })
+      if (cpfSanitized.length !== 11) {
+        return res.status(400).json({ error: 'CPF deve conter 11 dígitos' })
+      }
+      // Validar dígitos verificadores do CPF
+      if (!validateCpfCnpj(cpfSanitized)) {
+        return res.status(400).json({ error: 'CPF inválido. Verifique os dígitos e tente novamente.' })
       }
       updateData.cpf = cpfSanitized
     }

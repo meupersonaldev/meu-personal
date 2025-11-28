@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Logo } from "@/components/ui/logo"
 import { useAuthStore, UserRole } from "@/lib/stores/auth-store"
-import { isStrongPassword } from '@/lib/utils'
+import { isStrongPassword, validateCpfCnpj } from '@/lib/utils'
 
 const FEATURE_ICON_MAP = {
   shield: Shield,
@@ -146,6 +146,12 @@ export function RegisterTemplate({
     const cleanCpf = formData.cpf.replace(/\D/g, '')
     if (cleanCpf.length !== 11) {
       toast.error("CPF inválido. Deve conter 11 dígitos.")
+      return
+    }
+
+    // Validar dígitos verificadores do CPF
+    if (!validateCpfCnpj(cleanCpf)) {
+      toast.error("CPF inválido. Verifique os dígitos e tente novamente.")
       return
     }
 

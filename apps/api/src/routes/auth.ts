@@ -10,6 +10,7 @@ import { ensureFranqueadoraContact } from '../services/franqueadora-contacts.ser
 import { auditAuthEvent, auditSensitiveOperation } from '../middleware/audit'
 import { auditService } from '../services/audit.service'
 import { emailService } from '../services/email.service'
+import { validateCpfCnpj } from '../utils/validation'
 
 const router = express.Router()
 
@@ -267,6 +268,11 @@ router.post(
           })
       }
       const sanitizedCpf = userData.cpf.replace(/\D/g, '')
+
+      // Validar CPF (verificar dígitos verificadores)
+      if (!validateCpfCnpj(sanitizedCpf)) {
+        return res.status(400).json({ message: 'CPF inválido. Verifique os dígitos e tente novamente.' })
+      }
 
       // Verificar se email já existe
       const { data: existingUser, error: checkError } = await supabase
