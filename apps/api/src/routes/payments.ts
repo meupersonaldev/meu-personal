@@ -454,11 +454,58 @@ router.get('/franchise/:academy_id/asaas', requireAuth, async (req, res) => {
       })
     }
 
+    // Buscar dados dos clientes do Asaas e do nosso banco
+    const customerIds = [...new Set(filteredPayments.map((p: any) => p.customer).filter(Boolean))]
+    const customerMap = new Map<string, { name: string; email: string }>()
+
+    // Buscar clientes do nosso banco primeiro (mais rápido)
+    if (customerIds.length > 0) {
+      const { data: users } = await supabase
+        .from('users')
+        .select('id, name, email, asaas_customer_id')
+        .in('asaas_customer_id', customerIds)
+
+      if (users) {
+        users.forEach((user: any) => {
+          if (user.asaas_customer_id) {
+            customerMap.set(user.asaas_customer_id, {
+              name: user.name,
+              email: user.email
+            })
+          }
+        })
+      }
+
+      // Para clientes não encontrados no banco, buscar do Asaas
+      const missingCustomerIds = customerIds.filter(id => !customerMap.has(id))
+      
+      // Buscar em lotes para não sobrecarregar a API
+      for (const customerId of missingCustomerIds.slice(0, 20)) { // Limitar a 20 para não demorar muito
+        try {
+          const customerResult = await asaasService.getCustomer(customerId)
+          if (customerResult.success && customerResult.data) {
+            customerMap.set(customerId, {
+              name: customerResult.data.name || 'Cliente não identificado',
+              email: customerResult.data.email || ''
+            })
+          }
+        } catch (error) {
+          console.error(`[payments/franchise/asaas] Erro ao buscar cliente ${customerId}:`, error)
+        }
+      }
+    }
+
     // Calcular split/comissão (90% para franquia)
     const paymentsWithSplit = filteredPayments.map((p: any) => {
       const totalValue = p.value || 0
       const franchiseSplit = totalValue * 0.90 // 90% para franquia
       const franchisorSplit = totalValue * 0.10 // 10% para franqueadora
+
+      // Buscar dados do cliente
+      const customerId = p.customer
+      const customerData = customerId ? customerMap.get(customerId) : null
+      const customerName = customerData?.name || p.customerName || 'Cliente não identificado'
+      const customerEmail = customerData?.email || ''
 
       // Mapear status do Asaas para nosso formato
       let mappedStatus = 'PENDING'
@@ -481,8 +528,9 @@ router.get('/franchise/:academy_id/asaas', requireAuth, async (req, res) => {
       return {
         id: p.id,
         asaas_id: p.id,
-        customer: p.customer || null,
-        customer_name: p.customerName || 'Cliente não identificado',
+        customer: customerId || null,
+        customer_name: customerName,
+        customer_email: customerEmail,
         description: p.description || 'Pagamento',
         billing_type: p.billingType || 'PIX',
         status: mappedStatus,

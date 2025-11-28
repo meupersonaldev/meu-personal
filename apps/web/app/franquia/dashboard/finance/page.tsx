@@ -128,6 +128,13 @@ export default function FinancePageNew() {
         total_value: p.total_value,
         franchise_split: p.franchise_split,
         franchisor_split: p.franchisor_split
+      })).map((p: any) => ({
+        ...p,
+        user: {
+          ...p.user,
+          name: p.customer_name || p.user.name,
+          email: p.customer_email || p.user.email
+        }
       }))
 
       setPayments(mappedPayments)
