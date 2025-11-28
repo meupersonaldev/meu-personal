@@ -180,9 +180,16 @@ export default function DadosFranquiasPage() {
   }
 
   const fetchFranchiseAdmin = async (franchiseId: string) => {
+    if (!franchiseId) {
+      console.error('[fetchFranchiseAdmin] franchiseId não fornecido')
+      return null
+    }
+
     setLoadingAdmin(true)
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      console.log('[fetchFranchiseAdmin] Buscando admin para franquia:', franchiseId)
+      
       const response = await fetch(`${API_URL}/api/franchises/${franchiseId}/admin`, {
         headers: {
           'Authorization': `Bearer ${token}`
@@ -190,13 +197,23 @@ export default function DadosFranquiasPage() {
       })
 
       if (!response.ok) {
-        throw new Error('Erro ao buscar admin da franquia')
+        const errorData = await response.json().catch(() => ({}))
+        console.error('[fetchFranchiseAdmin] Erro na resposta:', response.status, errorData)
+        throw new Error(errorData.error || 'Erro ao buscar admin da franquia')
       }
 
       const admin = await response.json()
+      console.log('[fetchFranchiseAdmin] Admin encontrado:', admin)
+      
+      if (!admin || !admin.id || !admin.email) {
+        console.error('[fetchFranchiseAdmin] Dados do admin incompletos:', admin)
+        throw new Error('Dados do admin incompletos')
+      }
+
       setFranchiseAdmin(admin)
       return admin
     } catch (error: any) {
+      console.error('[fetchFranchiseAdmin] Erro:', error)
       toast.error(error.message || 'Erro ao buscar admin da franquia')
       return null
     } finally {
@@ -204,10 +221,23 @@ export default function DadosFranquiasPage() {
     }
   }
 
-  const handleOpenPasswordModal = async (franchise: Academy) => {
+  const handleOpenPasswordModal = async (franchise: Academy | EditingFranchise) => {
+    if (!franchise?.id) {
+      toast.error('ID da franquia não encontrado')
+      return
+    }
+    
+    // Limpar estado anterior antes de buscar novo admin
+    setFranchiseAdmin(null)
+    setPasswordData({ newPassword: '', confirmPassword: '' })
+    
+    console.log('[handleOpenPasswordModal] Buscando admin para franquia:', franchise.id, franchise.name)
     const admin = await fetchFranchiseAdmin(franchise.id)
     if (admin) {
+      console.log('[handleOpenPasswordModal] Admin encontrado:', admin.email, admin.name)
       setShowPasswordModal(true)
+    } else {
+      toast.error('Não foi possível encontrar o admin desta franquia')
     }
   }
 
@@ -642,8 +672,14 @@ export default function DadosFranquiasPage() {
                   <div className="flex flex-wrap gap-3">
                     <Button
                       variant="outline"
-                      onClick={() => handleOpenPasswordModal(editingFranchise as any)}
-                      disabled={loadingAdmin}
+                      onClick={() => {
+                        if (!editingFranchise?.id) {
+                          toast.error('ID da franquia não encontrado')
+                          return
+                        }
+                        handleOpenPasswordModal(editingFranchise)
+                      }}
+                      disabled={loadingAdmin || !editingFranchise?.id}
                       className="flex items-center gap-2"
                     >
                       {loadingAdmin ? (
@@ -660,8 +696,14 @@ export default function DadosFranquiasPage() {
                     </Button>
                     <Button
                       variant="outline"
-                      onClick={() => handleResetPassword(editingFranchise as any)}
-                      disabled={resetPasswordLoading || loadingAdmin}
+                      onClick={() => {
+                        if (!editingFranchise?.id) {
+                          toast.error('ID da franquia não encontrado')
+                          return
+                        }
+                        handleResetPassword(editingFranchise)
+                      }}
+                      disabled={resetPasswordLoading || loadingAdmin || !editingFranchise?.id}
                       className="flex items-center gap-2"
                     >
                       {resetPasswordLoading ? (
