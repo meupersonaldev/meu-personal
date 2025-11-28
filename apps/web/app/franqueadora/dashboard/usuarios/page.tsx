@@ -26,8 +26,7 @@ import {
   Save,
   X,
   Lock,
-  KeyRound,
-  Mail
+  KeyRound
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
