@@ -86,18 +86,26 @@ export default function ProfessorPagamentoPage() {
       return
     }
 
+    // No iOS, window.open() é frequentemente bloqueado
+    // Então não tenta abrir automaticamente, apenas mostra o botão
+    if (isIOS) {
+      console.log('📱 iOS detectado - mostrando botão para abrir pagamento')
+      setOpened(true)
+      setPolling(true)
+      toast.info('Clique no botão abaixo para abrir o link de pagamento.')
+      return
+    }
+
     // Delay mínimo para garantir que o DOM está pronto
     const delay = 300
     
     const openTimer = setTimeout(() => {
       try {
-        // Sempre tenta abrir em nova aba primeiro (mesmo no iOS)
+        // Tenta abrir em nova aba (desktop/Android)
         console.log('🔄 Tentando abrir pagamento em nova aba:', url)
         const newWindow = window.open(url, '_blank', 'noopener,noreferrer')
         
         // Verifica se a nova aba foi aberta com sucesso
-        // No iOS, window.open pode retornar null mas ainda abrir a aba
-        // Então verificamos após um pequeno delay
         setTimeout(() => {
           if (newWindow && !newWindow.closed && typeof newWindow.closed !== 'undefined') {
             // Nova aba aberta com sucesso
@@ -107,7 +115,7 @@ export default function ProfessorPagamentoPage() {
             setPolling(true)
             toast.success('Página de pagamento aberta em nova aba. Aguardando confirmação...')
           } else {
-            // Não conseguiu abrir nova aba (bloqueado ou iOS)
+            // Não conseguiu abrir nova aba (bloqueado)
             console.warn('⚠️ Não foi possível abrir nova aba. Mantendo página de aguardo.')
             setOpened(true)
             setPolling(true)
@@ -123,7 +131,7 @@ export default function ProfessorPagamentoPage() {
     }, delay)
 
     return () => clearTimeout(openTimer)
-  }, [paymentIntent?.checkout_url, opened])
+  }, [paymentIntent?.checkout_url, opened, isIOS])
 
   // Polling do status do pagamento
   useEffect(() => {
@@ -257,19 +265,25 @@ export default function ProfessorPagamentoPage() {
                     onClick={() => {
                       if (!paymentIntent.checkout_url) return
                       
-                      // Tenta focar na aba existente ou abrir nova
-                      if (paymentWindow && !paymentWindow.closed) {
-                        paymentWindow.focus()
+                      if (isIOS) {
+                        // No iOS, redireciona diretamente (única opção que funciona)
+                        console.log('📱 iOS - redirecionando para:', paymentIntent.checkout_url)
+                        window.location.href = paymentIntent.checkout_url
                       } else {
-                        // Tenta abrir nova aba
-                        const newWindow = window.open(paymentIntent.checkout_url, '_blank', 'noopener,noreferrer')
-                        if (newWindow) {
-                          setPaymentWindow(newWindow)
-                          toast.success('Página de pagamento aberta em nova aba.')
+                        // Em outros dispositivos, tenta focar na aba existente ou abrir nova
+                        if (paymentWindow && !paymentWindow.closed) {
+                          paymentWindow.focus()
                         } else {
-                          // Se não conseguir abrir nova aba, oferece opção de redirecionar
-                          if (confirm('Não foi possível abrir nova aba. Deseja redirecionar para a página de pagamento?')) {
-                            window.location.href = paymentIntent.checkout_url
+                          // Tenta abrir nova aba
+                          const newWindow = window.open(paymentIntent.checkout_url, '_blank', 'noopener,noreferrer')
+                          if (newWindow) {
+                            setPaymentWindow(newWindow)
+                            toast.success('Página de pagamento aberta em nova aba.')
+                          } else {
+                            // Se não conseguir abrir nova aba, oferece opção de redirecionar
+                            if (confirm('Não foi possível abrir nova aba. Deseja redirecionar para a página de pagamento?')) {
+                              window.location.href = paymentIntent.checkout_url
+                            }
                           }
                         }
                       }
@@ -277,7 +291,7 @@ export default function ProfessorPagamentoPage() {
                     variant="outline"
                     className="w-full"
                   >
-                    Abrir Página de Pagamento
+                    {isIOS ? 'Ir para Página de Pagamento' : 'Abrir Página de Pagamento'}
                   </Button>
                   <Button
                     onClick={() => {
@@ -298,36 +312,49 @@ export default function ProfessorPagamentoPage() {
                   Abrindo página de pagamento...
                 </h3>
                 <p className="text-sm text-gray-600 mb-6">
-                  A página de pagamento será aberta em uma nova aba em instantes. Esta página permanecerá aberta aguardando a confirmação do pagamento.
+                  {isIOS 
+                    ? 'Clique no botão abaixo para abrir a página de pagamento. Após concluir, você será redirecionado de volta automaticamente.'
+                    : 'A página de pagamento será aberta em uma nova aba em instantes. Esta página permanecerá aberta aguardando a confirmação do pagamento.'}
                 </p>
                 {paymentIntent.checkout_url && (
                   <Button
                     onClick={() => {
                       const url = paymentIntent.checkout_url!
                       
-                      // Sempre tenta abrir em nova aba
-                      console.log('Clique manual - abrindo em nova aba:', url)
-                      const newWindow = window.open(url, '_blank', 'noopener,noreferrer')
-                      
-                      if (newWindow) {
-                        setPaymentWindow(newWindow)
+                      if (isIOS) {
+                        // No iOS, redireciona diretamente (única opção que funciona)
+                        console.log('📱 iOS - redirecionando para:', url)
                         setOpened(true)
                         setPolling(true)
-                        toast.success('Página de pagamento aberta em nova aba. Aguardando confirmação...')
+                        toast.success('Redirecionando para página de pagamento. Aguardando confirmação...')
+                        setTimeout(() => {
+                          window.location.href = url
+                        }, 100)
                       } else {
-                        // Se não conseguir, oferece opção de redirecionar
-                        if (confirm('Não foi possível abrir nova aba. Deseja redirecionar para a página de pagamento?')) {
+                        // Em outros dispositivos, tenta abrir em nova aba
+                        console.log('Clique manual - abrindo em nova aba:', url)
+                        const newWindow = window.open(url, '_blank', 'noopener,noreferrer')
+                        
+                        if (newWindow) {
+                          setPaymentWindow(newWindow)
                           setOpened(true)
                           setPolling(true)
-                          window.location.href = url
+                          toast.success('Página de pagamento aberta em nova aba. Aguardando confirmação...')
                         } else {
-                          toast.info('Você pode clicar no botão novamente quando quiser.')
+                          // Se não conseguir, oferece opção de redirecionar
+                          if (confirm('Não foi possível abrir nova aba. Deseja redirecionar para a página de pagamento?')) {
+                            setOpened(true)
+                            setPolling(true)
+                            window.location.href = url
+                          } else {
+                            toast.info('Você pode clicar no botão novamente quando quiser.')
+                          }
                         }
                       }
                     }}
                     className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 text-lg font-semibold"
                   >
-                    Abrir Link de Pagamento
+                    {isIOS ? 'Ir para Pagamento' : 'Abrir Link de Pagamento'}
                   </Button>
                 )}
               </>
