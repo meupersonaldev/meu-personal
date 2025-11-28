@@ -630,6 +630,28 @@ router.get('/stats/:academy_id', async (req, res) => {
 })
 
 /**
+ * Helper para calcular receita mensal de payment_intents
+ */
+function getMonthlyRevenueFromIntents(intents: any[]) {
+  const monthlyData: Record<string, number> = {}
+  
+  intents
+    .filter(p => p.status === 'PAID')
+    .forEach((intent: any) => {
+      const date = new Date(intent.created_at)
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+      const amount = intent.amount_cents / 100
+      monthlyData[monthKey] = (monthlyData[monthKey] || 0) + amount
+    })
+
+  // Converter para array e ordenar
+  return Object.entries(monthlyData)
+    .map(([month, revenue]) => ({ month, revenue }))
+    .sort((a, b) => a.month.localeCompare(b.month))
+    .slice(-12) // Últimos 12 meses
+}
+
+/**
  * Helper para calcular receita mensal
  */
 function getMonthlyRevenue(payments: any[]) {
