@@ -442,6 +442,7 @@ export default function ComprarCreditosPage() {
                         if (paymentData?.id) {
                           router.push(`/aluno/pagamento/${paymentData.id}`)
                         } else if (checkoutUrl) {
+                          // Usa window.location.href para garantir funcionamento em iOS
                           window.location.href = checkoutUrl
                         }
                       }}
@@ -482,6 +483,7 @@ export default function ComprarCreditosPage() {
                         if (paymentData?.id) {
                           router.push(`/aluno/pagamento/${paymentData.id}`)
                         } else if (checkoutUrl) {
+                          // Usa window.location.href para garantir funcionamento em iOS
                           window.location.href = checkoutUrl
                         }
                       }}
@@ -527,7 +529,11 @@ export default function ComprarCreditosPage() {
                 <div className="mb-6">
                   <p className="text-gray-600 mb-4">Seu boleto foi gerado!</p>
                   <Button
-                    onClick={() => window.open(paymentData.invoice_url || paymentData.payment_url || paymentData.checkout_url, '_blank')}
+                    onClick={() => {
+                      // Usa window.location.href para garantir funcionamento em iOS
+                      const url = paymentData.invoice_url || paymentData.payment_url || paymentData.checkout_url
+                      if (url) window.location.href = url
+                    }}
                     className="bg-blue-600 hover:bg-blue-700"
                   >
                     <Barcode className="h-4 w-4 mr-2" />

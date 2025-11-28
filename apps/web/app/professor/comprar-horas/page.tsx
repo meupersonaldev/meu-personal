@@ -96,8 +96,21 @@ export default function ComprarHorasPage() {
       const data = await response.json().catch(() => ({}))
 
       if (response.ok) {
+        const paymentIntentId = data?.payment_intent?.id
         const checkoutUrl = data?.payment_intent?.checkout_url
-        if (checkoutUrl) window.open(checkoutUrl, '_blank')
+        
+        if (paymentIntentId && checkoutUrl) {
+          // Redireciona para página de pagamento (melhor para iOS)
+          window.location.href = `/professor/pagamento/${paymentIntentId}`
+          return
+        }
+        
+        if (checkoutUrl) {
+          // Fallback: redireciona diretamente (usa window.location.href para iOS)
+          window.location.href = checkoutUrl
+          return
+        }
+        
         setPaymentData(data.payment_intent)
         setStep('success')
       } else {
@@ -161,8 +174,23 @@ export default function ComprarHorasPage() {
 
       const data = await response.json().catch(() => ({}))
       if (response.ok) {
+        const paymentIntentId = data?.payment_intent?.id
         const checkoutUrl = data?.payment_intent?.checkout_url
-        if (checkoutUrl) window.open(checkoutUrl, '_blank')
+        
+        if (paymentIntentId && checkoutUrl) {
+          // Redireciona para página de pagamento (melhor para iOS)
+          setShowCpfModal(false)
+          window.location.href = `/professor/pagamento/${paymentIntentId}`
+          return
+        }
+        
+        if (checkoutUrl) {
+          // Fallback: redireciona diretamente (usa window.location.href para iOS)
+          setShowCpfModal(false)
+          window.location.href = checkoutUrl
+          return
+        }
+        
         setPaymentData(data.payment_intent)
         setStep('success')
         setShowCpfModal(false)
@@ -538,7 +566,10 @@ export default function ComprarHorasPage() {
                   {!paymentData.pix_copy_paste && paymentData.checkout_url && (
                     <div className="mt-4">
                       <Button
-                        onClick={() => window.open(paymentData.checkout_url, '_blank')}
+                        onClick={() => {
+                          // Usa window.location.href para garantir funcionamento em iOS
+                          window.location.href = paymentData.checkout_url
+                        }}
                         className="bg-blue-600 hover:bg-blue-700"
                       >
                         Abrir Checkout
@@ -552,7 +583,11 @@ export default function ComprarHorasPage() {
                 <div className="mb-6">
                   <p className="text-gray-600 mb-4">Seu boleto foi gerado!</p>
                   <Button
-                    onClick={() => window.open(paymentData.invoice_url || paymentData.payment_url || paymentData.checkout_url, '_blank')}
+                    onClick={() => {
+                      // Usa window.location.href para garantir funcionamento em iOS
+                      const url = paymentData.invoice_url || paymentData.payment_url || paymentData.checkout_url
+                      if (url) window.location.href = url
+                    }}
                     className="bg-blue-600 hover:bg-blue-700"
                   >
                     <Barcode className="h-4 w-4 mr-2" />

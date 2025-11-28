@@ -24,7 +24,10 @@ export default function PagamentoPage() {
   const { token } = useAuthStore()
   const [paymentIntent, setPaymentIntent] = useState<PaymentIntent | null>(null)
   const [loading, setLoading] = useState(true)
-  const [attemptedAutoOpen, setAttemptedAutoOpen] = useState(false)
+  const [redirecting, setRedirecting] = useState(false)
+
+  // Detectar se é iOS
+  const isIOS = typeof window !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent)
 
   useEffect(() => {
     if (!token || !paymentIntentId) return
@@ -54,26 +57,26 @@ export default function PagamentoPage() {
     fetchPaymentIntent()
   }, [token, paymentIntentId, router])
 
-  // Tenta abrir automaticamente (pode ser bloqueado no iOS)
+  // Redirecionamento automático - otimizado para iOS
   useEffect(() => {
-    if (!paymentIntent?.checkout_url || attemptedAutoOpen) return
+    if (!paymentIntent?.checkout_url || redirecting) return
 
-    setAttemptedAutoOpen(true)
-    // Pequeno delay para mostrar a mensagem
-    const timer = setTimeout(() => {
+    setRedirecting(true)
+    
+    // Para iOS e dispositivos móveis, sempre usa window.location.href (mais confiável)
+    // Para desktop, também usa window.location.href para garantir funcionamento
+    const delay = isIOS ? 300 : 800 // Delay menor para iOS
+    
+    setTimeout(() => {
       try {
-        const newWindow = window.open(paymentIntent.checkout_url!, '_blank')
-        // Se for bloqueado (retorna null), o botão manual estará disponível
-        if (!newWindow) {
-          console.log('Popup bloqueado, use o botão manual')
-        }
+        // Sempre usa window.location.href para garantir funcionamento em todos os dispositivos
+        window.location.href = paymentIntent.checkout_url!
       } catch (e) {
-        console.log('Erro ao abrir popup:', e)
+        console.error('Erro ao redirecionar:', e)
+        toast.error('Erro ao abrir link de pagamento. Clique no botão abaixo.')
       }
-    }, 1000)
-
-    return () => clearTimeout(timer)
-  }, [paymentIntent?.checkout_url, attemptedAutoOpen])
+    }, delay)
+  }, [paymentIntent?.checkout_url, redirecting, isIOS])
 
   if (loading) {
     return (
@@ -125,31 +128,24 @@ export default function PagamentoPage() {
         <div className="text-center max-w-md w-full">
           <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4 text-blue-600" />
           <h3 className="text-xl font-semibold text-gray-900 mb-2">
-            Abrindo página de pagamento...
+            {redirecting ? 'Redirecionando...' : 'Abrindo página de pagamento...'}
           </h3>
           <p className="text-sm text-gray-600 mb-6">
-            {attemptedAutoOpen 
-              ? 'Se a página não abriu automaticamente, clique no botão abaixo.'
-              : 'A página de pagamento será aberta em instantes.'}
+            {isIOS 
+              ? 'Você será redirecionado para a página de pagamento em instantes.'
+              : redirecting
+                ? 'Se a página não abriu automaticamente, clique no botão abaixo.'
+                : 'A página de pagamento será aberta em instantes.'}
           </p>
           {paymentIntent.checkout_url && (
             <Button
               onClick={() => {
-                // No iOS, window.open pode não funcionar, então usa window.location.href como fallback
-                try {
-                  const newWindow = window.open(paymentIntent.checkout_url!, '_blank')
-                  // Se for bloqueado, redireciona na mesma aba
-                  if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
-                    window.location.href = paymentIntent.checkout_url!
-                  }
-                } catch (e) {
-                  // Fallback: redireciona na mesma aba
-                  window.location.href = paymentIntent.checkout_url!
-                }
+                // Sempre usa window.location.href para garantir funcionamento em todos os dispositivos
+                window.location.href = paymentIntent.checkout_url!
               }}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 text-lg font-semibold"
             >
-              Abrir Link de Pagamento
+              {isIOS ? 'Ir para Pagamento' : 'Abrir Link de Pagamento'}
             </Button>
           )}
         </div>
