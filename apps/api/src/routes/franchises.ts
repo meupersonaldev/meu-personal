@@ -423,15 +423,14 @@ router.get(
           id,
           academyCheckError
         )
-        return res
-          .status(404)
-          .json({ error: 'Academia não encontrada' })
+        return res.status(404).json({ error: 'Academia não encontrada' })
       }
 
-      console.log(
-        '[GET /api/franchises/:id/admin] Academia encontrada:',
-        { id: academy.id, name: academy.name, email: academy.email }
-      )
+      console.log('[GET /api/franchises/:id/admin] Academia encontrada:', {
+        id: academy.id,
+        name: academy.name,
+        email: academy.email
+      })
 
       // Buscar admin da franquia
       const { data: franchiseAdmins, error: adminError } = await supabase
@@ -461,7 +460,7 @@ router.get(
 
       // Se houver múltiplos admins, usar o primeiro
       const franchiseAdmin = franchiseAdmins[0]
-      
+
       if (franchiseAdmins.length > 1) {
         console.warn(
           '[GET /api/franchises/:id/admin] Múltiplos admins encontrados para franquia:',
