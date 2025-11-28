@@ -524,7 +524,18 @@ router.post('/leads', asyncErrorHandler(async (req, res) => {
 
     if (error) {
       console.error('[LEADS] Erro ao criar lead:', error)
+      console.error('[LEADS] Código do erro:', error.code)
+      console.error('[LEADS] Mensagem do erro:', error.message)
       console.error('[LEADS] Detalhes do erro:', JSON.stringify(error, null, 2))
+      
+      // Se a tabela não existir, retornar erro específico
+      if (error.code === '42P01' || error.message?.includes('does not exist')) {
+        console.error('[LEADS] Tabela franchise_leads não existe! Execute a migração.')
+        return res.status(500).json({ 
+          error: 'Tabela de leads não configurada. Contate o suporte técnico.' 
+        })
+      }
+      
       throw error
     }
 
