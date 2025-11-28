@@ -162,7 +162,13 @@ function serializePaymentIntent(intent: any) {
     payment_url: paymentUrl,
     pix_copy_paste: payload.pix_copy_paste || null,
     pix_qr_code: payload.pix_qr_code || null,
-    provider_id: intent.provider_id || null // Incluir provider_id para possível busca futura
+    provider_id: intent.provider_id || null,
+    payload_json: {
+      package_title: payload.package_title || null,
+      classes_qty: payload.classes_qty || null,
+      hours_qty: payload.hours_qty || null,
+      payment_method: payload.payment_method || null
+    }
   };
 }
 

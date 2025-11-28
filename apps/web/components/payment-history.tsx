@@ -20,6 +20,7 @@ interface PaymentIntent {
   bank_slip_url?: string | null
   payment_url?: string | null
   pix_copy_paste?: string | null
+  payment_method?: string | null
   created_at: string
   updated_at: string
   payload_json: {
@@ -330,8 +331,8 @@ export function PaymentHistory({ className }: PaymentHistoryProps) {
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
-                          {getPaymentMethodIcon(payment.payload_json?.payment_method)}
-                          <span>{getPaymentMethodLabel(payment.payload_json?.payment_method)}</span>
+                          {getPaymentMethodIcon(payment.payment_method || payment.payload_json?.payment_method)}
+                          <span>{getPaymentMethodLabel(payment.payment_method || payment.payload_json?.payment_method)}</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <Calendar className="h-4 w-4" />
