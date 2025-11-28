@@ -469,6 +469,53 @@ export class AsaasService {
   }
 
   /**
+   * Listar pagamentos do Asaas
+   * Filtros opcionais: customer, subscription, status, paymentDate, dueDate, walletId
+   */
+  async listPayments(filters?: {
+    customer?: string
+    subscription?: string
+    status?: string
+    paymentDate?: string
+    dueDate?: string
+    walletId?: string
+    limit?: number
+    offset?: number
+  }) {
+    try {
+      const params = new URLSearchParams()
+      
+      if (filters?.customer) params.append('customer', filters.customer)
+      if (filters?.subscription) params.append('subscription', filters.subscription)
+      if (filters?.status) params.append('status', filters.status)
+      if (filters?.paymentDate) params.append('paymentDate', filters.paymentDate)
+      if (filters?.dueDate) params.append('dueDate', filters.dueDate)
+      if (filters?.walletId) params.append('walletId', filters.walletId)
+      if (filters?.limit) params.append('limit', String(filters.limit))
+      if (filters?.offset) params.append('offset', String(filters.offset))
+
+      const path = `/payments${params.toString() ? `?${params.toString()}` : ''}`
+      const startedAt = Date.now()
+      const response = await this.withRetry(() => this.api.get(path))
+      const duration = Date.now() - startedAt
+      console.log('[ASAAS] Listagem de pagamentos bem-sucedida:', { path, status: response.status, count: response.data?.data?.length || 0, ms: duration })
+      return {
+        success: true,
+        data: response.data?.data || [],
+        totalCount: response.data?.totalCount || 0,
+        hasMore: response.data?.hasMore || false
+      }
+    } catch (error: any) {
+      console.error('Erro ao listar pagamentos Asaas:', { filters, status: error?.response?.status, error: error.response?.data || error.message })
+      return {
+        success: false,
+        error: error.response?.data?.errors || error.message,
+        data: []
+      }
+    }
+  }
+
+  /**
    * Cancelar assinatura
    */
   async cancelSubscription(subscriptionId: string) {

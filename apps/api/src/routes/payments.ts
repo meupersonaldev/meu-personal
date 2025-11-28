@@ -396,6 +396,133 @@ router.post('/teacher/purchase-hours', requireAuth, requireApprovedTeacher, asyn
  * Listar todos os pagamentos de uma academia (para dashboard de finanças)
  * Busca de payment_intents relacionados à academia via unit_id
  */
+// GET /api/payments/franchise/:academy_id/asaas - Buscar pagamentos do Asaas relacionados à franquia
+router.get('/franchise/:academy_id/asaas', requireAuth, async (req, res) => {
+  try {
+    const { academy_id } = req.params
+    const { status, start_date, end_date, limit = 100 } = req.query
+
+    console.log(`[payments/franchise/asaas] Buscando pagamentos do Asaas para franquia ${academy_id}`)
+
+    // WalletId da franquia (hardcoded - 90% do split)
+    const FRANCHISE_WALLET_ID = '03223ec1-c254-43a9-bcdd-6f54acac0609'
+
+    // Buscar pagamentos do Asaas com filtro por walletId
+    const filters: any = {
+      walletId: FRANCHISE_WALLET_ID,
+      limit: Number(limit)
+    }
+
+    if (status) {
+      filters.status = status
+    }
+
+    // Buscar pagamentos do Asaas
+    const asaasResult = await asaasService.listPayments(filters)
+
+    if (!asaasResult.success) {
+      console.error('[payments/franchise/asaas] Erro ao buscar pagamentos do Asaas:', asaasResult.error)
+      return res.status(500).json({ error: 'Erro ao buscar pagamentos do Asaas' })
+    }
+
+    const asaasPayments = asaasResult.data || []
+
+    // Filtrar por data se fornecido
+    let filteredPayments = asaasPayments
+    if (start_date || end_date) {
+      filteredPayments = asaasPayments.filter((p: any) => {
+        const paymentDate = p.dueDate || p.paymentDate || p.dateCreated
+        if (!paymentDate) return true
+        
+        const date = new Date(paymentDate)
+        if (start_date && date < new Date(start_date)) return false
+        if (end_date && date > new Date(end_date)) return false
+        return true
+      })
+    }
+
+    // Calcular split/comissão (90% para franquia)
+    const paymentsWithSplit = filteredPayments.map((p: any) => {
+      const totalValue = p.value || 0
+      const franchiseSplit = totalValue * 0.90 // 90% para franquia
+      const franchisorSplit = totalValue * 0.10 // 10% para franqueadora
+
+      // Mapear status do Asaas para nosso formato
+      let mappedStatus = 'PENDING'
+      if (p.status === 'CONFIRMED' || p.status === 'RECEIVED') {
+        mappedStatus = 'RECEIVED'
+      } else if (p.status === 'OVERDUE') {
+        mappedStatus = 'OVERDUE'
+      } else if (p.status === 'PENDING') {
+        // Verificar se está vencido
+        const dueDate = p.dueDate ? new Date(p.dueDate) : null
+        if (dueDate && dueDate < new Date() && p.status === 'PENDING') {
+          mappedStatus = 'OVERDUE'
+        } else {
+          mappedStatus = 'PENDING'
+        }
+      } else if (p.status === 'REFUNDED' || p.status === 'DELETED') {
+        mappedStatus = 'REFUNDED'
+      }
+
+      return {
+        id: p.id,
+        asaas_id: p.id,
+        customer: p.customer || null,
+        customer_name: p.customerName || 'Cliente não identificado',
+        description: p.description || 'Pagamento',
+        billing_type: p.billingType || 'PIX',
+        status: mappedStatus,
+        status_asaas: p.status,
+        total_value: totalValue,
+        franchise_split: franchiseSplit, // Valor que a franquia recebe (90%)
+        franchisor_split: franchisorSplit, // Valor que a franqueadora recebe (10%)
+        due_date: p.dueDate || null,
+        payment_date: p.paymentDate || null,
+        invoice_url: p.invoiceUrl || p.bankSlipUrl || null,
+        pix_code: p.pixQrCode || p.pixCopyPaste || null,
+        created_at: p.dateCreated || p.createdDate || new Date().toISOString(),
+        updated_at: p.dateUpdated || p.updatedDate || new Date().toISOString()
+      }
+    })
+
+    // Calcular estatísticas
+    const stats = {
+      total_revenue: paymentsWithSplit
+        .filter((p: any) => p.status === 'RECEIVED')
+        .reduce((sum: number, p: any) => sum + p.franchise_split, 0),
+      pending_revenue: paymentsWithSplit
+        .filter((p: any) => p.status === 'PENDING')
+        .reduce((sum: number, p: any) => sum + p.franchise_split, 0),
+      overdue_revenue: paymentsWithSplit
+        .filter((p: any) => p.status === 'OVERDUE')
+        .reduce((sum: number, p: any) => sum + p.franchise_split, 0),
+      total_transactions: paymentsWithSplit.length,
+      by_status: {
+        pending: paymentsWithSplit.filter((p: any) => p.status === 'PENDING').length,
+        confirmed: paymentsWithSplit.filter((p: any) => p.status === 'RECEIVED').length,
+        received: paymentsWithSplit.filter((p: any) => p.status === 'RECEIVED').length,
+        overdue: paymentsWithSplit.filter((p: any) => p.status === 'OVERDUE').length,
+        refunded: paymentsWithSplit.filter((p: any) => p.status === 'REFUNDED').length
+      },
+      by_billing_type: {
+        pix: paymentsWithSplit.filter((p: any) => p.billing_type === 'PIX').length,
+        boleto: paymentsWithSplit.filter((p: any) => p.billing_type === 'BOLETO').length,
+        credit_card: paymentsWithSplit.filter((p: any) => p.billing_type === 'CREDIT_CARD').length
+      }
+    }
+
+    res.json({
+      payments: paymentsWithSplit,
+      stats,
+      total: paymentsWithSplit.length
+    })
+  } catch (error: any) {
+    console.error('[payments/franchise/asaas] Erro:', error)
+    res.status(500).json({ error: error.message || 'Erro ao buscar pagamentos do Asaas' })
+  }
+})
+
 router.get('/academy/:academy_id', async (req, res) => {
   try {
     const { academy_id } = req.params

@@ -77,7 +77,9 @@ export default function FinancePageNew() {
     setLoading(true)
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      let url = `${API_URL}/api/payments/academy/${franquiaUser.academyId}?limit=50`
+      
+      // Buscar pagamentos do Asaas (com split da franquia)
+      let url = `${API_URL}/api/payments/franchise/${franquiaUser.academyId}/asaas?limit=100`
 
       if (statusFilter && statusFilter !== 'all') {
         url += `&status=${statusFilter}`
@@ -89,16 +91,49 @@ export default function FinancePageNew() {
         url += `&end_date=${endDate}`
       }
 
-      const response = await fetch(url, { credentials: 'include' })
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+      const response = await fetch(url, {
+        credentials: 'include',
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      })
 
       if (!response.ok) {
         throw new Error('Failed to fetch payments')
       }
 
       const data = await response.json()
-      setPayments(data.payments || [])
-    } catch {
-      toast.error('Erro ao carregar pagamentos. Verifique se a tabela payments existe no banco.')
+      
+      // Mapear para formato esperado pelo frontend
+      const mappedPayments = (data.payments || []).map((p: any) => ({
+        id: p.id,
+        user: {
+          id: p.customer || '',
+          name: p.customer_name || 'Cliente não identificado',
+          email: '',
+          role: 'STUDENT'
+        },
+        type: p.description?.includes('Plano') ? 'PLAN_PURCHASE' : 
+              p.description?.includes('Aula') ? 'BOOKING_PAYMENT' : 
+              p.description?.includes('Assinatura') ? 'SUBSCRIPTION' : 'PLAN_PURCHASE',
+        billing_type: p.billing_type || 'PIX',
+        status: p.status,
+        amount: p.franchise_split, // Valor que a franquia recebe (90% do total)
+        description: p.description || 'Pagamento',
+        due_date: p.due_date,
+        payment_date: p.payment_date,
+        invoice_url: p.invoice_url,
+        pix_code: p.pix_code,
+        created_at: p.created_at,
+        // Campos adicionais do Asaas
+        total_value: p.total_value,
+        franchise_split: p.franchise_split,
+        franchisor_split: p.franchisor_split
+      }))
+
+      setPayments(mappedPayments)
+    } catch (error: any) {
+      console.error('[fetchPayments] Erro:', error)
+      toast.error('Erro ao carregar pagamentos do Asaas.')
       setPayments([])
     } finally {
       setLoading(false)
@@ -110,24 +145,58 @@ export default function FinancePageNew() {
 
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      let url = `${API_URL}/api/payments/stats/${franquiaUser.academyId}`
+      
+      // Buscar stats do Asaas (já vem junto com os pagamentos)
+      let url = `${API_URL}/api/payments/franchise/${franquiaUser.academyId}/asaas?limit=1000`
 
       if (startDate) {
-        url += `?start_date=${startDate}`
+        url += `&start_date=${startDate}`
       }
       if (endDate) {
-        url += `${startDate ? '&' : '?'}end_date=${endDate}`
+        url += `${startDate ? '&' : '&'}end_date=${endDate}`
       }
 
-      const response = await fetch(url, { credentials: 'include' })
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+      const response = await fetch(url, {
+        credentials: 'include',
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      })
 
       if (!response.ok) {
         throw new Error('Failed to fetch stats')
       }
 
       const data = await response.json()
-      setStats(data.stats)
-    } catch {
+      
+      // Usar stats do Asaas (já calculados com split)
+      if (data.stats) {
+        setStats({
+          total_revenue: data.stats.total_revenue || 0,
+          pending_revenue: data.stats.pending_revenue || 0,
+          overdue_revenue: data.stats.overdue_revenue || 0,
+          total_transactions: data.stats.total_transactions || 0,
+          by_status: data.stats.by_status || {
+            pending: 0,
+            confirmed: 0,
+            received: 0,
+            overdue: 0,
+            refunded: 0
+          },
+          by_type: {
+            plan_purchase: 0,
+            booking_payment: 0,
+            subscription: 0
+          },
+          by_billing_type: data.stats.by_billing_type || {
+            pix: 0,
+            boleto: 0,
+            credit_card: 0
+          },
+          monthly_revenue: []
+        })
+      }
+    } catch (error: any) {
+      console.error('[fetchStats] Erro:', error)
       // Silenciar erros de estatísticas para não poluir UI
     }
   }
