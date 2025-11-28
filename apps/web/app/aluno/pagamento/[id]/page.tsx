@@ -24,7 +24,9 @@ export default function PagamentoPage() {
   const { token } = useAuthStore()
   const [paymentIntent, setPaymentIntent] = useState<PaymentIntent | null>(null)
   const [loading, setLoading] = useState(true)
-  const [redirecting, setRedirecting] = useState(false)
+  const [opened, setOpened] = useState(false)
+  const [paymentWindow, setPaymentWindow] = useState<Window | null>(null)
+  const [polling, setPolling] = useState(false)
 
   // Detectar se é iOS
   const isIOS = typeof window !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent)
@@ -70,9 +72,9 @@ export default function PagamentoPage() {
     fetchPaymentIntent()
   }, [token, paymentIntentId, router])
 
-  // Redirecionamento automático - imediato e confiável
+  // Abrir pagamento em nova aba automaticamente
   useEffect(() => {
-    if (!paymentIntent?.checkout_url) return
+    if (!paymentIntent?.checkout_url || opened) return
 
     const url = paymentIntent.checkout_url
     
@@ -83,41 +85,76 @@ export default function PagamentoPage() {
       return
     }
 
-    // Marca como redirecionando imediatamente
-    setRedirecting(true)
+    // Delay mínimo para garantir que o DOM está pronto
+    const delay = 300
     
-    // Redirecionamento imediato - delay mínimo apenas para garantir que o DOM está pronto
-    const delay = 150 // Delay mínimo para todos os dispositivos
-    
-    const redirectTimer = setTimeout(() => {
+    const openTimer = setTimeout(() => {
       try {
-        // Sempre usa window.location.href para garantir funcionamento em todos os dispositivos
-        console.log('🔄 Redirecionando automaticamente para:', url)
-        window.location.href = url
+        console.log('🔄 Abrindo pagamento em nova aba:', url)
+        const newWindow = window.open(url, '_blank', 'noopener,noreferrer')
+        
+        if (newWindow) {
+          setPaymentWindow(newWindow)
+          setOpened(true)
+          setPolling(true)
+          toast.success('Página de pagamento aberta em nova aba. Aguardando confirmação...')
+        } else {
+          // Se popup foi bloqueado, usa redirecionamento direto
+          console.warn('⚠️ Popup bloqueado, redirecionando diretamente...')
+          window.location.href = url
+        }
       } catch (e) {
-        console.error('❌ Erro ao redirecionar:', e)
+        console.error('❌ Erro ao abrir link:', e)
         toast.error('Erro ao abrir link de pagamento. Clique no botão abaixo.')
-        setRedirecting(false)
       }
     }, delay)
 
-    // Fallback agressivo: se após 1 segundo não redirecionou, força novamente
-    const fallbackTimer = setTimeout(() => {
-      if (document.visibilityState === 'visible' && window.location.href !== url) {
-        console.log('🔄 Fallback: forçando redirecionamento novamente...')
-        try {
-          window.location.replace(url) // Usa replace para evitar voltar na história
-        } catch (e) {
-          console.error('❌ Erro no fallback:', e)
-        }
-      }
-    }, 1000)
+    return () => clearTimeout(openTimer)
+  }, [paymentIntent?.checkout_url, opened])
 
-    return () => {
-      clearTimeout(redirectTimer)
-      clearTimeout(fallbackTimer)
-    }
-  }, [paymentIntent?.checkout_url])
+  // Polling do status do pagamento
+  useEffect(() => {
+    if (!polling || !paymentIntentId || !token) return
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/packages/payment-intent/${paymentIntentId}`, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        })
+
+        if (!response.ok) return
+
+        const data = await response.json()
+        const intent = data.payment_intent
+
+        if (intent?.status === 'PAID') {
+          console.log('✅ Pagamento confirmado!')
+          setPolling(false)
+          toast.success('Pagamento confirmado com sucesso!')
+          
+          // Fechar janela de pagamento se ainda estiver aberta
+          if (paymentWindow && !paymentWindow.closed) {
+            paymentWindow.close()
+          }
+
+          // Redirecionar para página de compra após 1 segundo
+          setTimeout(() => {
+            router.push('/aluno/comprar')
+          }, 1000)
+        } else if (intent?.status === 'FAILED' || intent?.status === 'CANCELED') {
+          console.log('❌ Pagamento falhou ou foi cancelado')
+          setPolling(false)
+          toast.error('Pagamento não foi concluído. Tente novamente.')
+        }
+      } catch (error) {
+        console.error('Erro ao verificar status:', error)
+      }
+    }, 3000) // Verifica a cada 3 segundos
+
+    return () => clearInterval(pollInterval)
+  }, [polling, paymentIntentId, token, paymentWindow, router])
 
   if (loading) {
     return (
@@ -167,29 +204,74 @@ export default function PagamentoPage() {
       {/* Conteúdo de redirecionamento */}
       <div className="flex-1 flex items-center justify-center p-4">
         <div className="text-center max-w-md w-full">
-          <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4 text-blue-600" />
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">
-            {redirecting ? 'Redirecionando...' : 'Abrindo página de pagamento...'}
-          </h3>
-          <p className="text-sm text-gray-600 mb-6">
-            {isIOS 
-              ? 'Você será redirecionado para a página de pagamento em instantes.'
-              : redirecting
-                ? 'Se a página não abriu automaticamente, clique no botão abaixo.'
-                : 'A página de pagamento será aberta em instantes.'}
-          </p>
-          {paymentIntent.checkout_url && (
-            <Button
-              onClick={() => {
-                const url = paymentIntent.checkout_url!
-                console.log('Clique manual - redirecionando para:', url)
-                // Sempre usa window.location.href para garantir funcionamento em todos os dispositivos
-                window.location.href = url
-              }}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 text-lg font-semibold"
-            >
-              {isIOS ? 'Ir para Pagamento' : 'Abrir Link de Pagamento'}
-            </Button>
+          {polling ? (
+            <>
+              <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4 text-blue-600" />
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                Aguardando confirmação do pagamento...
+              </h3>
+              <p className="text-sm text-gray-600 mb-6">
+                A página de pagamento foi aberta em uma nova aba. Complete o pagamento e aguarde a confirmação automática.
+              </p>
+              <div className="space-y-3">
+                <Button
+                  onClick={() => {
+                    if (paymentWindow && !paymentWindow.closed) {
+                      paymentWindow.focus()
+                    } else if (paymentIntent.checkout_url) {
+                      window.open(paymentIntent.checkout_url, '_blank', 'noopener,noreferrer')
+                    }
+                  }}
+                  variant="outline"
+                  className="w-full"
+                >
+                  Abrir Página de Pagamento Novamente
+                </Button>
+                <Button
+                  onClick={() => {
+                    setPolling(false)
+                    router.push('/aluno/comprar')
+                  }}
+                  variant="ghost"
+                  className="w-full"
+                >
+                  Voltar para Comprar
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4 text-blue-600" />
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                Abrindo página de pagamento...
+              </h3>
+              <p className="text-sm text-gray-600 mb-6">
+                {isIOS 
+                  ? 'A página de pagamento será aberta em instantes.'
+                  : 'A página de pagamento será aberta em uma nova aba em instantes.'}
+              </p>
+              {paymentIntent.checkout_url && (
+                <Button
+                  onClick={() => {
+                    const url = paymentIntent.checkout_url!
+                    console.log('Clique manual - abrindo em nova aba:', url)
+                    const newWindow = window.open(url, '_blank', 'noopener,noreferrer')
+                    if (newWindow) {
+                      setPaymentWindow(newWindow)
+                      setOpened(true)
+                      setPolling(true)
+                      toast.success('Página de pagamento aberta. Aguardando confirmação...')
+                    } else {
+                      // Fallback se popup for bloqueado
+                      window.location.href = url
+                    }
+                  }}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 text-lg font-semibold"
+                >
+                  Abrir Link de Pagamento
+                </Button>
+              )}
+            </>
           )}
         </div>
       </div>
