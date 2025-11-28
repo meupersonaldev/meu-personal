@@ -102,12 +102,10 @@ router.get(
     }
 
     if (!finalFranchiseId && !teacherId && !studentId) {
-      return res
-        .status(400)
-        .json({
-          error:
-            'franchise_id ou academy_id é obrigatório (ou teacher_id/student_id)'
-        })
+      return res.status(400).json({
+        error:
+          'franchise_id ou academy_id é obrigatório (ou teacher_id/student_id)'
+      })
     }
 
     // Compatibilidade: permitir consultas apenas por student_id (legado)
@@ -717,11 +715,9 @@ router.post(
       bookingData.source === 'PROFESSOR' &&
       !['TEACHER', 'PROFESSOR', 'FRANQUIA', 'FRANQUEADORA'].includes(user.role)
     ) {
-      return res
-        .status(403)
-        .json({
-          error: 'Apenas professores podem criar agendamentos professor-led'
-        })
+      return res.status(403).json({
+        error: 'Apenas professores podem criar agendamentos professor-led'
+      })
     }
 
     // Se for ALUNO-led, precisa de student_id
