@@ -136,11 +136,11 @@ export default function Home() {
                 Como Funciona
               </Link>
               <div className="pt-3 border-t border-meu-primary-dark space-y-3">
-                <Link href="/cadastro" onClick={() => setMobileMenuOpen(false)}>
-                  <Button size="sm" className="bg-meu-accent text-meu-primary hover:bg-meu-accent/90 w-full">
+                <Button asChild size="sm" className="bg-meu-accent text-meu-primary hover:bg-meu-accent/90 w-full">
+                  <Link href="/cadastro" onClick={() => setMobileMenuOpen(false)} className="no-underline">
                     Comece agora
-                  </Button>
-                </Link>
+                  </Link>
+                </Button>
               </div>
             </nav>
           </div>
