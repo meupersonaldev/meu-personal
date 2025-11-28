@@ -23,9 +23,13 @@ import {
   Users,
   Plus,
   Save,
-  X
+  X,
+  Lock,
+  KeyRound,
+  Mail
 } from 'lucide-react'
 import { useFranqueadoraStore, type Academy } from '@/lib/stores/franqueadora-store'
+import { Input } from '@/components/ui/input'
 
 interface EditingFranchise extends Partial<Academy> {
   id: string
@@ -33,7 +37,7 @@ interface EditingFranchise extends Partial<Academy> {
 
 export default function DadosFranquiasPage() {
   const router = useRouter()
-  const { franqueadora, academies, fetchAcademies, updateAcademy, deleteAcademy, isLoading } = useFranqueadoraStore()
+  const { franqueadora, academies, fetchAcademies, updateAcademy, deleteAcademy, isLoading, token } = useFranqueadoraStore()
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all')
   const [sortBy, setSortBy] = useState<'name' | 'revenue' | 'royalty' | 'created'>('name')
@@ -47,6 +51,15 @@ export default function DadosFranquiasPage() {
     isOpen: false,
     franchise: null
   })
+  const [showPasswordModal, setShowPasswordModal] = useState(false)
+  const [franchiseAdmin, setFranchiseAdmin] = useState<{ id: string; name: string; email: string } | null>(null)
+  const [passwordData, setPasswordData] = useState({
+    newPassword: '',
+    confirmPassword: ''
+  })
+  const [passwordLoading, setPasswordLoading] = useState(false)
+  const [resetPasswordLoading, setResetPasswordLoading] = useState(false)
+  const [loadingAdmin, setLoadingAdmin] = useState(false)
 
   // Hydration fix
   const [hydrated, setHydrated] = useState(false)
@@ -164,6 +177,116 @@ export default function DadosFranquiasPage() {
       }
     } catch (error) {
       toast.error('Erro ao atualizar status')
+    }
+  }
+
+  const fetchFranchiseAdmin = async (franchiseId: string) => {
+    setLoadingAdmin(true)
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const response = await fetch(`${API_URL}/api/franchises/${franchiseId}/admin`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error('Erro ao buscar admin da franquia')
+      }
+
+      const admin = await response.json()
+      setFranchiseAdmin(admin)
+      return admin
+    } catch (error: any) {
+      toast.error(error.message || 'Erro ao buscar admin da franquia')
+      return null
+    } finally {
+      setLoadingAdmin(false)
+    }
+  }
+
+  const handleOpenPasswordModal = async (franchise: Academy) => {
+    const admin = await fetchFranchiseAdmin(franchise.id)
+    if (admin) {
+      setShowPasswordModal(true)
+    }
+  }
+
+  const handleChangePassword = async () => {
+    if (!franchiseAdmin) return
+
+    if (!passwordData.newPassword || !passwordData.confirmPassword) {
+      toast.error('Preencha todos os campos')
+      return
+    }
+
+    if (passwordData.newPassword.length < 6) {
+      toast.error('A senha deve ter no mínimo 6 caracteres')
+      return
+    }
+
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      toast.error('As senhas não coincidem')
+      return
+    }
+
+    setPasswordLoading(true)
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const response = await fetch(`${API_URL}/api/users/${franchiseAdmin.id}/password`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          newPassword: passwordData.newPassword
+        })
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Erro ao alterar senha')
+      }
+
+      toast.success('Senha alterada com sucesso!')
+      setShowPasswordModal(false)
+      setPasswordData({ newPassword: '', confirmPassword: '' })
+      setFranchiseAdmin(null)
+    } catch (error: any) {
+      toast.error(error.message || 'Erro ao alterar senha')
+    } finally {
+      setPasswordLoading(false)
+    }
+  }
+
+  const handleResetPassword = async (franchise: Academy) => {
+    setResetPasswordLoading(true)
+    try {
+      const admin = await fetchFranchiseAdmin(franchise.id)
+      if (!admin) return
+
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const response = await fetch(`${API_URL}/api/users/${admin.id}/reset-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Erro ao resetar senha')
+      }
+
+      toast.success(`Email de redefinição de senha enviado para ${data.email || admin.email}`)
+    } catch (error: any) {
+      toast.error(error.message || 'Erro ao resetar senha')
+    } finally {
+      setResetPasswordLoading(false)
     }
   }
 
@@ -514,6 +637,49 @@ export default function DadosFranquiasPage() {
                   </div>
                 </div>
 
+                {/* Ações de Senha do Admin */}
+                <div className="border-t pt-4 mt-6">
+                  <h4 className="text-sm font-medium text-gray-900 mb-3">Gerenciar Senha do Admin</h4>
+                  <div className="flex flex-wrap gap-3">
+                    <Button
+                      variant="outline"
+                      onClick={() => handleOpenPasswordModal(editingFranchise as any)}
+                      disabled={loadingAdmin}
+                      className="flex items-center gap-2"
+                    >
+                      {loadingAdmin ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
+                          Carregando...
+                        </>
+                      ) : (
+                        <>
+                          <KeyRound className="h-4 w-4" />
+                          Alterar Senha
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => handleResetPassword(editingFranchise as any)}
+                      disabled={resetPasswordLoading || loadingAdmin}
+                      className="flex items-center gap-2"
+                    >
+                      {resetPasswordLoading ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
+                          Enviando...
+                        </>
+                      ) : (
+                        <>
+                          <Mail className="h-4 w-4" />
+                          Resetar e Enviar por Email
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
                 <div className="flex items-center justify-end space-x-4 mt-6">
                   <Button variant="outline" onClick={handleCancelEdit}>
                     <X className="h-4 w-4 mr-2" />
@@ -529,6 +695,107 @@ export default function DadosFranquiasPage() {
                 </div>
               </div>
             </Card>
+          </div>
+        )}
+
+        {/* Modal de Alterar Senha do Admin */}
+        {showPasswordModal && franchiseAdmin && (
+          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+            <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-1/2 lg:w-1/3 shadow-lg rounded-md bg-white">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Alterar Senha do Admin - {franchiseAdmin.name}
+                </h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setShowPasswordModal(false)
+                    setPasswordData({ newPassword: '', confirmPassword: '' })
+                    setFranchiseAdmin(null)
+                  }}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Email do Admin
+                  </label>
+                  <Input
+                    type="email"
+                    value={franchiseAdmin.email}
+                    disabled
+                    className="w-full bg-gray-50"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Nova Senha *
+                  </label>
+                  <Input
+                    type="password"
+                    value={passwordData.newPassword}
+                    onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                    placeholder="Mínimo 6 caracteres"
+                    className="w-full"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Confirmar Nova Senha *
+                  </label>
+                  <Input
+                    type="password"
+                    value={passwordData.confirmPassword}
+                    onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                    placeholder="Digite a senha novamente"
+                    className="w-full"
+                  />
+                </div>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+                  <p className="text-sm text-blue-800">
+                    <strong>Observação:</strong> Como franqueadora, você pode alterar a senha do admin da franquia sem precisar da senha atual.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 mt-6">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowPasswordModal(false)
+                    setPasswordData({ newPassword: '', confirmPassword: '' })
+                    setFranchiseAdmin(null)
+                  }}
+                  disabled={passwordLoading}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleChangePassword}
+                  disabled={passwordLoading || !passwordData.newPassword || !passwordData.confirmPassword}
+                  className="bg-meu-primary hover:bg-meu-primary/90 text-white"
+                >
+                  {passwordLoading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Alterando...
+                    </>
+                  ) : (
+                    <>
+                      <Lock className="h-4 w-4 mr-2" />
+                      Alterar Senha
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
           </div>
         )}
 
