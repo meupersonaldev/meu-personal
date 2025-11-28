@@ -8,6 +8,7 @@ import { Loader2, ExternalLink, QrCode, Barcode, CreditCard, Calendar, DollarSig
 import { API_BASE_URL } from '@/lib/api'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { toast } from 'sonner'
+import ConfirmDialog from '@/components/ui/confirm-dialog'
 
 interface PaymentIntent {
   id: string
@@ -42,6 +43,9 @@ export function PaymentHistory({ className }: PaymentHistoryProps) {
   const [total, setTotal] = useState(0)
   const [deleting, setDeleting] = useState(false)
   const [cancelingId, setCancelingId] = useState<string | null>(null)
+  const [showCancelDialog, setShowCancelDialog] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [paymentToCancel, setPaymentToCancel] = useState<string | null>(null)
   const itemsPerPage = 10
 
   useEffect(() => {
@@ -75,10 +79,6 @@ export function PaymentHistory({ className }: PaymentHistoryProps) {
   }
 
   const handleDeleteCanceled = async () => {
-    if (!confirm('Tem certeza que deseja remover todos os pagamentos cancelados? Esta ação não pode ser desfeita.')) {
-      return
-    }
-
     try {
       setDeleting(true)
       const response = await fetch(`${API_BASE_URL}/api/packages/payment-history/canceled`, {
@@ -93,6 +93,7 @@ export function PaymentHistory({ className }: PaymentHistoryProps) {
       }
 
       toast.success('Pagamentos cancelados removidos com sucesso')
+      setShowDeleteDialog(false)
       // Recarregar pagamentos
       loadPayments()
     } catch (error: any) {
@@ -103,14 +104,12 @@ export function PaymentHistory({ className }: PaymentHistoryProps) {
     }
   }
 
-  const handleCancelPayment = async (paymentId: string) => {
-    if (!confirm('Tem certeza que deseja cancelar este pagamento? Esta ação não pode ser desfeita.')) {
-      return
-    }
+  const handleCancelPayment = async () => {
+    if (!paymentToCancel) return
 
     try {
-      setCancelingId(paymentId)
-      const response = await fetch(`${API_BASE_URL}/api/packages/payment-intent/${paymentId}/cancel`, {
+      setCancelingId(paymentToCancel)
+      const response = await fetch(`${API_BASE_URL}/api/packages/payment-intent/${paymentToCancel}/cancel`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`
@@ -123,6 +122,8 @@ export function PaymentHistory({ className }: PaymentHistoryProps) {
       }
 
       toast.success('Pagamento cancelado com sucesso')
+      setShowCancelDialog(false)
+      setPaymentToCancel(null)
       // Recarregar pagamentos
       loadPayments()
     } catch (error: any) {
@@ -131,6 +132,15 @@ export function PaymentHistory({ className }: PaymentHistoryProps) {
     } finally {
       setCancelingId(null)
     }
+  }
+
+  const openCancelDialog = (paymentId: string) => {
+    setPaymentToCancel(paymentId)
+    setShowCancelDialog(true)
+  }
+
+  const openDeleteDialog = () => {
+    setShowDeleteDialog(true)
   }
 
   const totalPages = Math.ceil(total / itemsPerPage)
@@ -251,21 +261,12 @@ export function PaymentHistory({ className }: PaymentHistoryProps) {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={handleDeleteCanceled}
+                  onClick={openDeleteDialog}
                   disabled={deleting}
                   className="text-red-600 hover:text-red-700 hover:bg-red-50"
                 >
-                  {deleting ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Removendo...
-                    </>
-                  ) : (
-                    <>
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Limpar Cancelados ({canceledCount})
-                    </>
-                  )}
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Limpar Cancelados ({canceledCount})
                 </Button>
               )}
             </div>
@@ -369,21 +370,12 @@ export function PaymentHistory({ className }: PaymentHistoryProps) {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleCancelPayment(payment.id)}
+                          onClick={() => openCancelDialog(payment.id)}
                           disabled={cancelingId === payment.id}
                           className="flex items-center gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
                         >
-                          {cancelingId === payment.id ? (
-                            <>
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                              Cancelando...
-                            </>
-                          ) : (
-                            <>
-                              <X className="h-4 w-4" />
-                              Cancelar
-                            </>
-                          )}
+                          <X className="h-4 w-4" />
+                          Cancelar
                         </Button>
                       )}
                     </div>
@@ -448,6 +440,35 @@ export function PaymentHistory({ className }: PaymentHistoryProps) {
           )}
         </CardContent>
       </Card>
+
+      {/* Modal de confirmação para cancelar pagamento */}
+      <ConfirmDialog
+        isOpen={showCancelDialog}
+        onClose={() => {
+          setShowCancelDialog(false)
+          setPaymentToCancel(null)
+        }}
+        onConfirm={handleCancelPayment}
+        title="Cancelar Pagamento"
+        description="Tem certeza que deseja cancelar este pagamento? Esta ação não pode ser desfeita."
+        confirmText="Sim, Cancelar"
+        cancelText="Não, Manter"
+        type="warning"
+        loading={cancelingId !== null}
+      />
+
+      {/* Modal de confirmação para deletar cancelados */}
+      <ConfirmDialog
+        isOpen={showDeleteDialog}
+        onClose={() => setShowDeleteDialog(false)}
+        onConfirm={handleDeleteCanceled}
+        title="Limpar Pagamentos Cancelados"
+        description={`Tem certeza que deseja remover todos os ${canceledCount} pagamento(s) cancelado(s)? Esta ação não pode ser desfeita.`}
+        confirmText="Sim, Remover"
+        cancelText="Cancelar"
+        type="danger"
+        loading={deleting}
+      />
     </div>
   )
 }
