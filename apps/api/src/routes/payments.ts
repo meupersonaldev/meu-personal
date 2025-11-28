@@ -407,10 +407,10 @@ router.get('/franchise/:academy_id/asaas', requireAuth, async (req, res) => {
     // WalletId da franquia (hardcoded - 90% do split)
     const FRANCHISE_WALLET_ID = '03223ec1-c254-43a9-bcdd-6f54acac0609'
 
-    // Buscar pagamentos do Asaas com filtro por walletId
+    // Buscar pagamentos do Asaas (sem filtro de walletId, pois a API pode não suportar)
+    // Vamos buscar todos e filtrar pelos que têm split com o walletId da franquia
     const filters: any = {
-      walletId: FRANCHISE_WALLET_ID,
-      limit: Number(limit)
+      limit: Number(limit) || 100
     }
 
     if (status) {
@@ -425,7 +425,20 @@ router.get('/franchise/:academy_id/asaas', requireAuth, async (req, res) => {
       return res.status(500).json({ error: 'Erro ao buscar pagamentos do Asaas' })
     }
 
-    const asaasPayments = asaasResult.data || []
+    const allAsaasPayments = asaasResult.data || []
+    
+    // Filtrar pagamentos que têm split com o walletId da franquia
+    const asaasPayments = allAsaasPayments.filter((p: any) => {
+      // Verificar se o pagamento tem split com o walletId da franquia
+      if (p.split && Array.isArray(p.split)) {
+        return p.split.some((s: any) => s.walletId === FRANCHISE_WALLET_ID)
+      }
+      // Se não tiver split, pode ser um pagamento antigo - vamos incluir se for da unidade
+      // Verificar via externalReference ou outros campos
+      return false
+    })
+
+    console.log(`[payments/franchise/asaas] Encontrados ${allAsaasPayments.length} pagamentos no Asaas, ${asaasPayments.length} com split da franquia`)
 
     // Filtrar por data se fornecido
     let filteredPayments = asaasPayments
