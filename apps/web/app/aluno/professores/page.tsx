@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Users, Calendar, Star, Loader2, MapPin } from 'lucide-react'
+import { Users, Calendar, Loader2, MapPin } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -532,24 +532,6 @@ export default function StudentProfessoresPage() {
                                     </Avatar>
                                     <div id={`aluno-professores-teacher-info-${teacher.id}`} className="w-full">
                                       <h3 id={`aluno-professores-teacher-name-${teacher.id}`} className="font-bold text-lg text-gray-900 mb-1 line-clamp-1">{teacher.name}</h3>
-                                      {/* Avaliação logo abaixo do nome */}
-                                      <div id={`aluno-professores-teacher-rating-${teacher.id}`} className="flex items-center justify-center gap-1.5">
-                                        <div className="flex items-center gap-0.5">
-                                          {Array.from({ length: 5 }).map((_, i) => {
-                                            const idx = i + 1
-                                            const filled = idx <= Math.round(teacher.rating_avg || 0)
-                                            return (
-                                              <Star key={idx} id={`aluno-professores-teacher-star-${teacher.id}-${idx}`} className={`h-4 w-4 ${filled ? 'text-amber-400 fill-amber-400' : 'text-gray-300'}`} />
-                                            )
-                                          })}
-                                        </div>
-                                        <span id={`aluno-professores-teacher-rating-value-${teacher.id}`} className="text-sm font-bold text-gray-900">
-                                          {typeof teacher.rating_avg === 'number' ? teacher.rating_avg.toFixed(1) : '0.0'}
-                                        </span>
-                                        <span id={`aluno-professores-teacher-rating-count-${teacher.id}`} className="text-xs text-gray-500">
-                                          ({teacher.rating_count || 0})
-                                        </span>
-                                      </div>
                                     </div>
                                   </div>
                                 </div>
