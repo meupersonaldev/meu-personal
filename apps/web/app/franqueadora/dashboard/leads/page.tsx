@@ -28,9 +28,12 @@ import {
   Loader2,
   ChevronLeft,
   ChevronRight,
-  Eye
+  Eye,
+  Download,
+  Trash2
 } from 'lucide-react'
 import { toast } from 'sonner'
+import ConfirmDialog from '@/components/ui/confirm-dialog'
 
 interface FranchiseLead {
   id: string
@@ -75,6 +78,9 @@ export default function FranchiseLeadsPage() {
   const [totalPages, setTotalPages] = useState(1)
   const [selectedLead, setSelectedLead] = useState<FranchiseLead | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const limit = 10
 
   const fetchLeads = useCallback(async () => {
@@ -158,6 +164,177 @@ export default function FranchiseLeadsPage() {
     setSelectedLead(null)
   }
 
+  const handleExportLeads = async () => {
+    if (exporting) return
+    if (!total) {
+      toast.info('Nenhum lead para exportar.')
+      return
+    }
+
+    setExporting(true)
+
+    try {
+      const xlsxModule = await import('xlsx')
+      const XLSX = xlsxModule.default || xlsxModule
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+
+      // Buscar todos os leads (sem paginação)
+      const allLeads: FranchiseLead[] = []
+      let currentPage = 1
+      let hasMore = true
+
+      while (hasMore) {
+        const params = new URLSearchParams({
+          page: currentPage.toString(),
+          limit: '100', // Buscar em lotes maiores para exportação
+          sortBy: 'created_at',
+          sortOrder: 'desc'
+        })
+
+        if (searchTerm) {
+          params.append('name', searchTerm)
+        }
+
+        const response = await fetch(`${API_URL}/api/franqueadora/leads?${params}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        })
+
+        if (!response.ok) {
+          throw new Error('Falha ao buscar leads para exportação.')
+        }
+
+        const data = await response.json()
+        if (data.success && data.data?.length > 0) {
+          allLeads.push(...data.data)
+          if (data.data.length < 100 || allLeads.length >= (data.pagination?.total || 0)) {
+            hasMore = false
+          } else {
+            currentPage++
+          }
+        } else {
+          hasMore = false
+        }
+      }
+
+      if (!allLeads.length) {
+        toast.info('Nenhum lead encontrado para exportar.')
+        return
+      }
+
+      const formatDate = (dateString: string) => {
+        const date = new Date(dateString)
+        return date.toLocaleDateString('pt-BR', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        })
+      }
+
+      const headers = [
+        'Nome',
+        'Email',
+        'Telefone',
+        'Cidade',
+        'Capacidade de Investimento',
+        'Status',
+        'Mensagem',
+        'Data de Cadastro',
+        'Última Atualização'
+      ]
+
+      const rows = [
+        headers,
+        ...allLeads.map((lead) => [
+          lead.name || '',
+          lead.email || '',
+          lead.phone || '',
+          lead.city || '',
+          lead.investment_capacity || '',
+          STATUS_LABELS[lead.status] || lead.status,
+          lead.message || '',
+          formatDate(lead.created_at),
+          lead.updated_at ? formatDate(lead.updated_at) : ''
+        ])
+      ]
+
+      const worksheet = XLSX.utils.aoa_to_sheet(rows)
+      const workbook = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Leads')
+
+      // Ajustar largura das colunas
+      const colWidths = [
+        { wch: 25 }, // Nome
+        { wch: 30 }, // Email
+        { wch: 15 }, // Telefone
+        { wch: 20 }, // Cidade
+        { wch: 25 }, // Capacidade de Investimento
+        { wch: 20 }, // Status
+        { wch: 50 }, // Mensagem
+        { wch: 20 }, // Data de Cadastro
+        { wch: 20 }  // Última Atualização
+      ]
+      worksheet['!cols'] = colWidths
+
+      const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' })
+      const blob = new Blob([excelBuffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      })
+      const link = document.createElement('a')
+      const url = URL.createObjectURL(blob)
+      link.href = url
+      link.download = `leads_${new Date().toISOString().split('T')[0]}.xlsx`
+      link.click()
+      URL.revokeObjectURL(url)
+
+      toast.success('Leads exportados com sucesso!')
+    } catch (error: any) {
+      console.error('Erro ao exportar leads:', error)
+      toast.error('Erro ao exportar leads. Tente novamente.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const handleDeleteLead = async (leadId: string) => {
+    if (!token) {
+      toast.error('Não autenticado')
+      setDeletingId(null)
+      return
+    }
+
+    setIsDeleting(true)
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const response = await fetch(`${API_URL}/api/franqueadora/leads/${leadId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Erro ao deletar lead')
+      }
+
+      toast.success('Lead deletado com sucesso!')
+      // Recarregar a lista
+      await fetchLeads()
+    } catch (error: any) {
+      console.error('Erro ao deletar lead:', error)
+      toast.error(error.message || 'Erro ao deletar lead. Tente novamente.')
+    } finally {
+      setIsDeleting(false)
+      setDeletingId(null)
+    }
+  }
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
     return date.toLocaleDateString('pt-BR', {
@@ -171,13 +348,23 @@ export default function FranchiseLeadsPage() {
     <FranqueadoraGuard requiredPermission="canViewDashboard">
       <div className="p-3 sm:p-4 lg:p-8">
         {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">
-            Leads de Franquias
-          </h1>
-          <p className="text-gray-600">
-            Gerencie os interessados em se tornar franqueados
-          </p>
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">
+              Leads de Franquias
+            </h1>
+            <p className="text-gray-600">
+              Gerencie os interessados em se tornar franqueados
+            </p>
+          </div>
+          <Button
+            onClick={handleExportLeads}
+            disabled={!total || exporting}
+            className="flex items-center gap-2"
+          >
+            <Download className={`h-4 w-4 ${exporting ? 'animate-spin' : ''}`} />
+            {exporting ? 'Exportando...' : 'Exportar Excel'}
+          </Button>
         </div>
 
         {/* Search Bar */}
@@ -273,15 +460,26 @@ export default function FranchiseLeadsPage() {
                           </span>
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleViewDetails(lead)}
-                            className="flex items-center gap-2"
-                          >
-                            <Eye className="h-4 w-4" />
-                            Ver Detalhes
-                          </Button>
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleViewDetails(lead)}
+                              className="flex items-center gap-2"
+                            >
+                              <Eye className="h-4 w-4" />
+                              Ver Detalhes
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setDeletingId(lead.id)}
+                              className="flex items-center gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              Deletar
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -329,6 +527,19 @@ export default function FranchiseLeadsPage() {
           isOpen={isModalOpen}
           onClose={handleCloseModal}
           lead={selectedLead}
+        />
+
+        {/* Delete Confirmation Modal */}
+        <ConfirmDialog
+          isOpen={!!deletingId}
+          onClose={() => !isDeleting && setDeletingId(null)}
+          onConfirm={() => deletingId && handleDeleteLead(deletingId)}
+          title="Confirmar Exclusão"
+          description="Tem certeza que deseja deletar este lead? Esta ação não pode ser desfeita."
+          confirmText="Sim, Deletar"
+          cancelText="Cancelar"
+          type="danger"
+          loading={isDeleting}
         />
       </div>
     </FranqueadoraGuard>

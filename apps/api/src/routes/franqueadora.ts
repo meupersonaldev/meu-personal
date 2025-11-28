@@ -567,6 +567,47 @@ router.post('/leads', asyncErrorHandler(async (req, res) => {
   }
 }))
 
+// DELETE /api/franqueadora/leads/:id - Deletar lead
+router.delete('/leads/:id',
+  requireAuth,
+  requireRole(['SUPER_ADMIN']),
+  requireFranqueadoraAdmin,
+  asyncErrorHandler(async (req, res) => {
+    const { id } = req.params
+    const franqueadoraId = req.franqueadoraAdmin?.franqueadora_id
+
+    if (!franqueadoraId) {
+      return res.status(403).json({ error: 'Franqueadora não identificada' })
+    }
+
+    // Verificar se o lead pertence à franqueadora do admin
+    const { data: lead, error: fetchError } = await supabase
+      .from('franchise_leads')
+      .select('id, franqueadora_id')
+      .eq('id', id)
+      .eq('franqueadora_id', franqueadoraId)
+      .single()
+
+    if (fetchError || !lead) {
+      return res.status(404).json({ error: 'Lead não encontrado ou acesso não autorizado' })
+    }
+
+    // Deletar o lead
+    const { error: deleteError } = await supabase
+      .from('franchise_leads')
+      .delete()
+      .eq('id', id)
+      .eq('franqueadora_id', franqueadoraId)
+
+    if (deleteError) {
+      console.error('[LEADS DELETE] Erro ao deletar lead:', deleteError)
+      return res.status(500).json({ error: 'Erro ao deletar lead' })
+    }
+
+    return res.json({ message: 'Lead deletado com sucesso' })
+  })
+)
+
 router.put('/leads/:id', requireAuth, requireRole(['SUPER_ADMIN']), requireFranqueadoraAdmin, async (req, res) => {
   try {
     if (!req.franqueadoraAdmin?.franqueadora_id) return res.status(400).json({ error: 'No franqueadora context' })
