@@ -45,7 +45,20 @@ export default function PagamentoPage() {
         }
 
         const data = await response.json()
-        setPaymentIntent(data.payment_intent)
+        const intent = data.payment_intent
+        
+        console.log('Payment Intent recebido:', {
+          id: intent?.id,
+          checkout_url: intent?.checkout_url,
+          status: intent?.status,
+          hasUrl: !!intent?.checkout_url
+        })
+        
+        if (!intent?.checkout_url) {
+          console.warn('⚠️ Payment Intent sem checkout_url! Dados completos:', intent)
+        }
+        
+        setPaymentIntent(intent)
       } catch (error: any) {
         toast.error(error.message || 'Erro ao carregar link de pagamento')
         router.push('/aluno/inicio')
@@ -57,26 +70,54 @@ export default function PagamentoPage() {
     fetchPaymentIntent()
   }, [token, paymentIntentId, router])
 
-  // Redirecionamento automático - otimizado para iOS
+  // Redirecionamento automático - imediato e confiável
   useEffect(() => {
-    if (!paymentIntent?.checkout_url || redirecting) return
+    if (!paymentIntent?.checkout_url) return
 
+    const url = paymentIntent.checkout_url
+    
+    // Valida se a URL é válida
+    if (!url || !url.startsWith('http')) {
+      console.error('URL de pagamento inválida:', url)
+      toast.error('URL de pagamento inválida. Clique no botão abaixo.')
+      return
+    }
+
+    // Marca como redirecionando imediatamente
     setRedirecting(true)
     
-    // Para iOS e dispositivos móveis, sempre usa window.location.href (mais confiável)
-    // Para desktop, também usa window.location.href para garantir funcionamento
-    const delay = isIOS ? 300 : 800 // Delay menor para iOS
+    // Redirecionamento imediato - delay mínimo apenas para garantir que o DOM está pronto
+    const delay = 150 // Delay mínimo para todos os dispositivos
     
-    setTimeout(() => {
+    const redirectTimer = setTimeout(() => {
       try {
         // Sempre usa window.location.href para garantir funcionamento em todos os dispositivos
-        window.location.href = paymentIntent.checkout_url!
+        console.log('🔄 Redirecionando automaticamente para:', url)
+        window.location.href = url
       } catch (e) {
-        console.error('Erro ao redirecionar:', e)
+        console.error('❌ Erro ao redirecionar:', e)
         toast.error('Erro ao abrir link de pagamento. Clique no botão abaixo.')
+        setRedirecting(false)
       }
     }, delay)
-  }, [paymentIntent?.checkout_url, redirecting, isIOS])
+
+    // Fallback agressivo: se após 1 segundo não redirecionou, força novamente
+    const fallbackTimer = setTimeout(() => {
+      if (document.visibilityState === 'visible' && window.location.href !== url) {
+        console.log('🔄 Fallback: forçando redirecionamento novamente...')
+        try {
+          window.location.replace(url) // Usa replace para evitar voltar na história
+        } catch (e) {
+          console.error('❌ Erro no fallback:', e)
+        }
+      }
+    }, 1000)
+
+    return () => {
+      clearTimeout(redirectTimer)
+      clearTimeout(fallbackTimer)
+    }
+  }, [paymentIntent?.checkout_url])
 
   if (loading) {
     return (
@@ -140,8 +181,10 @@ export default function PagamentoPage() {
           {paymentIntent.checkout_url && (
             <Button
               onClick={() => {
+                const url = paymentIntent.checkout_url!
+                console.log('Clique manual - redirecionando para:', url)
                 // Sempre usa window.location.href para garantir funcionamento em todos os dispositivos
-                window.location.href = paymentIntent.checkout_url!
+                window.location.href = url
               }}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 text-lg font-semibold"
             >
