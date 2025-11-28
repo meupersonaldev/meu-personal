@@ -93,6 +93,14 @@ export default function DadosFranquiasPage() {
   }
 
   const handleEditFranchise = async (franchise: Academy) => {
+    console.log('[handleEditFranchise] Abrindo modal para editar franquia:', {
+      id: franchise.id,
+      name: franchise.name,
+      email: franchise.email
+    })
+    
+    // Limpar estado anterior primeiro
+    setEditingFranchiseAdmin(null)
     setEditingFranchise({
       id: franchise.id,
       name: franchise.name,
@@ -107,21 +115,29 @@ export default function DadosFranquiasPage() {
     })
     
     // Buscar o admin da franquia ao abrir o modal de edição
-    setEditingFranchiseAdmin(null)
-    setLoadingEditingAdmin(true)
+    // Aguardar um tick para garantir que o estado foi limpo
+    await new Promise(resolve => setTimeout(resolve, 50))
+    
     try {
-      const admin = await fetchFranchiseAdmin(franchise.id)
+      const admin = await fetchFranchiseAdmin(franchise.id, true) // true = forEditing
       if (admin && admin.id && admin.email) {
+        console.log('[handleEditFranchise] Admin encontrado:', {
+          franchiseId: franchise.id,
+          franchiseName: franchise.name,
+          adminId: admin.id,
+          adminEmail: admin.email,
+          adminName: admin.name
+        })
         setEditingFranchiseAdmin({
           id: admin.id,
           name: admin.name || 'Admin',
           email: admin.email
         })
+      } else {
+        console.warn('[handleEditFranchise] Admin não encontrado para franquia:', franchise.id)
       }
     } catch (error) {
       console.error('[handleEditFranchise] Erro ao buscar admin:', error)
-    } finally {
-      setLoadingEditingAdmin(false)
     }
   }
 
@@ -208,16 +224,26 @@ export default function DadosFranquiasPage() {
     }
   }
 
-  const fetchFranchiseAdmin = async (franchiseId: string) => {
+  const fetchFranchiseAdmin = async (franchiseId: string, forEditing: boolean = false) => {
     if (!franchiseId) {
       console.error('[fetchFranchiseAdmin] franchiseId não fornecido')
       return null
     }
 
-    setLoadingAdmin(true)
+    // Usar o estado de loading apropriado
+    if (forEditing) {
+      setLoadingEditingAdmin(true)
+    } else {
+      setLoadingAdmin(true)
+    }
+    
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      console.log('[fetchFranchiseAdmin] Buscando admin para franquia:', franchiseId)
+      console.log('[fetchFranchiseAdmin] Buscando admin para franquia:', {
+        franchiseId,
+        forEditing,
+        timestamp: new Date().toISOString()
+      })
       
       const response = await fetch(`${API_URL}/api/franchises/${franchiseId}/admin`, {
         headers: {
@@ -233,11 +259,12 @@ export default function DadosFranquiasPage() {
 
       const admin = await response.json()
       console.log('[fetchFranchiseAdmin] Resposta da API:', {
-        admin,
-        hasId: !!admin?.id,
-        hasEmail: !!admin?.email,
-        hasName: !!admin?.name,
-        franchiseId
+        franchiseId,
+        adminId: admin?.id,
+        adminEmail: admin?.email,
+        adminName: admin?.name,
+        forEditing,
+        timestamp: new Date().toISOString()
       })
       
       if (!admin || !admin.id || !admin.email) {
@@ -245,15 +272,20 @@ export default function DadosFranquiasPage() {
         throw new Error('Dados do admin incompletos')
       }
 
-      // Não setar o estado aqui, deixar o handleOpenPasswordModal fazer isso
-      // setFranchiseAdmin(admin)
+      // Não setar o estado aqui, deixar o chamador fazer isso
       return admin
     } catch (error: any) {
       console.error('[fetchFranchiseAdmin] Erro:', error)
-      toast.error(error.message || 'Erro ao buscar admin da franquia')
+      if (!forEditing) {
+        toast.error(error.message || 'Erro ao buscar admin da franquia')
+      }
       return null
     } finally {
-      setLoadingAdmin(false)
+      if (forEditing) {
+        setLoadingEditingAdmin(false)
+      } else {
+        setLoadingAdmin(false)
+      }
     }
   }
 
@@ -746,13 +778,19 @@ export default function DadosFranquiasPage() {
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600 inline-block mr-2"></div>
                       Carregando dados do admin...
                     </div>
-                  ) : editingFranchiseAdmin ? (
+                  ) : editingFranchiseAdmin && editingFranchise?.id ? (
                     <div className="mb-3 p-3 bg-gray-50 rounded-md">
+                      <p className="text-xs text-gray-400 mb-1">
+                        Franquia ID: {editingFranchise.id}
+                      </p>
                       <p className="text-sm text-gray-600">
                         <span className="font-medium">Admin:</span> {editingFranchiseAdmin.name}
                       </p>
                       <p className="text-sm text-gray-600">
                         <span className="font-medium">Email:</span> {editingFranchiseAdmin.email}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Admin ID: {editingFranchiseAdmin.id}
                       </p>
                     </div>
                   ) : (
