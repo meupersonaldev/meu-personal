@@ -662,7 +662,7 @@ router.delete('/:id', requireAuth, asyncErrorHandler(async (req, res) => {
   const hasPermission =
     booking.student_id === user.userId ||
     booking.teacher_id === user.userId ||
-    ['FRANQUIA', 'FRANQUEADORA', 'ADMIN', 'TEACHER', 'PROFESSOR'].includes(user.role)
+    ['FRANQUIA', 'FRANCHISE_ADMIN', 'FRANQUEADORA', 'ADMIN', 'TEACHER', 'PROFESSOR', 'SUPER_ADMIN'].includes(user.role)
 
   if (!hasPermission) {
     return res.status(403).json({ error: 'Acesso não autorizado' })
@@ -703,7 +703,31 @@ router.delete('/:id', requireAuth, asyncErrorHandler(async (req, res) => {
     })
   }
 
-  // Para agendamentos com aluno, cancelar
+  // Para agendamentos com aluno:
+  // - Se for FRANCHISE_ADMIN, FRANQUEADORA ou SUPER_ADMIN, deletar permanentemente
+  // - Caso contrário, apenas cancelar
+  const canDeletePermanently = ['FRANCHISE_ADMIN', 'FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN'].includes(user.role)
+  
+  if (canDeletePermanently) {
+    console.log('🗑️ Deletando agendamento permanentemente (admin)')
+    const { error: deleteError } = await supabase
+      .from('bookings')
+      .delete()
+      .eq('id', id)
+
+    if (deleteError) {
+      console.error('❌ Erro ao deletar agendamento:', deleteError)
+      return res.status(500).json({ error: 'Erro ao deletar agendamento' })
+    }
+
+    console.log('✅ Agendamento DELETADO permanentemente!')
+    return res.json({
+      message: 'Agendamento excluído permanentemente',
+      status: 'DELETED'
+    })
+  }
+
+  // Para outros usuários, apenas cancelar
   await bookingCanonicalService.cancelBooking(id, user.userId)
 
   res.json({
