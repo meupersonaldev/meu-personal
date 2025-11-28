@@ -827,7 +827,7 @@ export const useFranquiaStore = create<FranquiaState>()(
             monthlyGrowth = 100 // 100% se não havia alunos no mês anterior
           }
 
-          // Buscar bookings para calcular aulas do mês
+          // Buscar bookings válidos (apenas com aluno) para calcular aulas do mês
           const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
@@ -841,7 +841,19 @@ export const useFranquiaStore = create<FranquiaState>()(
             })
             if (resp.ok) {
               const data = await resp.json()
-              totalClassesThisMonth = Array.isArray(data?.bookings) ? data.bookings.length : 0
+              const bookings = Array.isArray(data?.bookings) ? data.bookings : []
+              
+              // Filtrar apenas agendamentos válidos (com aluno e professor)
+              const validBookings = bookings.filter((b: any) => {
+                const hasStudent = b.student_id && b.student?.id
+                const hasTeacher = b.teacher_id && b.teacher?.id
+                // Excluir cancelados
+                const isNotCancelled = b.status_canonical !== 'CANCELED' && b.status !== 'CANCELLED'
+                return hasStudent && hasTeacher && isNotCancelled
+              })
+              
+              totalClassesThisMonth = validBookings.length
+              console.log(`[fetchAnalytics] Encontrados ${bookings.length} bookings, ${totalClassesThisMonth} válidos (com aluno e professor, não cancelados)`)
             }
           } catch (error) {
             console.error('[fetchAnalytics] Erro ao buscar bookings:', error)

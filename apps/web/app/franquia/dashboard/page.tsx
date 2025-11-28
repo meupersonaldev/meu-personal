@@ -78,9 +78,15 @@ export default function FranquiaDashboard() {
     // Academia já vem do login via Supabase - não sobrescrever!
 
     // Buscar dados
-    fetchTeachers()
-    fetchStudents()
-    fetchAnalytics()
+    const loadData = async () => {
+      await Promise.all([
+        fetchTeachers(),
+        fetchStudents()
+      ])
+      // Analytics depende dos dados de teachers e students
+      await fetchAnalytics()
+    }
+    loadData()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -157,7 +163,7 @@ export default function FranquiaDashboard() {
                   <div className="ml-3 sm:ml-4 min-w-0 flex-1">
                     <p className="text-xs sm:text-sm font-medium text-gray-600">Aulas Este Mês</p>
                     <p className="text-xl sm:text-2xl font-bold text-gray-900">{analytics?.totalClasses || 0}</p>
-                    <p className="text-xs sm:text-sm text-purple-600 truncate">Agendamentos ativos</p>
+                    <p className="text-xs sm:text-sm text-purple-600 truncate">Agendamentos válidos</p>
                   </div>
                 </div>
               </Card>
