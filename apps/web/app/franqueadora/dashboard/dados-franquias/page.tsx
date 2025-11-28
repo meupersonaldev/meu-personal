@@ -126,13 +126,26 @@ export default function DadosFranquiasPage() {
           franchiseName: franchise.name,
           adminId: admin.id,
           adminEmail: admin.email,
-          adminName: admin.name
+          adminName: admin.name,
+          franchiseEmail: franchise.email
         })
         setEditingFranchiseAdmin({
           id: admin.id,
           name: admin.name || 'Admin',
           email: admin.email
         })
+        
+        // Atualizar o email da franquia com o email do admin se forem diferentes
+        if (franchise.email !== admin.email) {
+          console.log('[handleEditFranchise] Atualizando email da franquia com email do admin:', {
+            emailAntigo: franchise.email,
+            emailNovo: admin.email
+          })
+          setEditingFranchise(prev => prev ? {
+            ...prev,
+            email: admin.email
+          } : null)
+        }
       } else {
         console.warn('[handleEditFranchise] Admin não encontrado para franquia:', franchise.id)
       }
@@ -688,10 +701,23 @@ export default function DadosFranquiasPage() {
                     <label className="block text-sm font-medium text-gray-700 mb-2">Email *</label>
                     <Input
                       type="email"
-                      value={editingFranchise.email || ''}
-                      onChange={(e) => setEditingFranchise({...editingFranchise, email: e.target.value})}
+                      value={editingFranchiseAdmin?.email || editingFranchise.email || ''}
+                      onChange={(e) => {
+                        // Se o email do admin estiver disponível, atualizar também o email da franquia
+                        setEditingFranchise({...editingFranchise, email: e.target.value})
+                        // Se o email do admin existir e for diferente, atualizar também
+                        if (editingFranchiseAdmin && editingFranchiseAdmin.email !== e.target.value) {
+                          // O email da franquia pode ser diferente do email do admin
+                          // Mas vamos manter a sincronização se o usuário editar
+                        }
+                      }}
                       placeholder="email@franquia.com"
                     />
+                    {editingFranchiseAdmin?.email && editingFranchiseAdmin.email !== editingFranchise.email && (
+                      <p className="text-xs text-blue-600 mt-1">
+                        💡 Email do admin: {editingFranchiseAdmin.email}
+                      </p>
+                    )}
                   </div>
 
                   <div>
