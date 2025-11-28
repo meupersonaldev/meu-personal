@@ -792,8 +792,14 @@ export const useFranquiaStore = create<FranquiaState>()(
       // Analytics
       fetchAnalytics: async () => {
         try {
-          const { academy, teachers, students, classes } = get()
-          if (!academy) return
+          const { academy, franquiaUser, teachers, students, classes } = get()
+          const academyId = academy?.id || franquiaUser?.academyId
+          if (!academyId) {
+            console.log('[fetchAnalytics] academyId não encontrado')
+            return
+          }
+
+          console.log(`[fetchAnalytics] Calculando analytics para academia ${academyId}`)
 
           // Calcular crescimento mensal real baseado em join_date
           let monthlyGrowth = 0
@@ -821,19 +827,41 @@ export const useFranquiaStore = create<FranquiaState>()(
             monthlyGrowth = 100 // 100% se não havia alunos no mês anterior
           }
 
+          // Buscar bookings para calcular aulas do mês
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          let token: string | null = null
+          try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
+          
+          let totalClassesThisMonth = 0
+          try {
+            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+            const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString()
+            const resp = await fetch(`${API_URL}/api/bookings?franchise_id=${academyId}&from=${startOfMonth}&to=${endOfMonth}`, {
+              headers: token ? { Authorization: `Bearer ${token}` } : {}
+            })
+            if (resp.ok) {
+              const data = await resp.json()
+              totalClassesThisMonth = Array.isArray(data?.bookings) ? data.bookings.length : 0
+            }
+          } catch (error) {
+            console.error('[fetchAnalytics] Erro ao buscar bookings:', error)
+          }
+
           // Calcular analytics básicos
           const analytics: Analytics = {
             totalTeachers: teachers.length,
             totalStudents: students.length,
             totalRevenue: students.reduce((sum, student) => sum + (student.credits * 10), 0), // Estimativa
-            totalClasses: classes.length,
+            totalClasses: totalClassesThisMonth || classes.length,
             activeTeachers: teachers.filter(t => t.status === 'active').length,
             activeStudents: students.filter(s => s.status === 'active').length,
             monthlyGrowth: Number(monthlyGrowth.toFixed(1))
           }
 
+          console.log('[fetchAnalytics] Analytics calculados:', analytics)
           set({ analytics })
         } catch (error) {
+          console.error('[fetchAnalytics] Erro:', error)
         }
       },
 
