@@ -691,13 +691,22 @@ router.get('/academies/:id/stats', requireAuth, requireRole(['SUPER_ADMIN']), re
     // Fallback para consultas separadas se RPC não estiver disponível
     console.warn('RPC get_academy_stats não disponível, usando fallback')
     
+    // Buscar IDs dos professores da academia para buscar bookings
+    const { data: academyTeachers } = await supabase
+      .from('academy_teachers')
+      .select('teacher_id')
+      .eq('academy_id', id)
+    
+    const teacherIds = (academyTeachers || []).map(t => t.teacher_id).filter(Boolean)
+
     // Consultas paralelas para melhor performance
     const [
       teachersResult,
       studentsResult,
-      totalBookingsResult,
-      completedBookingsResult,
-      cancelledBookingsResult
+      bookingsByAcademyId,
+      bookingsByFranchiseId,
+      bookingsByUnitId,
+      bookingsByTeachers
     ] = await Promise.all([
       // Contagem de professores
       supabase
@@ -711,32 +720,112 @@ router.get('/academies/:id/stats', requireAuth, requireRole(['SUPER_ADMIN']), re
         .select('status')
         .eq('academy_id', id),
       
-      // Estatísticas de agendamentos (contagens com head:true)
+      // Bookings por academy_id
       supabase
         .from('bookings')
-        .select('*', { count: 'exact', head: true })
+        .select('id, status_canonical')
         .eq('academy_id', id),
+      
+      // Bookings por franchise_id
       supabase
         .from('bookings')
-        .select('*', { count: 'exact', head: true })
-        .eq('academy_id', id)
-        .eq('status_canonical', 'DONE'),
+        .select('id, status_canonical')
+        .eq('franchise_id', id),
+      
+      // Bookings por unit_id
       supabase
         .from('bookings')
-        .select('*', { count: 'exact', head: true })
-        .eq('academy_id', id)
-        .eq('status_canonical', 'CANCELED')
+        .select('id, status_canonical')
+        .eq('unit_id', id),
+      
+      // Bookings por professores (se houver professores)
+      teacherIds.length > 0
+        ? supabase
+            .from('bookings')
+            .select('id, status_canonical')
+            .in('teacher_id', teacherIds)
+        : Promise.resolve({ data: [], error: null, count: 0 })
     ])
+
+    // Combinar todos os bookings únicos (usando Set para evitar duplicatas)
+    const allBookingsIds = new Set<string>()
+    const allBookings: Array<{ id: string; status_canonical: string }> = []
+    
+    const addBookings = (bookings: any[]) => {
+      if (Array.isArray(bookings)) {
+        bookings.forEach(b => {
+          if (b?.id && !allBookingsIds.has(b.id)) {
+            allBookingsIds.add(b.id)
+            allBookings.push(b)
+          }
+        })
+      }
+    }
+
+    addBookings(bookingsByAcademyId.data || [])
+    addBookings(bookingsByFranchiseId.data || [])
+    addBookings(bookingsByUnitId.data || [])
+    if (teacherIds.length > 0) {
+      addBookings(bookingsByTeachers.data || [])
+    }
+
+    const totalBookings = allBookings.length
+    const completedBookings = allBookings.filter(b => b.status_canonical === 'DONE').length
+    const cancelledBookings = allBookings.filter(b => b.status_canonical === 'CANCELED').length
+
+    // Buscar créditos e planos ativos
+    const [creditsResult, plansResult, activeTeachersResult] = await Promise.all([
+      // Créditos disponíveis (soma de todos os créditos dos alunos da academia)
+      supabase
+        .from('academy_students')
+        .select('student_id')
+        .eq('academy_id', id)
+        .eq('status', 'active'),
+      // Planos ativos
+      supabase
+        .from('academy_plans')
+        .select('*', { count: 'exact', head: true })
+        .eq('academy_id', id)
+        .eq('is_active', true),
+      // Professores ativos
+      supabase
+        .from('academy_teachers')
+        .select('*', { count: 'exact', head: true })
+        .eq('academy_id', id)
+        .eq('status', 'active')
+    ])
+
+    // Buscar créditos dos alunos
+    const activeStudentIds = (creditsResult.data || []).map(s => s.student_id).filter(Boolean)
+    let creditsBalance = 0
+    if (activeStudentIds.length > 0) {
+      const { data: studentCredits } = await supabase
+        .from('users')
+        .select('credits')
+        .in('id', activeStudentIds)
+      
+      creditsBalance = (studentCredits || []).reduce((sum, u) => sum + (u.credits || 0), 0)
+    }
+
+    console.log(`[ACADEMY STATS] Academy ${id}:`, {
+      totalBookings,
+      completedBookings,
+      cancelledBookings,
+      bookingsByAcademyId: bookingsByAcademyId.data?.length || 0,
+      bookingsByFranchiseId: bookingsByFranchiseId.data?.length || 0,
+      bookingsByUnitId: bookingsByUnitId.data?.length || 0,
+      bookingsByTeachers: teacherIds.length > 0 ? bookingsByTeachers.data?.length || 0 : 0,
+      teacherIds: teacherIds.length,
+      creditsBalance,
+      plansActive: plansResult.count || 0
+    })
 
     // Processar resultados
     const totalTeachers = teachersResult.count || 0
     const allStudents = studentsResult.data || []
     const totalStudents = allStudents.length
     const activeStudents = allStudents.filter(s => s.status === 'active').length
-    
-    const totalBookings = totalBookingsResult.count || 0
-    const completedBookings = completedBookingsResult.count || 0
-    const cancelledBookings = cancelledBookingsResult.count || 0
+    const activeTeachers = activeTeachersResult.count || totalTeachers
 
     const finalStats = {
       academy: {
@@ -747,13 +836,13 @@ router.get('/academies/:id/stats', requireAuth, requireRole(['SUPER_ADMIN']), re
       totalStudents,
       activeStudents,
       totalTeachers,
-      activeTeachers: totalTeachers, // Assumindo todos os professores estão ativos
+      activeTeachers,
       totalBookings,
       completedBookings,
       cancelledBookings,
       completionRate: totalBookings > 0 ? (completedBookings / totalBookings * 100).toFixed(1) : 0,
-      creditsBalance: 0,
-      plansActive: 0,
+      creditsBalance,
+      plansActive: plansResult.count || 0,
       lastUpdated: new Date().toISOString()
     }
 

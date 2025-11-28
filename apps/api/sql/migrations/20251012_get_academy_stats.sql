@@ -23,25 +23,61 @@ begin
   from academy_students
   where academy_id = get_academy_stats.academy_id;
 
+  -- Buscar bookings por academy_id, franchise_id, unit_id ou através dos professores
   select count(*) into total_bookings
-  from bookings
-  where academy_id = get_academy_stats.academy_id;
+  from bookings b
+  where b.academy_id = get_academy_stats.academy_id
+     or b.franchise_id = get_academy_stats.academy_id
+     or b.unit_id = get_academy_stats.academy_id
+     or b.teacher_id in (
+       select teacher_id 
+       from academy_teachers 
+       where academy_id = get_academy_stats.academy_id
+     );
 
   select count(*) into completed_bookings
-  from bookings
-  where academy_id = get_academy_stats.academy_id
-    and status_canonical = 'DONE';
+  from bookings b
+  where (b.academy_id = get_academy_stats.academy_id
+     or b.franchise_id = get_academy_stats.academy_id
+     or b.unit_id = get_academy_stats.academy_id
+     or b.teacher_id in (
+       select teacher_id 
+       from academy_teachers 
+       where academy_id = get_academy_stats.academy_id
+     ))
+    and b.status_canonical = 'DONE';
 
   select count(*) into cancelled_bookings
-  from bookings
-  where academy_id = get_academy_stats.academy_id
-    and status_canonical = 'CANCELED';
+  from bookings b
+  where (b.academy_id = get_academy_stats.academy_id
+     or b.franchise_id = get_academy_stats.academy_id
+     or b.unit_id = get_academy_stats.academy_id
+     or b.teacher_id in (
+       select teacher_id 
+       from academy_teachers 
+       where academy_id = get_academy_stats.academy_id
+     ))
+    and b.status_canonical = 'CANCELED';
 
   if total_bookings > 0 then
     completion_rate := round((completed_bookings::numeric / total_bookings::numeric) * 100, 1);
   else
     completion_rate := 0;
   end if;
+
+  -- Buscar créditos dos alunos ativos da academia
+  select coalesce(sum(u.credits), 0) into credits_balance
+  from users u
+  inner join academy_students ast on ast.student_id = u.id
+  where ast.academy_id = get_academy_stats.academy_id
+    and ast.status = 'active'
+    and u.credits is not null;
+
+  -- Buscar planos ativos da academia
+  select count(*) into plans_active
+  from academy_plans
+  where academy_id = get_academy_stats.academy_id
+    and is_active = true;
 
   return jsonb_build_object(
     'totalStudents', coalesce(total_students, 0),
