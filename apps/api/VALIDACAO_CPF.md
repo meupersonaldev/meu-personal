@@ -31,14 +31,16 @@ CPF_VALIDATION_API_URL=https://brasilapi.com.br/api/cpf/v1
 
 ### APIs Disponíveis
 
-#### 1. Brasil API (Recomendada - Gratuita)
+#### 1. Brasil API (Padrão - Gratuita e Recomendada)
 ```env
-CPF_VALIDATION_API_URL=https://brasilapi.com.br/api/cpf/v1
+# Não precisa configurar, já é o padrão
+# CPF_VALIDATION_API_URL=https://brasilapi.com.br/api/cpf/v1
 ```
 - **Gratuita**
 - **Rate limit**: Generoso
 - **Formato**: `GET /api/cpf/v1/{cpf}`
-- **Resposta**: `{ cpf: '...', nome: '...', nascimento: '...' }` ou erro
+- **Resposta**: `{ cpf: '...', nome: '...', nascimento: '...', situacao: '...' }` ou 404 se não encontrado
+- **Status HTTP**: 200 se válido, 404 se não encontrado
 
 #### 2. ReceitaWS (Gratuita, mas com limitações)
 ```env

@@ -26,14 +26,12 @@ export async function validateCpfWithAPI(cpf: string): Promise<{ valid: boolean;
   }
 
   try {
-    // APIs disponíveis:
-    // - ReceitaWS: https://www.receitaws.com.br/v1/cpf/{cpf} (gratuita, rate limit)
-    // - Brasil API: https://brasilapi.com.br/api/cpf/v1/{cpf} (gratuita)
-    // - CPF/CNPJ API: https://www.cpfcnpj.com.br (paga, mais confiável)
-    // - Serpro: https://developers.serpro.gov.br/consulta-cpf (oficial, requer cadastro)
+    // Brasil API é a API padrão (gratuita e confiável)
+    // Endpoint: GET https://brasilapi.com.br/api/cpf/v1/{cpf}
+    // Retorna: { cpf: '...', nome: '...', nascimento: '...', situacao: '...' } ou erro 404
     const apiUrl = process.env.CPF_VALIDATION_API_URL || 'https://brasilapi.com.br/api/cpf/v1'
     
-    // Formatar URL conforme a API escolhida
+    // Formatar URL - Brasil API usa formato: /api/cpf/v1/{cpf}
     const url = apiUrl.includes('{cpf}') 
       ? apiUrl.replace('{cpf}', cleanCpf)
       : `${apiUrl}/${cleanCpf}`
@@ -53,33 +51,49 @@ export async function validateCpfWithAPI(cpf: string): Promise<{ valid: boolean;
         })
         
         res.on('end', () => {
+          // Brasil API retorna 404 se CPF não for encontrado
+          if (res.statusCode === 404) {
+            console.warn('CPF não encontrado na Brasil API (404)')
+            resolve({ 
+              valid: false, 
+              error: 'CPF não encontrado nos registros oficiais da Receita Federal' 
+            })
+            return
+          }
+          
+          // Outros erros HTTP
+          if (res.statusCode && res.statusCode >= 400) {
+            console.warn(`Erro HTTP ${res.statusCode} da Brasil API`)
+            // Aceita se dígitos estão corretos (API pode estar temporariamente indisponível)
+            resolve({ valid: true })
+            return
+          }
+          
           try {
             const result = JSON.parse(data)
             
-            // Diferentes APIs retornam formatos diferentes:
-            // ReceitaWS: { status: 'OK' } ou { status: 'ERROR', message: '...' }
-            // Brasil API: { cpf: '...', nome: '...', nascimento: '...' } ou erro
-            // CPF/CNPJ API: { valid: true/false, ... }
-            
-            // Verificar se CPF é válido
-            if (result.status === 'OK' || result.valid === true || result.situacao === 'REGULAR' || result.cpf) {
-              // CPF encontrado e válido
+            // Brasil API retorna objeto com dados do CPF se válido:
+            // { cpf: '12345678900', nome: '...', nascimento: '...', situacao: '...' }
+            // Se tiver campo 'cpf', significa que foi encontrado e é válido
+            if (result.cpf || result.nome) {
+              // CPF encontrado e válido na Receita Federal
+              console.log('✅ CPF validado com sucesso via Brasil API:', cleanCpf.substring(0, 3) + '***')
               resolve({ valid: true })
-            } else if (result.status === 'ERROR' || result.valid === false || result.message) {
-              // CPF não encontrado ou inválido na Receita Federal
-              const errorMsg = result.message || result.error || 'CPF não encontrado nos registros oficiais da Receita Federal'
-              console.warn('CPF rejeitado pela API de validação:', errorMsg)
+            } else if (result.message || result.error) {
+              // Erro explícito da API
+              const errorMsg = result.message || result.error || 'CPF não encontrado nos registros oficiais'
+              console.warn('CPF rejeitado pela Brasil API:', errorMsg)
               resolve({ 
                 valid: false, 
                 error: errorMsg
               })
             } else {
               // Resposta desconhecida - aceita se dígitos estão corretos (fallback)
-              console.warn('API de validação retornou resposta desconhecida, mas CPF tem dígitos válidos:', result)
+              console.warn('Brasil API retornou resposta desconhecida, mas CPF tem dígitos válidos:', result)
               resolve({ valid: true })
             }
           } catch (parseError) {
-            console.warn('Erro ao parsear resposta da API de validação:', parseError)
+            console.warn('Erro ao parsear resposta da Brasil API:', parseError)
             // Se não conseguir parsear, aceita se dígitos estão corretos
             resolve({ valid: true })
           }
