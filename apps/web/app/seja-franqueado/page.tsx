@@ -5,11 +5,9 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Logo } from '@/components/ui/logo'
 import { ArrowLeft, Building } from 'lucide-react'
-import FranchiseLeadModal from '@/components/franchise-lead-modal'
 
 export default function SejaFranqueadoPage() {
   const [mounted, setMounted] = useState(false)
-  const [isModalOpen, setIsModalOpen] = useState(false)
 
   useEffect(() => {
     setMounted(true)
@@ -62,14 +60,8 @@ export default function SejaFranqueadoPage() {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button 
-              onClick={() => setIsModalOpen(true)}
-              className="bg-gradient-to-r from-meu-accent to-yellow-400 hover:from-yellow-400 hover:to-meu-accent text-meu-primary font-bold px-8 py-4 text-lg rounded-xl shadow-2xl hover:shadow-meu-accent/50 transition-all duration-300 transform hover:scale-105"
-            >
-              Receber Informações
-            </Button>
             <Link href="/">
-              <Button variant="outline" className="border-2 border-white/30 bg-white/10 backdrop-blur-sm text-white hover:bg-white hover:text-meu-primary font-bold px-8 py-4 text-lg rounded-xl transition-all duration-300">
+              <Button className="bg-gradient-to-r from-meu-accent to-yellow-400 hover:from-yellow-400 hover:to-meu-accent text-meu-primary font-bold px-8 py-4 text-lg rounded-xl shadow-2xl hover:shadow-meu-accent/50 transition-all duration-300 transform hover:scale-105">
                 Voltar ao Início
               </Button>
             </Link>
@@ -85,12 +77,6 @@ export default function SejaFranqueadoPage() {
           </p>
         </div>
       </footer>
-
-      {/* Modal de Formulário */}
-      <FranchiseLeadModal 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
-      />
     </div>
   )
 }

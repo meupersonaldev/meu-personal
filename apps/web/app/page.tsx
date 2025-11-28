@@ -8,6 +8,7 @@ import Image from 'next/image'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { Button } from '@/components/ui/button'
 import { Logo } from '@/components/ui/logo'
+import FranchiseLeadModal from '@/components/franchise-lead-modal'
 import {
   ArrowRight,
   Check,
@@ -20,6 +21,7 @@ export default function Home() {
   const { isAuthenticated, user } = useAuthStore()
   const [mounted, setMounted] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [isLeadModalOpen, setIsLeadModalOpen] = useState(false)
 
   
   useEffect(() => {
@@ -455,12 +457,13 @@ export default function Home() {
                   </div>
                 </div>
               </div>
-              <Link href="/seja-franqueado" className="group">
-                <Button className="w-full sm:w-auto bg-gradient-to-r from-meu-accent to-yellow-400 hover:from-yellow-400 hover:to-meu-accent text-meu-primary font-bold px-8 py-4 text-base lg:text-lg rounded-xl shadow-2xl hover:shadow-meu-accent/50 transition-all duration-300 transform hover:scale-105">
-                  Receba Informações
-                  <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
-                </Button>
-              </Link>
+              <Button 
+                onClick={() => setIsLeadModalOpen(true)}
+                className="w-full sm:w-auto bg-gradient-to-r from-meu-accent to-yellow-400 hover:from-yellow-400 hover:to-meu-accent text-meu-primary font-bold px-8 py-4 text-base lg:text-lg rounded-xl shadow-2xl hover:shadow-meu-accent/50 transition-all duration-300 transform hover:scale-105"
+              >
+                Receba Informações
+                <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+              </Button>
             </div>
             <div className="relative">
               <div className="relative w-full h-[400px] sm:h-[500px] bg-gradient-to-br from-meu-primary to-meu-primary-dark rounded-3xl overflow-hidden border border-meu-accent/20">
@@ -586,12 +589,13 @@ export default function Home() {
               <p className="text-gray-300 mb-6">
                 Em breve, leve nosso conceito para sua cidade
               </p>
-              <Link href="/seja-franqueado" className="group">
-                <Button className="w-full bg-gradient-to-r from-meu-accent to-yellow-400 hover:from-yellow-400 hover:to-meu-accent text-meu-primary font-bold px-8 py-4 text-base lg:text-lg rounded-xl shadow-2xl hover:shadow-meu-accent/50 transition-all duration-300 transform hover:scale-105">
-                  Saber Mais
-                  <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
-                </Button>
-              </Link>
+              <Button 
+                onClick={() => setIsLeadModalOpen(true)}
+                className="w-full bg-gradient-to-r from-meu-accent to-yellow-400 hover:from-yellow-400 hover:to-meu-accent text-meu-primary font-bold px-8 py-4 text-base lg:text-lg rounded-xl shadow-2xl hover:shadow-meu-accent/50 transition-all duration-300 transform hover:scale-105"
+              >
+                Saber Mais
+                <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+              </Button>
             </div>
           </div>
         </div>
@@ -599,6 +603,12 @@ export default function Home() {
 
       {/* Footer */}
       <SiteFooter />
+
+      {/* Modal de Formulário de Leads */}
+      <FranchiseLeadModal 
+        isOpen={isLeadModalOpen} 
+        onClose={() => setIsLeadModalOpen(false)} 
+      />
     </div>
   )
 }
