@@ -36,7 +36,9 @@ export default function SiteFooter() {
           </div>
         </div>
         <div className="border-t border-meu-accent/20 pt-6 lg:pt-8">
-          <p className="text-gray-300 text-center text-sm lg:text-base">&copy; 2025 Meu Personal. Todos os direitos reservados.</p>
+          <p className="text-gray-300 text-center text-sm lg:text-base">
+            &copy; {new Date().getFullYear()} Meu Personal. Todos os direitos reservados.
+          </p>
         </div>
       </div>
     </footer>
