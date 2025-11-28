@@ -31,11 +31,6 @@ export interface CreatePaymentIntentParams {
 
 class PaymentIntentService {
   async createPaymentIntent(params: CreatePaymentIntentParams): Promise<PaymentIntent> {
-    const existingIntent = await this.findExistingIntent(params);
-    if (existingIntent) {
-      return existingIntent;
-    }
-
     // 1. Gerar checkout no provedor de pagamentos
     const provider = getPaymentProvider();
     const user = await this.getUser(params.actorUserId);
@@ -148,13 +143,51 @@ class PaymentIntentService {
       throw new Error('Erro ao criar pagamento no Asaas');
     }
 
-    // 2. Criar registro em payment_intents AGORA, com o provider_id
-    const linkResult = await provider.generatePaymentLink(paymentResult.data.id);
-    const paymentLink = linkResult.success ? linkResult.data : {
-      paymentUrl: paymentResult.data.invoiceUrl,
-      bankSlipUrl: paymentResult.data.bankSlipUrl,
-      pixCode: paymentResult.data.payload
-    };
+    const asaasPaymentId = paymentResult.data.id;
+    
+    // 2. Buscar links de pagamento - tentar múltiplas fontes
+    // Primeiro, verificar se já vem na resposta da criação
+    let paymentUrl = paymentResult.data.invoiceUrl || paymentResult.data.paymentUrl || null;
+    let bankSlipUrl = paymentResult.data.bankSlipUrl || null;
+    let pixCopyPaste = paymentResult.data.payload || null;
+    let pixQrCode = (paymentResult.data as any)?.encodedImage || null;
+
+    // Se não tiver link na resposta, tentar buscar via generatePaymentLink
+    if (!paymentUrl && !bankSlipUrl) {
+      console.log('[PAYMENT INTENT] 🔍 Link não veio na criação, buscando via generatePaymentLink...');
+      const linkResult = await provider.generatePaymentLink(asaasPaymentId);
+      
+      if (linkResult.success && linkResult.data) {
+        paymentUrl = linkResult.data.paymentUrl || paymentUrl;
+        bankSlipUrl = linkResult.data.bankSlipUrl || bankSlipUrl;
+        pixCopyPaste = linkResult.data.pixCode || pixCopyPaste;
+      } else {
+        console.warn('[PAYMENT INTENT] ⚠️ generatePaymentLink falhou, tentando buscar pagamento completo...');
+        
+        // Última tentativa: buscar o pagamento completo do Asaas
+        const paymentDetails = await asaasService.getPayment(asaasPaymentId);
+        if (paymentDetails.success && paymentDetails.data) {
+          paymentUrl = paymentDetails.data.invoiceUrl || paymentDetails.data.paymentUrl || paymentUrl;
+          bankSlipUrl = paymentDetails.data.bankSlipUrl || bankSlipUrl;
+          pixCopyPaste = paymentDetails.data.payload || pixCopyPaste;
+        }
+      }
+    }
+
+    // Se ainda não tiver link, construir URL manualmente usando o ID do Asaas
+    // O Asaas sempre tem uma URL de checkout no formato: https://www.asaas.com/c/{paymentId}
+    const checkoutUrl = paymentUrl || bankSlipUrl || (asaasPaymentId ? `https://www.asaas.com/c/${asaasPaymentId}` : null);
+    
+    if (!checkoutUrl) {
+      console.error('[PAYMENT INTENT] ❌ Não foi possível obter link de pagamento para:', asaasPaymentId);
+      throw new Error('Não foi possível gerar link de pagamento. Tente novamente.');
+    }
+
+    console.log('[PAYMENT INTENT] ✅ Link de pagamento obtido:', {
+      hasPaymentUrl: !!paymentUrl,
+      hasBankSlipUrl: !!bankSlipUrl,
+      checkoutUrl: checkoutUrl?.substring(0, 50) + '...'
+    });
 
     const { data: intent, error: intentError } = await supabase
       .from('payment_intents')
@@ -164,13 +197,19 @@ class PaymentIntentService {
         provider_id: paymentResult.data.id, // ID do Asaas usado aqui
         amount_cents: params.amountCents,
         status: 'PENDING',
-        checkout_url: paymentLink.paymentUrl,
+        checkout_url: checkoutUrl,
         payload_json: {
           ...params.metadata,
+          payment_method: billingType,
           asaas_payment_id: paymentResult.data.id,
           billing_type: billingType,
           franqueadora_id: params.franqueadoraId,
-          unit_id: params.unitId || null
+          unit_id: params.unitId || null,
+          payment_url: paymentUrl,
+          invoice_url: paymentResult.data.invoiceUrl || null,
+          bank_slip_url: bankSlipUrl,
+          pix_copy_paste: pixCopyPaste,
+          pix_qr_code: pixQrCode
         },
         actor_user_id: params.actorUserId,
         franqueadora_id: params.franqueadoraId,
@@ -323,25 +362,6 @@ class PaymentIntentService {
       return `${metadata.package_title} - ${metadata.hours_qty} horas`;
     }
     return 'Pagamento Meu Personal';
-  }
-
-  private async findExistingIntent(params: CreatePaymentIntentParams): Promise<PaymentIntent | null> {
-    const { data, error } = await supabase
-      .from('payment_intents')
-      .select('*')
-      .eq('actor_user_id', params.actorUserId)
-      .eq('type', params.type)
-      .eq('status', 'PENDING')
-      .eq('payload_json->>package_id', params.metadata?.package_id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
-
-    if (error || !data) {
-      return null;
-    }
-
-    return data;
   }
 
   async getPaymentIntentsByUser(userId: string, status?: string): Promise<PaymentIntent[]> {
