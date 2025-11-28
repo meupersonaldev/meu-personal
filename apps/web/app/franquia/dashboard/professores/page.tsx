@@ -13,7 +13,6 @@ import {
   Phone,
   Calendar,
   MapPin,
-  Star,
   DollarSign,
   Users,
   GraduationCap,
@@ -39,8 +38,6 @@ interface Teacher {
     hourly_rate: number
     availability: object
     is_available: boolean
-    rating_avg?: number
-    rating_count?: number
   }>
   academy_teachers?: Array<{
     id: string
@@ -109,14 +106,6 @@ export default function ProfessoresPage() {
       .slice(0, 2)
   }
 
-  const getRating = (teacher: Teacher) => {
-    const profile = teacher.teacher_profiles?.[0]
-    return {
-      avg: profile?.rating_avg || 0,
-      count: profile?.rating_count || 0
-    }
-  }
-
   const getStatusBadge = (teacher: Teacher) => {
     const profile = teacher.teacher_profiles?.[0]
     if (profile?.is_available) {
@@ -150,7 +139,7 @@ export default function ProfessoresPage() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Card>
             <CardContent className="p-4 sm:p-6">
               <div className="flex items-center">
@@ -160,24 +149,6 @@ export default function ProfessoresPage() {
                 <div className="ml-3 sm:ml-4 min-w-0 flex-1">
                   <p className="text-xs sm:text-sm font-medium text-gray-600">Total</p>
                   <p className="text-xl sm:text-2xl font-bold text-gray-900">{teachers.length}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <Star className="h-6 w-6 sm:h-8 sm:w-8 text-yellow-600" />
-                </div>
-                <div className="ml-3 sm:ml-4 min-w-0 flex-1">
-                  <p className="text-xs sm:text-sm font-medium text-gray-600">Avaliação Média</p>
-                  <p className="text-xl sm:text-2xl font-bold text-gray-900">
-                    {teachers.length > 0
-                      ? (teachers.reduce((sum, t) => sum + getRating(t).avg, 0) / teachers.length).toFixed(1)
-                      : '0.0'}
-                  </p>
                 </div>
               </div>
             </CardContent>
@@ -241,7 +212,6 @@ export default function ProfessoresPage() {
                       <TableRow>
                         <TableHead>Professor</TableHead>
                         <TableHead>Contato</TableHead>
-                        <TableHead>Avaliação</TableHead>
                         <TableHead>Taxa/Hora</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead className="text-right">Ações</TableHead>
@@ -250,7 +220,6 @@ export default function ProfessoresPage() {
                     <TableBody>
                       {paginatedTeachers.map((teacher) => {
                         const profile = teacher.teacher_profiles?.[0]
-                        const rating = getRating(teacher)
                         const hourlyRate = profile?.hourly_rate || 0
 
                         return (
@@ -285,15 +254,6 @@ export default function ProfessoresPage() {
                                     <span>{teacher.phone}</span>
                                   </div>
                                 )}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center space-x-1">
-                                <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
-                                <span className="font-medium">{rating.avg.toFixed(1)}</span>
-                                <span className="text-xs text-gray-500">
-                                  ({rating.count})
-                                </span>
                               </div>
                             </TableCell>
                             <TableCell>
@@ -409,13 +369,6 @@ export default function ProfessoresPage() {
                   <h3 className="text-xl font-bold text-gray-900">{selectedTeacher.name}</h3>
                   <div className="flex items-center space-x-2 mt-2">
                     {getStatusBadge(selectedTeacher)}
-                    <div className="flex items-center space-x-1">
-                      <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
-                      <span className="font-medium">{getRating(selectedTeacher).avg.toFixed(1)}</span>
-                      <span className="text-sm text-gray-500">
-                        ({getRating(selectedTeacher).count} avaliações)
-                      </span>
-                    </div>
                   </div>
                 </div>
               </div>
