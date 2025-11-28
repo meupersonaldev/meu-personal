@@ -429,7 +429,12 @@ export const useFranquiaStore = create<FranquiaState>()(
             return
           }
           const payload = await resp.json()
-          const teachers = Array.isArray(payload?.teachers) ? payload.teachers : []
+          // A API pode retornar { teachers: [...] } ou apenas [...]
+          const teachers = Array.isArray(payload?.teachers) 
+            ? payload.teachers 
+            : Array.isArray(payload) 
+            ? payload 
+            : []
           console.log(`[fetchTeachers] Encontrados ${teachers.length} professores`)
           set({ teachers })
         } catch (error) {

@@ -4,57 +4,175 @@ import { supabase } from '../lib/supabase'
 const router = Router()
 
 // GET /api/students - Listar todos os alunos
+// Inclui alunos vinculados explicitamente E alunos com bookings na unidade
 router.get('/', async (req, res) => {
   try {
     const { academy_id } = req.query
 
-    let query = supabase
-      .from('users')
-      .select(`
-        *,
-        academy_students!inner (
-          id,
-          academy_id,
-          plan_id,
-          status,
-          join_date,
-          last_activity,
-          academies (
-            name,
-            city,
-            state
-          )
-        ),
-        student_subscriptions (
-          id,
-          status,
-          credits_remaining,
-          start_date,
-          end_date,
-          student_plans (
-            name,
-            price,
-            credits_included
-          )
-        )
-      `)
-      .eq('role', 'STUDENT')
-      .order('created_at', { ascending: false })
+    console.log(`[students] Buscando alunos para academia ${academy_id || 'todas'}`)
 
+    // 1. Buscar alunos vinculados explicitamente via academy_students
+    let linkedStudents: any[] = []
     if (academy_id) {
-      query = query.eq('academy_students.academy_id', academy_id)
+      const { data, error } = await supabase
+        .from('users')
+        .select(`
+          *,
+          academy_students!inner (
+            id,
+            academy_id,
+            plan_id,
+            status,
+            join_date,
+            last_activity,
+            academies (
+              name,
+              city,
+              state
+            )
+          ),
+          student_subscriptions (
+            id,
+            status,
+            credits_remaining,
+            start_date,
+            end_date,
+            student_plans (
+              name,
+              price,
+              credits_included
+            )
+          )
+        `)
+        .eq('role', 'STUDENT')
+        .eq('academy_students.academy_id', academy_id)
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        console.error('[students] Erro ao buscar alunos vinculados:', error)
+      } else {
+        linkedStudents = data || []
+      }
+    } else {
+      // Se não tem academy_id, buscar todos os alunos vinculados
+      const { data, error } = await supabase
+        .from('users')
+        .select(`
+          *,
+          academy_students!inner (
+            id,
+            academy_id,
+            plan_id,
+            status,
+            join_date,
+            last_activity,
+            academies (
+              name,
+              city,
+              state
+            )
+          ),
+          student_subscriptions (
+            id,
+            status,
+            credits_remaining,
+            start_date,
+            end_date,
+            student_plans (
+              name,
+              price,
+              credits_included
+            )
+          )
+        `)
+        .eq('role', 'STUDENT')
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        console.error('[students] Erro ao buscar alunos:', error)
+      } else {
+        linkedStudents = data || []
+      }
     }
 
-    const { data, error } = await query
+    // 2. Se academy_id foi fornecido, buscar alunos que têm bookings na unidade (mesmo sem vínculo explícito)
+    let studentsWithBookings: any[] = []
+    if (academy_id) {
+      const { data: bookingsWithStudents, error: bookingsError } = await supabase
+        .from('bookings')
+        .select('student_id')
+        .or(`franchise_id.eq.${academy_id},academy_id.eq.${academy_id},unit_id.eq.${academy_id}`)
+        .not('student_id', 'is', null)
 
-    if (error) {
-      console.error('Erro ao buscar alunos:', error)
-      return res.status(500).json({ error: 'Erro interno do servidor' })
+      if (bookingsError) {
+        console.error('[students] Erro ao buscar bookings:', bookingsError)
+      } else {
+        // Extrair IDs únicos de alunos com bookings
+        const studentIdsFromBookings = [...new Set(
+          (bookingsWithStudents || [])
+            .map((b: any) => b.student_id)
+            .filter(Boolean)
+        )]
+
+        console.log(`[students] Encontrados ${studentIdsFromBookings.length} alunos com bookings na unidade`)
+
+        // Buscar dados completos desses alunos
+        if (studentIdsFromBookings.length > 0) {
+          const { data: studentsData, error: studentsError } = await supabase
+            .from('users')
+            .select(`
+              *,
+              academy_students (
+                id,
+                academy_id,
+                plan_id,
+                status,
+                join_date,
+                last_activity,
+                academies (
+                  name,
+                  city,
+                  state
+                )
+              ),
+              student_subscriptions (
+                id,
+                status,
+                credits_remaining,
+                start_date,
+                end_date,
+                student_plans (
+                  name,
+                  price,
+                  credits_included
+                )
+              )
+            `)
+            .eq('role', 'STUDENT')
+            .in('id', studentIdsFromBookings)
+            .order('created_at', { ascending: false })
+
+          if (studentsError) {
+            console.error('[students] Erro ao buscar alunos com bookings:', studentsError)
+          } else {
+            studentsWithBookings = studentsData || []
+          }
+        }
+      }
     }
 
-    res.json(data)
+    // 3. Combinar e remover duplicatas
+    const linkedStudentIds = new Set(linkedStudents.map((s: any) => s.id))
+    const allStudents = [
+      ...linkedStudents,
+      ...studentsWithBookings.filter((s: any) => !linkedStudentIds.has(s.id))
+    ]
+
+    console.log(`[students] Total: ${linkedStudents.length} vinculados + ${studentsWithBookings.length} com bookings = ${allStudents.length} únicos`)
+
+    res.json(allStudents)
   } catch (error) {
-    console.error('Erro ao processar requisição:', error)
+    console.error('[students] Erro ao processar requisição:', error)
     res.status(500).json({ error: 'Erro interno do servidor' })
   }
 })
