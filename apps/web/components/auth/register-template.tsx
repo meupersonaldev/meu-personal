@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Logo } from "@/components/ui/logo"
 import { useAuthStore, UserRole } from "@/lib/stores/auth-store"
-import { isStrongPassword, validateCpfCnpj } from '@/lib/utils'
+import { validateCpfCnpj } from '@/lib/utils'
 
 const FEATURE_ICON_MAP = {
   shield: Shield,
@@ -132,10 +132,7 @@ export function RegisterTemplate({
       return
     }
 
-    if (!isStrongPassword(formData.password)) {
-      toast.error('Senha fraca. Use no mínimo 6 caracteres, com letras maiúsculas, minúsculas, números e símbolos.')
-      return
-    }
+    // Validação de senha forte removida - permitir qualquer senha
 
     if (!formData.gender) {
       toast.error('Selecione seu gênero')
@@ -473,7 +470,7 @@ export function RegisterTemplate({
                   {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
-              <p className="text-xs text-gray-500">Mínimo 6 caracteres, com maiúscula, minúscula, número e símbolo.</p>
+              <p className="text-xs text-gray-500">Crie uma senha de sua preferência.</p>
             </div>
 
             {/* Confirm Password */}
