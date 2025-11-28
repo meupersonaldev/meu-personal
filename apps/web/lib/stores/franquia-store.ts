@@ -250,7 +250,7 @@ export const useFranquiaStore = create<FranquiaState>()(
       login: async (email: string, password: string) => {
         try {
           set({ isLoading: true })
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
           // 1. Fazer login via API
           const response = await fetch(`${API_URL}/api/auth/login`, {
@@ -407,25 +407,34 @@ export const useFranquiaStore = create<FranquiaState>()(
       // Teachers
       fetchTeachers: async () => {
         try {
-          const { academy } = get()
-          if (!academy) {
+          const { academy, franquiaUser } = get()
+          const academyId = academy?.id || franquiaUser?.academyId
+          if (!academyId) {
+            console.log('[fetchTeachers] academyId não encontrado')
+            set({ teachers: [] })
             return
           }
           // Buscar via API Express (com Auth)
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
-          const resp = await fetch(`${API_URL}/api/teachers/by-academy?academy_id=${academy.id}` , {
+          
+          console.log(`[fetchTeachers] Buscando professores para academia ${academyId}`)
+          const resp = await fetch(`${API_URL}/api/teachers/by-academy?academy_id=${academyId}` , {
             headers: token ? { Authorization: `Bearer ${token}` } : {}
           })
           if (!resp.ok) {
+            console.error(`[fetchTeachers] Erro na resposta: ${resp.status}`)
             set({ teachers: [] })
             return
           }
           const payload = await resp.json()
           const teachers = Array.isArray(payload?.teachers) ? payload.teachers : []
+          console.log(`[fetchTeachers] Encontrados ${teachers.length} professores`)
           set({ teachers })
         } catch (error) {
+          console.error('[fetchTeachers] Erro:', error)
+          set({ teachers: [] })
         }
       },
 
@@ -433,7 +442,7 @@ export const useFranquiaStore = create<FranquiaState>()(
         try {
           const { academy } = get()
           if (!academy) return false
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
 
@@ -481,7 +490,7 @@ export const useFranquiaStore = create<FranquiaState>()(
       updateTeacher: async (id, updates) => {
         try {
           const { academy } = get()
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
 
@@ -526,7 +535,7 @@ export const useFranquiaStore = create<FranquiaState>()(
 
       deleteTeacher: async (id) => {
         try {
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
           const resp = await fetch(`${API_URL}/api/teachers/${id}`, {
@@ -544,15 +553,26 @@ export const useFranquiaStore = create<FranquiaState>()(
       // Students
       fetchStudents: async () => {
         try {
-          const { academy } = get()
-          if (!academy) return
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          const { academy, franquiaUser } = get()
+          const academyId = academy?.id || franquiaUser?.academyId
+          if (!academyId) {
+            console.log('[fetchStudents] academyId não encontrado')
+            set({ students: [] })
+            return
+          }
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
-          const resp = await fetch(`${API_URL}/api/students?academy_id=${academy.id}`, {
+          
+          console.log(`[fetchStudents] Buscando alunos para academia ${academyId}`)
+          const resp = await fetch(`${API_URL}/api/students?academy_id=${academyId}`, {
             headers: token ? { Authorization: `Bearer ${token}` } : {}
           })
-          if (!resp.ok) { set({ students: [] }); return }
+          if (!resp.ok) {
+            console.error(`[fetchStudents] Erro na resposta: ${resp.status}`)
+            set({ students: [] })
+            return
+          }
           const rows = await resp.json()
           const students: Student[] = (rows || []).map((u: any) => ({
             id: u.id,
@@ -566,8 +586,11 @@ export const useFranquiaStore = create<FranquiaState>()(
             planId: u.academy_students?.plan_id,
             plan_id: u.academy_students?.plan_id
           }))
+          console.log(`[fetchStudents] Encontrados ${students.length} alunos`)
           set({ students })
         } catch (error) {
+          console.error('[fetchStudents] Erro:', error)
+          set({ students: [] })
         }
       },
 
@@ -575,7 +598,7 @@ export const useFranquiaStore = create<FranquiaState>()(
         try {
           const { academy } = get()
           if (!academy) return false
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
 
@@ -604,7 +627,7 @@ export const useFranquiaStore = create<FranquiaState>()(
 
       updateStudent: async (id, updates) => {
         try {
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
 
@@ -637,7 +660,7 @@ export const useFranquiaStore = create<FranquiaState>()(
 
       deleteStudent: async (id) => {
         try {
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
           const resp = await fetch(`${API_URL}/api/students/${id}`, {
@@ -657,7 +680,7 @@ export const useFranquiaStore = create<FranquiaState>()(
         try {
           const { academy } = get()
           if (!academy) return
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
           const resp = await fetch(`${API_URL}/api/plans/student?academy_id=${academy.id}`, {
@@ -689,7 +712,7 @@ export const useFranquiaStore = create<FranquiaState>()(
         try {
           const { academy } = get()
           if (!academy) return false
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
 
@@ -719,7 +742,7 @@ export const useFranquiaStore = create<FranquiaState>()(
 
       updatePlan: async (id, updates) => {
         try {
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
 
@@ -751,7 +774,7 @@ export const useFranquiaStore = create<FranquiaState>()(
 
       deletePlan: async (id) => {
         try {
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
           const resp = await fetch(`${API_URL}/api/plans/students/${id}`, {
@@ -819,7 +842,7 @@ export const useFranquiaStore = create<FranquiaState>()(
         try {
           const { academy } = get()
           if (!academy) return
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
 
@@ -856,7 +879,7 @@ export const useFranquiaStore = create<FranquiaState>()(
 
       updateClass: async (id, updates) => {
         try {
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
 
@@ -889,7 +912,7 @@ export const useFranquiaStore = create<FranquiaState>()(
 
       deleteClass: async (id) => {
         try {
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
           const resp = await fetch(`${API_URL}/api/bookings/${id}`, {
@@ -909,7 +932,7 @@ export const useFranquiaStore = create<FranquiaState>()(
         try {
           const { academy } = get()
           if (!academy) return
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
           const resp = await fetch(`${API_URL}/api/time-slots?academy_id=${academy.id}`, {
@@ -937,7 +960,7 @@ export const useFranquiaStore = create<FranquiaState>()(
           const { timeSlots } = get()
           const slot = timeSlots.find(s => s.id === id)
           if (!slot) return false
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
           const resp = await fetch(`${API_URL}/api/time-slots/${id}`, {
@@ -961,7 +984,7 @@ export const useFranquiaStore = create<FranquiaState>()(
         try {
           const { franquiaUser, academy } = get()
           if (!franquiaUser || !academy) return
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
           const resp = await fetch(`${API_URL}/api/notifications?academy_id=${academy.id}`, {
@@ -979,7 +1002,7 @@ export const useFranquiaStore = create<FranquiaState>()(
 
       markNotificationAsRead: async (id) => {
         try {
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
           const resp = await fetch(`${API_URL}/api/notifications/${id}/read`, {
@@ -998,7 +1021,7 @@ export const useFranquiaStore = create<FranquiaState>()(
         try {
           const { academy } = get()
           if (!academy) return false
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
           const resp = await fetch(`${API_URL}/api/notifications/mark-all-read`, {
@@ -1022,7 +1045,7 @@ export const useFranquiaStore = create<FranquiaState>()(
         try {
           const { academy } = get()
           if (!academy) return
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
           const resp = await fetch(`${API_URL}/api/plans/teacher?academy_id=${academy.id}`, {
@@ -1040,7 +1063,7 @@ export const useFranquiaStore = create<FranquiaState>()(
         try {
           const { academy } = get()
           if (!academy) return false
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
 
@@ -1072,7 +1095,7 @@ export const useFranquiaStore = create<FranquiaState>()(
         try {
           const { academy } = get()
           if (!academy) return
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
           const resp = await fetch(`${API_URL}/api/plans/student?academy_id=${academy.id}`, {
@@ -1090,7 +1113,7 @@ export const useFranquiaStore = create<FranquiaState>()(
         try {
           const { academy } = get()
           if (!academy) return false
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
 
