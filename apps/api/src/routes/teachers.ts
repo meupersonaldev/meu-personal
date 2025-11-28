@@ -61,6 +61,140 @@ router.get('/', requireAuth, async (req, res) => {
 })
 
 
+// Função compartilhada para buscar professores por academy_id
+async function fetchTeachersByAcademy(academyId: string, user: any) {
+  console.log(`[fetchTeachersByAcademy] Buscando professores para academia ${academyId}`)
+
+  // 1. Buscar professores vinculados explicitamente via academy_teachers
+  const { data: linkedTeachers, error: linkedError } = await supabase
+    .from('users')
+    .select(`
+      *,
+      teacher_profiles (
+        *
+      ),
+      academy_teachers!inner (
+        *,
+        academies:academy_id (
+          *
+        )
+      )
+    `)
+    .eq('role', 'TEACHER')
+    .eq('is_active', true)
+    .eq('academy_teachers.academy_id', academyId)
+    .eq('academy_teachers.status', 'active')
+    .order('created_at', { ascending: false })
+
+  if (linkedError) {
+    console.error('[fetchTeachersByAcademy] Erro ao buscar professores vinculados:', linkedError)
+  }
+
+  // 2. Buscar professores que têm bookings na unidade (mesmo sem vínculo explícito)
+  const { data: bookingsWithTeachers, error: bookingsError } = await supabase
+    .from('bookings')
+    .select('teacher_id')
+    .or(`franchise_id.eq.${academyId},academy_id.eq.${academyId},unit_id.eq.${academyId}`)
+    .not('teacher_id', 'is', null)
+
+  if (bookingsError) {
+    console.error('[fetchTeachersByAcademy] Erro ao buscar bookings:', bookingsError)
+  }
+
+  // Extrair IDs únicos de professores com bookings
+  const teacherIdsFromBookings = [...new Set(
+    (bookingsWithTeachers || [])
+      .map((b: any) => b.teacher_id)
+      .filter(Boolean)
+  )]
+
+  console.log(`[fetchTeachersByAcademy] Encontrados ${teacherIdsFromBookings.length} professores com bookings na unidade`)
+
+  // 3. Buscar dados completos desses professores
+  let teachersWithBookings: any[] = []
+  if (teacherIdsFromBookings.length > 0) {
+    const { data: teachersData, error: teachersError } = await supabase
+      .from('users')
+      .select(`
+        *,
+        teacher_profiles (
+          *
+        ),
+        academy_teachers (
+          *,
+          academies:academy_id (
+            *
+          )
+        )
+      `)
+      .eq('role', 'TEACHER')
+      .eq('is_active', true)
+      .in('id', teacherIdsFromBookings)
+      .order('created_at', { ascending: false })
+
+    if (teachersError) {
+      console.error('[fetchTeachersByAcademy] Erro ao buscar professores com bookings:', teachersError)
+    } else {
+      teachersWithBookings = teachersData || []
+    }
+  }
+
+  // 4. Combinar e remover duplicatas
+  const linkedTeacherIds = new Set((linkedTeachers || []).map((t: any) => t.id))
+  const allTeachers = [
+    ...(linkedTeachers || []),
+    ...teachersWithBookings.filter((t: any) => !linkedTeacherIds.has(t.id))
+  ]
+
+  console.log(`[fetchTeachersByAcademy] Total: ${linkedTeachers?.length || 0} vinculados + ${teachersWithBookings.length} com bookings = ${allTeachers.length} únicos`)
+
+  // Normalizar os dados para o formato esperado
+  const normalizedTeachers = allTeachers.map((teacher: any) => {
+    const profilesArray = Array.isArray(teacher.teacher_profiles)
+      ? teacher.teacher_profiles
+      : teacher.teacher_profiles
+        ? [teacher.teacher_profiles]
+        : []
+
+    const normalizedProfiles = profilesArray.map((profile: any) => ({
+      ...profile,
+      specialties: profile.specialties ?? profile.specialization ?? []
+    }))
+
+    // Extrair informações da academia
+    const academyTeachers = Array.isArray(teacher.academy_teachers)
+      ? teacher.academy_teachers
+      : teacher.academy_teachers
+        ? [teacher.academy_teachers]
+        : []
+
+    const academy = academyTeachers[0]?.academies || null
+
+    // Anexar rating do cache (teacher_profiles) em nível raiz
+    const profile = normalizedProfiles[0]
+    const avg = profile?.rating_avg != null ? Number(profile.rating_avg) : 0
+    const count = profile?.rating_count != null ? Number(profile.rating_count) : 0
+
+    return {
+      id: teacher.id,
+      name: teacher.name,
+      email: teacher.email,
+      phone: teacher.phone,
+      avatar_url: teacher.avatar_url,
+      created_at: teacher.created_at,
+      is_active: teacher.is_active,
+      role: teacher.role,
+      teacher_profiles: normalizedProfiles,
+      academy_teachers: academyTeachers,
+      academy: academy,
+      rating_avg: avg,
+      rating_count: count
+    }
+  })
+
+  return normalizedTeachers
+}
+
 // GET /api/teachers/by-academy-id - Buscar professores por academy_id
 // Inclui professores vinculados explicitamente E professores com bookings/disponibilidade na unidade
 router.get('/by-academy-id', requireAuth, async (req, res) => {
@@ -78,139 +212,7 @@ router.get('/by-academy-id', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'academy_id é obrigatório' })
     }
 
-    console.log(`[teachers/by-academy-id] Buscando professores para academia ${academy_id}`)
-
-    // 1. Buscar professores vinculados explicitamente via academy_teachers
-    const { data: linkedTeachers, error: linkedError } = await supabase
-      .from('users')
-      .select(`
-        *,
-        teacher_profiles (
-          *
-        ),
-        academy_teachers!inner (
-          *,
-          academies:academy_id (
-            *
-          )
-        )
-      `)
-      .eq('role', 'TEACHER')
-      .eq('is_active', true)
-      .eq('academy_teachers.academy_id', academy_id)
-      .eq('academy_teachers.status', 'active')
-      .order('created_at', { ascending: false })
-
-    if (linkedError) {
-      console.error('[teachers/by-academy-id] Erro ao buscar professores vinculados:', linkedError)
-    }
-
-    // 2. Buscar professores que têm bookings na unidade (mesmo sem vínculo explícito)
-    const { data: bookingsWithTeachers, error: bookingsError } = await supabase
-      .from('bookings')
-      .select('teacher_id')
-      .or(`franchise_id.eq.${academy_id},academy_id.eq.${academy_id},unit_id.eq.${academy_id}`)
-      .not('teacher_id', 'is', null)
-
-    if (bookingsError) {
-      console.error('[teachers/by-academy-id] Erro ao buscar bookings:', bookingsError)
-    }
-
-    // Extrair IDs únicos de professores com bookings
-    const teacherIdsFromBookings = [...new Set(
-      (bookingsWithTeachers || [])
-        .map((b: any) => b.teacher_id)
-        .filter(Boolean)
-    )]
-
-    console.log(`[teachers/by-academy-id] Encontrados ${teacherIdsFromBookings.length} professores com bookings na unidade`)
-
-    // 3. Buscar dados completos desses professores
-    let teachersWithBookings: any[] = []
-    if (teacherIdsFromBookings.length > 0) {
-      const { data: teachersData, error: teachersError } = await supabase
-        .from('users')
-        .select(`
-          *,
-          teacher_profiles (
-            *
-          ),
-          academy_teachers (
-            *,
-            academies:academy_id (
-              *
-            )
-          )
-        `)
-        .eq('role', 'TEACHER')
-        .eq('is_active', true)
-        .in('id', teacherIdsFromBookings)
-        .order('created_at', { ascending: false })
-
-      if (teachersError) {
-        console.error('[teachers/by-academy-id] Erro ao buscar professores com bookings:', teachersError)
-      } else {
-        teachersWithBookings = teachersData || []
-      }
-    }
-
-    // 4. Combinar e remover duplicatas
-    const linkedTeacherIds = new Set((linkedTeachers || []).map((t: any) => t.id))
-    const allTeachers = [
-      ...(linkedTeachers || []),
-      ...teachersWithBookings.filter((t: any) => !linkedTeacherIds.has(t.id))
-    ]
-
-    console.log(`[teachers/by-academy-id] Total: ${linkedTeachers?.length || 0} vinculados + ${teachersWithBookings.length} com bookings = ${allTeachers.length} únicos`)
-
-    if (allTeachers.length === 0) {
-      return res.json({ teachers: [] })
-    }
-
-    // Normalizar os dados para o formato esperado
-    const normalizedTeachers = allTeachers.map((teacher: any) => {
-      const profilesArray = Array.isArray(teacher.teacher_profiles)
-        ? teacher.teacher_profiles
-        : teacher.teacher_profiles
-          ? [teacher.teacher_profiles]
-          : []
-
-      const normalizedProfiles = profilesArray.map((profile: any) => ({
-        ...profile,
-        specialties: profile.specialties ?? profile.specialization ?? []
-      }))
-
-      // Extrair informações da academia
-      const academyTeachers = Array.isArray(teacher.academy_teachers)
-        ? teacher.academy_teachers
-        : teacher.academy_teachers
-          ? [teacher.academy_teachers]
-          : []
-
-      const academy = academyTeachers[0]?.academies || null
-
-      // Anexar rating do cache (teacher_profiles) em nível raiz
-      const profile = normalizedProfiles[0]
-      const avg = profile?.rating_avg != null ? Number(profile.rating_avg) : 0
-      const count = profile?.rating_count != null ? Number(profile.rating_count) : 0
-
-      return {
-        id: teacher.id,
-        name: teacher.name,
-        email: teacher.email,
-        phone: teacher.phone,
-        avatar_url: teacher.avatar_url,
-        created_at: teacher.created_at,
-        is_active: teacher.is_active,
-        role: teacher.role,
-        teacher_profiles: normalizedProfiles,
-        academy_teachers: academyTeachers,
-        academy: academy,
-        rating_avg: avg,
-        rating_count: count
-      }
-    })
-
+    const normalizedTeachers = await fetchTeachersByAcademy(academy_id as string, user)
     res.json({ teachers: normalizedTeachers })
 
   } catch (error) {
@@ -221,9 +223,26 @@ router.get('/by-academy-id', requireAuth, async (req, res) => {
 
 // GET /api/teachers/by-academy - Alias para /by-academy-id (compatibilidade)
 router.get('/by-academy', requireAuth, async (req, res) => {
-  // Redirecionar para a mesma lógica de /by-academy-id
-  req.url = '/by-academy-id'
-  return router.handle(req, res)
+  try {
+    // Permitir acesso para ADMIN, STUDENT, FRANCHISE_ADMIN, FRANQUEADORA
+    const user = req.user
+    const allowedRoles = ['ADMIN', 'STUDENT', 'FRANCHISE_ADMIN', 'FRANQUEADORA', 'SUPER_ADMIN']
+    if (!user || !allowedRoles.includes(user.role)) {
+      return res.status(403).json({ error: 'Acesso negado' })
+    }
+
+    const { academy_id } = req.query
+
+    if (!academy_id) {
+      return res.status(400).json({ error: 'academy_id é obrigatório' })
+    }
+
+    const normalizedTeachers = await fetchTeachersByAcademy(academy_id as string, user)
+    res.json({ teachers: normalizedTeachers })
+  } catch (error) {
+    console.error('[teachers/by-academy] Erro interno:', error)
+    res.status(500).json({ error: 'Erro interno do servidor' })
+  }
 })
 
 // GET /api/teachers/:id/bookings-by-date - Buscar bookings disponíveis do professor por data
