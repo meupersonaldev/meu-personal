@@ -62,37 +62,43 @@ export default function Home() {
       <header className="bg-meu-primary text-white sticky top-0 z-50 border-b border-meu-primary-dark">
         <div className="container-meu">
           <div className="flex items-center justify-between h-20">
-            {/* Logo */}
-            <Logo
-              size="header"
-              variant="default"
-              showText={false}
-              href="/"
-            />
-
-            {/* Desktop Navigation */}
-            <nav className="hidden md:flex items-center space-x-6">
+            {/* Desktop Navigation - Esquerda */}
+            <nav className="hidden md:flex items-center space-x-6 flex-1">
               <Link href="#para-alunos" className="text-white hover:text-meu-accent transition-colors font-medium">Para Alunos</Link>
               <Link href="#para-professores" className="text-white hover:text-meu-accent transition-colors font-medium">Para Professores</Link>
               <Link href="#franquias" className="text-white hover:text-meu-accent transition-colors font-medium">Franquias</Link>
               <Link href="#como-funciona" className="text-white hover:text-meu-accent transition-colors font-medium">Como Funciona</Link>
-              <Link href="/cadastro">
+            </nav>
+
+            {/* Logo - Centralizado */}
+            <div className="flex-1 flex justify-center">
+              <Logo
+                size="header"
+                variant="default"
+                showText={false}
+                href="/"
+              />
+            </div>
+
+            {/* Botão e Mobile Menu - Direita */}
+            <div className="flex items-center gap-4 flex-1 justify-end">
+              <Link href="/cadastro" className="hidden md:block">
                 <Button size="sm" className="bg-meu-accent text-meu-primary hover:bg-meu-accent/90">
                   Comece agora
                 </Button>
               </Link>
-            </nav>
-
-            {/* Mobile Menu Button */}
-            <div className="md:hidden">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-white hover:bg-meu-primary-dark"
-                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              >
-                {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-              </Button>
+              
+              {/* Mobile Menu Button */}
+              <div className="md:hidden">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-white hover:bg-meu-primary-dark"
+                  onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                >
+                  {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+                </Button>
+              </div>
             </div>
           </div>
         </div>
