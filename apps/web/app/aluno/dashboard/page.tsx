@@ -11,7 +11,6 @@ import {
   Save,
   Eye,
   EyeOff,
-  Star
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -157,11 +156,6 @@ export default function StudentDashboardPage() {
     return !isBookingUpcoming(booking)
   }
 
-  const [ratingsMap, setRatingsMap] = useState<Record<string, { rating: number; comment?: string }>>({})
-  const [ratingModal, setRatingModal] = useState<{ open: boolean; bookingId: string | null }>({ open: false, bookingId: null })
-  const [ratingValue, setRatingValue] = useState<number>(0)
-  const [ratingComment, setRatingComment] = useState<string>("")
-  const [ratingSubmitting, setRatingSubmitting] = useState(false)
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -213,24 +207,6 @@ export default function StudentDashboardPage() {
     }
   }, [user?.id, token, section])
 
-  useEffect(() => {
-    if (!token) return
-    const past = bookings.filter(b => isBookingPast(b)).slice(0, 3)
-    past.forEach(async (b) => {
-      if (ratingsMap[b.id] !== undefined) return
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/bookings/${b.id}/rating`, {
-          headers: { Authorization: `Bearer ${token}` }
-        })
-        if (res.ok) {
-          const json = await res.json().catch(() => null)
-          if (json?.rating) {
-            setRatingsMap(prev => ({ ...prev, [b.id]: { rating: Number(json.rating.rating) || 0, comment: json.rating.comment || undefined } }))
-          }
-        }
-      } catch {}
-    })
-  }, [bookings, token])
 
   const fetchBookings = async () => {
     if (!user?.id || !token) return
@@ -352,56 +328,6 @@ export default function StudentDashboardPage() {
     }
   }
 
-  const openRating = async (bookingId: string) => {
-    if (!token) return
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/bookings/${bookingId}/rating`, {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-      if (res.ok) {
-        const json = await res.json().catch(() => null)
-        if (json?.rating) {
-          setRatingValue(Number(json.rating.rating) || 0)
-          setRatingComment(json.rating.comment || "")
-        } else {
-          setRatingValue(0)
-          setRatingComment("")
-        }
-      }
-    } catch {
-      setRatingValue(0)
-      setRatingComment("")
-    }
-    setRatingModal({ open: true, bookingId })
-  }
-
-  const submitRating = async () => {
-    if (!token || !ratingModal.bookingId || ratingValue < 1) return
-    try {
-      setRatingSubmitting(true)
-      const res = await fetch(`${API_BASE_URL}/api/bookings/${ratingModal.bookingId}/rating`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ rating: ratingValue, comment: ratingComment?.trim() || undefined })
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => null)
-        toast.error(data?.error || data?.message || 'Erro ao salvar avaliação')
-        return
-      }
-      const json = await res.json().catch(() => null)
-      setRatingsMap(prev => ({ ...prev, [ratingModal.bookingId!]: { rating: Number(json?.rating?.rating) || ratingValue, comment: ratingComment?.trim() || undefined } }))
-      setRatingModal({ open: false, bookingId: null })
-      toast.success('Avaliação registrada!')
-    } catch {
-      toast.error('Erro ao salvar avaliação')
-    } finally {
-      setRatingSubmitting(false)
-    }
-  }
 
   if (!user || !isAuthenticated) {
     return null
@@ -1216,25 +1142,7 @@ export default function StudentDashboardPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 ml-3">
-                      {ratingsMap[booking.id]?.rating ? (
-                        <div className="flex items-center gap-1">
-                          {(() => {
-                            const r = Number(ratingsMap[booking.id]?.rating ?? 0)
-                            return (
-                              <>
-                                {[1,2,3,4,5].map((i) => (
-                                  <Star key={i} className={`h-4 w-4 ${i <= r ? 'text-amber-500 fill-current' : 'text-gray-300'}`} />
-                                ))}
-                                <span className="text-xs text-gray-600 ml-1">{r.toFixed(0)}/5</span>
-                              </>
-                            )
-                          })()}
-                        </div>
-                      ) : booking.status === 'COMPLETED' ? (
-                        <Button variant="outline" size="sm" onClick={() => openRating(booking.id)}>
-                          Avaliar
-                        </Button>
-                      ) : (
+                      {booking.status === 'CANCELLED' && (
                         <span className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-700">Cancelada</span>
                       )}
                     </div>
@@ -1357,50 +1265,6 @@ export default function StudentDashboardPage() {
         )
       })()}
 
-      {/* Modal de Avaliação */}
-      {ratingModal.open && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-3">Avaliar aula</h3>
-            <div className="flex items-center gap-2 mb-4">
-              {[1,2,3,4,5].map((i) => (
-                <button
-                  key={i}
-                  type="button"
-                  className="focus:outline-none"
-                  onClick={() => setRatingValue(i)}
-                >
-                  <Star className={`h-6 w-6 ${i <= ratingValue ? 'text-amber-500 fill-current' : 'text-gray-300'}`} />
-                </button>
-              ))}
-            </div>
-            <div className="mb-6">
-              <label className="text-sm text-gray-700 mb-1 block">Comentário (opcional)</label>
-              <textarea
-                className="w-full border border-gray-200 rounded-md p-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-200"
-                rows={4}
-                maxLength={1000}
-                placeholder="Como foi a aula?"
-                value={ratingComment}
-                onChange={(e) => setRatingComment(e.target.value)}
-              />
-              <div className="text-xs text-gray-400 mt-1">{ratingComment.length}/1000</div>
-            </div>
-            <div className="flex justify-end gap-3">
-              <Button variant="outline" onClick={() => setRatingModal({ open: false, bookingId: null })}>Cancelar</Button>
-              <Button
-                className="bg-[#002C4E] hover:bg-[#003d6b] text-white"
-                disabled={ratingValue < 1 || ratingSubmitting}
-                onClick={submitRating}
-              >
-                {ratingSubmitting ? (
-                  <span className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Salvando...</span>
-                ) : 'Salvar'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

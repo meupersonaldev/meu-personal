@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { History, Calendar, User, MapPin, Clock, Star, Loader2 } from 'lucide-react'
+import { History, Calendar, User, MapPin, Clock, Loader2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -187,21 +187,6 @@ export default function StudentHistoricoPage() {
                           </span>
                         </div>
 
-                        {/* Avaliação */}
-                        {classItem.rating && classItem.status === 'completed' && (
-                          <div className="flex items-center gap-1 mt-2">
-                            {[...Array(5)].map((_, i) => (
-                              <Star
-                                key={i}
-                                className={`h-4 w-4 ${
-                                  i < classItem.rating!
-                                    ? 'text-amber-500 fill-current'
-                                    : 'text-gray-300'
-                                }`}
-                              />
-                            ))}
-                          </div>
-                        )}
                       </div>
                     </div>
                   </CardContent>
