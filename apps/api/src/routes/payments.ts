@@ -7,6 +7,66 @@ import { requireApprovedTeacher } from '../middleware/approval'
 
 const router = express.Router()
 
+// Cache simples em memória para dados financeiros
+interface CacheEntry<T> {
+  data: T
+  timestamp: number
+  ttl: number // Time to live em milissegundos
+}
+
+class SimpleCache {
+  private cache = new Map<string, CacheEntry<any>>()
+
+  set<T>(key: string, data: T, ttlMs: number = 5 * 60 * 1000) { // 5 minutos por padrão
+    this.cache.set(key, {
+      data,
+      timestamp: Date.now(),
+      ttl: ttlMs
+    })
+  }
+
+  get<T>(key: string): T | null {
+    const entry = this.cache.get(key)
+    if (!entry) return null
+
+    const now = Date.now()
+    const age = now - entry.timestamp
+
+    if (age > entry.ttl) {
+      // Cache expirado
+      this.cache.delete(key)
+      return null
+    }
+
+    return entry.data as T
+  }
+
+  clear(key?: string) {
+    if (key) {
+      this.cache.delete(key)
+    } else {
+      this.cache.clear()
+    }
+  }
+
+  // Limpar entradas expiradas periodicamente
+  cleanup() {
+    const now = Date.now()
+    for (const [key, entry] of this.cache.entries()) {
+      if (now - entry.timestamp > entry.ttl) {
+        this.cache.delete(key)
+      }
+    }
+  }
+}
+
+const financeCache = new SimpleCache()
+
+// Limpar cache expirado a cada 10 minutos
+setInterval(() => {
+  financeCache.cleanup()
+}, 10 * 60 * 1000)
+
 /**
  * Função auxiliar para buscar walletIds e montar split de pagamento
  * Retorna array de split (90% franquia, 10% franqueadora) ou lança erro se não conseguir
@@ -400,9 +460,21 @@ router.post('/teacher/purchase-hours', requireAuth, requireApprovedTeacher, asyn
 router.get('/franchise/:academy_id/asaas', requireAuth, async (req, res) => {
   try {
     const { academy_id } = req.params
-    const { status, start_date, end_date, limit = 100 } = req.query
+    const { status, start_date, end_date, limit = 100, force_refresh } = req.query
 
-    console.log(`[payments/franchise/asaas] Buscando pagamentos do Asaas para franquia ${academy_id}`)
+    // Criar chave de cache baseada nos parâmetros
+    const cacheKey = `franchise_${academy_id}_${status || 'all'}_${start_date || ''}_${end_date || ''}_${limit}`
+    
+    // Verificar cache (a menos que force_refresh seja true)
+    if (force_refresh !== 'true') {
+      const cached = financeCache.get(cacheKey)
+      if (cached) {
+        console.log(`[payments/franchise/asaas] Retornando dados do cache para ${academy_id}`)
+        return res.json(cached)
+      }
+    }
+
+    console.log(`[payments/franchise/asaas] Buscando pagamentos do Asaas para franquia ${academy_id}${force_refresh === 'true' ? ' (forçando refresh)' : ''}`)
 
     // WalletId da franquia (hardcoded - 90% do split)
     const FRANCHISE_WALLET_ID = '03223ec1-c254-43a9-bcdd-6f54acac0609'
@@ -592,11 +664,19 @@ router.get('/franchise/:academy_id/asaas', requireAuth, async (req, res) => {
       }
     }
 
-    res.json({
+    const response = {
       payments: paymentsWithSplit,
       stats,
-      total: paymentsWithSplit.length
-    })
+      total: paymentsWithSplit.length,
+      cached: false,
+      cached_at: new Date().toISOString()
+    }
+
+    // Salvar no cache (TTL de 5 minutos para dados financeiros)
+    financeCache.set(cacheKey, response, 5 * 60 * 1000)
+    console.log(`[payments/franchise/asaas] Dados salvos no cache para ${academy_id}`)
+
+    res.json(response)
   } catch (error: any) {
     console.error('[payments/franchise/asaas] Erro:', error)
     res.status(500).json({ error: error.message || 'Erro ao buscar pagamentos do Asaas' })

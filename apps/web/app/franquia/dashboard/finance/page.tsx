@@ -71,7 +71,7 @@ export default function FinancePageNew() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, startDate, endDate])
 
-  const fetchPayments = async () => {
+  const fetchPayments = async (forceRefresh = false) => {
     if (!franquiaUser?.academyId) return
 
     setLoading(true)
@@ -89,6 +89,9 @@ export default function FinancePageNew() {
       }
       if (endDate) {
         url += `&end_date=${endDate}`
+      }
+      if (forceRefresh) {
+        url += `&force_refresh=true`
       }
 
       const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
@@ -147,7 +150,7 @@ export default function FinancePageNew() {
     }
   }
 
-  const fetchStats = async () => {
+  const fetchStats = async (forceRefresh = false) => {
     if (!franquiaUser?.academyId) return
 
     try {
@@ -161,6 +164,9 @@ export default function FinancePageNew() {
       }
       if (endDate) {
         url += `${startDate ? '&' : '&'}end_date=${endDate}`
+      }
+      if (forceRefresh) {
+        url += `&force_refresh=true`
       }
 
       const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
@@ -258,7 +264,15 @@ export default function FinancePageNew() {
             <p className="text-sm sm:text-base text-gray-600">Acompanhe pagamentos e receitas via Asaas</p>
           </div>
 
-          <Button onClick={() => { fetchPayments(); fetchStats() }} variant="outline" className="w-full sm:w-auto">
+          <Button 
+            onClick={() => { 
+              // Forçar refresh do cache
+              fetchPayments(true); 
+              fetchStats(true) 
+            }} 
+            variant="outline" 
+            className="w-full sm:w-auto"
+          >
             <RefreshCw className="h-4 w-4 mr-2" />
             Atualizar
           </Button>
