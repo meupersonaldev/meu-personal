@@ -451,6 +451,69 @@ router.get('/leads',
   })
 )
 
+// POST /api/franqueadora/leads - Criar lead (público, sem autenticação)
+router.post('/leads', asyncErrorHandler(async (req, res) => {
+  try {
+    const {
+      name,
+      email,
+      phone,
+      city,
+      investment_capacity,
+      message
+    } = req.body
+
+    // Validação básica
+    if (!name || !email) {
+      return res.status(400).json({ error: 'Nome e email são obrigatórios' })
+    }
+
+    // Buscar franqueadora padrão (primeira ativa)
+    const { data: defaultFranqueadora, error: franqueadoraError } = await supabase
+      .from('franqueadora')
+      .select('id')
+      .eq('is_active', true)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .single()
+
+    if (franqueadoraError || !defaultFranqueadora) {
+      console.error('Erro ao buscar franqueadora padrão:', franqueadoraError)
+      return res.status(500).json({ error: 'Erro ao processar solicitação. Tente novamente mais tarde.' })
+    }
+
+    // Criar lead
+    const { data, error } = await supabase
+      .from('franchise_leads')
+      .insert({
+        franqueadora_id: defaultFranqueadora.id,
+        name,
+        email,
+        phone: phone || null,
+        city: city || null,
+        investment_capacity: investment_capacity || null,
+        message: message || null,
+        status: 'NEW'
+      })
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Erro ao criar lead:', error)
+      throw error
+    }
+
+    return res.status(201).json({ 
+      success: true,
+      message: 'Sua solicitação foi enviada com sucesso! Entraremos em contato em breve.',
+      lead: data 
+    })
+  } catch (error: any) {
+    console.error('Error creating franchise lead:', error)
+    return res.status(500).json({ error: error.message || 'Erro ao processar solicitação' })
+  }
+}))
+
 router.put('/leads/:id', requireAuth, requireRole(['SUPER_ADMIN']), requireFranqueadoraAdmin, async (req, res) => {
   try {
     if (!req.franqueadoraAdmin?.franqueadora_id) return res.status(400).json({ error: 'No franqueadora context' })
