@@ -1,46 +1,61 @@
 # Configuração do Redis no Easypanel
 
-## Opção 1: Usar Redis do Easypanel (Recomendado)
+## Passo a Passo Completo
 
-O Easypanel tem suporte nativo para Redis. Siga estes passos:
-
-### 1. Adicionar serviço Redis no Easypanel
+### 1. Criar o serviço Redis no Easypanel
 
 1. No painel do Easypanel, vá para seu projeto
-2. Clique em **"Add Service"** ou **"Adicionar Serviço"**
-3. Selecione **"Redis"** da lista de serviços disponíveis
-4. Configure:
-   - **Name**: `redis` (ou `meu-personal-redis`)
-   - **Version**: Use a versão mais recente (7.x ou 8.x)
-   - **Memory Limit**: 256MB ou 512MB (suficiente para cache)
-   - **Port**: Deixe o padrão (6379) ou configure se necessário
+2. Clique em **"Criar Redis"** ou selecione **"Redis"** da lista de serviços
+3. No modal que abrir, preencha:
+   - **Nome do Serviço**: `redis` (ou `meu-personal-redis`)
+   - **Senha**: Deixe vazio para gerar automaticamente OU defina uma senha personalizada
+   - **Imagem Docker**: `redis:7` (já vem preenchido, pode deixar assim)
+4. Clique em **"Criar"**
 
-### 2. Obter a URL de conexão
+### 2. Obter informações de conexão
 
-Após criar o serviço Redis, o Easypanel fornecerá:
-- **Host**: Geralmente `redis` (nome do serviço) ou um host específico
-- **Port**: 6379 (padrão)
-- **Password**: Pode ser gerado automaticamente ou você pode definir
+Após criar o Redis, você precisa descobrir:
+- **Nome do serviço**: O nome que você definiu (ex: `redis`)
+- **Senha**: Se você deixou vazio, o Easypanel gerou uma senha aleatória. Você pode ver ela nas variáveis de ambiente do serviço Redis ou nos logs.
 
-### 3. Configurar variável de ambiente
-
-No serviço da sua API (backend), adicione a variável de ambiente:
-
-```bash
-REDIS_URL=redis://:senha@redis:6379
-```
-
-Ou se não tiver senha:
-```bash
-REDIS_URL=redis://redis:6379
-```
-
-**No Easypanel:**
-1. Vá para o serviço da sua API
+**Como ver a senha gerada:**
+1. Vá para o serviço Redis que você criou
 2. Aba **"Environment Variables"** ou **"Variáveis de Ambiente"**
-3. Adicione:
+3. Procure por uma variável como `REDIS_PASSWORD` ou similar
+4. Ou verifique os logs do Redis
+
+### 3. Configurar variável de ambiente na API
+
+Agora você precisa configurar a `REDIS_URL` no serviço da sua API:
+
+1. Vá para o serviço da sua **API** (não o Redis)
+2. Aba **"Environment Variables"** ou **"Variáveis de Ambiente"**
+3. Clique em **"Add Variable"** ou **"Adicionar Variável"**
+4. Adicione:
    - **Key**: `REDIS_URL`
-   - **Value**: `redis://redis:6379` (ajuste conforme sua configuração)
+   - **Value**: 
+     - **Se tiver senha**: `redis://:SUA_SENHA@redis:6379`
+     - **Se NÃO tiver senha**: `redis://redis:6379`
+   
+   **Importante**: Substitua `SUA_SENHA` pela senha real do Redis e `redis` pelo nome do serviço que você criou.
+
+### 4. Reiniciar a API
+
+Após adicionar a variável `REDIS_URL`, reinicie o serviço da API para aplicar as mudanças.
+
+### 5. Verificar se funcionou
+
+Verifique os logs da API. Você deve ver algo como:
+```
+✅ Redis conectado com sucesso
+```
+
+Ou se não conectou:
+```
+⚠️ Redis connection error, falling back to memory cache
+```
+
+**Nota**: Se não conectar, o sistema continua funcionando com cache em memória (fallback automático).
 
 ### 4. Reiniciar o serviço da API
 
