@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Calendar, User, GraduationCap, AlertCircle, Eye, X, CheckCircle, XCircle, Clock, Edit, Trash2, Save, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Calendar, User, GraduationCap, AlertCircle, Eye, X, CheckCircle, XCircle, Clock, Edit, Trash2, Save, ChevronLeft, ChevronRight, Trash } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -50,6 +50,8 @@ export default function AgendamentosGestaoPage() {
     isOpen: false,
     bookingId: null
   })
+  const [selectedBookings, setSelectedBookings] = useState<Set<string>>(new Set())
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
 
   const cancelFreeUntilLabel = (() => {
     if (!cancelConfirm.bookingId) return null
@@ -276,6 +278,69 @@ export default function AgendamentosGestaoPage() {
     }
   }
 
+  const handleSelectBooking = (bookingId: string) => {
+    setSelectedBookings(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(bookingId)) {
+        newSet.delete(bookingId)
+      } else {
+        newSet.add(bookingId)
+      }
+      return newSet
+    })
+  }
+
+  const handleSelectAll = () => {
+    if (selectedBookings.size === paginatedBookings.length) {
+      setSelectedBookings(new Set())
+    } else {
+      setSelectedBookings(new Set(paginatedBookings.map(b => b.id)))
+    }
+  }
+
+  const handleBulkDelete = () => {
+    if (selectedBookings.size === 0) {
+      toast.error('Selecione pelo menos um agendamento para excluir')
+      return
+    }
+    setBulkDeleteConfirm(true)
+  }
+
+  const confirmBulkDelete = async () => {
+    if (selectedBookings.size === 0) return
+
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+      
+      const deletePromises = Array.from(selectedBookings).map(bookingId =>
+        fetch(`${API_URL}/api/bookings/${bookingId}`, {
+          method: 'DELETE',
+          headers: {
+            ...(token && { 'Authorization': `Bearer ${token}` })
+          }
+        })
+      )
+
+      const results = await Promise.allSettled(deletePromises)
+      const successful = results.filter(r => r.status === 'fulfilled' && r.value.ok).length
+      const failed = results.length - successful
+
+      if (successful > 0) {
+        toast.success(`${successful} agendamento(s) excluído(s) com sucesso${failed > 0 ? ` (${failed} falharam)` : ''}`)
+      } else {
+        toast.error('Erro ao excluir agendamentos')
+      }
+
+      setSelectedBookings(new Set())
+      setBulkDeleteConfirm(false)
+      await fetchBookings()
+    } catch (error: any) {
+      toast.error(error.message || 'Erro ao excluir agendamentos')
+      setBulkDeleteConfirm(false)
+    }
+  }
+
   const formatDate = (dateString: string) => {
     // Usar timezone local correto
     const localDate = new Date(getLocalDateFromUtc(dateString) + 'T12:00:00')
@@ -345,6 +410,16 @@ export default function AgendamentosGestaoPage() {
             </p>
           </div>
           <div className="flex items-center space-x-3">
+            {selectedBookings.size > 0 && (
+              <Button
+                onClick={handleBulkDelete}
+                variant="outline"
+                className="text-red-600 hover:bg-red-50 border-red-200"
+              >
+                <Trash className="h-4 w-4 mr-2" />
+                Excluir Selecionados ({selectedBookings.size})
+              </Button>
+            )}
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as any)}
@@ -440,6 +515,14 @@ export default function AgendamentosGestaoPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-12">
+                    <input
+                      type="checkbox"
+                      checked={selectedBookings.size === paginatedBookings.length && paginatedBookings.length > 0}
+                      onChange={handleSelectAll}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
+                    />
+                  </TableHead>
                   <TableHead>Data</TableHead>
                   <TableHead>Horário</TableHead>
                   <TableHead>Aluno</TableHead>
@@ -451,7 +534,15 @@ export default function AgendamentosGestaoPage() {
               </TableHeader>
               <TableBody>
                 {paginatedBookings.map((booking) => (
-                  <TableRow key={booking.id} className="hover:bg-gray-50">
+                  <TableRow key={booking.id} className={`hover:bg-gray-50 ${selectedBookings.has(booking.id) ? 'bg-blue-50' : ''}`}>
+                    <TableCell>
+                      <input
+                        type="checkbox"
+                        checked={selectedBookings.has(booking.id)}
+                        onChange={() => handleSelectBooking(booking.id)}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
+                      />
+                    </TableCell>
                     <TableCell className="font-medium">
                       {formatDate(booking.date)}
                     </TableCell>
@@ -730,6 +821,18 @@ export default function AgendamentosGestaoPage() {
           title="Excluir Agendamento"
           description="Tem certeza que deseja excluir permanentemente este agendamento? Esta ação não pode ser desfeita."
           confirmText="Excluir"
+          cancelText="Cancelar"
+          type="danger"
+        />
+
+        {/* Modal de Confirmação de Exclusão em Massa */}
+        <ConfirmDialog
+          isOpen={bulkDeleteConfirm}
+          onClose={() => setBulkDeleteConfirm(false)}
+          onConfirm={confirmBulkDelete}
+          title="Excluir Agendamentos Selecionados"
+          description={`Tem certeza que deseja excluir permanentemente ${selectedBookings.size} agendamento(s)? Esta ação não pode ser desfeita.`}
+          confirmText="Excluir Todos"
           cancelText="Cancelar"
           type="danger"
         />
