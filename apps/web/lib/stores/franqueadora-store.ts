@@ -614,11 +614,26 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
               try { const { toast } = await import('sonner'); toast.error('Sem permissão para atualizar franquia.') } catch {}
               return false
             }
-            throw new Error('Failed to update academy')
+            const errorData = await resp.json().catch(() => ({}))
+            console.error('[updateAcademy] Erro na resposta:', resp.status, errorData)
+            throw new Error(errorData.error || 'Failed to update academy')
           }
+          
+          const updatedAcademy = await resp.json()
+          console.log('[updateAcademy] Franquia atualizada:', updatedAcademy)
+          
+          // Atualizar estado local imediatamente
+          set(state => ({
+            academies: state.academies.map(academy => 
+              academy.id === id ? { ...academy, ...updatedAcademy } : academy
+            )
+          }))
+          
+          // Recarregar dados do servidor para garantir sincronização
           await get().fetchAcademies()
           return true
-        } catch {
+        } catch (error: any) {
+          console.error('[updateAcademy] Erro ao atualizar franquia:', error)
           return false
         }
       },

@@ -540,6 +540,8 @@ router.put('/:id', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 'ADM
       .eq('id', id)
       .single()
 
+    console.log('[PUT /api/franchises/:id] Atualizando franquia:', id, updates)
+    
     const { data, error } = await supabase
       .from('academies')
       .update(updates)
@@ -547,12 +549,17 @@ router.put('/:id', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 'ADM
       .select()
       .single()
 
-    if (error) throw error
+    if (error) {
+      console.error('[PUT /api/franchises/:id] Erro ao atualizar:', error)
+      throw error
+    }
 
     if (!data) {
+      console.error('[PUT /api/franchises/:id] Franquia não encontrada:', id)
       return res.status(404).json({ error: 'Franchise not found' })
     }
 
+    console.log('[PUT /api/franchises/:id] Franquia atualizada com sucesso:', data)
     res.json(data)
 
     // Audit log de mudanças de políticas

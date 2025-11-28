@@ -88,19 +88,31 @@ export default function DadosFranquiasPage() {
   const handleSaveEdit = async () => {
     if (!editingFranchise) return
 
+    // Validação básica
+    if (!editingFranchise.name || !editingFranchise.email) {
+      toast.error('Nome e email são obrigatórios')
+      return
+    }
+
     try {
       const { id, ...updates } = editingFranchise
+      console.log('[handleSaveEdit] Atualizando franquia:', id, updates)
+      
       const success = await updateAcademy(id, updates)
       
       if (success) {
         toast.success('Franquia atualizada com sucesso!')
         setEditingFranchise(null)
-        fetchAcademies() // Recarregar dados
+        // Aguardar um pouco para garantir que o estado foi atualizado
+        setTimeout(() => {
+          fetchAcademies() // Recarregar dados
+        }, 100)
       } else {
-        toast.error('Erro ao atualizar franquia')
+        toast.error('Erro ao atualizar franquia. Verifique os dados e tente novamente.')
       }
-    } catch (error) {
-      toast.error('Erro ao atualizar franquia')
+    } catch (error: any) {
+      console.error('[handleSaveEdit] Erro:', error)
+      toast.error(error.message || 'Erro ao atualizar franquia')
     }
   }
 
