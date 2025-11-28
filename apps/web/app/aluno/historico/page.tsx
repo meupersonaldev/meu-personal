@@ -17,7 +17,6 @@ interface ClassHistory {
   teacher_avatar?: string
   unit_name: string
   status: 'completed' | 'cancelled' | 'no_show'
-  rating?: number
 }
 
 export default function StudentHistoricoPage() {
