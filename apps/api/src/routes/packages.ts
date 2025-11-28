@@ -667,15 +667,37 @@ router.get('/professor/balance', requireAuth, requireRole(['TEACHER', 'PROFESSOR
 }));
 
 // Histórico de pagamentos do usuário
-router.get('/payment-history', requireAuth, asyncErrorHandler(async (req, res) => {
+router.get('/payment-history', requireAuth, extractPagination, asyncErrorHandler(async (req, res) => {
   const user = req.user;
   const { status } = req.query as { status?: string };
+  const { limit, offset } = req.pagination;
 
-  const intents = await paymentIntentService.getPaymentIntentsByUser(user.userId, status);
+  const result = await paymentIntentService.getPaymentIntentsByUser(user.userId, status, limit, offset);
 
   res.json({
-    payment_intents: intents.map(intent => serializePaymentIntent(intent))
+    payment_intents: result.data.map(intent => serializePaymentIntent(intent)),
+    total: result.total,
+    limit,
+    offset
   });
+}));
+
+// Deletar payment intents cancelados
+router.delete('/payment-history/canceled', requireAuth, asyncErrorHandler(async (req, res) => {
+  const user = req.user;
+
+  const { error } = await supabase
+    .from('payment_intents')
+    .delete()
+    .eq('actor_user_id', user.userId)
+    .eq('status', 'CANCELED');
+
+  if (error) {
+    console.error('Erro ao deletar payment intents cancelados:', error);
+    return res.status(500).json({ error: 'Erro ao deletar pagamentos cancelados' });
+  }
+
+  res.json({ message: 'Pagamentos cancelados removidos com sucesso' });
 }));
 
 // ---------------------------------------------------------------------------

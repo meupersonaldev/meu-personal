@@ -364,10 +364,10 @@ class PaymentIntentService {
     return 'Pagamento Meu Personal';
   }
 
-  async getPaymentIntentsByUser(userId: string, status?: string): Promise<PaymentIntent[]> {
+  async getPaymentIntentsByUser(userId: string, status?: string, limit?: number, offset?: number): Promise<{ data: PaymentIntent[]; total: number }> {
     let query = supabase
       .from('payment_intents')
-      .select('*')
+      .select('*', { count: 'exact' })
       .eq('actor_user_id', userId)
       .order('created_at', { ascending: false });
 
@@ -375,9 +375,16 @@ class PaymentIntentService {
       query = query.eq('status', status);
     }
 
-    const { data, error } = await query;
+    if (limit !== undefined) {
+      query = query.limit(limit);
+    }
+    if (offset !== undefined) {
+      query = query.range(offset, offset + (limit || 10) - 1);
+    }
+
+    const { data, error, count } = await query;
     if (error) throw error;
-    return data;
+    return { data: data || [], total: count || 0 };
   }
 
   async getPaymentIntentsByUnit(unitId: string, status?: string): Promise<PaymentIntent[]> {

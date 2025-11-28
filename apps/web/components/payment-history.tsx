@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Loader2, ExternalLink, QrCode, Barcode, CreditCard, Calendar, DollarSign } from 'lucide-react'
+import { Loader2, ExternalLink, QrCode, Barcode, CreditCard, Calendar, DollarSign, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { API_BASE_URL } from '@/lib/api'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { toast } from 'sonner'
@@ -38,17 +38,21 @@ export function PaymentHistory({ className }: PaymentHistoryProps) {
   const [payments, setPayments] = useState<PaymentIntent[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'PENDING' | 'PAID' | 'FAILED' | 'CANCELED'>('all')
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const [deleting, setDeleting] = useState(false)
+  const itemsPerPage = 10
 
   useEffect(() => {
     if (!token) return
     loadPayments()
-  }, [token, filter])
+  }, [token, filter, page])
 
   const loadPayments = async () => {
     try {
       setLoading(true)
-      const statusParam = filter !== 'all' ? `?status=${filter}` : ''
-      const response = await fetch(`${API_BASE_URL}/api/packages/payment-history${statusParam}`, {
+      const statusParam = filter !== 'all' ? `&status=${filter}` : ''
+      const response = await fetch(`${API_BASE_URL}/api/packages/payment-history?page=${page}&limit=${itemsPerPage}${statusParam}`, {
         headers: {
           Authorization: `Bearer ${token}`
         }
@@ -60,6 +64,7 @@ export function PaymentHistory({ className }: PaymentHistoryProps) {
 
       const data = await response.json()
       setPayments(data.payment_intents || [])
+      setTotal(data.total || 0)
     } catch (error: any) {
       console.error('Erro ao carregar histórico de pagamentos:', error)
       toast.error('Erro ao carregar histórico de pagamentos')
@@ -67,6 +72,37 @@ export function PaymentHistory({ className }: PaymentHistoryProps) {
       setLoading(false)
     }
   }
+
+  const handleDeleteCanceled = async () => {
+    if (!confirm('Tem certeza que deseja remover todos os pagamentos cancelados? Esta ação não pode ser desfeita.')) {
+      return
+    }
+
+    try {
+      setDeleting(true)
+      const response = await fetch(`${API_BASE_URL}/api/packages/payment-history/canceled`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error('Erro ao deletar pagamentos cancelados')
+      }
+
+      toast.success('Pagamentos cancelados removidos com sucesso')
+      // Recarregar pagamentos
+      loadPayments()
+    } catch (error: any) {
+      console.error('Erro ao deletar pagamentos cancelados:', error)
+      toast.error('Erro ao deletar pagamentos cancelados')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const totalPages = Math.ceil(total / itemsPerPage)
 
   const formatCurrency = (cents: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -131,44 +167,76 @@ export function PaymentHistory({ className }: PaymentHistoryProps) {
   }
 
   const stats = {
-    total: payments.length,
+    total: total,
     pending: payments.filter(p => p.status === 'PENDING').length,
     paid: payments.filter(p => p.status === 'PAID').length,
     failed: payments.filter(p => p.status === 'FAILED').length,
     canceled: payments.filter(p => p.status === 'CANCELED').length
   }
+  
+  const canceledCount = stats.canceled
 
   return (
     <div className={className}>
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center justify-between">
+          <CardTitle className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <span className="flex items-center gap-2">
               <DollarSign className="h-5 w-5 text-meu-primary" />
               Histórico de Pagamentos
             </span>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 variant={filter === 'all' ? 'default' : 'outline'}
                 size="sm"
-                onClick={() => setFilter('all')}
+                onClick={() => {
+                  setFilter('all')
+                  setPage(1)
+                }}
               >
                 Todos
               </Button>
               <Button
                 variant={filter === 'PENDING' ? 'default' : 'outline'}
                 size="sm"
-                onClick={() => setFilter('PENDING')}
+                onClick={() => {
+                  setFilter('PENDING')
+                  setPage(1)
+                }}
               >
                 Pendentes
               </Button>
               <Button
                 variant={filter === 'PAID' ? 'default' : 'outline'}
                 size="sm"
-                onClick={() => setFilter('PAID')}
+                onClick={() => {
+                  setFilter('PAID')
+                  setPage(1)
+                }}
               >
                 Pagos
               </Button>
+              {canceledCount > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDeleteCanceled}
+                  disabled={deleting}
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                >
+                  {deleting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Removendo...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Limpar Cancelados ({canceledCount})
+                    </>
+                  )}
+                </Button>
+              )}
             </div>
           </CardTitle>
         </CardHeader>
@@ -268,6 +336,60 @@ export function PaymentHistory({ className }: PaymentHistoryProps) {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Paginação */}
+          {!loading && payments.length > 0 && totalPages > 1 && (
+            <div className="flex items-center justify-between mt-6 pt-4 border-t">
+              <div className="text-sm text-gray-600">
+                Mostrando {((page - 1) * itemsPerPage) + 1} a {Math.min(page * itemsPerPage, total)} de {total} pagamentos
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Anterior
+                </Button>
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum: number
+                    if (totalPages <= 5) {
+                      pageNum = i + 1
+                    } else if (page <= 3) {
+                      pageNum = i + 1
+                    } else if (page >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i
+                    } else {
+                      pageNum = page - 2 + i
+                    }
+                    return (
+                      <Button
+                        key={pageNum}
+                        variant={page === pageNum ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setPage(pageNum)}
+                        className="min-w-[40px]"
+                      >
+                        {pageNum}
+                      </Button>
+                    )
+                  })}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                >
+                  Próxima
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>
