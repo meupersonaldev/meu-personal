@@ -830,6 +830,7 @@ export default function ConfiguracoesPage() {
             </Card>
           </div>
         )}
+
       </div>
     </ProfessorLayout >
   )

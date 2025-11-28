@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { CreditCard, Barcode, QrCode, Check, Loader2 } from 'lucide-react'
+import { CreditCard, Barcode, QrCode, Check, Loader2, History } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -10,6 +10,7 @@ import { toast } from 'sonner'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { useStudentUnitsStore } from '@/lib/stores/student-units-store'
 import { API_BASE_URL } from '@/lib/api'
+import { PaymentHistory } from '@/components/payment-history'
 
 interface Plan {
   id: string
@@ -38,6 +39,7 @@ export default function ComprarCreditosPage() {
   const [loading, setLoading] = useState(false)
   const [paymentData, setPaymentData] = useState<any>(null)
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'comprar' | 'historico'>('comprar')
   const [step, setStep] = useState<'select-plan' | 'payment' | 'success'>('select-plan')
   const [showCpfModal, setShowCpfModal] = useState(false)
   const [cpfInput, setCpfInput] = useState('')
@@ -230,7 +232,7 @@ export default function ComprarCreditosPage() {
     <div className="min-h-screen bg-gray-50 py-12 px-4">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <div className="text-center mb-12">
+        <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-4">
             Comprar Créditos
           </h1>
@@ -239,7 +241,40 @@ export default function ComprarCreditosPage() {
           </p>
         </div>
 
-        {/* Steps Indicator */}
+        {/* Tabs */}
+        <div className="mb-8 border-b border-gray-200">
+          <div className="flex justify-center space-x-1">
+            <button
+              onClick={() => setActiveTab('comprar')}
+              className={`px-6 py-3 font-medium text-sm border-b-2 transition-colors ${
+                activeTab === 'comprar'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <CreditCard className="h-4 w-4 inline mr-2" />
+              Comprar
+            </button>
+            <button
+              onClick={() => setActiveTab('historico')}
+              className={`px-6 py-3 font-medium text-sm border-b-2 transition-colors ${
+                activeTab === 'historico'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <History className="h-4 w-4 inline mr-2" />
+              Histórico
+            </button>
+          </div>
+        </div>
+
+        {/* Tab Content */}
+        {activeTab === 'historico' ? (
+          <PaymentHistory />
+        ) : (
+          <>
+            {/* Steps Indicator */}
         <div className="flex items-center justify-center mb-12">
           <div className="flex items-center space-x-4">
             <div className={`flex items-center ${step === 'select-plan' ? 'text-blue-600' : 'text-gray-400'}`}>
@@ -514,6 +549,8 @@ export default function ComprarCreditosPage() {
               </Button>
             </Card>
           </div>
+        )}
+          </>
         )}
       </div>
     </div>

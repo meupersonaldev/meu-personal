@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { CreditCard, Barcode, QrCode, Check, Loader2, Clock } from 'lucide-react'
+import { CreditCard, Barcode, QrCode, Check, Loader2, Clock, History } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -13,6 +13,7 @@ import { API_BASE_URL } from '@/lib/api'
 import { useTeacherApproval } from '@/hooks/use-teacher-approval'
 import { ApprovalBanner } from '@/components/teacher/approval-banner'
 import { ApprovalBlock } from '@/components/teacher/approval-block'
+import { PaymentHistory } from '@/components/payment-history'
 
 interface HoursPackage {
   id: string
@@ -33,6 +34,7 @@ export default function ComprarHorasPage() {
   const [paymentMethod, setPaymentMethod] = useState<'PIX' | 'BOLETO' | 'CREDIT_CARD'>('PIX')
   const [loading, setLoading] = useState(false)
   const [paymentData, setPaymentData] = useState<any>(null)
+  const [activeTab, setActiveTab] = useState<'comprar' | 'historico'>('comprar')
   const [step, setStep] = useState<'select-package' | 'payment' | 'success'>('select-package')
   const [showCpfModal, setShowCpfModal] = useState(false)
   const [cpfInput, setCpfInput] = useState('')
@@ -238,7 +240,7 @@ export default function ComprarHorasPage() {
       <div className="min-h-screen bg-gray-50 py-12 px-4">
         <div className="max-w-6xl mx-auto">
           {/* Header */}
-          <div className="text-center mb-12">
+          <div className="text-center mb-8">
                 <h1 className="text-4xl font-bold text-gray-900 mb-4">
                   Comprar Banco de Horas
                 </h1>
@@ -247,6 +249,39 @@ export default function ComprarHorasPage() {
                 </p>
               </div>
 
+          {/* Tabs */}
+          <div className="mb-8 border-b border-gray-200">
+            <div className="flex justify-center space-x-1">
+              <button
+                onClick={() => setActiveTab('comprar')}
+                className={`px-6 py-3 font-medium text-sm border-b-2 transition-colors ${
+                  activeTab === 'comprar'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <Clock className="h-4 w-4 inline mr-2" />
+                Comprar
+              </button>
+              <button
+                onClick={() => setActiveTab('historico')}
+                className={`px-6 py-3 font-medium text-sm border-b-2 transition-colors ${
+                  activeTab === 'historico'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <History className="h-4 w-4 inline mr-2" />
+                Histórico
+              </button>
+            </div>
+          </div>
+
+          {/* Tab Content */}
+          {activeTab === 'historico' ? (
+            <PaymentHistory />
+          ) : (
+            <>
         {/* Steps Indicator */}
         <div className="flex items-center justify-center mb-12">
           <div className="flex items-center space-x-4">
@@ -542,9 +577,11 @@ export default function ComprarHorasPage() {
             </Card>
           </div>
         )}
+            </>
+          )}
+        </div>
       </div>
-    </div>
-      
+
     {showCpfModal && (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
         <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl">
