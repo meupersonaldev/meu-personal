@@ -1,11 +1,21 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useFranqueadoraStore } from '@/lib/stores/franqueadora-store'
 import FranqueadoraGuard from '@/components/auth/franqueadora-guard'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import FranchiseLeadDetailsModal from '@/components/franchise-lead-details-modal'
 import { 
   Building, 
   Mail, 
@@ -17,7 +27,8 @@ import {
   Search,
   Loader2,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Eye
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -62,9 +73,11 @@ export default function FranchiseLeadsPage() {
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
+  const [selectedLead, setSelectedLead] = useState<FranchiseLead | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
   const limit = 10
 
-  const fetchLeads = async () => {
+  const fetchLeads = useCallback(async () => {
     if (!isAuthenticated || !user || !token) {
       console.log('[LEADS PAGE] Não autenticado ou sem token')
       return
@@ -127,35 +140,32 @@ export default function FranchiseLeadsPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [isAuthenticated, user, token, page, searchTerm])
 
   useEffect(() => {
     if (isAuthenticated) {
       fetchLeads()
     }
-  }, [isAuthenticated, page, searchTerm])
+  }, [isAuthenticated, fetchLeads])
+
+  const handleViewDetails = (lead: FranchiseLead) => {
+    setSelectedLead(lead)
+    setIsModalOpen(true)
+  }
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false)
+    setSelectedLead(null)
+  }
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
     return date.toLocaleDateString('pt-BR', {
       day: '2-digit',
       month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+      year: 'numeric'
     })
   }
-
-  const filteredLeads = leads.filter(lead => {
-    if (!searchTerm) return true
-    const search = searchTerm.toLowerCase()
-    return (
-      lead.name.toLowerCase().includes(search) ||
-      lead.email.toLowerCase().includes(search) ||
-      (lead.phone && lead.phone.includes(search)) ||
-      (lead.city && lead.city.toLowerCase().includes(search))
-    )
-  })
 
   return (
     <FranqueadoraGuard requiredPermission="canViewDashboard">
@@ -187,12 +197,12 @@ export default function FranchiseLeadsPage() {
           </div>
         </div>
 
-        {/* Leads List */}
+        {/* Leads Table */}
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-meu-primary" />
           </div>
-        ) : filteredLeads.length === 0 ? (
+        ) : leads.length === 0 ? (
           <Card className="p-8 text-center">
             <Building className="h-12 w-12 text-gray-400 mx-auto mb-4" />
             <p className="text-gray-600 text-lg">
@@ -201,77 +211,88 @@ export default function FranchiseLeadsPage() {
           </Card>
         ) : (
           <>
-            <div className="space-y-4 mb-6">
-              {filteredLeads.map((lead) => (
-                <Card key={lead.id} className="p-4 sm:p-6 hover:shadow-md transition-shadow">
-                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                    <div className="flex-1 space-y-3">
-                      {/* Header */}
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                            {lead.name}
-                          </h3>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${STATUS_COLORS[lead.status] || STATUS_COLORS.NEW}`}>
-                              {STATUS_LABELS[lead.status] || lead.status}
-                            </span>
-                            <span className="text-sm text-gray-500 flex items-center gap-1">
-                              <Calendar className="h-4 w-4" />
-                              {formatDate(lead.created_at)}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Contact Info */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="flex items-center gap-2 text-gray-700">
-                          <Mail className="h-4 w-4 text-gray-400" />
-                          <a href={`mailto:${lead.email}`} className="text-sm hover:text-meu-primary transition-colors">
+            <Card className="overflow-hidden">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[200px]">Nome</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Telefone</TableHead>
+                      <TableHead>Cidade</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Data</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {leads.map((lead) => (
+                      <TableRow key={lead.id} className="hover:bg-gray-50">
+                        <TableCell className="font-medium">{lead.name}</TableCell>
+                        <TableCell>
+                          <a
+                            href={`mailto:${lead.email}`}
+                            className="text-meu-primary hover:underline flex items-center gap-1"
+                          >
+                            <Mail className="h-3 w-3" />
                             {lead.email}
                           </a>
-                        </div>
-                        {lead.phone && (
-                          <div className="flex items-center gap-2 text-gray-700">
-                            <Phone className="h-4 w-4 text-gray-400" />
-                            <a href={`tel:${lead.phone}`} className="text-sm hover:text-meu-primary transition-colors">
+                        </TableCell>
+                        <TableCell>
+                          {lead.phone ? (
+                            <a
+                              href={`tel:${lead.phone}`}
+                              className="text-gray-700 hover:text-meu-primary flex items-center gap-1"
+                            >
+                              <Phone className="h-3 w-3" />
                               {lead.phone}
                             </a>
-                          </div>
-                        )}
-                        {lead.city && (
-                          <div className="flex items-center gap-2 text-gray-700">
-                            <MapPin className="h-4 w-4 text-gray-400" />
-                            <span className="text-sm">{lead.city}</span>
-                          </div>
-                        )}
-                        {lead.investment_capacity && (
-                          <div className="flex items-center gap-2 text-gray-700">
-                            <DollarSign className="h-4 w-4 text-gray-400" />
-                            <span className="text-sm">{lead.investment_capacity}</span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Message */}
-                      {lead.message && (
-                        <div className="mt-3 p-3 bg-gray-50 rounded-lg">
-                          <div className="flex items-start gap-2">
-                            <MessageSquare className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
-                            <p className="text-sm text-gray-700">{lead.message}</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </Card>
-              ))}
-            </div>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {lead.city ? (
+                            <span className="flex items-center gap-1">
+                              <MapPin className="h-3 w-3 text-gray-400" />
+                              {lead.city}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={STATUS_COLORS[lead.status] || STATUS_COLORS.NEW}>
+                            {STATUS_LABELS[lead.status] || lead.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm text-gray-600 flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            {formatDate(lead.created_at)}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleViewDetails(lead)}
+                            className="flex items-center gap-2"
+                          >
+                            <Eye className="h-4 w-4" />
+                            Ver Detalhes
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </Card>
 
             {/* Pagination */}
             {totalPages > 1 && (
-              <div className="flex items-center justify-between">
+              <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="text-sm text-gray-600">
                   Mostrando {((page - 1) * limit) + 1} a {Math.min(page * limit, total)} de {total} leads
                 </div>
@@ -280,7 +301,7 @@ export default function FranchiseLeadsPage() {
                     variant="outline"
                     size="sm"
                     onClick={() => setPage(p => Math.max(1, p - 1))}
-                    disabled={page === 1}
+                    disabled={page === 1 || isLoading}
                   >
                     <ChevronLeft className="h-4 w-4" />
                     Anterior
@@ -292,7 +313,7 @@ export default function FranchiseLeadsPage() {
                     variant="outline"
                     size="sm"
                     onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                    disabled={page === totalPages}
+                    disabled={page === totalPages || isLoading}
                   >
                     Próxima
                     <ChevronRight className="h-4 w-4" />
@@ -302,6 +323,13 @@ export default function FranchiseLeadsPage() {
             )}
           </>
         )}
+
+        {/* Details Modal */}
+        <FranchiseLeadDetailsModal
+          isOpen={isModalOpen}
+          onClose={handleCloseModal}
+          lead={selectedLead}
+        />
       </div>
     </FranqueadoraGuard>
   )
