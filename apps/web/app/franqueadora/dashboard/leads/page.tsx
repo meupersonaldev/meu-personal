@@ -55,7 +55,7 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 export default function FranchiseLeadsPage() {
-  const { user, franqueadora, isAuthenticated } = useFranqueadoraStore()
+  const { user, franqueadora, isAuthenticated, token } = useFranqueadoraStore()
   const [leads, setLeads] = useState<FranchiseLead[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -65,12 +65,11 @@ export default function FranchiseLeadsPage() {
   const limit = 10
 
   const fetchLeads = async () => {
-    if (!isAuthenticated || !user) return
+    if (!isAuthenticated || !user || !token) return
 
     setIsLoading(true)
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      const token = localStorage.getItem('auth-token')
       
       const params = new URLSearchParams({
         page: page.toString(),
@@ -91,7 +90,8 @@ export default function FranchiseLeadsPage() {
       })
 
       if (!response.ok) {
-        throw new Error('Erro ao buscar leads')
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || `Erro ${response.status}: ${response.statusText}`)
       }
 
       const data = await response.json()
@@ -100,10 +100,17 @@ export default function FranchiseLeadsPage() {
         setLeads(data.data || [])
         setTotal(data.pagination?.total || 0)
         setTotalPages(data.pagination?.totalPages || 1)
+      } else {
+        throw new Error(data.error || 'Erro ao processar resposta')
       }
     } catch (error: any) {
       console.error('Erro ao buscar leads:', error)
-      toast.error('Erro ao carregar leads. Tente novamente.')
+      const errorMessage = error.message || 'Erro ao carregar leads. Tente novamente.'
+      toast.error(errorMessage)
+      // Limpar dados em caso de erro
+      setLeads([])
+      setTotal(0)
+      setTotalPages(1)
     } finally {
       setIsLoading(false)
     }
