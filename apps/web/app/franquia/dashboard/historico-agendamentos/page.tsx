@@ -1,10 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Calendar, User, GraduationCap, AlertCircle, Eye, X, CheckCircle, XCircle, Clock } from 'lucide-react'
+import { Calendar, User, GraduationCap, AlertCircle, Eye, X, CheckCircle, XCircle, Clock, Edit, Trash2, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import { useFranquiaStore } from '@/lib/stores/franquia-store'
 import { toast } from 'sonner'
 import ConfirmDialog from '@/components/ui/confirm-dialog'
@@ -29,9 +30,17 @@ export default function AgendamentosGestaoPage() {
   const [bookings, setBookings] = useState<Booking[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
+  const [editingBooking, setEditingBooking] = useState<Booking | null>(null)
   const [statusFilter, setStatusFilter] = useState<'all' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED'>('all')
   const [isHydrated, setIsHydrated] = useState(false)
   const [cancelConfirm, setCancelConfirm] = useState<{
+    isOpen: boolean
+    bookingId: string | null
+  }>({
+    isOpen: false,
+    bookingId: null
+  })
+  const [deleteConfirm, setDeleteConfirm] = useState<{
     isOpen: boolean
     bookingId: string | null
   }>({
@@ -76,17 +85,35 @@ export default function AgendamentosGestaoPage() {
 
   const fetchBookings = async () => {
     if (!franquiaUser?.academyId) {
+      console.error('[fetchBookings] academyId não encontrado')
       return
     }
 
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+      
+      console.log('[fetchBookings] Buscando agendamentos para academia:', franquiaUser.academyId)
+      
       const url = `${API_URL}/api/bookings?franchise_id=${franquiaUser.academyId}`
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json'
+      }
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
 
-      const response = await fetch(url)
-      if (!response.ok) throw new Error('Failed to fetch bookings')
+      const response = await fetch(url, { headers })
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        console.error('[fetchBookings] Erro na resposta:', response.status, errorData)
+        throw new Error(errorData.error || 'Failed to fetch bookings')
+      }
 
       const data = await response.json()
+      console.log('[fetchBookings] Dados recebidos:', data)
 
       // Enriquecer com nomes e filtrar apenas bookings com alunos (não disponibilidades vazias)
       const enrichedBookings = data.bookings
@@ -98,12 +125,16 @@ export default function AgendamentosGestaoPage() {
           ...booking,
           student_id: booking.student_id || booking.studentId,
           teacher_id: booking.teacher_id || booking.teacherId,
-          studentName: booking.studentName || students.find(s => s.id === booking.studentId || s.id === booking.student_id)?.name || 'Aluno não encontrado',
-          teacherName: booking.teacherName || teachers.find(t => t.id === booking.teacherId || t.id === booking.teacher_id)?.name || 'Professor não encontrado'
+          studentName: booking.studentName || booking.student?.name || students.find(s => s.id === booking.studentId || s.id === booking.student_id)?.name || 'Aluno não encontrado',
+          teacherName: booking.teacherName || booking.teacher?.name || teachers.find(t => t.id === booking.teacherId || t.id === booking.teacher_id)?.name || 'Professor não encontrado',
+          created_at: booking.created_at || booking.createdAt || new Date().toISOString()
         })) || []
 
+      console.log('[fetchBookings] Agendamentos enriquecidos:', enrichedBookings.length)
       setBookings(enrichedBookings)
-    } catch (error) {
+    } catch (error: any) {
+      console.error('[fetchBookings] Erro:', error)
+      toast.error(error.message || 'Erro ao carregar agendamentos')
       setBookings([])
     }
   }
@@ -145,18 +176,100 @@ export default function AgendamentosGestaoPage() {
   const handleComplete = async (bookingId: string) => {
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+      
       const response = await fetch(`${API_URL}/api/bookings/${bookingId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` })
+        },
         body: JSON.stringify({ status: 'COMPLETED' })
       })
 
-      if (!response.ok) throw new Error('Failed to complete booking')
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to complete booking')
+      }
 
       toast.success('Aula marcada como concluída')
       await fetchBookings()
-    } catch (error) {
-      toast.error('Erro ao marcar como concluída')
+      setSelectedBooking(null)
+    } catch (error: any) {
+      toast.error(error.message || 'Erro ao marcar como concluída')
+    }
+  }
+
+  const handleEdit = (booking: Booking) => {
+    setEditingBooking({ ...booking })
+    setSelectedBooking(null)
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editingBooking) return
+
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+      
+      const updates: any = {}
+      if (editingBooking.notes !== undefined) updates.notes = editingBooking.notes
+      if (editingBooking.status) updates.status = editingBooking.status
+
+      const response = await fetch(`${API_URL}/api/bookings/${editingBooking.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` })
+        },
+        body: JSON.stringify(updates)
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to update booking')
+      }
+
+      toast.success('Agendamento atualizado com sucesso')
+      setEditingBooking(null)
+      await fetchBookings()
+    } catch (error: any) {
+      toast.error(error.message || 'Erro ao atualizar agendamento')
+    }
+  }
+
+  const handleDelete = (bookingId: string) => {
+    setDeleteConfirm({
+      isOpen: true,
+      bookingId
+    })
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteConfirm.bookingId) return
+
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+      
+      const response = await fetch(`${API_URL}/api/bookings/${deleteConfirm.bookingId}`, {
+        method: 'DELETE',
+        headers: {
+          ...(token && { 'Authorization': `Bearer ${token}` })
+        }
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to delete booking')
+      }
+
+      toast.success('Agendamento excluído com sucesso')
+      setDeleteConfirm({ isOpen: false, bookingId: null })
+      await fetchBookings()
+    } catch (error: any) {
+      toast.error(error.message || 'Erro ao excluir agendamento')
+      setDeleteConfirm({ isOpen: false, bookingId: null })
     }
   }
 
@@ -372,7 +485,7 @@ export default function AgendamentosGestaoPage() {
                       )}
 
                       {/* Actions */}
-                      <div className="flex items-center space-x-3">
+                      <div className="flex items-center space-x-3 flex-wrap">
                         {booking.status === 'CONFIRMED' && (
                           <>
                             <Button
@@ -394,6 +507,24 @@ export default function AgendamentosGestaoPage() {
                             </Button>
                           </>
                         )}
+                        <Button
+                          onClick={() => handleEdit(booking)}
+                          size="sm"
+                          variant="outline"
+                          className="text-blue-600 hover:bg-blue-50 border-blue-200"
+                        >
+                          <Edit className="h-4 w-4 mr-2" />
+                          Editar
+                        </Button>
+                        <Button
+                          onClick={() => handleDelete(booking.id)}
+                          size="sm"
+                          variant="outline"
+                          className="text-red-600 hover:bg-red-50 border-red-200"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Excluir
+                        </Button>
                         <Button
                           onClick={() => setSelectedBooking(booking)}
                           size="sm"
@@ -540,6 +671,104 @@ export default function AgendamentosGestaoPage() {
           cancelText="Voltar"
           type="warning"
         />
+
+        {/* Modal de Confirmação de Exclusão */}
+        <ConfirmDialog
+          isOpen={deleteConfirm.isOpen}
+          onClose={() => setDeleteConfirm({ isOpen: false, bookingId: null })}
+          onConfirm={confirmDelete}
+          title="Excluir Agendamento"
+          description="Tem certeza que deseja excluir permanentemente este agendamento? Esta ação não pode ser desfeita."
+          confirmText="Excluir"
+          cancelText="Cancelar"
+          type="danger"
+        />
+
+        {/* Modal de Edição */}
+        {editingBooking && (
+          <div className="fixed inset-0 left-0 top-0 right-0 bottom-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
+            <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-bold text-gray-900">Editar Agendamento</h2>
+                  <Button
+                    onClick={() => setEditingBooking(null)}
+                    variant="ghost"
+                    size="sm"
+                  >
+                    <X className="h-5 w-5" />
+                  </Button>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Status
+                    </label>
+                    <select
+                      value={editingBooking.status}
+                      onChange={(e) => setEditingBooking({ ...editingBooking, status: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-600"
+                    >
+                      <option value="CONFIRMED">Confirmado</option>
+                      <option value="COMPLETED">Concluído</option>
+                      <option value="CANCELLED">Cancelado</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Observações
+                    </label>
+                    <textarea
+                      value={editingBooking.notes || ''}
+                      onChange={(e) => setEditingBooking({ ...editingBooking, notes: e.target.value })}
+                      rows={4}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-600"
+                      placeholder="Adicione observações sobre o agendamento..."
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 pt-4">
+                    <div>
+                      <div className="text-sm text-gray-600 mb-1">Aluno</div>
+                      <div className="font-medium text-gray-900">{editingBooking.studentName}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-gray-600 mb-1">Professor</div>
+                      <div className="font-medium text-gray-900">{editingBooking.teacherName}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-gray-600 mb-1">Data</div>
+                      <div className="font-medium text-gray-900">{formatDate(editingBooking.date)}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-gray-600 mb-1">Horário</div>
+                      <div className="font-medium text-gray-900">{formatTime(editingBooking.date)}</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-3 pt-4">
+                    <Button
+                      onClick={handleSaveEdit}
+                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                      <Save className="h-4 w-4 mr-2" />
+                      Salvar Alterações
+                    </Button>
+                    <Button
+                      onClick={() => setEditingBooking(null)}
+                      variant="outline"
+                      className="flex-1"
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </div>
+        )}
         </>
       )}
     </div>
