@@ -33,11 +33,16 @@ Agora você precisa configurar a `REDIS_URL` no serviço da sua API:
 3. Clique em **"Add Variable"** ou **"Adicionar Variável"**
 4. Adicione:
    - **Key**: `REDIS_URL`
-   - **Value**: 
-     - **Se tiver senha**: `redis://:SUA_SENHA@redis:6379`
-     - **Se NÃO tiver senha**: `redis://redis:6379`
+   - **Value**: `redis://default:f37f4e0986b5e18215f5@projeto_meu-personal-redis:6379`
    
-   **Importante**: Substitua `SUA_SENHA` pela senha real do Redis e `redis` pelo nome do serviço que você criou.
+   **Formato geral**: `redis://[username]:[password]@[host]:[port]`
+   
+   **No seu caso específico**:
+   - Username: `default`
+   - Password: `f37f4e0986b5e18215f5`
+   - Host: `projeto_meu-personal-redis`
+   - Port: `6379`
+   - URL completa: `redis://default:f37f4e0986b5e18215f5@projeto_meu-personal-redis:6379`
 
 ### 4. Reiniciar a API
 
