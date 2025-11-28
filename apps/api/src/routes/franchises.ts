@@ -397,6 +397,70 @@ router.get(
   }
 )
 
+// GET /api/franchises/:id/admin - Obter admin de uma franquia (DEVE VIR ANTES DE /:id)
+router.get(
+  '/:id/admin',
+  requireAuth,
+  requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']),
+  async (req, res) => {
+    try {
+      const { id } = req.params
+
+      // Buscar admin da franquia
+      const { data: franchiseAdmin, error: adminError } = await supabase
+        .from('franchise_admins')
+        .select('user_id')
+        .eq('academy_id', id)
+        .limit(1)
+        .maybeSingle()
+
+      if (adminError) {
+        console.error(
+          '[GET /api/franchises/:id/admin] Erro ao buscar admin:',
+          adminError
+        )
+        return res
+          .status(500)
+          .json({ error: 'Erro ao buscar admin da franquia' })
+      }
+
+      if (!franchiseAdmin || !franchiseAdmin.user_id) {
+        return res
+          .status(404)
+          .json({ error: 'Admin da franquia não encontrado' })
+      }
+
+      // Buscar dados do usuário admin
+      const { data: user, error: userError } = await supabase
+        .from('users')
+        .select('id, name, email, role, is_active')
+        .eq('id', franchiseAdmin.user_id)
+        .single()
+
+      if (userError) {
+        console.error(
+          '[GET /api/franchises/:id/admin] Erro ao buscar usuário:',
+          userError
+        )
+        return res
+          .status(500)
+          .json({ error: 'Erro ao buscar dados do usuário admin' })
+      }
+
+      if (!user) {
+        return res.status(404).json({ error: 'Usuário admin não encontrado' })
+      }
+
+      res.json(user)
+    } catch (error: any) {
+      console.error('[GET /api/franchises/:id/admin] Erro:', error)
+      res
+        .status(500)
+        .json({ error: error.message || 'Erro interno do servidor' })
+    }
+  }
+)
+
 // GET /api/franchises/:id - Obter detalhes de uma franquia
 router.get(
   '/:id',
@@ -421,46 +485,6 @@ router.get(
       res.json(data)
     } catch (error: any) {
       console.error('Error fetching franchise:', error)
-      res.status(500).json({ error: error.message })
-    }
-  }
-)
-
-// GET /api/franchises/:id/admin - Obter admin de uma franquia
-router.get(
-  '/:id/admin',
-  requireAuth,
-  requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']),
-  async (req, res) => {
-    try {
-      const { id } = req.params
-
-      // Buscar admin da franquia
-      const { data: franchiseAdmin, error: adminError } = await supabase
-        .from('franchise_admins')
-        .select('user_id')
-        .eq('academy_id', id)
-        .limit(1)
-        .single()
-
-      if (adminError || !franchiseAdmin) {
-        return res.status(404).json({ error: 'Admin da franquia não encontrado' })
-      }
-
-      // Buscar dados do usuário admin
-      const { data: user, error: userError } = await supabase
-        .from('users')
-        .select('id, name, email, role, is_active')
-        .eq('id', franchiseAdmin.user_id)
-        .single()
-
-      if (userError || !user) {
-        return res.status(404).json({ error: 'Usuário admin não encontrado' })
-      }
-
-      res.json(user)
-    } catch (error: any) {
-      console.error('Error fetching franchise admin:', error)
       res.status(500).json({ error: error.message })
     }
   }
