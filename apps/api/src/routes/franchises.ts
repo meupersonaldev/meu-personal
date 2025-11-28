@@ -405,6 +405,7 @@ router.get(
   async (req, res) => {
     try {
       const { id } = req.params
+      console.log('[GET /api/franchises/:id/admin] Buscando admin para franquia ID:', id)
 
       // Buscar admin da franquia
       const { data: franchiseAdmin, error: adminError } = await supabase
@@ -425,10 +426,13 @@ router.get(
       }
 
       if (!franchiseAdmin || !franchiseAdmin.user_id) {
+        console.log('[GET /api/franchises/:id/admin] Admin não encontrado para franquia:', id)
         return res
           .status(404)
           .json({ error: 'Admin da franquia não encontrado' })
       }
+
+      console.log('[GET /api/franchises/:id/admin] Admin encontrado, user_id:', franchiseAdmin.user_id)
 
       // Buscar dados do usuário admin
       const { data: user, error: userError } = await supabase
@@ -448,9 +452,11 @@ router.get(
       }
 
       if (!user) {
+        console.log('[GET /api/franchises/:id/admin] Usuário não encontrado, user_id:', franchiseAdmin.user_id)
         return res.status(404).json({ error: 'Usuário admin não encontrado' })
       }
 
+      console.log('[GET /api/franchises/:id/admin] Retornando admin:', { id: user.id, email: user.email, name: user.name })
       res.json(user)
     } catch (error: any) {
       console.error('[GET /api/franchises/:id/admin] Erro:', error)

@@ -203,14 +203,21 @@ export default function DadosFranquiasPage() {
       }
 
       const admin = await response.json()
-      console.log('[fetchFranchiseAdmin] Admin encontrado:', admin)
+      console.log('[fetchFranchiseAdmin] Resposta da API:', {
+        admin,
+        hasId: !!admin?.id,
+        hasEmail: !!admin?.email,
+        hasName: !!admin?.name,
+        franchiseId
+      })
       
       if (!admin || !admin.id || !admin.email) {
         console.error('[fetchFranchiseAdmin] Dados do admin incompletos:', admin)
         throw new Error('Dados do admin incompletos')
       }
 
-      setFranchiseAdmin(admin)
+      // Não setar o estado aqui, deixar o handleOpenPasswordModal fazer isso
+      // setFranchiseAdmin(admin)
       return admin
     } catch (error: any) {
       console.error('[fetchFranchiseAdmin] Erro:', error)
@@ -227,16 +234,32 @@ export default function DadosFranquiasPage() {
       return
     }
     
+    // Fechar modal anterior se estiver aberto
+    setShowPasswordModal(false)
+    
     // Limpar estado anterior antes de buscar novo admin
     setFranchiseAdmin(null)
     setPasswordData({ newPassword: '', confirmPassword: '' })
     
-    console.log('[handleOpenPasswordModal] Buscando admin para franquia:', franchise.id, franchise.name)
+    console.log('[handleOpenPasswordModal] Buscando admin para franquia:', {
+      franchiseId: franchise.id,
+      franchiseName: franchise.name,
+      editingFranchiseId: editingFranchise?.id
+    })
+    
     const admin = await fetchFranchiseAdmin(franchise.id)
-    if (admin) {
-      console.log('[handleOpenPasswordModal] Admin encontrado:', admin.email, admin.name)
+    if (admin && admin.id && admin.email) {
+      console.log('[handleOpenPasswordModal] Admin encontrado:', {
+        adminId: admin.id,
+        adminEmail: admin.email,
+        adminName: admin.name,
+        franchiseId: franchise.id
+      })
+      // Só abrir o modal depois que o admin for carregado
+      setFranchiseAdmin(admin)
       setShowPasswordModal(true)
     } else {
+      console.error('[handleOpenPasswordModal] Admin não encontrado ou dados incompletos:', admin)
       toast.error('Não foi possível encontrar o admin desta franquia')
     }
   }
@@ -677,6 +700,7 @@ export default function DadosFranquiasPage() {
                           toast.error('ID da franquia não encontrado')
                           return
                         }
+                        console.log('[Button] Clicou em Alterar Senha para franquia:', editingFranchise.id, editingFranchise.name)
                         handleOpenPasswordModal(editingFranchise)
                       }}
                       disabled={loadingAdmin || !editingFranchise?.id}
@@ -745,12 +769,13 @@ export default function DadosFranquiasPage() {
             <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-1/2 lg:w-1/3 shadow-lg rounded-md bg-white">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">
-                  Alterar Senha do Admin - {franchiseAdmin.name}
+                  Alterar Senha do Admin - {franchiseAdmin.name || 'N/A'}
                 </h3>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => {
+                    console.log('[Modal] Fechando modal e limpando estado')
                     setShowPasswordModal(false)
                     setPasswordData({ newPassword: '', confirmPassword: '' })
                     setFranchiseAdmin(null)
@@ -767,9 +792,10 @@ export default function DadosFranquiasPage() {
                   </label>
                   <Input
                     type="email"
-                    value={franchiseAdmin.email}
+                    value={franchiseAdmin?.email || ''}
                     disabled
                     className="w-full bg-gray-50"
+                    placeholder={loadingAdmin ? 'Carregando...' : 'Email não encontrado'}
                   />
                 </div>
 
