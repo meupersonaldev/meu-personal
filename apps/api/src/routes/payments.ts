@@ -525,6 +525,19 @@ router.get('/franchise/:academy_id/asaas', requireAuth, async (req, res) => {
         mappedStatus = 'REFUNDED'
       }
 
+      // Identificar tipo de pagamento baseado na descrição ou externalReference
+      let paymentType = 'PLAN_PURCHASE' // padrão
+      const description = (p.description || '').toLowerCase()
+      const externalRef = (p.externalReference || '').toLowerCase()
+      
+      if (description.includes('aula') || description.includes('agendamento') || description.includes('booking') || externalRef.includes('booking')) {
+        paymentType = 'BOOKING_PAYMENT'
+      } else if (description.includes('assinatura') || description.includes('subscription') || description.includes('horas') || externalRef.includes('prof_hours') || externalRef.includes('subscription')) {
+        paymentType = 'SUBSCRIPTION'
+      } else if (description.includes('plano') || description.includes('pacote') || description.includes('package') || externalRef.includes('student_package') || externalRef.includes('package')) {
+        paymentType = 'PLAN_PURCHASE'
+      }
+
       return {
         id: p.id,
         asaas_id: p.id,
@@ -532,6 +545,7 @@ router.get('/franchise/:academy_id/asaas', requireAuth, async (req, res) => {
         customer_name: customerName,
         customer_email: customerEmail,
         description: p.description || 'Pagamento',
+        type: paymentType,
         billing_type: p.billingType || 'PIX',
         status: mappedStatus,
         status_asaas: p.status,
@@ -565,6 +579,11 @@ router.get('/franchise/:academy_id/asaas', requireAuth, async (req, res) => {
         received: paymentsWithSplit.filter((p: any) => p.status === 'RECEIVED').length,
         overdue: paymentsWithSplit.filter((p: any) => p.status === 'OVERDUE').length,
         refunded: paymentsWithSplit.filter((p: any) => p.status === 'REFUNDED').length
+      },
+      by_type: {
+        plan_purchase: paymentsWithSplit.filter((p: any) => p.type === 'PLAN_PURCHASE').length,
+        booking_payment: paymentsWithSplit.filter((p: any) => p.type === 'BOOKING_PAYMENT').length,
+        subscription: paymentsWithSplit.filter((p: any) => p.type === 'SUBSCRIPTION').length
       },
       by_billing_type: {
         pix: paymentsWithSplit.filter((p: any) => p.billing_type === 'PIX').length,

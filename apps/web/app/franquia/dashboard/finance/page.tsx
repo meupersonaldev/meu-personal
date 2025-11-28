@@ -189,7 +189,7 @@ export default function FinancePageNew() {
             overdue: 0,
             refunded: 0
           },
-          by_type: {
+          by_type: data.stats.by_type || {
             plan_purchase: 0,
             booking_payment: 0,
             subscription: 0
