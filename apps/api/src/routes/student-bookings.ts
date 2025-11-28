@@ -97,22 +97,94 @@ router.post('/student', async (req, res) => {
     const startDate = new Date(date);
     const endDate = new Date(startDate.getTime() + effectiveDuration * 60000);
 
-    const { data: conflicts, error: conflictError } = await supabase
-      .from('bookings')
-      .select('id')
-      .eq('teacher_id', teacher_id)
-      .eq('franchise_id', franchise_id)
-      .gte('date', startDate.toISOString())
-      .lt('date', endDate.toISOString())
-      .neq('status', 'CANCELLED');
-
-    if (conflictError) {
-      console.error('Erro ao validar disponibilidade:', conflictError);
-      return res.status(500).json({ message: 'Erro ao validar disponibilidade' });
+    // VALIDAÇÃO 1: Verificar capacidade da unidade
+    // Buscar capacidade da unidade (pode estar em units ou academies)
+    let unitCapacity = 1; // padrão
+    const { data: unit } = await supabase
+      .from('units')
+      .select('capacity_per_slot')
+      .or(`id.eq.${franchise_id},academy_legacy_id.eq.${franchise_id}`)
+      .eq('is_active', true)
+      .limit(1)
+      .single();
+    
+    if (unit?.capacity_per_slot) {
+      unitCapacity = unit.capacity_per_slot;
+    } else {
+      // Fallback: buscar de academies se não encontrar em units
+      const { data: academy } = await supabase
+        .from('academies')
+        .select('capacity_per_slot')
+        .eq('id', franchise_id)
+        .single();
+      
+      if (academy?.capacity_per_slot) {
+        unitCapacity = academy.capacity_per_slot;
+      }
     }
 
-    if (conflicts && conflicts.length > 0) {
-      return res.status(409).json({ message: 'Professor indisponivel neste horario na unidade selecionada' });
+    // Contar agendamentos no mesmo horário na unidade (considerando sobreposição)
+    const { data: unitBookings, error: unitBookingsError } = await supabase
+      .from('bookings')
+      .select('id, date, duration, start_at, end_at')
+      .or(`franchise_id.eq.${franchise_id},academy_id.eq.${franchise_id},unit_id.eq.${franchise_id}`)
+      .neq('status', 'CANCELLED')
+      .neq('status_canonical', 'CANCELED');
+
+    if (unitBookingsError) {
+      console.error('Erro ao validar capacidade da unidade:', unitBookingsError);
+      return res.status(500).json({ message: 'Erro ao validar capacidade da unidade' });
+    }
+
+    // Verificar sobreposição de horários
+    const overlappingBookings = (unitBookings || []).filter((b: any) => {
+      const bookingStart = b.start_at ? new Date(b.start_at) : new Date(b.date);
+      const bookingEnd = b.end_at 
+        ? new Date(b.end_at)
+        : new Date(bookingStart.getTime() + (b.duration || 60) * 60000);
+      
+      // Verificar se há sobreposição: o novo agendamento começa antes do existente terminar
+      // e o novo agendamento termina depois do existente começar
+      return (startDate < bookingEnd && endDate > bookingStart);
+    });
+
+    if (overlappingBookings.length >= unitCapacity) {
+      return res.status(409).json({ 
+        message: `Capacidade da unidade excedida. Máximo de ${unitCapacity} agendamento(s) simultâneo(s) permitido(s).` 
+      });
+    }
+
+    // VALIDAÇÃO 2: Verificar conflito de professor (mesmo professor não pode atender 2 alunos ao mesmo tempo)
+    // Buscar bookings do professor que sobrepõem com o horário solicitado
+    const { data: teacherBookings, error: teacherBookingsError } = await supabase
+      .from('bookings')
+      .select('id, date, duration, start_at, end_at, student_id')
+      .eq('teacher_id', teacher_id)
+      .or(`franchise_id.eq.${franchise_id},academy_id.eq.${franchise_id},unit_id.eq.${franchise_id}`)
+      .neq('status', 'CANCELLED')
+      .neq('status_canonical', 'CANCELED')
+      .not('student_id', 'is', null); // Apenas bookings com aluno
+
+    if (teacherBookingsError) {
+      console.error('Erro ao validar disponibilidade do professor:', teacherBookingsError);
+      return res.status(500).json({ message: 'Erro ao validar disponibilidade do professor' });
+    }
+
+    // Verificar sobreposição de horários do professor
+    const teacherOverlapping = (teacherBookings || []).filter((b: any) => {
+      const bookingStart = b.start_at ? new Date(b.start_at) : new Date(b.date);
+      const bookingEnd = b.end_at 
+        ? new Date(b.end_at)
+        : new Date(bookingStart.getTime() + (b.duration || 60) * 60000);
+      
+      // Verificar se há sobreposição
+      return (startDate < bookingEnd && endDate > bookingStart);
+    });
+
+    if (teacherOverlapping.length > 0) {
+      return res.status(409).json({ 
+        message: 'Professor indisponível neste horário. O professor já possui um agendamento com outro aluno no mesmo período.' 
+      });
     }
 
     const { data: booking, error: bookingError } = await supabase
