@@ -16,7 +16,7 @@ router.get('/events', async (req, res) => {
       return res.status(400).json({ error: 'start_date e end_date são obrigatórios (YYYY-MM-DD)' })
     }
 
-    // Buscar bookings do período
+    // Buscar bookings do período - apenas com alunos (agendamentos reais, não disponibilidades)
     const { data: bookings, error: bookingsError } = await supabase
       .from('bookings')
       .select(`
@@ -24,7 +24,10 @@ router.get('/events', async (req, res) => {
         date,
         duration,
         status,
+        status_canonical,
         notes,
+        student_id,
+        teacher_id,
         student:users!bookings_student_id_fkey (
           id,
           name,
@@ -37,35 +40,53 @@ router.get('/events', async (req, res) => {
         )
       `)
       .eq('franchise_id', academy_id)
+      .not('student_id', 'is', null) // Apenas agendamentos com aluno
       .gte('date', `${start_date}T00:00:00Z`)
       .lte('date', `${end_date}T23:59:59Z`)
       .order('date', { ascending: true })
 
-    if (bookingsError) throw bookingsError
+    if (bookingsError) {
+      console.error('[calendar/events] Erro ao buscar bookings:', bookingsError)
+      throw bookingsError
+    }
+
+    console.log(`[calendar/events] Encontrados ${bookings?.length || 0} agendamentos para academia ${academy_id}`)
+
+    // Filtrar apenas bookings válidos (com aluno e professor válidos)
+    const validBookings = (bookings || []).filter((booking: any) => {
+      const hasValidStudent = booking.student_id && booking.student?.id
+      const hasValidTeacher = booking.teacher_id && booking.teacher?.id
+      return hasValidStudent && hasValidTeacher
+    })
+
+    console.log(`[calendar/events] ${validBookings.length} agendamentos válidos (com aluno e professor)`)
 
     // Transformar bookings em eventos de calendário
-    const events = (bookings || []).map((booking: any) => {
+    const events = validBookings.map((booking: any) => {
       const startDate = new Date(booking.date)
       const endDate = new Date(startDate.getTime() + (booking.duration || 60) * 60 * 1000)
       const student = booking.student as any
       const teacher = booking.teacher as any
 
 
+      // Normalizar status para garantir consistência
+      const normalizedStatus = booking.status_canonical || booking.status || 'PENDING'
+      
       return {
         id: booking.id,
         title: `Aula: ${student?.name || 'Aluno'} com ${teacher?.name || 'Professor'}`,
         start: startDate.toISOString(),
         end: endDate.toISOString(),
-        status: booking.status,
+        status: normalizedStatus,
         studentId: student?.id,
         studentName: student?.name || 'Aluno não encontrado',
         studentEmail: student?.email,
         teacherId: teacher?.id,
         teacherName: teacher?.name || 'Professor não encontrado',
         teacherEmail: teacher?.email,
-        duration: booking.duration,
+        duration: booking.duration || 60,
         notes: booking.notes,
-        color: getEventColor(booking.status)
+        color: getEventColor(normalizedStatus)
       }
     })
 

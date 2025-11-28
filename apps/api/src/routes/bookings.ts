@@ -736,6 +736,185 @@ router.delete('/:id', requireAuth, asyncErrorHandler(async (req, res) => {
   })
 }))
 
+// GET /api/bookings/validate-orphans - Validar e identificar bookings órfãos
+router.get('/validate-orphans', requireAuth, requireRole(['FRANCHISE_ADMIN', 'FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']), asyncErrorHandler(async (req, res) => {
+  const { franchise_id, academy_id } = req.query
+  const franchiseId = Array.isArray(franchise_id) ? franchise_id[0] : franchise_id
+  const academyId = Array.isArray(academy_id) ? academy_id[0] : academy_id
+  const finalFranchiseId = franchiseId || academyId
+
+  if (!finalFranchiseId) {
+    return res.status(400).json({ error: 'franchise_id ou academy_id é obrigatório' })
+  }
+
+  try {
+    // Buscar todos os bookings da franquia
+    const { data: allBookings, error: fetchError } = await supabase
+      .from('bookings')
+      .select(`
+        id,
+        date,
+        status,
+        status_canonical,
+        student_id,
+        teacher_id,
+        franchise_id
+      `)
+      .eq('franchise_id', finalFranchiseId)
+
+    if (fetchError) {
+      console.error('[validate-orphans] Erro ao buscar bookings:', fetchError)
+      return res.status(500).json({ error: 'Erro ao buscar bookings' })
+    }
+
+    // Buscar IDs válidos de alunos e professores
+    const studentIds = [...new Set((allBookings || []).map((b: any) => b.student_id).filter(Boolean))]
+    const teacherIds = [...new Set((allBookings || []).map((b: any) => b.teacher_id).filter(Boolean))]
+
+    const { data: validStudents } = await supabase
+      .from('users')
+      .select('id')
+      .in('id', studentIds.length > 0 ? studentIds : ['00000000-0000-0000-0000-000000000000'])
+
+    const { data: validTeachers } = await supabase
+      .from('users')
+      .select('id')
+      .in('id', teacherIds.length > 0 ? teacherIds : ['00000000-0000-0000-0000-000000000000'])
+
+    const validStudentIds = new Set((validStudents || []).map((u: any) => u.id))
+    const validTeacherIds = new Set((validTeachers || []).map((u: any) => u.id))
+
+    // Identificar órfãos
+    const orphans = (allBookings || []).filter((booking: any) => {
+      // Manter cancelados
+      if (booking.status_canonical === 'CANCELED' || booking.status === 'CANCELLED') {
+        return false
+      }
+
+      // Órfão se não tem aluno válido OU não tem professor válido
+      const hasInvalidStudent = booking.student_id && !validStudentIds.has(booking.student_id)
+      const hasInvalidTeacher = booking.teacher_id && !validTeacherIds.has(booking.teacher_id)
+      const hasNoStudent = !booking.student_id
+      const hasNoTeacher = !booking.teacher_id
+
+      // Considerar órfão se:
+      // - Não tem aluno E não tem professor (disponibilidade órfã)
+      // - Tem aluno mas o aluno não existe mais
+      // - Tem professor mas o professor não existe mais
+      return (hasNoStudent && hasNoTeacher) || hasInvalidStudent || hasInvalidTeacher
+    })
+
+    const stats = {
+      total: allBookings?.length || 0,
+      valid: (allBookings?.length || 0) - orphans.length,
+      orphans: orphans.length,
+      cancelled: (allBookings || []).filter((b: any) => 
+        b.status_canonical === 'CANCELED' || b.status === 'CANCELLED'
+      ).length,
+      byStatus: {
+        CONFIRMED: (allBookings || []).filter((b: any) => 
+          b.status === 'CONFIRMED' || b.status_canonical === 'PAID'
+        ).length,
+        COMPLETED: (allBookings || []).filter((b: any) => 
+          b.status === 'COMPLETED' || b.status_canonical === 'DONE'
+        ).length,
+        CANCELLED: (allBookings || []).filter((b: any) => 
+          b.status_canonical === 'CANCELED' || b.status === 'CANCELLED'
+        ).length,
+      }
+    }
+
+    res.json({
+      stats,
+      orphans: orphans.map((b: any) => ({
+        id: b.id,
+        date: b.date,
+        status: b.status,
+        status_canonical: b.status_canonical,
+        student_id: b.student_id,
+        teacher_id: b.teacher_id,
+        reason: !b.student_id && !b.teacher_id 
+          ? 'Sem aluno e sem professor'
+          : !b.student_id 
+          ? 'Sem aluno'
+          : !b.teacher_id
+          ? 'Sem professor'
+          : !validStudentIds.has(b.student_id)
+          ? 'Aluno não existe mais'
+          : 'Professor não existe mais'
+      })),
+      message: `Encontrados ${orphans.length} bookings órfãos (cancelados foram mantidos)`
+    })
+  } catch (error: any) {
+    console.error('[validate-orphans] Erro:', error)
+    res.status(500).json({ error: error.message })
+  }
+}))
+
+// DELETE /api/bookings/cleanup-orphans - Limpar bookings órfãos (mantém cancelados)
+router.delete('/cleanup-orphans', requireAuth, requireRole(['FRANCHISE_ADMIN', 'FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN']), asyncErrorHandler(async (req, res) => {
+  const { franchise_id, academy_id, dry_run } = req.query
+  const franchiseId = Array.isArray(franchise_id) ? franchise_id[0] : franchise_id
+  const academyId = Array.isArray(academy_id) ? academy_id[0] : academy_id
+  const finalFranchiseId = franchiseId || academyId
+  const isDryRun = dry_run === 'true'
+
+  if (!finalFranchiseId) {
+    return res.status(400).json({ error: 'franchise_id ou academy_id é obrigatório' })
+  }
+
+  try {
+    // Primeiro validar órfãos
+    const validateResponse = await fetch(`${req.protocol}://${req.get('host')}/api/bookings/validate-orphans?franchise_id=${finalFranchiseId}`, {
+      headers: {
+        'Authorization': req.headers.authorization || ''
+      }
+    })
+
+    if (!validateResponse.ok) {
+      return res.status(validateResponse.status).json({ error: 'Erro ao validar órfãos' })
+    }
+
+    const { orphans } = await validateResponse.json()
+
+    if (orphans.length === 0) {
+      return res.json({
+        message: 'Nenhum booking órfão encontrado',
+        deleted: 0
+      })
+    }
+
+    if (isDryRun) {
+      return res.json({
+        message: `DRY RUN: ${orphans.length} bookings órfãos seriam deletados`,
+        wouldDelete: orphans.length,
+        orphans: orphans.map((o: any) => o.id)
+      })
+    }
+
+    // Deletar órfãos
+    const orphanIds = orphans.map((o: any) => o.id)
+    const { error: deleteError } = await supabase
+      .from('bookings')
+      .delete()
+      .in('id', orphanIds)
+
+    if (deleteError) {
+      console.error('[cleanup-orphans] Erro ao deletar:', deleteError)
+      return res.status(500).json({ error: 'Erro ao deletar bookings órfãos' })
+    }
+
+    res.json({
+      message: `${orphans.length} bookings órfãos deletados com sucesso`,
+      deleted: orphans.length,
+      cancelledKept: true
+    })
+  } catch (error: any) {
+    console.error('[cleanup-orphans] Erro:', error)
+    res.status(500).json({ error: error.message })
+  }
+}))
+
 // GET /api/bookings/:id/rating - Buscar avaliação de um agendamento (se existir)
 router.get('/:id/rating', requireAuth, asyncErrorHandler(async (req, res) => {
   const { id } = req.params
