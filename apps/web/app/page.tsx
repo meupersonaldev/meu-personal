@@ -556,7 +556,7 @@ export default function Home() {
               <p className="text-gray-300 mb-6">
                 Encontre seu personal trainer ideal e comece sua transformação
               </p>
-              <Link href="/aluno/cadastro" className="group">
+              <Link href="/aluno/login" className="group">
                 <Button className="w-full bg-gradient-to-r from-meu-accent to-yellow-400 hover:from-yellow-400 hover:to-meu-accent text-meu-primary font-bold px-8 py-4 text-base lg:text-lg rounded-xl shadow-2xl hover:shadow-meu-accent/50 transition-all duration-300 transform hover:scale-105">
                   Começar Agora
                   <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
@@ -571,7 +571,7 @@ export default function Home() {
               <p className="text-gray-300 mb-6">
                 Expanda sua carreira e conquiste mais alunos
               </p>
-              <Link href="/professor/cadastro" className="group">
+              <Link href="/professor/login" className="group">
                 <Button className="w-full bg-gradient-to-r from-meu-cyan to-blue-400 hover:from-blue-400 hover:to-meu-cyan text-meu-primary font-bold px-8 py-4 text-base lg:text-lg rounded-xl shadow-2xl hover:shadow-meu-cyan/50 transition-all duration-300 transform hover:scale-105">
                   Cadastrar-se
                   <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
