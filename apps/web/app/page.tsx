@@ -74,7 +74,7 @@ export default function Home() {
               <Link href="#para-professores" className="text-white hover:text-meu-accent transition-colors font-medium">Para Professores</Link>
               <Link href="#franquias" className="text-white hover:text-meu-accent transition-colors font-medium">Franquias</Link>
               <Link href="#como-funciona" className="text-white hover:text-meu-accent transition-colors font-medium">Como Funciona</Link>
-              <Link href="/login">
+              <Link href="/cadastro">
                 <Button size="sm" className="bg-meu-accent text-meu-primary hover:bg-meu-accent/90">
                   Comece agora
                 </Button>
@@ -130,7 +130,7 @@ export default function Home() {
                 Como Funciona
               </Link>
               <div className="pt-3 border-t border-meu-primary-dark space-y-3">
-                <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
+                <Link href="/cadastro" onClick={() => setMobileMenuOpen(false)}>
                   <Button size="sm" className="bg-meu-accent text-meu-primary hover:bg-meu-accent/90 w-full">
                     Comece agora
                   </Button>
