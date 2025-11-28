@@ -339,12 +339,15 @@ router.get('/', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN'
     const franchises = (data || []).map(academy => ({
       id: academy.id,
       name: academy.name,
+      email: academy.email,
+      phone: academy.phone,
       address: academy.address,
       city: academy.city,
       state: academy.state,
       is_active: academy.is_active,
       monthly_revenue: academy.monthly_revenue,
       royalty_percentage: academy.royalty_percentage,
+      franchise_fee: academy.franchise_fee,
       created_at: academy.created_at,
       // Campos de políticas para consumo no dashboard da Franqueadora
       credits_per_class: academy.credits_per_class,
