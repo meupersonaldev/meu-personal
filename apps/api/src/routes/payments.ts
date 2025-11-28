@@ -459,19 +459,22 @@ router.get('/franchise/:academy_id/asaas', requireAuth, async (req, res) => {
     // Filtrar por data se fornecido
     let filteredPayments = asaasPayments
     if (start_date || end_date) {
+      const startDateStr = Array.isArray(start_date) ? start_date[0] : start_date
+      const endDateStr = Array.isArray(end_date) ? end_date[0] : end_date
+      
       filteredPayments = asaasPayments.filter((p: any) => {
         const paymentDate = p.dueDate || p.paymentDate || p.dateCreated
         if (!paymentDate) return true
         
         const date = new Date(paymentDate)
-        if (start_date && date < new Date(start_date)) return false
-        if (end_date && date > new Date(end_date)) return false
+        if (startDateStr && typeof startDateStr === 'string' && date < new Date(startDateStr)) return false
+        if (endDateStr && typeof endDateStr === 'string' && date > new Date(endDateStr)) return false
         return true
       })
     }
 
     // Buscar dados dos clientes do Asaas e do nosso banco
-    const customerIds = [...new Set(filteredPayments.map((p: any) => p.customer).filter(Boolean))]
+    const customerIds = [...new Set(filteredPayments.map((p: any) => p.customer).filter(Boolean))] as string[]
     const customerMap = new Map<string, { name: string; email: string }>()
 
     // Buscar clientes do nosso banco primeiro (mais rápido)
@@ -493,14 +496,14 @@ router.get('/franchise/:academy_id/asaas', requireAuth, async (req, res) => {
       }
 
       // Para clientes não encontrados no banco, buscar do Asaas
-      const missingCustomerIds = customerIds.filter(id => !customerMap.has(id))
+      const missingCustomerIds = customerIds.filter((id: string) => !customerMap.has(id))
       
       // Buscar em lotes para não sobrecarregar a API
       for (const customerId of missingCustomerIds.slice(0, 20)) { // Limitar a 20 para não demorar muito
         try {
-          const customerResult = await asaasService.getCustomer(customerId)
+          const customerResult = await asaasService.getCustomer(customerId as string)
           if (customerResult.success && customerResult.data) {
-            customerMap.set(customerId, {
+            customerMap.set(customerId as string, {
               name: customerResult.data.name || 'Cliente não identificado',
               email: customerResult.data.email || ''
             })

@@ -9,7 +9,7 @@ import { requireApprovedTeacher } from '../middleware/approval'
 import { createUserRateLimit, rateLimitConfig } from '../middleware/rateLimit'
 import { asyncErrorHandler } from '../middleware/errorHandler'
 import { normalizeBookingStatus } from '../utils/booking-status'
-import { toZonedTime, fromZonedTime, formatInTimeZone } from 'date-fns-tz'
+import { utcToZonedTime, zonedTimeToUtc, formatInTimeZone } from 'date-fns-tz'
 import { parse, format } from 'date-fns'
 
 const router = express.Router()
@@ -875,7 +875,8 @@ router.delete('/cleanup-orphans', requireAuth, requireRole(['FRANCHISE_ADMIN', '
       return res.status(validateResponse.status).json({ error: 'Erro ao validar órfãos' })
     }
 
-    const { orphans } = await validateResponse.json()
+    const validateData = await validateResponse.json() as { orphans?: any[] }
+    const orphans = validateData.orphans || []
 
     if (orphans.length === 0) {
       return res.json({
