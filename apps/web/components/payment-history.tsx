@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Loader2, ExternalLink, QrCode, Barcode, CreditCard, Calendar, DollarSign, Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Loader2, ExternalLink, QrCode, Barcode, CreditCard, Calendar, DollarSign, Trash2, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { API_BASE_URL } from '@/lib/api'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { toast } from 'sonner'
@@ -41,6 +41,7 @@ export function PaymentHistory({ className }: PaymentHistoryProps) {
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
   const [deleting, setDeleting] = useState(false)
+  const [cancelingId, setCancelingId] = useState<string | null>(null)
   const itemsPerPage = 10
 
   useEffect(() => {
@@ -99,6 +100,36 @@ export function PaymentHistory({ className }: PaymentHistoryProps) {
       toast.error('Erro ao deletar pagamentos cancelados')
     } finally {
       setDeleting(false)
+    }
+  }
+
+  const handleCancelPayment = async (paymentId: string) => {
+    if (!confirm('Tem certeza que deseja cancelar este pagamento? Esta ação não pode ser desfeita.')) {
+      return
+    }
+
+    try {
+      setCancelingId(paymentId)
+      const response = await fetch(`${API_BASE_URL}/api/packages/payment-intent/${paymentId}/cancel`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Erro ao cancelar pagamento')
+      }
+
+      toast.success('Pagamento cancelado com sucesso')
+      // Recarregar pagamentos
+      loadPayments()
+    } catch (error: any) {
+      console.error('Erro ao cancelar pagamento:', error)
+      toast.error(error.message || 'Erro ao cancelar pagamento')
+    } finally {
+      setCancelingId(null)
     }
   }
 
@@ -317,22 +348,45 @@ export function PaymentHistory({ className }: PaymentHistoryProps) {
                         </div>
                       )}
                     </div>
-                    {payment.status === 'PENDING' && hasPaymentLink(payment) && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleOpenPayment(payment)}
-                        className="flex items-center gap-2"
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                        Acessar Pagamento
-                      </Button>
-                    )}
-                    {payment.status === 'PENDING' && !hasPaymentLink(payment) && (
-                      <div className="text-xs text-gray-500 italic">
-                        Link não disponível
-                      </div>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {payment.status === 'PENDING' && hasPaymentLink(payment) && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOpenPayment(payment)}
+                          className="flex items-center gap-2"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                          Acessar Pagamento
+                        </Button>
+                      )}
+                      {payment.status === 'PENDING' && !hasPaymentLink(payment) && (
+                        <div className="text-xs text-gray-500 italic">
+                          Link não disponível
+                        </div>
+                      )}
+                      {payment.status === 'PENDING' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleCancelPayment(payment.id)}
+                          disabled={cancelingId === payment.id}
+                          className="flex items-center gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          {cancelingId === payment.id ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Cancelando...
+                            </>
+                          ) : (
+                            <>
+                              <X className="h-4 w-4" />
+                              Cancelar
+                            </>
+                          )}
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}

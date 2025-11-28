@@ -402,6 +402,54 @@ class PaymentIntentService {
     if (error) throw error;
     return data;
   }
+
+  async cancelPaymentIntent(intentId: string, userId: string): Promise<void> {
+    // 1. Buscar PaymentIntent
+    const { data: intent, error: intentError } = await supabase
+      .from('payment_intents')
+      .select('*')
+      .eq('id', intentId)
+      .single();
+
+    if (intentError || !intent) {
+      throw new Error('Payment intent não encontrado');
+    }
+
+    // 2. Verificar se o usuário tem permissão
+    if (intent.actor_user_id !== userId) {
+      throw new Error('Acesso não autorizado');
+    }
+
+    // 3. Verificar se pode ser cancelado (só pendentes)
+    if (intent.status !== 'PENDING') {
+      throw new Error('Apenas pagamentos pendentes podem ser cancelados');
+    }
+
+    // 4. Se tiver provider_id, cancelar no Asaas
+    if (intent.provider_id && intent.provider === 'ASAAS') {
+      const cancelResult = await asaasService.cancelPayment(intent.provider_id);
+      
+      if (!cancelResult.success) {
+        console.warn('⚠️ Erro ao cancelar no Asaas, mas continuando com cancelamento local:', cancelResult.error);
+        // Continua mesmo se falhar no Asaas (pode já estar cancelado)
+      }
+    }
+
+    // 5. Atualizar status no banco
+    const { error: updateError } = await supabase
+      .from('payment_intents')
+      .update({
+        status: 'CANCELED',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', intentId);
+
+    if (updateError) {
+      throw new Error('Erro ao atualizar status do payment intent');
+    }
+
+    console.log(`✅ PaymentIntent ${intentId} cancelado com sucesso`);
+  }
 }
 
 export const paymentIntentService = new PaymentIntentService();

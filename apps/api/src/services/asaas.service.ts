@@ -492,6 +492,30 @@ export class AsaasService {
   }
 
   /**
+   * Cancelar/Deletar pagamento pendente
+   * Só funciona para pagamentos pendentes (PENDING)
+   */
+  async cancelPayment(paymentId: string) {
+    try {
+      const path = `/payments/${paymentId}`
+      const startedAt = Date.now()
+      const response = await this.withRetry(() => this.api.delete(path))
+      const duration = Date.now() - startedAt
+      console.log('asaas_request', { method: 'DELETE', path, status: response.status, ms: duration })
+      return {
+        success: true,
+        data: response.data
+      }
+    } catch (error: any) {
+      console.error('Erro ao cancelar pagamento Asaas:', { path: `/payments/${paymentId}`, status: error?.response?.status, error: error.response?.data || error.message })
+      return {
+        success: false,
+        error: error.response?.data?.errors || error.message
+      }
+    }
+  }
+
+  /**
    * Estornar pagamento
    */
   async refundPayment(paymentId: string) {

@@ -682,6 +682,20 @@ router.get('/payment-history', requireAuth, extractPagination, asyncErrorHandler
   });
 }));
 
+// Cancelar um payment intent específico
+router.post('/payment-intent/:id/cancel', requireAuth, asyncErrorHandler(async (req, res) => {
+  const { id } = req.params;
+  const user = req.user;
+
+  try {
+    await paymentIntentService.cancelPaymentIntent(id, user.userId);
+    res.json({ message: 'Pagamento cancelado com sucesso' });
+  } catch (error: any) {
+    console.error('Erro ao cancelar payment intent:', error);
+    return res.status(400).json({ error: error.message || 'Erro ao cancelar pagamento' });
+  }
+}));
+
 // Deletar payment intents cancelados
 router.delete('/payment-history/canceled', requireAuth, asyncErrorHandler(async (req, res) => {
   const user = req.user;
