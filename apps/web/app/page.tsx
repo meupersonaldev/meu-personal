@@ -62,26 +62,24 @@ export default function Home() {
       <header className="bg-meu-primary text-white sticky top-0 z-50 border-b border-meu-primary-dark">
         <div className="container-meu">
           <div className="flex items-center justify-between h-20">
-            {/* Desktop Navigation - Esquerda */}
-            <nav className="hidden md:flex items-center space-x-6 flex-1">
+            {/* Logo - Esquerda */}
+            <Logo
+              size="header"
+              variant="default"
+              showText={false}
+              href="/"
+            />
+
+            {/* Desktop Navigation - Centro */}
+            <nav className="hidden md:flex items-center space-x-6 flex-1 justify-center">
               <Link href="#para-alunos" className="text-white hover:text-meu-accent transition-colors font-medium">Para Alunos</Link>
               <Link href="#para-professores" className="text-white hover:text-meu-accent transition-colors font-medium">Para Professores</Link>
               <Link href="#franquias" className="text-white hover:text-meu-accent transition-colors font-medium">Franquias</Link>
               <Link href="#como-funciona" className="text-white hover:text-meu-accent transition-colors font-medium">Como Funciona</Link>
             </nav>
 
-            {/* Logo - Centralizado */}
-            <div className="flex-1 flex justify-center">
-              <Logo
-                size="header"
-                variant="default"
-                showText={false}
-                href="/"
-              />
-            </div>
-
             {/* Botão e Mobile Menu - Direita */}
-            <div className="flex items-center gap-4 flex-1 justify-end">
+            <div className="flex items-center gap-4">
               <Link href="/cadastro" className="hidden md:block">
                 <Button size="sm" className="bg-meu-accent text-meu-primary hover:bg-meu-accent/90">
                   Comece agora
