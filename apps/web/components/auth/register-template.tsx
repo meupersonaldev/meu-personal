@@ -132,7 +132,11 @@ export function RegisterTemplate({
       return
     }
 
-    // Validação de senha forte removida - permitir qualquer senha
+    // Validação mínima: apenas 6 caracteres
+    if (formData.password.length < 6) {
+      toast.error('Senha deve ter no mínimo 6 caracteres.')
+      return
+    }
 
     if (!formData.gender) {
       toast.error('Selecione seu gênero')
@@ -470,7 +474,7 @@ export function RegisterTemplate({
                   {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
-              <p className="text-xs text-gray-500">Crie uma senha de sua preferência.</p>
+              <p className="text-xs text-gray-500">Mínimo 6 caracteres.</p>
             </div>
 
             {/* Confirm Password */}
