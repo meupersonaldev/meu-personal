@@ -18,7 +18,9 @@ const router = express.Router()
  * Retorna split de pagamento - apenas para franquia (subconta)
  * 90% para franquia, 10% fica automaticamente na franqueadora (conta principal)
  */
-function getPaymentSplit(academyId: string | null): Array<{ walletId: string; percentualValue: number }> {
+function getPaymentSplit (
+  academyId: string | null
+): Array<{ walletId: string; percentualValue: number }> {
   // Split apenas para franquia (subconta) - 90%
   // Os 10% restantes ficam automaticamente na conta principal
   const FRANCHISE_WALLET_ID = '03223ec1-c254-43a9-bcdd-6f54acac0609' // 90%
@@ -30,7 +32,7 @@ function getPaymentSplit(academyId: string | null): Array<{ walletId: string; pe
   })
 
   return [
-    { walletId: FRANCHISE_WALLET_ID, percentualValue: 90.00 }
+    { walletId: FRANCHISE_WALLET_ID, percentualValue: 90.0 }
     // Os 10% restantes ficam automaticamente na conta principal (franqueadora)
   ]
 }
@@ -53,7 +55,7 @@ const teacherHoursPurchaseSchema = z.object({
 /**
  * POST /api/payments/student/purchase-package
  * Aluno compra pacote (espaço + personal)
- * 
+ *
  * Fluxo:
  * 1. Aluno paga → Dinheiro vai 100% para franquia
  * 2. Aluno ganha créditos para usar
@@ -109,9 +111,11 @@ router.post('/student/purchase-package', async (req, res) => {
 
       if (!customerResult.success) {
         const message = Array.isArray(customerResult.error)
-          ? (customerResult.error[0]?.description || 'Erro ao criar cliente no Asaas')
-          : (customerResult.error || 'Erro ao criar cliente no Asaas')
-        const isCpfError = typeof message === 'string' && message.toLowerCase().includes('cpf')
+          ? customerResult.error[0]?.description ||
+            'Erro ao criar cliente no Asaas'
+          : customerResult.error || 'Erro ao criar cliente no Asaas'
+        const isCpfError =
+          typeof message === 'string' && message.toLowerCase().includes('cpf')
         return res.status(isCpfError ? 400 : 500).json({ error: message })
       }
 
@@ -127,12 +131,15 @@ router.post('/student/purchase-package', async (req, res) => {
     // 5. Configurar split de pagamento com walletIds hardcoded
     const academyId = (student.academy_students as any)?.[0]?.academy_id || null
     const split = getPaymentSplit(academyId)
-    
-    console.log('[PAYMENTS] ✅ Split configurado (apenas franquia) para compra de pacote:', {
-      franchiseWalletId: split[0].walletId,
-      franchisorPercent: '10% (automático - conta principal)',
-      splitPercentages: split.map(s => s.percentualValue)
-    })
+
+    console.log(
+      '[PAYMENTS] ✅ Split configurado (apenas franquia) para compra de pacote:',
+      {
+        franchiseWalletId: split[0].walletId,
+        franchisorPercent: '10% (automático - conta principal)',
+        splitPercentages: split.map(s => s.percentualValue)
+      }
+    )
 
     // 6. Criar cobrança no Asaas (apenas se split estiver validado)
     const tomorrow = new Date()
@@ -145,7 +152,9 @@ router.post('/student/purchase-package', async (req, res) => {
       value: package_.price,
       dueDate: dueDate,
       description: `${package_.name} - ${package_.credits_included} créditos`,
-      externalReference: `STUDENT_PACKAGE_${data.student_id}_${data.package_id}_${Date.now()}`,
+      externalReference: `STUDENT_PACKAGE_${data.student_id}_${
+        data.package_id
+      }_${Date.now()}`,
       split: split
     })
 
@@ -179,12 +188,16 @@ router.post('/student/purchase-package', async (req, res) => {
     }
 
     // 7. Obter links de pagamento do Asaas e retornar dados
-    const linkResult = await asaasService.generatePaymentLink(paymentResult.data.id)
-    const paymentLink = linkResult.success ? linkResult.data : {
-      paymentUrl: paymentResult.data.invoiceUrl,
-      bankSlipUrl: paymentResult.data.bankSlipUrl,
-      pixCode: paymentResult.data.payload
-    }
+    const linkResult = await asaasService.generatePaymentLink(
+      paymentResult.data.id
+    )
+    const paymentLink = linkResult.success
+      ? linkResult.data
+      : {
+          paymentUrl: paymentResult.data.invoiceUrl,
+          bankSlipUrl: paymentResult.data.bankSlipUrl,
+          pixCode: paymentResult.data.payload
+        }
 
     res.status(201).json({
       message: 'Pagamento criado com sucesso',
@@ -200,7 +213,6 @@ router.post('/student/purchase-package', async (req, res) => {
         pix_copy_paste: paymentLink.pixCode
       }
     })
-
   } catch (error) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({
@@ -217,178 +229,197 @@ router.post('/student/purchase-package', async (req, res) => {
 /**
  * POST /api/payments/teacher/purchase-hours
  * Professor compra horas
- * 
+ *
  * Fluxo:
  * 1. Professor paga → Dinheiro vai 100% para franquia
  * 2. Professor recebe horas no banco de horas dele
  */
-router.post('/teacher/purchase-hours', requireAuth, requireApprovedTeacher, async (req, res) => {
-  try {
-    const data = teacherHoursPurchaseSchema.parse(req.body)
+router.post(
+  '/teacher/purchase-hours',
+  requireAuth,
+  requireApprovedTeacher,
+  async (req, res) => {
+    try {
+      const data = teacherHoursPurchaseSchema.parse(req.body)
 
-    // 1. Buscar dados do professor
-    const { data: teacher, error: teacherError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', data.teacher_id)
-      .in('role', ['TEACHER', 'PROFESSOR'])
-      .single()
+      // 1. Buscar dados do professor
+      const { data: teacher, error: teacherError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', data.teacher_id)
+        .in('role', ['TEACHER', 'PROFESSOR'])
+        .single()
 
-    if (teacherError || !teacher) {
-      return res.status(404).json({ error: 'Professor não encontrado' })
-    }
-
-    // 2. Buscar pacote de horas
-    const { data: hoursPackage, error: packageError } = await supabase
-      .from('teacher_plans')
-      .select('*')
-      .eq('id', data.hours_package_id)
-      .single()
-
-    if (packageError || !hoursPackage) {
-      return res.status(404).json({ error: 'Pacote de horas não encontrado' })
-    }
-
-    const metadataJson = (hoursPackage as any).metadata_json || {}
-    const rawHoursIncluded = Number(
-      (hoursPackage as any).hours_included ??
-      (hoursPackage as any).hours_qty ??
-      metadataJson?.hours_included ??
-      metadataJson?.hours ??
-      0
-    )
-    const hoursIncluded = Math.max(0, Math.floor(rawHoursIncluded))
-
-    if (!hoursIncluded) {
-      return res.status(400).json({ error: 'Pacote de horas sem quantidade configurada' })
-    }
-
-    // 3. Criar/buscar cliente no Asaas
-    let asaasCustomerId = teacher.asaas_customer_id
-
-    if (!asaasCustomerId) {
-      const customerResult = await asaasService.createCustomer({
-        name: teacher.name,
-        email: teacher.email,
-        cpfCnpj: (teacher.cpf || '').replace(/\D/g, '') || '00000000000',
-        phone: teacher.phone
-      })
-
-      if (!customerResult.success) {
-        const message = Array.isArray(customerResult.error)
-          ? (customerResult.error[0]?.description || 'Erro ao criar cliente no Asaas')
-          : (customerResult.error || 'Erro ao criar cliente no Asaas')
-        const isCpfError = typeof message === 'string' && message.toLowerCase().includes('cpf')
-        return res.status(isCpfError ? 400 : 500).json({ error: message })
+      if (teacherError || !teacher) {
+        return res.status(404).json({ error: 'Professor não encontrado' })
       }
 
-      asaasCustomerId = customerResult.data.id
+      // 2. Buscar pacote de horas
+      const { data: hoursPackage, error: packageError } = await supabase
+        .from('teacher_plans')
+        .select('*')
+        .eq('id', data.hours_package_id)
+        .single()
 
-      await supabase
-        .from('users')
-        .update({ asaas_customer_id: asaasCustomerId })
-        .eq('id', teacher.id)
-    }
+      if (packageError || !hoursPackage) {
+        return res.status(404).json({ error: 'Pacote de horas não encontrado' })
+      }
 
-    // 4. Buscar walletIds para split (90% franquia, 10% franqueadora)
-    // OBRIGATÓRIO: se falhar, retornar erro (não criar pagamento sem split)
-    // Buscar academia do professor via academy_teachers
-    const { data: academyTeacher } = await supabase
-      .from('academy_teachers')
-      .select('academy_id')
-      .eq('teacher_id', data.teacher_id)
-      .eq('status', 'active')
-      .limit(1)
-      .single()
+      const metadataJson = (hoursPackage as any).metadata_json || {}
+      const rawHoursIncluded = Number(
+        (hoursPackage as any).hours_included ??
+          (hoursPackage as any).hours_qty ??
+          metadataJson?.hours_included ??
+          metadataJson?.hours ??
+          0
+      )
+      const hoursIncluded = Math.max(0, Math.floor(rawHoursIncluded))
 
-    // 4. Configurar split de pagamento com walletIds hardcoded
-    const academyId = academyTeacher?.academy_id || null
-    const split = getPaymentSplit(academyId)
-    
-    console.log('[PAYMENTS] ✅ Split configurado (apenas franquia) para compra de horas:', {
-      franchiseWalletId: split[0].walletId,
-      franchisorPercent: '10% (automático - conta principal)',
-      splitPercentages: split.map(s => s.percentualValue)
-    })
+      if (!hoursIncluded) {
+        return res
+          .status(400)
+          .json({ error: 'Pacote de horas sem quantidade configurada' })
+      }
 
-    // 5. Criar cobrança no Asaas (apenas se split estiver validado)
-    const tomorrow = new Date()
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    const dueDate = tomorrow.toISOString().split('T')[0]
+      // 3. Criar/buscar cliente no Asaas
+      let asaasCustomerId = teacher.asaas_customer_id
 
-    const paymentResult = await asaasService.createPayment({
-      customer: asaasCustomerId,
-      billingType: data.payment_method,
-      value: hoursPackage.price,
-      dueDate: dueDate,
-      description: `${hoursPackage.name} - Banco de Horas`,
-      externalReference: `TEACHER_HOURS_${data.teacher_id}_${data.hours_package_id}_${Date.now()}`,
-      split: split
-    })
+      if (!asaasCustomerId) {
+        const customerResult = await asaasService.createCustomer({
+          name: teacher.name,
+          email: teacher.email,
+          cpfCnpj: (teacher.cpf || '').replace(/\D/g, '') || '00000000000',
+          phone: teacher.phone
+        })
 
-    if (!paymentResult.success) {
-      return res.status(500).json({ error: 'Erro ao criar cobrança no Asaas' })
-    }
+        if (!customerResult.success) {
+          const message = Array.isArray(customerResult.error)
+            ? customerResult.error[0]?.description ||
+              'Erro ao criar cliente no Asaas'
+            : customerResult.error || 'Erro ao criar cliente no Asaas'
+          const isCpfError =
+            typeof message === 'string' && message.toLowerCase().includes('cpf')
+          return res.status(isCpfError ? 400 : 500).json({ error: message })
+        }
 
-    // 6. Salvar transação no banco
-    const { data: transaction, error: transactionError } = await supabase
-      .from('transactions')
-      .insert({
-        user_id: teacher.id,
-        type: 'CREDIT_PURCHASE',
-        amount: hoursPackage.price,
-        description: `Compra de horas: ${hoursPackage.name}`,
-        reference_id: paymentResult.data.id,
-        metadata: {
-          package_id: hoursPackage.id,
-          hours_to_add: hoursIncluded,
-          asaas_payment_id: paymentResult.data.id,
-          payment_method: data.payment_method
+        asaasCustomerId = customerResult.data.id
+
+        await supabase
+          .from('users')
+          .update({ asaas_customer_id: asaasCustomerId })
+          .eq('id', teacher.id)
+      }
+
+      // 4. Buscar walletIds para split (90% franquia, 10% franqueadora)
+      // OBRIGATÓRIO: se falhar, retornar erro (não criar pagamento sem split)
+      // Buscar academia do professor via academy_teachers
+      const { data: academyTeacher } = await supabase
+        .from('academy_teachers')
+        .select('academy_id')
+        .eq('teacher_id', data.teacher_id)
+        .eq('status', 'active')
+        .limit(1)
+        .single()
+
+      // 4. Configurar split de pagamento com walletIds hardcoded
+      const academyId = academyTeacher?.academy_id || null
+      const split = getPaymentSplit(academyId)
+
+      console.log(
+        '[PAYMENTS] ✅ Split configurado (apenas franquia) para compra de horas:',
+        {
+          franchiseWalletId: split[0].walletId,
+          franchisorPercent: '10% (automático - conta principal)',
+          splitPercentages: split.map(s => s.percentualValue)
+        }
+      )
+
+      // 5. Criar cobrança no Asaas (apenas se split estiver validado)
+      const tomorrow = new Date()
+      tomorrow.setDate(tomorrow.getDate() + 1)
+      const dueDate = tomorrow.toISOString().split('T')[0]
+
+      const paymentResult = await asaasService.createPayment({
+        customer: asaasCustomerId,
+        billingType: data.payment_method,
+        value: hoursPackage.price,
+        dueDate: dueDate,
+        description: `${hoursPackage.name} - Banco de Horas`,
+        externalReference: `TEACHER_HOURS_${data.teacher_id}_${
+          data.hours_package_id
+        }_${Date.now()}`,
+        split: split
+      })
+
+      if (!paymentResult.success) {
+        return res
+          .status(500)
+          .json({ error: 'Erro ao criar cobrança no Asaas' })
+      }
+
+      // 6. Salvar transação no banco
+      const { data: transaction, error: transactionError } = await supabase
+        .from('transactions')
+        .insert({
+          user_id: teacher.id,
+          type: 'CREDIT_PURCHASE',
+          amount: hoursPackage.price,
+          description: `Compra de horas: ${hoursPackage.name}`,
+          reference_id: paymentResult.data.id,
+          metadata: {
+            package_id: hoursPackage.id,
+            hours_to_add: hoursIncluded,
+            asaas_payment_id: paymentResult.data.id,
+            payment_method: data.payment_method
+          }
+        })
+        .select()
+        .single()
+
+      if (transactionError) {
+        console.error('Erro ao salvar transação:', transactionError)
+        return res.status(500).json({ error: 'Erro ao salvar transação' })
+      }
+
+      // 6. Obter links e retornar dados do pagamento
+      const linkResult = await asaasService.generatePaymentLink(
+        paymentResult.data.id
+      )
+      const paymentLink = linkResult.success
+        ? linkResult.data
+        : {
+            paymentUrl: paymentResult.data.invoiceUrl,
+            bankSlipUrl: paymentResult.data.bankSlipUrl,
+            pixCode: paymentResult.data.payload
+          }
+
+      res.status(201).json({
+        message: 'Pagamento criado com sucesso',
+        transaction_id: transaction.id,
+        payment: {
+          id: paymentResult.data.id,
+          status: paymentResult.data.status,
+          value: paymentResult.data.value,
+          due_date: paymentResult.data.dueDate,
+          invoice_url: paymentLink.paymentUrl,
+          bank_slip_url: paymentLink.bankSlipUrl,
+          pix_qr_code: null,
+          pix_copy_paste: paymentLink.pixCode
         }
       })
-      .select()
-      .single()
-
-    if (transactionError) {
-      console.error('Erro ao salvar transação:', transactionError)
-      return res.status(500).json({ error: 'Erro ao salvar transação' })
-    }
-
-    // 6. Obter links e retornar dados do pagamento
-    const linkResult = await asaasService.generatePaymentLink(paymentResult.data.id)
-    const paymentLink = linkResult.success ? linkResult.data : {
-      paymentUrl: paymentResult.data.invoiceUrl,
-      bankSlipUrl: paymentResult.data.bankSlipUrl,
-      pixCode: paymentResult.data.payload
-    }
-
-    res.status(201).json({
-      message: 'Pagamento criado com sucesso',
-      transaction_id: transaction.id,
-      payment: {
-        id: paymentResult.data.id,
-        status: paymentResult.data.status,
-        value: paymentResult.data.value,
-        due_date: paymentResult.data.dueDate,
-        invoice_url: paymentLink.paymentUrl,
-        bank_slip_url: paymentLink.bankSlipUrl,
-        pix_qr_code: null,
-        pix_copy_paste: paymentLink.pixCode
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({
+          error: 'Dados inválidos',
+          details: error.errors
+        })
       }
-    })
 
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json({
-        error: 'Dados inválidos',
-        details: error.errors
-      })
+      console.error('Erro ao processar compra:', error)
+      res.status(500).json({ error: 'Erro interno do servidor' })
     }
-
-    console.error('Erro ao processar compra:', error)
-    res.status(500).json({ error: 'Erro interno do servidor' })
   }
-})
+)
 
 // webhook legado removido em favor do modelo payment_intents (apps/api/src/routes/webhooks.ts)
 
@@ -401,16 +432,26 @@ router.post('/teacher/purchase-hours', requireAuth, requireApprovedTeacher, asyn
 router.get('/franchise/:academy_id/asaas', requireAuth, async (req, res) => {
   try {
     const { academy_id } = req.params
-    const { status, start_date, end_date, limit = 100, force_refresh } = req.query
+    const {
+      status,
+      start_date,
+      end_date,
+      limit = 100,
+      force_refresh
+    } = req.query
 
     // Criar chave de cache baseada nos parâmetros
-    const cacheKey = `franchise_payments_${academy_id}_${status || 'all'}_${start_date || ''}_${end_date || ''}_${limit}`
-    
+    const cacheKey = `franchise_payments_${academy_id}_${status || 'all'}_${
+      start_date || ''
+    }_${end_date || ''}_${limit}`
+
     // Verificar cache (a menos que force_refresh seja true)
     if (force_refresh !== 'true') {
       const cached = await cacheService.get(cacheKey)
       if (cached) {
-        console.log(`[payments/franchise/asaas] Retornando dados do cache para ${academy_id}`)
+        console.log(
+          `[payments/franchise/asaas] Retornando dados do cache para ${academy_id}`
+        )
         return res.json({
           ...cached,
           cached: true
@@ -418,7 +459,11 @@ router.get('/franchise/:academy_id/asaas', requireAuth, async (req, res) => {
       }
     }
 
-    console.log(`[payments/franchise/asaas] Buscando pagamentos do Asaas para franquia ${academy_id}${force_refresh === 'true' ? ' (forçando refresh)' : ''}`)
+    console.log(
+      `[payments/franchise/asaas] Buscando pagamentos do Asaas para franquia ${academy_id}${
+        force_refresh === 'true' ? ' (forçando refresh)' : ''
+      }`
+    )
 
     // WalletId da franquia (hardcoded - 90% do split)
     const FRANCHISE_WALLET_ID = '03223ec1-c254-43a9-bcdd-6f54acac0609'
@@ -437,12 +482,17 @@ router.get('/franchise/:academy_id/asaas', requireAuth, async (req, res) => {
     const asaasResult = await asaasService.listPayments(filters)
 
     if (!asaasResult.success) {
-      console.error('[payments/franchise/asaas] Erro ao buscar pagamentos do Asaas:', asaasResult.error)
-      return res.status(500).json({ error: 'Erro ao buscar pagamentos do Asaas' })
+      console.error(
+        '[payments/franchise/asaas] Erro ao buscar pagamentos do Asaas:',
+        asaasResult.error
+      )
+      return res
+        .status(500)
+        .json({ error: 'Erro ao buscar pagamentos do Asaas' })
     }
 
     const allAsaasPayments = asaasResult.data || []
-    
+
     // Filtrar pagamentos que têm split com o walletId da franquia
     const asaasPayments = allAsaasPayments.filter((p: any) => {
       // Verificar se o pagamento tem split com o walletId da franquia
@@ -454,27 +504,43 @@ router.get('/franchise/:academy_id/asaas', requireAuth, async (req, res) => {
       return false
     })
 
-    console.log(`[payments/franchise/asaas] Encontrados ${allAsaasPayments.length} pagamentos no Asaas, ${asaasPayments.length} com split da franquia`)
+    console.log(
+      `[payments/franchise/asaas] Encontrados ${allAsaasPayments.length} pagamentos no Asaas, ${asaasPayments.length} com split da franquia`
+    )
 
     // Filtrar por data se fornecido
     let filteredPayments = asaasPayments
     if (start_date || end_date) {
-      const startDateStr = Array.isArray(start_date) ? start_date[0] : start_date
+      const startDateStr = Array.isArray(start_date)
+        ? start_date[0]
+        : start_date
       const endDateStr = Array.isArray(end_date) ? end_date[0] : end_date
-      
+
       filteredPayments = asaasPayments.filter((p: any) => {
         const paymentDate = p.dueDate || p.paymentDate || p.dateCreated
         if (!paymentDate) return true
-        
+
         const date = new Date(paymentDate)
-        if (startDateStr && typeof startDateStr === 'string' && date < new Date(startDateStr)) return false
-        if (endDateStr && typeof endDateStr === 'string' && date > new Date(endDateStr)) return false
+        if (
+          startDateStr &&
+          typeof startDateStr === 'string' &&
+          date < new Date(startDateStr)
+        )
+          return false
+        if (
+          endDateStr &&
+          typeof endDateStr === 'string' &&
+          date > new Date(endDateStr)
+        )
+          return false
         return true
       })
     }
 
     // Buscar dados dos clientes do Asaas e do nosso banco
-    const customerIds = [...new Set(filteredPayments.map((p: any) => p.customer).filter(Boolean))] as string[]
+    const customerIds = [
+      ...new Set(filteredPayments.map((p: any) => p.customer).filter(Boolean))
+    ] as string[]
     const customerMap = new Map<string, { name: string; email: string }>()
 
     // Buscar clientes do nosso banco primeiro (mais rápido)
@@ -496,12 +562,17 @@ router.get('/franchise/:academy_id/asaas', requireAuth, async (req, res) => {
       }
 
       // Para clientes não encontrados no banco, buscar do Asaas
-      const missingCustomerIds = customerIds.filter((id: string) => !customerMap.has(id))
-      
+      const missingCustomerIds = customerIds.filter(
+        (id: string) => !customerMap.has(id)
+      )
+
       // Buscar em lotes para não sobrecarregar a API
-      for (const customerId of missingCustomerIds.slice(0, 20)) { // Limitar a 20 para não demorar muito
+      for (const customerId of missingCustomerIds.slice(0, 20)) {
+        // Limitar a 20 para não demorar muito
         try {
-          const customerResult = await asaasService.getCustomer(customerId as string)
+          const customerResult = await asaasService.getCustomer(
+            customerId as string
+          )
           if (customerResult.success && customerResult.data) {
             customerMap.set(customerId as string, {
               name: customerResult.data.name || 'Cliente não identificado',
@@ -509,7 +580,10 @@ router.get('/franchise/:academy_id/asaas', requireAuth, async (req, res) => {
             })
           }
         } catch (error) {
-          console.error(`[payments/franchise/asaas] Erro ao buscar cliente ${customerId}:`, error)
+          console.error(
+            `[payments/franchise/asaas] Erro ao buscar cliente ${customerId}:`,
+            error
+          )
         }
       }
     }
@@ -517,13 +591,14 @@ router.get('/franchise/:academy_id/asaas', requireAuth, async (req, res) => {
     // Calcular split/comissão (90% para franquia)
     const paymentsWithSplit = filteredPayments.map((p: any) => {
       const totalValue = p.value || 0
-      const franchiseSplit = totalValue * 0.90 // 90% para franquia
-      const franchisorSplit = totalValue * 0.10 // 10% para franqueadora
+      const franchiseSplit = totalValue * 0.9 // 90% para franquia
+      const franchisorSplit = totalValue * 0.1 // 10% para franqueadora
 
       // Buscar dados do cliente
       const customerId = p.customer
       const customerData = customerId ? customerMap.get(customerId) : null
-      const customerName = customerData?.name || p.customerName || 'Cliente não identificado'
+      const customerName =
+        customerData?.name || p.customerName || 'Cliente não identificado'
       const customerEmail = customerData?.email || ''
 
       // Mapear status do Asaas para nosso formato
@@ -548,12 +623,29 @@ router.get('/franchise/:academy_id/asaas', requireAuth, async (req, res) => {
       let paymentType = 'PLAN_PURCHASE' // padrão
       const description = (p.description || '').toLowerCase()
       const externalRef = (p.externalReference || '').toLowerCase()
-      
-      if (description.includes('aula') || description.includes('agendamento') || description.includes('booking') || externalRef.includes('booking')) {
+
+      if (
+        description.includes('aula') ||
+        description.includes('agendamento') ||
+        description.includes('booking') ||
+        externalRef.includes('booking')
+      ) {
         paymentType = 'BOOKING_PAYMENT'
-      } else if (description.includes('assinatura') || description.includes('subscription') || description.includes('horas') || externalRef.includes('prof_hours') || externalRef.includes('subscription')) {
+      } else if (
+        description.includes('assinatura') ||
+        description.includes('subscription') ||
+        description.includes('horas') ||
+        externalRef.includes('prof_hours') ||
+        externalRef.includes('subscription')
+      ) {
         paymentType = 'SUBSCRIPTION'
-      } else if (description.includes('plano') || description.includes('pacote') || description.includes('package') || externalRef.includes('student_package') || externalRef.includes('package')) {
+      } else if (
+        description.includes('plano') ||
+        description.includes('pacote') ||
+        description.includes('package') ||
+        externalRef.includes('student_package') ||
+        externalRef.includes('package')
+      ) {
         paymentType = 'PLAN_PURCHASE'
       }
 
@@ -593,21 +685,37 @@ router.get('/franchise/:academy_id/asaas', requireAuth, async (req, res) => {
         .reduce((sum: number, p: any) => sum + p.franchise_split, 0),
       total_transactions: paymentsWithSplit.length,
       by_status: {
-        pending: paymentsWithSplit.filter((p: any) => p.status === 'PENDING').length,
-        confirmed: paymentsWithSplit.filter((p: any) => p.status === 'RECEIVED').length,
-        received: paymentsWithSplit.filter((p: any) => p.status === 'RECEIVED').length,
-        overdue: paymentsWithSplit.filter((p: any) => p.status === 'OVERDUE').length,
-        refunded: paymentsWithSplit.filter((p: any) => p.status === 'REFUNDED').length
+        pending: paymentsWithSplit.filter((p: any) => p.status === 'PENDING')
+          .length,
+        confirmed: paymentsWithSplit.filter((p: any) => p.status === 'RECEIVED')
+          .length,
+        received: paymentsWithSplit.filter((p: any) => p.status === 'RECEIVED')
+          .length,
+        overdue: paymentsWithSplit.filter((p: any) => p.status === 'OVERDUE')
+          .length,
+        refunded: paymentsWithSplit.filter((p: any) => p.status === 'REFUNDED')
+          .length
       },
       by_type: {
-        plan_purchase: paymentsWithSplit.filter((p: any) => p.type === 'PLAN_PURCHASE').length,
-        booking_payment: paymentsWithSplit.filter((p: any) => p.type === 'BOOKING_PAYMENT').length,
-        subscription: paymentsWithSplit.filter((p: any) => p.type === 'SUBSCRIPTION').length
+        plan_purchase: paymentsWithSplit.filter(
+          (p: any) => p.type === 'PLAN_PURCHASE'
+        ).length,
+        booking_payment: paymentsWithSplit.filter(
+          (p: any) => p.type === 'BOOKING_PAYMENT'
+        ).length,
+        subscription: paymentsWithSplit.filter(
+          (p: any) => p.type === 'SUBSCRIPTION'
+        ).length
       },
       by_billing_type: {
-        pix: paymentsWithSplit.filter((p: any) => p.billing_type === 'PIX').length,
-        boleto: paymentsWithSplit.filter((p: any) => p.billing_type === 'BOLETO').length,
-        credit_card: paymentsWithSplit.filter((p: any) => p.billing_type === 'CREDIT_CARD').length
+        pix: paymentsWithSplit.filter((p: any) => p.billing_type === 'PIX')
+          .length,
+        boleto: paymentsWithSplit.filter(
+          (p: any) => p.billing_type === 'BOLETO'
+        ).length,
+        credit_card: paymentsWithSplit.filter(
+          (p: any) => p.billing_type === 'CREDIT_CARD'
+        ).length
       }
     }
 
@@ -621,12 +729,16 @@ router.get('/franchise/:academy_id/asaas', requireAuth, async (req, res) => {
 
     // Salvar no cache (TTL de 5 minutos para dados financeiros)
     await cacheService.set(cacheKey, response, 5 * 60 * 1000)
-    console.log(`[payments/franchise/asaas] Dados salvos no cache para ${academy_id}`)
+    console.log(
+      `[payments/franchise/asaas] Dados salvos no cache para ${academy_id}`
+    )
 
     res.json(response)
   } catch (error: any) {
     console.error('[payments/franchise/asaas] Erro:', error)
-    res.status(500).json({ error: error.message || 'Erro ao buscar pagamentos do Asaas' })
+    res
+      .status(500)
+      .json({ error: error.message || 'Erro ao buscar pagamentos do Asaas' })
   }
 })
 
@@ -641,26 +753,30 @@ router.get('/academy/:academy_id', async (req, res) => {
       offset = '0'
     } = req.query
 
-    console.log(`[payments/academy] Buscando pagamentos para academia ${academy_id}`)
+    console.log(
+      `[payments/academy] Buscando pagamentos para academia ${academy_id}`
+    )
 
     // Buscar payment_intents relacionados à academia via unit_id
     let query = supabase
       .from('payment_intents')
-      .select(`
+      .select(
+        `
         *,
         user:users!payment_intents_actor_user_id_fkey(id, name, email, role)
-      `)
+      `
+      )
       .eq('unit_id', academy_id)
       .order('created_at', { ascending: false })
 
     if (status) {
       // Mapear status da API para status do payment_intents
       const statusMap: Record<string, string> = {
-        'PENDING': 'PENDING',
-        'CONFIRMED': 'PAID',
-        'RECEIVED': 'PAID',
-        'OVERDUE': 'PENDING',
-        'REFUNDED': 'CANCELED'
+        PENDING: 'PENDING',
+        CONFIRMED: 'PAID',
+        RECEIVED: 'PAID',
+        OVERDUE: 'PENDING',
+        REFUNDED: 'CANCELED'
       }
       const mappedStatus = statusMap[status as string] || status
       query = query.eq('status', mappedStatus)
@@ -686,13 +802,17 @@ router.get('/academy/:academy_id', async (req, res) => {
       throw error
     }
 
-    console.log(`[payments/academy] Encontrados ${paymentIntents?.length || 0} payment_intents`)
+    console.log(
+      `[payments/academy] Encontrados ${
+        paymentIntents?.length || 0
+      } payment_intents`
+    )
 
     // Transformar payment_intents para formato esperado pelo frontend
     const payments = (paymentIntents || []).map((intent: any) => {
       const payload = intent.payload_json || {}
       const amount = intent.amount_cents / 100 // Converter centavos para reais
-      
+
       // Mapear status
       let mappedStatus = intent.status
       if (intent.status === 'PAID') {
@@ -708,7 +828,8 @@ router.get('/academy/:academy_id', async (req, res) => {
       }
 
       // Determinar billing_type
-      const billingType = payload.payment_method || payload.billing_type || 'PIX'
+      const billingType =
+        payload.payment_method || payload.billing_type || 'PIX'
 
       return {
         id: intent.id,
@@ -722,7 +843,10 @@ router.get('/academy/:academy_id', async (req, res) => {
         billing_type: billingType.toUpperCase(),
         status: mappedStatus,
         amount: amount.toFixed(2),
-        description: payload.package_title || payload.description || `${intent.type} - R$ ${amount.toFixed(2)}`,
+        description:
+          payload.package_title ||
+          payload.description ||
+          `${intent.type} - R$ ${amount.toFixed(2)}`,
         due_date: payload.due_date || intent.created_at,
         payment_date: intent.status === 'PAID' ? intent.updated_at : null,
         invoice_url: payload.invoice_url || payload.payment_url || null,
@@ -750,18 +874,21 @@ router.get('/academy/:academy_id', async (req, res) => {
     const summary = {
       total_received: (allIntents || [])
         .filter(p => p.status === 'PAID')
-        .reduce((sum, p) => sum + (p.amount_cents / 100), 0),
+        .reduce((sum, p) => sum + p.amount_cents / 100, 0),
       total_pending: (allIntents || [])
         .filter(p => p.status === 'PENDING')
-        .reduce((sum, p) => sum + (p.amount_cents / 100), 0),
+        .reduce((sum, p) => sum + p.amount_cents / 100, 0),
       total_overdue: (allIntents || [])
         .filter(p => p.status === 'FAILED')
-        .reduce((sum, p) => sum + (p.amount_cents / 100), 0),
+        .reduce((sum, p) => sum + p.amount_cents / 100, 0),
       total_payments: allIntents?.length || 0,
       by_type: {
-        plan_purchase: (allIntents || []).filter(p => p.type === 'STUDENT_PACKAGE').length,
+        plan_purchase: (allIntents || []).filter(
+          p => p.type === 'STUDENT_PACKAGE'
+        ).length,
         booking_payment: 0, // Não há booking_payment em payment_intents
-        subscription: (allIntents || []).filter(p => p.type === 'PROF_HOURS').length
+        subscription: (allIntents || []).filter(p => p.type === 'PROF_HOURS')
+          .length
       }
     }
 
@@ -789,7 +916,9 @@ router.get('/stats/:academy_id', async (req, res) => {
     const { academy_id } = req.params
     const { start_date, end_date } = req.query
 
-    console.log(`[payments/stats] Buscando estatísticas para academia ${academy_id}`)
+    console.log(
+      `[payments/stats] Buscando estatísticas para academia ${academy_id}`
+    )
 
     let query = supabase
       .from('payment_intents')
@@ -811,7 +940,9 @@ router.get('/stats/:academy_id', async (req, res) => {
       throw error
     }
 
-    console.log(`[payments/stats] Encontrados ${data?.length || 0} payment_intents`)
+    console.log(
+      `[payments/stats] Encontrados ${data?.length || 0} payment_intents`
+    )
 
     // Calcular estatísticas
     const paidIntents = data?.filter(p => p.status === 'PAID') || []
@@ -819,38 +950,63 @@ router.get('/stats/:academy_id', async (req, res) => {
     const failedIntents = data?.filter(p => p.status === 'FAILED') || []
 
     const stats = {
-      total_revenue: paidIntents.reduce((sum, p) => sum + (p.amount_cents / 100), 0),
-      pending_revenue: pendingIntents.reduce((sum, p) => sum + (p.amount_cents / 100), 0),
-      overdue_revenue: failedIntents.reduce((sum, p) => sum + (p.amount_cents / 100), 0),
+      total_revenue: paidIntents.reduce(
+        (sum, p) => sum + p.amount_cents / 100,
+        0
+      ),
+      pending_revenue: pendingIntents.reduce(
+        (sum, p) => sum + p.amount_cents / 100,
+        0
+      ),
+      overdue_revenue: failedIntents.reduce(
+        (sum, p) => sum + p.amount_cents / 100,
+        0
+      ),
       total_transactions: data?.length || 0,
       by_status: {
         pending: pendingIntents.length,
         confirmed: paidIntents.length, // PAID = confirmado
         received: paidIntents.length, // PAID = recebido
         overdue: failedIntents.length,
-        refunded: (data?.filter(p => p.status === 'CANCELED').length || 0)
+        refunded: data?.filter(p => p.status === 'CANCELED').length || 0
       },
       by_type: {
-        plan_purchase: (data?.filter(p => p.type === 'STUDENT_PACKAGE').length || 0),
+        plan_purchase:
+          data?.filter(p => p.type === 'STUDENT_PACKAGE').length || 0,
         booking_payment: 0, // Não há booking_payment em payment_intents
-        subscription: (data?.filter(p => p.type === 'PROF_HOURS').length || 0)
+        subscription: data?.filter(p => p.type === 'PROF_HOURS').length || 0
       },
       by_billing_type: {
-        pix: (data?.filter(p => {
-          const payload = p.payload_json || {}
-          const method = (payload.payment_method || payload.billing_type || '').toUpperCase()
-          return method === 'PIX'
-        }).length || 0),
-        boleto: (data?.filter(p => {
-          const payload = p.payload_json || {}
-          const method = (payload.payment_method || payload.billing_type || '').toUpperCase()
-          return method === 'BOLETO'
-        }).length || 0),
-        credit_card: (data?.filter(p => {
-          const payload = p.payload_json || {}
-          const method = (payload.payment_method || payload.billing_type || '').toUpperCase()
-          return method === 'CREDIT_CARD' || method === 'CREDITCARD'
-        }).length || 0)
+        pix:
+          data?.filter(p => {
+            const payload = p.payload_json || {}
+            const method = (
+              payload.payment_method ||
+              payload.billing_type ||
+              ''
+            ).toUpperCase()
+            return method === 'PIX'
+          }).length || 0,
+        boleto:
+          data?.filter(p => {
+            const payload = p.payload_json || {}
+            const method = (
+              payload.payment_method ||
+              payload.billing_type ||
+              ''
+            ).toUpperCase()
+            return method === 'BOLETO'
+          }).length || 0,
+        credit_card:
+          data?.filter(p => {
+            const payload = p.payload_json || {}
+            const method = (
+              payload.payment_method ||
+              payload.billing_type ||
+              ''
+            ).toUpperCase()
+            return method === 'CREDIT_CARD' || method === 'CREDITCARD'
+          }).length || 0
       },
       // Receita por mês (últimos 12 meses)
       monthly_revenue: getMonthlyRevenueFromIntents(data || [])
@@ -866,14 +1022,16 @@ router.get('/stats/:academy_id', async (req, res) => {
 /**
  * Helper para calcular receita mensal de payment_intents
  */
-function getMonthlyRevenueFromIntents(intents: any[]) {
+function getMonthlyRevenueFromIntents (intents: any[]) {
   const monthlyData: Record<string, number> = {}
-  
+
   intents
     .filter(p => p.status === 'PAID')
     .forEach((intent: any) => {
       const date = new Date(intent.created_at)
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+      const monthKey = `${date.getFullYear()}-${String(
+        date.getMonth() + 1
+      ).padStart(2, '0')}`
       const amount = intent.amount_cents / 100
       monthlyData[monthKey] = (monthlyData[monthKey] || 0) + amount
     })
@@ -888,14 +1046,16 @@ function getMonthlyRevenueFromIntents(intents: any[]) {
 /**
  * Helper para calcular receita mensal
  */
-function getMonthlyRevenue(payments: any[]) {
+function getMonthlyRevenue (payments: any[]) {
   const monthlyData: Record<string, number> = {}
 
   payments
     .filter(p => p.status === 'RECEIVED' || p.status === 'CONFIRMED')
     .forEach(payment => {
       const date = new Date(payment.payment_date || payment.created_at)
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+      const monthKey = `${date.getFullYear()}-${String(
+        date.getMonth() + 1
+      ).padStart(2, '0')}`
 
       if (!monthlyData[monthKey]) {
         monthlyData[monthKey] = 0
@@ -909,7 +1069,9 @@ function getMonthlyRevenue(payments: any[]) {
   const now = new Date()
   for (let i = 11; i >= 0; i--) {
     const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+    const monthKey = `${date.getFullYear()}-${String(
+      date.getMonth() + 1
+    ).padStart(2, '0')}`
     months.push({
       month: monthKey,
       revenue: monthlyData[monthKey] || 0
@@ -920,4 +1082,3 @@ function getMonthlyRevenue(payments: any[]) {
 }
 
 export default router
-
