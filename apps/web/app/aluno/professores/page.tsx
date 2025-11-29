@@ -18,7 +18,7 @@ import { useAuthStore } from '@/lib/stores/auth-store'
 import { useStudentUnitsStore } from '@/lib/stores/student-units-store'
 import type { Teacher } from '@/lib/stores/student-store'
 import WizardStepper from '@/components/franchise-form/WizardStepper'
-import { academiesAPI, API_BASE_URL, teachersAPI } from '@/lib/api'
+import { academiesAPI, teachersAPI } from '@/lib/api'
 
 
 export default function StudentProfessoresPage() {
@@ -46,8 +46,6 @@ export default function StudentProfessoresPage() {
   // Estado para professores buscados por academy_id
   const [academyTeachers, setAcademyTeachers] = useState<any[]>([])
   const [academyTeachersLoading, setAcademyTeachersLoading] = useState<boolean>(false)
-  // ID da academia fixo conforme solicitado
-  const ACADEMY_ID = '3a25ffaf-1356-4862-adef-d9ca4ef69b38'
 
   useEffect(() => {
     if (user?.id) {
@@ -62,9 +60,8 @@ export default function StudentProfessoresPage() {
       if (!token) return
       try {
         setBalanceLoading(true)
-        const res = await fetch(`${API_BASE_URL}/api/packages/student/balance`, {
-          headers: { Authorization: `Bearer ${token}` },
-          credentials: 'include'
+        const res = await fetch(`/api/packages/student/balance`, {
+          headers: { Authorization: `Bearer ${token}` }
         })
         if (!res.ok) return
         const data = await res.json().catch(() => ({}))
@@ -83,40 +80,13 @@ export default function StudentProfessoresPage() {
     loadBalance()
   }, [token])
 
-  // Função para buscar professores por academy_id
+  // Função para buscar professores por academy_id (não mais usada para exibição principal, mas mantida se necessário)
   const loadTeachersByAcademy = useCallback(async (academyId: string) => {
-    if (!token) return
-    
-    setAcademyTeachersLoading(true)
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/teachers/by-academy-id?academy_id=${academyId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include'
-      })
+    // Implementação mantida para referência ou uso futuro
+  }, [])
 
-      if (!response.ok) {
-        throw new Error('Erro ao buscar professores')
-      }
+  // Carregar professores removido - usamos activeTeachers carregado no início
 
-      const data = await response.json()
-      setAcademyTeachers(Array.isArray(data) ? data : [])
-    } catch (error) {
-      console.error('Erro ao buscar professores por academy_id:', error)
-      setAcademyTeachers([])
-    } finally {
-      setAcademyTeachersLoading(false)
-    }
-  }, [token])
-
-  // Carregar professores quando o step 3 for exibido
-  useEffect(() => {
-    if (currentStep === 2 && ACADEMY_ID && token) {
-      loadTeachersByAcademy(ACADEMY_ID)
-    }
-  }, [currentStep, ACADEMY_ID, token, loadTeachersByAcademy])
 
   // Lista unificada de academias disponíveis (derivadas das unidades)
   const allLocations = useMemo(() => {
@@ -350,6 +320,7 @@ export default function StudentProfessoresPage() {
                       onClick={async () => {
                         if (!selectedAcademyId || !selectedDate) return
                         try {
+                          console.log(`[DEBUG] Verificando disponibilidade para ${activeTeachers.length} professores`)
                           setAvailabilityError(null)
                           setCheckingAvailability(true)
                           // Para cada professor, verificar se há ao menos um horário livre neste dia
@@ -360,6 +331,7 @@ export default function StudentProfessoresPage() {
                                 // Usar o endpoint correto que já filtra horários ocupados
                                 const bookings = await teachersAPI.getBookingsByDate(t.id, selectedDate)
                                 const bookingsList = Array.isArray(bookings) ? bookings : []
+                                console.log(`[DEBUG] Professor ${t.name} (${t.id}): ${bookingsList.length} bookings`)
                                 // Se há pelo menos um booking disponível (retornado pelo endpoint), o professor está disponível
                                 const anyFree = bookingsList.length > 0
                                 
@@ -442,30 +414,41 @@ export default function StudentProfessoresPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent id="aluno-professores-step-3-content" className="p-4 sm:p-6 md:p-8">
-              {academyTeachersLoading || checkingAvailability ? (
+              {checkingAvailability ? (
                 <div id="aluno-professores-step-3-loading" className="flex items-center justify-center py-10 sm:py-12">
                   <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-meu-primary" />
                 </div>
-              ) : academyTeachers.length === 0 ? (
+              ) : activeTeachers.length === 0 ? (
                 <div id="aluno-professores-step-3-empty" className="text-center py-10 sm:py-12 text-gray-500">
                   <Users className="h-12 w-12 sm:h-16 sm:w-16 mx-auto mb-3 sm:mb-4 text-gray-300" />
-                  <p id="aluno-professores-step-3-empty-title" className="text-base sm:text-lg font-medium">Nenhum professor disponível</p>
+                  <p id="aluno-professores-step-3-empty-title" className="text-base sm:text-lg font-medium">Nenhum professor encontrado</p>
                   <p id="aluno-professores-step-3-empty-message" className="text-xs sm:text-sm mt-1.5 sm:mt-2 px-4">
                     Não há professores cadastrados nesta academia no momento.
                   </p>
                 </div>
               ) : (
                 (() => {
-                  // Usar todos os professores da academia (sem filtro de disponibilidade por enquanto)
-                  const teachersList = academyTeachers
+                  // Filtrar professores que têm disponibilidade na data selecionada
+                  const teachersList = activeTeachers.filter(t => availableTeacherIds.has(t.id))
+                  
                   if (teachersList.length === 0) {
                     return (
                       <div id="aluno-professores-step-3-no-availability" className="text-center py-10 sm:py-12 text-gray-500">
                         <Users className="h-12 w-12 sm:h-16 sm:w-16 mx-auto mb-3 sm:mb-4 text-gray-300" />
-                        <p id="aluno-professores-step-3-no-availability-title" className="text-base sm:text-lg font-medium">Nenhum professor encontrado</p>
+                        <p id="aluno-professores-step-3-no-availability-title" className="text-base sm:text-lg font-medium">Nenhum professor disponível</p>
                         <p id="aluno-professores-step-3-no-availability-message" className="text-xs sm:text-sm mt-1.5 sm:mt-2 px-4">
-                          Tente novamente mais tarde.
+                          Nenhum professor tem horários livres para a data selecionada ({new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR')}).
                         </p>
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setCurrentStep(1)
+                            setAvailableTeacherIds(new Set())
+                          }}
+                          className="mt-4"
+                        >
+                          Escolher outra data
+                        </Button>
                       </div>
                     )
                   }
@@ -571,9 +554,9 @@ export default function StudentProfessoresPage() {
                                         <p className="text-xs text-gray-500">
                                           {teacherBookings[teacher.id].length}{' '}
                                           {teacherBookings[teacher.id].length === 1
-                                            ? 'agendamento'
-                                            : 'agendamentos'}{' '}
-                                          já marcados nesta data.
+                                            ? 'horário disponível'
+                                            : 'horários disponíveis'}{' '}
+                                          para esta data.
                                         </p>
                                       ) : null}
                                     <Button

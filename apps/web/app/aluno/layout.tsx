@@ -53,7 +53,7 @@ export default function AlunoLayout({ children }: { children: React.ReactNode })
       return
     }
 
-    if (user.role !== 'STUDENT') {
+    if (user.role !== 'STUDENT' && (user.role as string) !== 'ALUNO') {
       switch (user.role) {
         case 'TEACHER':
           router.push('/professor/dashboard')
@@ -82,7 +82,7 @@ export default function AlunoLayout({ children }: { children: React.ReactNode })
     )
   }
 
-  if (!isAuthenticated || !user || user.role !== 'STUDENT') {
+  if (!isAuthenticated || !user || (user.role !== 'STUDENT' && (user.role as string) !== 'ALUNO')) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-primary">
         <div className="text-center">
