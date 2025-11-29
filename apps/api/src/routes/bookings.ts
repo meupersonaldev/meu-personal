@@ -675,7 +675,49 @@ router.get(
   })
 )
 
-// POST /api/bookings - Criar novo agendamento (endpoint canônico)
+// Schema para criar disponibilidade (professor)
+const createAvailabilitySchema = z.object({
+  source: z.literal('PROFESSOR'),
+  professorId: z.string().uuid(),
+  academyId: z.string().uuid(),
+  startAt: z.string(),
+  endAt: z.string(),
+  status: z.literal('AVAILABLE').optional(),
+  professorNotes: z.string().optional()
+})
+
+// POST /api/bookings/availability - Criar disponibilidade do professor
+router.post(
+  '/availability',
+  requireAuth,
+  requireRole(['TEACHER', 'PROFESSOR', 'FRANQUIA', 'FRANQUEADORA']),
+  requireApprovedTeacher,
+  asyncErrorHandler(async (req, res) => {
+    console.log('[POST /api/bookings/availability] Criando disponibilidade:', JSON.stringify(req.body, null, 2))
+
+    const data = createAvailabilitySchema.parse(req.body)
+    const user = req.user
+
+    // Verificar se o professor está criando para si mesmo
+    if (data.professorId !== user.userId && !['FRANQUIA', 'FRANQUEADORA'].includes(user.role)) {
+      return res.status(403).json({ error: 'Você só pode criar disponibilidade para si mesmo' })
+    }
+
+    const booking = await bookingCanonicalService.createBooking({
+      source: 'PROFESSOR',
+      professorId: data.professorId,
+      franchiseId: data.academyId,
+      startAt: new Date(data.startAt),
+      endAt: new Date(data.endAt),
+      status: 'AVAILABLE',
+      professorNotes: data.professorNotes
+    })
+
+    return res.status(201).json({ booking })
+  })
+)
+
+// POST /api/bookings - Atualizar agendamento existente (aluno reservando slot)
 router.post(
   '/',
   requireAuth,

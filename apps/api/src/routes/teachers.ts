@@ -27,9 +27,9 @@ const ensureTeacherScope = (
 // GET /api/teachers - Listar todos os professores
 router.get('/', requireAuth, async (req, res) => {
   try {
-    // Permitir acesso para ADMIN e STUDENT
+    // Permitir acesso para ADMIN, STUDENT e ALUNO
     const user = req.user
-    if (!user || (user.role !== 'ADMIN' && user.role !== 'STUDENT')) {
+    if (!user || !['ADMIN', 'STUDENT', 'ALUNO'].includes(user.role)) {
       return res.status(403).json({ error: 'Acesso negado' })
     }
 
@@ -199,9 +199,9 @@ async function fetchTeachersByAcademy(academyId: string, user: any) {
 // Inclui professores vinculados explicitamente E professores com bookings/disponibilidade na unidade
 router.get('/by-academy-id', requireAuth, async (req, res) => {
   try {
-    // Permitir acesso para ADMIN, STUDENT, FRANCHISE_ADMIN, FRANQUEADORA
+    // Permitir acesso para ADMIN, STUDENT, ALUNO, FRANCHISE_ADMIN, FRANQUEADORA
     const user = req.user
-    const allowedRoles = ['ADMIN', 'STUDENT', 'FRANCHISE_ADMIN', 'FRANQUEADORA', 'SUPER_ADMIN']
+    const allowedRoles = ['ADMIN', 'STUDENT', 'ALUNO', 'FRANCHISE_ADMIN', 'FRANQUEADORA', 'SUPER_ADMIN']
     if (!user || !allowedRoles.includes(user.role)) {
       return res.status(403).json({ error: 'Acesso negado' })
     }
@@ -224,9 +224,9 @@ router.get('/by-academy-id', requireAuth, async (req, res) => {
 // GET /api/teachers/by-academy - Alias para /by-academy-id (compatibilidade)
 router.get('/by-academy', requireAuth, async (req, res) => {
   try {
-    // Permitir acesso para ADMIN, STUDENT, FRANCHISE_ADMIN, FRANQUEADORA
+    // Permitir acesso para ADMIN, STUDENT, ALUNO, FRANCHISE_ADMIN, FRANQUEADORA
     const user = req.user
-    const allowedRoles = ['ADMIN', 'STUDENT', 'FRANCHISE_ADMIN', 'FRANQUEADORA', 'SUPER_ADMIN']
+    const allowedRoles = ['ADMIN', 'STUDENT', 'ALUNO', 'FRANCHISE_ADMIN', 'FRANQUEADORA', 'SUPER_ADMIN']
     if (!user || !allowedRoles.includes(user.role)) {
       return res.status(403).json({ error: 'Acesso negado' })
     }
@@ -249,7 +249,7 @@ router.get('/by-academy', requireAuth, async (req, res) => {
 router.get('/:id/bookings-by-date', requireAuth, async (req, res) => {
   try {
     const user = req.user
-    if (!user || (user.role !== 'ADMIN' && user.role !== 'STUDENT')) {
+    if (!user || !['ADMIN', 'STUDENT', 'ALUNO'].includes(user.role)) {
       return res.status(403).json({ error: 'Acesso negado' })
     }
 
