@@ -182,7 +182,9 @@ import studentUnitsRoutes from './routes/student-units'
 import studentsRoutes from './routes/students'
 import franchisorPoliciesRoutes from './routes/franchisor-policies'
 import asaasRoutes from './routes/asaas'
+import bookingSeriesRoutes from './routes/booking-series'
 import { bookingScheduler } from './jobs/booking-scheduler'
+import { reservationScheduler } from './jobs/reservation-processor'
 import { asaasSyncService } from './services/asaas-sync.service'
 
 // SEGURANÇA CRÍTICA: Rate limit específico para auth (mais restritivo)
@@ -209,6 +211,7 @@ app.use('/api/franqueadora', franqueadoraRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/franchisor/policies', franchisorPoliciesRoutes)
 app.use('/api/asaas', asaasRoutes)
+app.use('/api/booking-series', bookingSeriesRoutes)
 
 // SEGURANÇA CRÍTICA: Middleware para rotas não encontradas (deve vir antes do errorHandler)
 app.use(notFoundHandler)
@@ -263,7 +266,17 @@ if (process.env.NODE_ENV !== 'test') {
 
     bookingScheduler.startScheduler(schedulerInterval)
     console.log(
-      `✅ Scheduler configurado para rodar a cada ${schedulerInterval} minutos`
+      `✅ Scheduler de bookings configurado para rodar a cada ${schedulerInterval} minutos`
+    )
+
+    // Iniciar scheduler de processamento de reservas recorrentes (diário às 08:00)
+    console.log('⏰ Iniciando scheduler de reservas recorrentes...')
+    const reservationHour = process.env.RESERVATION_SCHEDULER_HOUR
+      ? parseInt(process.env.RESERVATION_SCHEDULER_HOUR)
+      : 8 // Padrão: 08:00
+    reservationScheduler.startDailyScheduler(reservationHour)
+    console.log(
+      `✅ Scheduler de reservas configurado para rodar às ${reservationHour}:00`
     )
 
     // Sincronizar subcontas Asaas na inicialização (assíncrono, não bloqueia)
