@@ -51,15 +51,22 @@ export function useTeacherAcademies() {
       }
 
       // Adicionar timestamp para evitar cache e garantir dados atualizados
-      const academiesRes = await fetch(url, { 
-        method: 'GET',
-        headers,
-        credentials: 'include',
-        mode: 'cors'
-      }).catch((fetchError) => {
+      let academiesRes: Response
+      try {
+        academiesRes = await fetch(url, { 
+          method: 'GET',
+          headers,
+          credentials: 'include',
+          mode: 'cors'
+        })
+      } catch (fetchError: any) {
         console.error('🔍 [useTeacherAcademies] Erro na requisição fetch:', fetchError)
-        throw new Error(`Erro de conexão: ${fetchError.message}. Verifique se a API está rodando em ${API_URL}`)
-      })
+        // Não quebrar a aplicação se a API não estiver disponível
+        setError(`Erro de conexão: ${fetchError.message || 'Failed to fetch'}. Verifique se a API está rodando em ${API_URL}`)
+        setAcademies([])
+        setLoading(false)
+        return
+      }
 
       console.log('🔍 [useTeacherAcademies] Resposta recebida:', {
         ok: academiesRes.ok,
