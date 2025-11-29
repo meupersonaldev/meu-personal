@@ -50,8 +50,14 @@ export function useTeacherAcademies() {
 
       const academiesData = await academiesRes.json()
       console.log('🔍 [useTeacherAcademies] Resposta da API:', academiesData)
-      const academiesList = academiesData.academies || []
+      const academiesList = Array.isArray(academiesData.academies) 
+        ? academiesData.academies.filter((a: any) => a && a.id && a.is_active !== false)
+        : []
       console.log('🔍 [useTeacherAcademies] Academias processadas:', academiesList)
+      console.log('🔍 [useTeacherAcademies] Total de academias:', academiesList.length)
+      if (academiesList.length === 0) {
+        console.warn('⚠️ [useTeacherAcademies] Nenhuma academia encontrada! Verifique os logs do servidor.')
+      }
       setAcademies(academiesList)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro desconhecido')

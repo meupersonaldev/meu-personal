@@ -661,6 +661,14 @@ export default function ProfessorAgendaPage() {
 
   // Modal de aviso quando não há academias vinculadas
   const NoAcademyModal = () => {
+    // Debug adicional
+    console.log('🔍 [NoAcademyModal] Verificando condições:', {
+      loadingAcademies,
+      teacherAcademiesLength: teacherAcademies.length,
+      teacherAcademies,
+      shouldShow: !loadingAcademies && teacherAcademies.length === 0
+    })
+    
     // Não exibir modal enquanto está carregando ou se houver academias
     if (loadingAcademies || teacherAcademies.length > 0) return null
 

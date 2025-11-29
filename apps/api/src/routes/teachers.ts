@@ -900,13 +900,21 @@ router.get('/:id/academies', requireAuth, async (req, res) => {
       .single()
 
     // ✅ NOVO: Verificar também teacher_preferences.academy_ids
-    const { data: teacherPreferences } = await supabase
+    const { data: teacherPreferences, error: preferencesError } = await supabase
       .from('teacher_preferences')
       .select('academy_ids')
       .eq('teacher_id', id)
       .single()
 
-    const preferenceAcademyIds = teacherPreferences?.academy_ids || []
+    if (preferencesError && preferencesError.code !== 'PGRST116') {
+      console.error('Erro ao buscar preferências do professor:', preferencesError)
+    }
+
+    const preferenceAcademyIds = Array.isArray(teacherPreferences?.academy_ids) 
+      ? teacherPreferences.academy_ids.filter(Boolean)
+      : []
+
+    console.log(`[GET /api/teachers/:id/academies] IDs de preferências encontrados:`, preferenceAcademyIds)
 
     // Mapear academias, filtrando aquelas que não existem ou estão inativas
     let academies: any[] = []
@@ -916,8 +924,12 @@ router.get('/:id/academies', requireAuth, async (req, res) => {
       .map((at: any) => at.academy_id)
       .filter(Boolean)
 
+    console.log(`[GET /api/teachers/:id/academies] IDs de academy_teachers:`, academyIdsFromLinks)
+
     // ✅ Combinar IDs de academy_teachers e teacher_preferences
     const allAcademyIds = [...new Set([...academyIdsFromLinks, ...preferenceAcademyIds])]
+
+    console.log(`[GET /api/teachers/:id/academies] Todos os IDs combinados:`, allAcademyIds)
 
     if (allAcademyIds.length > 0) {
       // Buscar academias diretamente para garantir que temos os dados
@@ -932,8 +944,10 @@ router.get('/:id/academies', requireAuth, async (req, res) => {
       } else {
         academies = academiesData || []
         console.log(`[GET /api/teachers/:id/academies] Academias buscadas diretamente:`, academies.length)
-        console.log(`[GET /api/teachers/:id/academies] IDs de preferências:`, preferenceAcademyIds)
+        console.log(`[GET /api/teachers/:id/academies] Academias encontradas:`, academies.map((a: any) => ({ id: a.id, name: a.name, is_active: a.is_active })))
       }
+    } else {
+      console.log(`[GET /api/teachers/:id/academies] ⚠️ Nenhum ID de academia encontrado!`)
     }
 
     console.log(`[GET /api/teachers/:id/academies] Academias mapeadas:`, academies.length)
