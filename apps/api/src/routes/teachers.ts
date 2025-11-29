@@ -896,10 +896,13 @@ router.get('/:id/academies', requireAuth, async (req, res) => {
       .eq('user_id', id)
       .single()
 
-    let academies = (academyTeachers || []).map((at: any) => ({
-      id: at.academy_id,
-      ...at.academies
-    }))
+    // Mapear academias, filtrando aquelas que não existem ou estão inativas
+    let academies = (academyTeachers || [])
+      .filter((at: any) => at.academies && at.academies.is_active !== false)
+      .map((at: any) => ({
+        id: at.academy_id,
+        ...at.academies
+      }))
 
     // Se teacher_profiles tiver academy_id e não estiver na lista, adicionar
     if (teacherProfile?.academy_id) {
@@ -911,6 +914,7 @@ router.get('/:id/academies', requireAuth, async (req, res) => {
           .from('academies')
           .select('*')
           .eq('id', academyId)
+          .eq('is_active', true)
           .single()
 
         if (academy) {
@@ -919,7 +923,15 @@ router.get('/:id/academies', requireAuth, async (req, res) => {
       }
     }
 
-    res.json({ academies })
+    // Filtrar academias duplicadas e garantir que todas estão ativas
+    const uniqueAcademies = academies.filter((academy: any, index: number, self: any[]) => 
+      academy && 
+      academy.id && 
+      academy.is_active !== false &&
+      index === self.findIndex((a: any) => a.id === academy.id)
+    )
+
+    res.json({ academies: uniqueAcademies })
 
   } catch (error: any) {
     console.error('Erro ao buscar academias do professor:', error)
