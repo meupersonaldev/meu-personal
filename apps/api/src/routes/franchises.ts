@@ -746,6 +746,32 @@ router.put(
         return res.status(404).json({ error: 'Franchise not found' })
       }
 
+      // Sincronizar nome da academia na tabela units se o nome foi alterado
+      if (updates.name && data.name) {
+        try {
+          const { error: unitsUpdateError } = await supabase
+            .from('units')
+            .update({ name: data.name })
+            .eq('academy_legacy_id', id)
+
+          if (unitsUpdateError) {
+            console.warn(
+              '[PUT /api/franchises/:id] Aviso: Erro ao sincronizar nome na tabela units:',
+              unitsUpdateError
+            )
+          } else {
+            console.log(
+              '[PUT /api/franchises/:id] Nome sincronizado na tabela units com sucesso'
+            )
+          }
+        } catch (syncError) {
+          console.warn(
+            '[PUT /api/franchises/:id] Aviso: Erro ao sincronizar nome na tabela units:',
+            syncError
+          )
+        }
+      }
+
       console.log(
         '[PUT /api/franchises/:id] Franquia atualizada com sucesso:',
         data

@@ -54,11 +54,35 @@ export async function getStudentUnits(req: Request, res: Response) {
       return res.status(500).json({ error: 'Erro ao buscar unidades do aluno' })
     }
 
-    // Transform the data to match our interfaces
-    const transformedUnits: StudentUnit[] = studentUnits?.map(su => ({
-      ...su,
-      unit: su.unit as Unit
-    })) || []
+    // Buscar nomes atualizados das academias para cada unidade
+    const transformedUnits: StudentUnit[] = await Promise.all(
+      (studentUnits || []).map(async (su: any) => {
+        const unit = su.unit as Unit
+        let updatedUnit = { ...unit }
+
+        // Se a unidade tem academy_legacy_id, buscar o nome atualizado da academia
+        if (unit.academy_legacy_id) {
+          const { data: academy } = await supabase
+            .from('academies')
+            .select('id, name')
+            .eq('id', unit.academy_legacy_id)
+            .single()
+
+          if (academy) {
+            // Atualizar o nome da unidade com o nome atualizado da academia
+            updatedUnit = {
+              ...unit,
+              name: academy.name
+            }
+          }
+        }
+
+        return {
+          ...su,
+          unit: updatedUnit
+        }
+      })
+    )
 
     res.json(transformedUnits)
   } catch (error) {
@@ -91,10 +115,30 @@ export async function getAvailableUnits(req: Request, res: Response) {
       return res.status(500).json({ error: 'Erro ao buscar unidades disponíveis' })
     }
 
-    // Filter out units student is already associated with
-    const filteredUnits = availableUnits?.filter(
-      unit => !existingUnitIds.includes(unit.id)
-    ) || []
+    // Buscar nomes atualizados das academias para cada unidade
+    const filteredUnits = await Promise.all(
+      (availableUnits || [])
+        .filter(unit => !existingUnitIds.includes(unit.id))
+        .map(async (unit: Unit) => {
+          // Se a unidade tem academy_legacy_id, buscar o nome atualizado da academia
+          if (unit.academy_legacy_id) {
+            const { data: academy } = await supabase
+              .from('academies')
+              .select('id, name')
+              .eq('id', unit.academy_legacy_id)
+              .single()
+
+            if (academy) {
+              // Retornar unidade com nome atualizado da academia
+              return {
+                ...unit,
+                name: academy.name
+              }
+            }
+          }
+          return unit
+        })
+    )
 
     res.json(filteredUnits)
   } catch (error) {
@@ -180,10 +224,35 @@ export async function activateStudentUnit(req: Request, res: Response) {
       return res.status(500).json({ error: 'Erro ao buscar unidades atualizadas' })
     }
 
-    const transformedUnits: StudentUnit[] = updatedUnits?.map(su => ({
-      ...su,
-      unit: su.unit as Unit
-    })) || []
+    // Buscar nomes atualizados das academias para cada unidade
+    const transformedUnits: StudentUnit[] = await Promise.all(
+      (updatedUnits || []).map(async (su: any) => {
+        const unit = su.unit as Unit
+        let updatedUnit = { ...unit }
+
+        // Se a unidade tem academy_legacy_id, buscar o nome atualizado da academia
+        if (unit.academy_legacy_id) {
+          const { data: academy } = await supabase
+            .from('academies')
+            .select('id, name')
+            .eq('id', unit.academy_legacy_id)
+            .single()
+
+          if (academy) {
+            // Atualizar o nome da unidade com o nome atualizado da academia
+            updatedUnit = {
+              ...unit,
+              name: academy.name
+            }
+          }
+        }
+
+        return {
+          ...su,
+          unit: updatedUnit
+        }
+      })
+    )
 
     res.json({
       message: 'Unidade ativada com sucesso',
@@ -220,9 +289,29 @@ export async function getStudentActiveUnit(req: Request, res: Response) {
       return res.status(500).json({ error: 'Erro ao buscar unidade ativa' })
     }
 
+    let unit = activeUnit.unit as Unit
+    let updatedUnit = { ...unit }
+
+    // Se a unidade tem academy_legacy_id, buscar o nome atualizado da academia
+    if (unit.academy_legacy_id) {
+      const { data: academy } = await supabase
+        .from('academies')
+        .select('id, name')
+        .eq('id', unit.academy_legacy_id)
+        .single()
+
+      if (academy) {
+        // Atualizar o nome da unidade com o nome atualizado da academia
+        updatedUnit = {
+          ...unit,
+          name: academy.name
+        }
+      }
+    }
+
     const transformedUnit: StudentUnit = {
       ...activeUnit,
-      unit: activeUnit.unit as Unit
+      unit: updatedUnit
     }
 
     res.json({ activeUnit: transformedUnit })
@@ -239,14 +328,14 @@ export async function joinUnit(req: Request, res: Response) {
     const { unitId } = req.body
 
     // Validate unit exists and is active
-    const { data: unit, error: unitError } = await supabase
+    const { data: validatedUnit, error: unitError } = await supabase
       .from('units')
       .select('*')
       .eq('id', unitId)
       .eq('is_active', true)
       .single()
 
-    if (unitError || !unit) {
+    if (unitError || !validatedUnit) {
       return res.status(404).json({ error: 'Unidade não encontrada ou inativa' })
     }
 
@@ -281,9 +370,29 @@ export async function joinUnit(req: Request, res: Response) {
       return res.status(500).json({ error: 'Erro ao se associar à unidade' })
     }
 
+    let unit = newAssociation.unit as Unit
+    let updatedUnit = { ...unit }
+
+    // Se a unidade tem academy_legacy_id, buscar o nome atualizado da academia
+    if (unit.academy_legacy_id) {
+      const { data: academy } = await supabase
+        .from('academies')
+        .select('id, name')
+        .eq('id', unit.academy_legacy_id)
+        .single()
+
+      if (academy) {
+        // Atualizar o nome da unidade com o nome atualizado da academia
+        updatedUnit = {
+          ...unit,
+          name: academy.name
+        }
+      }
+    }
+
     const transformedUnit: StudentUnit = {
       ...newAssociation,
-      unit: newAssociation.unit as Unit
+      unit: updatedUnit
     }
 
     res.json({

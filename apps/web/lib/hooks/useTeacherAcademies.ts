@@ -31,9 +31,18 @@ export function useTeacherAcademies() {
 
         const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
 
+        // Adicionar timestamp para evitar cache e garantir dados atualizados
         const academiesRes = await fetch(
-          `${API_URL}/api/teachers/${user.id}/academies`,
-          { headers, credentials: 'include' }
+          `${API_URL}/api/teachers/${user.id}/academies?t=${Date.now()}`,
+          { 
+            headers: { 
+              ...headers,
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'Pragma': 'no-cache',
+              'Expires': '0'
+            }, 
+            credentials: 'include' 
+          }
         )
 
         if (!academiesRes.ok) {
