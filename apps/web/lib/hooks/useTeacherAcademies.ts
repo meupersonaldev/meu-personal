@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAuthStore } from '@/lib/stores/auth-store'
 
 interface Academy {
@@ -16,7 +16,7 @@ export function useTeacherAcademies() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchAcademies = async () => {
+  const fetchAcademies = useCallback(async () => {
     if (!user?.id) {
       setAcademies([])
       setLoading(false)
@@ -56,11 +56,11 @@ export function useTeacherAcademies() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user?.id, token])
 
   useEffect(() => {
     fetchAcademies()
-  }, [user?.id, token])
+  }, [fetchAcademies])
 
   // Listener para recarregar quando preferências forem atualizadas
   useEffect(() => {
@@ -72,7 +72,7 @@ export function useTeacherAcademies() {
     return () => {
       window.removeEventListener('teacher:preferences:updated', handlePreferencesUpdated)
     }
-  }, [user?.id, token])
+  }, [fetchAcademies])
 
   return { academies, loading, error, refetch: fetchAcademies }
 }

@@ -118,14 +118,11 @@ export default function ProfessorAgendaPage() {
     })
   }
 
-  // Recarregar academias quando a página for montada ou quando receber foco
+  // Recarregar academias quando a página receber foco (apenas uma vez ao montar)
   useEffect(() => {
-    if (user?.id && token && refetchAcademies) {
-      refetchAcademies()
-    }
-
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible' && user?.id && token && refetchAcademies) {
+        // Recarregar apenas se a página estava oculta e agora está visível
         refetchAcademies()
       }
     }
