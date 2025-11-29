@@ -246,6 +246,9 @@ export default function ConfiguracoesPage() {
       await api.teachers.updatePreferences(user.id, { academy_ids: selectedAcademies })
       toast.success('Preferências atualizadas!')
       
+      // Aguardar um pouco para garantir que o vínculo foi criado no banco
+      await new Promise(resolve => setTimeout(resolve, 500))
+      
       // Disparar evento para recarregar academias em outras páginas
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('teacher:preferences:updated'))
