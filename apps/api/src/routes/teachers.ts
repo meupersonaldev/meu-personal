@@ -926,7 +926,29 @@ router.get('/:id/academies', requireAuth, async (req, res) => {
 
     console.log(`[GET /api/teachers/:id/academies] IDs de academy_teachers:`, academyIdsFromLinks)
 
-    // ✅ Combinar IDs de academy_teachers e teacher_preferences
+    // ✅ NOVO: Também buscar academias onde o professor tem bookings
+    const { data: bookingsWithAcademies, error: bookingsError } = await supabase
+      .from('bookings')
+      .select('franchise_id, academy_id, unit_id')
+      .eq('teacher_id', id)
+      .not('franchise_id', 'is', null)
+      .limit(100)
+
+    if (bookingsError) {
+      console.error('Erro ao buscar bookings do professor:', bookingsError)
+    } else {
+      const bookingAcademyIds = [
+        ...(bookingsWithAcademies || [])
+          .map((b: any) => b.franchise_id || b.academy_id || b.unit_id)
+          .filter(Boolean)
+      ]
+      console.log(`[GET /api/teachers/:id/academies] IDs de academias dos bookings:`, bookingAcademyIds)
+      
+      // Adicionar aos IDs de preferências
+      preferenceAcademyIds.push(...bookingAcademyIds)
+    }
+
+    // ✅ Combinar IDs de academy_teachers e teacher_preferences (agora incluindo bookings)
     const allAcademyIds = [...new Set([...academyIdsFromLinks, ...preferenceAcademyIds])]
 
     console.log(`[GET /api/teachers/:id/academies] Todos os IDs combinados:`, allAcademyIds)
