@@ -17,7 +17,10 @@ export function useTeacherAcademies() {
   const [error, setError] = useState<string | null>(null)
 
   const fetchAcademies = useCallback(async () => {
+    console.log('🔍 [useTeacherAcademies] fetchAcademies chamado', { userId: user?.id, hasToken: !!token })
+    
     if (!user?.id) {
+      console.log('🔍 [useTeacherAcademies] Sem user.id, retornando vazio')
       setAcademies([])
       setLoading(false)
       return
@@ -27,25 +30,34 @@ export function useTeacherAcademies() {
       setLoading(true)
       setError(null)
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const url = `${API_URL}/api/teachers/${user.id}/academies?t=${Date.now()}`
+      
+      console.log('🔍 [useTeacherAcademies] Fazendo requisição para:', url)
 
       const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
 
       // Adicionar timestamp para evitar cache e garantir dados atualizados
-      const academiesRes = await fetch(
-        `${API_URL}/api/teachers/${user.id}/academies?t=${Date.now()}`,
-        { 
-          headers: { 
-            ...headers,
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'Pragma': 'no-cache',
-            'Expires': '0'
-          }, 
-          credentials: 'include' 
-        }
-      )
+      const academiesRes = await fetch(url, { 
+        headers: { 
+          ...headers,
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+          'Content-Type': 'application/json'
+        }, 
+        credentials: 'include' 
+      })
+
+      console.log('🔍 [useTeacherAcademies] Resposta recebida:', {
+        ok: academiesRes.ok,
+        status: academiesRes.status,
+        statusText: academiesRes.statusText
+      })
 
       if (!academiesRes.ok) {
-        throw new Error('Erro ao buscar academias do professor')
+        const errorText = await academiesRes.text()
+        console.error('🔍 [useTeacherAcademies] Erro na resposta:', errorText)
+        throw new Error(`Erro ao buscar academias: ${academiesRes.status} ${academiesRes.statusText}`)
       }
 
       const academiesData = await academiesRes.json()
@@ -57,13 +69,16 @@ export function useTeacherAcademies() {
       console.log('🔍 [useTeacherAcademies] Total de academias:', academiesList.length)
       if (academiesList.length === 0) {
         console.warn('⚠️ [useTeacherAcademies] Nenhuma academia encontrada! Verifique os logs do servidor.')
+        console.warn('⚠️ [useTeacherAcademies] Dados brutos recebidos:', academiesData)
       }
       setAcademies(academiesList)
     } catch (err) {
+      console.error('🔍 [useTeacherAcademies] Erro capturado:', err)
       setError(err instanceof Error ? err.message : 'Erro desconhecido')
       setAcademies([])
     } finally {
       setLoading(false)
+      console.log('🔍 [useTeacherAcademies] Loading finalizado')
     }
   }, [user?.id, token])
 
