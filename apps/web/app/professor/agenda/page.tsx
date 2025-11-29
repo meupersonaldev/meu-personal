@@ -125,29 +125,8 @@ export default function ProfessorAgendaPage() {
     })
   }
 
-  // Recarregar academias quando a página receber foco (apenas uma vez ao montar)
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && user?.id && token && refetchAcademies) {
-        // Recarregar apenas se a página estava oculta e agora está visível
-        refetchAcademies()
-      }
-    }
-
-    const handleFocus = () => {
-      if (user?.id && token && refetchAcademies) {
-        refetchAcademies()
-      }
-    }
-
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    window.addEventListener('focus', handleFocus)
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-      window.removeEventListener('focus', handleFocus)
-    }
-  }, [user?.id, token, refetchAcademies])
+  // Remover listeners de eventos que causam múltiplas requisições desnecessárias
+  // O hook useTeacherAcademies já carrega as academias automaticamente
 
   useEffect(() => {
     if (!user?.id || !token) return

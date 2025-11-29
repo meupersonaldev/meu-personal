@@ -34,18 +34,31 @@ export function useTeacherAcademies() {
       
       console.log('🔍 [useTeacherAcademies] Fazendo requisição para:', url)
 
-      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
+      if (!token) {
+        console.warn('🔍 [useTeacherAcademies] Sem token, não é possível fazer requisição autenticada')
+        setError('Token de autenticação não encontrado')
+        setAcademies([])
+        setLoading(false)
+        return
+      }
+
+      const headers: Record<string, string> = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
 
       // Adicionar timestamp para evitar cache e garantir dados atualizados
       const academiesRes = await fetch(url, { 
-        headers: { 
-          ...headers,
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-          'Expires': '0',
-          'Content-Type': 'application/json'
-        }, 
-        credentials: 'include' 
+        method: 'GET',
+        headers,
+        credentials: 'include',
+        mode: 'cors'
+      }).catch((fetchError) => {
+        console.error('🔍 [useTeacherAcademies] Erro na requisição fetch:', fetchError)
+        throw new Error(`Erro de conexão: ${fetchError.message}. Verifique se a API está rodando em ${API_URL}`)
       })
 
       console.log('🔍 [useTeacherAcademies] Resposta recebida:', {
