@@ -17,6 +17,7 @@ export interface Unit {
   capacity_per_slot: number
   opening_hours_json: Record<string, any>
   metadata: Record<string, any>
+  academy_legacy_id?: string | null
   created_at: string
   updated_at: string
 }
