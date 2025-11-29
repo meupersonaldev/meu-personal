@@ -65,6 +65,13 @@ interface Academy {
 export default function ProfessorAgendaPage() {
   const { user, token } = useAuthStore()
   const { academies: teacherAcademies, loading: loadingAcademies, refetch: refetchAcademies } = useTeacherAcademies()
+  
+  // Debug: Log das academias
+  useEffect(() => {
+    console.log('🔍 [Agenda] teacherAcademies:', teacherAcademies)
+    console.log('🔍 [Agenda] loadingAcademies:', loadingAcademies)
+    console.log('🔍 [Agenda] teacherAcademies.length:', teacherAcademies.length)
+  }, [teacherAcademies, loadingAcademies])
   const [bookings, setBookings] = useState<Booking[]>([])
   const [selectedFranchise, setSelectedFranchise] = useState<string>('todas')
   const [loading, setLoading] = useState(true)

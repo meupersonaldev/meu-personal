@@ -49,7 +49,10 @@ export function useTeacherAcademies() {
       }
 
       const academiesData = await academiesRes.json()
-      setAcademies(academiesData.academies || [])
+      console.log('🔍 [useTeacherAcademies] Resposta da API:', academiesData)
+      const academiesList = academiesData.academies || []
+      console.log('🔍 [useTeacherAcademies] Academias processadas:', academiesList)
+      setAcademies(academiesList)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro desconhecido')
       setAcademies([])

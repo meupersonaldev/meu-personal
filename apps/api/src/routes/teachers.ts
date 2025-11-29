@@ -899,6 +899,15 @@ router.get('/:id/academies', requireAuth, async (req, res) => {
       .eq('user_id', id)
       .single()
 
+    // ✅ NOVO: Verificar também teacher_preferences.academy_ids
+    const { data: teacherPreferences } = await supabase
+      .from('teacher_preferences')
+      .select('academy_ids')
+      .eq('teacher_id', id)
+      .single()
+
+    const preferenceAcademyIds = teacherPreferences?.academy_ids || []
+
     // Mapear academias, filtrando aquelas que não existem ou estão inativas
     let academies: any[] = []
     
@@ -907,12 +916,15 @@ router.get('/:id/academies', requireAuth, async (req, res) => {
       .map((at: any) => at.academy_id)
       .filter(Boolean)
 
-    if (academyIdsFromLinks.length > 0) {
+    // ✅ Combinar IDs de academy_teachers e teacher_preferences
+    const allAcademyIds = [...new Set([...academyIdsFromLinks, ...preferenceAcademyIds])]
+
+    if (allAcademyIds.length > 0) {
       // Buscar academias diretamente para garantir que temos os dados
       const { data: academiesData, error: academiesError } = await supabase
         .from('academies')
         .select('id, name, email, phone, address, city, state, is_active')
-        .in('id', academyIdsFromLinks)
+        .in('id', allAcademyIds)
         .eq('is_active', true)
 
       if (academiesError) {
@@ -920,6 +932,7 @@ router.get('/:id/academies', requireAuth, async (req, res) => {
       } else {
         academies = academiesData || []
         console.log(`[GET /api/teachers/:id/academies] Academias buscadas diretamente:`, academies.length)
+        console.log(`[GET /api/teachers/:id/academies] IDs de preferências:`, preferenceAcademyIds)
       }
     }
 
