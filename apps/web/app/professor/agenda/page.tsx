@@ -64,7 +64,7 @@ interface Academy {
 
 export default function ProfessorAgendaPage() {
   const { user, token } = useAuthStore()
-  const { academies: teacherAcademies, loading: loadingAcademies } = useTeacherAcademies()
+  const { academies: teacherAcademies, loading: loadingAcademies, refetch: refetchAcademies } = useTeacherAcademies()
   const [bookings, setBookings] = useState<Booking[]>([])
   const [selectedFranchise, setSelectedFranchise] = useState<string>('todas')
   const [loading, setLoading] = useState(true)
@@ -117,6 +117,33 @@ export default function ProfessorAgendaPage() {
       credentials: 'include',
     })
   }
+
+  // Recarregar academias quando a página for montada ou quando receber foco
+  useEffect(() => {
+    if (user?.id && token && refetchAcademies) {
+      refetchAcademies()
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && user?.id && token && refetchAcademies) {
+        refetchAcademies()
+      }
+    }
+
+    const handleFocus = () => {
+      if (user?.id && token && refetchAcademies) {
+        refetchAcademies()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('focus', handleFocus)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('focus', handleFocus)
+    }
+  }, [user?.id, token, refetchAcademies])
 
   useEffect(() => {
     if (!user?.id || !token) return

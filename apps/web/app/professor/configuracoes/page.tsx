@@ -245,6 +245,11 @@ export default function ConfiguracoesPage() {
     try {
       await api.teachers.updatePreferences(user.id, { academy_ids: selectedAcademies })
       toast.success('Preferências atualizadas!')
+      
+      // Disparar evento para recarregar academias em outras páginas
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('teacher:preferences:updated'))
+      }
     } catch (error) {
       toast.error('Erro ao atualizar preferências')
     } finally {

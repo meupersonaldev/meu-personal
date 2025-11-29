@@ -889,6 +889,9 @@ router.get('/:id/academies', requireAuth, async (req, res) => {
       return res.status(500).json({ error: 'Erro ao buscar academias' })
     }
 
+    console.log(`[GET /api/teachers/:id/academies] Professor ${id} - Vínculos encontrados:`, academyTeachers?.length || 0)
+    console.log(`[GET /api/teachers/:id/academies] Dados brutos:`, JSON.stringify(academyTeachers, null, 2))
+
     // Também verificar se há academyId no teacher_profiles (caso exista)
     const { data: teacherProfile } = await supabase
       .from('teacher_profiles')
@@ -897,12 +900,30 @@ router.get('/:id/academies', requireAuth, async (req, res) => {
       .single()
 
     // Mapear academias, filtrando aquelas que não existem ou estão inativas
-    let academies = (academyTeachers || [])
-      .filter((at: any) => at.academies && at.academies.is_active !== false)
-      .map((at: any) => ({
-        id: at.academy_id,
-        ...at.academies
-      }))
+    let academies: any[] = []
+    
+    // Se o relacionamento retornou academias nulas, buscar diretamente
+    const academyIdsFromLinks = (academyTeachers || [])
+      .map((at: any) => at.academy_id)
+      .filter(Boolean)
+
+    if (academyIdsFromLinks.length > 0) {
+      // Buscar academias diretamente para garantir que temos os dados
+      const { data: academiesData, error: academiesError } = await supabase
+        .from('academies')
+        .select('id, name, email, phone, address, city, state, is_active')
+        .in('id', academyIdsFromLinks)
+        .eq('is_active', true)
+
+      if (academiesError) {
+        console.error('Erro ao buscar academias diretamente:', academiesError)
+      } else {
+        academies = academiesData || []
+        console.log(`[GET /api/teachers/:id/academies] Academias buscadas diretamente:`, academies.length)
+      }
+    }
+
+    console.log(`[GET /api/teachers/:id/academies] Academias mapeadas:`, academies.length)
 
     // Se teacher_profiles tiver academy_id e não estiver na lista, adicionar
     if (teacherProfile?.academy_id) {
@@ -930,6 +951,9 @@ router.get('/:id/academies', requireAuth, async (req, res) => {
       academy.is_active !== false &&
       index === self.findIndex((a: any) => a.id === academy.id)
     )
+
+    console.log(`[GET /api/teachers/:id/academies] Academias finais retornadas:`, uniqueAcademies.length)
+    console.log(`[GET /api/teachers/:id/academies] IDs das academias:`, uniqueAcademies.map((a: any) => a.id))
 
     res.json({ academies: uniqueAcademies })
 

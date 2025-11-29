@@ -16,51 +16,63 @@ export function useTeacherAcademies() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    const fetchAcademies = async () => {
-      if (!user?.id) {
-        setAcademies([])
-        setLoading(false)
-        return
-      }
-
-      try {
-        setLoading(true)
-        setError(null)
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-
-        const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
-
-        // Adicionar timestamp para evitar cache e garantir dados atualizados
-        const academiesRes = await fetch(
-          `${API_URL}/api/teachers/${user.id}/academies?t=${Date.now()}`,
-          { 
-            headers: { 
-              ...headers,
-              'Cache-Control': 'no-cache, no-store, must-revalidate',
-              'Pragma': 'no-cache',
-              'Expires': '0'
-            }, 
-            credentials: 'include' 
-          }
-        )
-
-        if (!academiesRes.ok) {
-          throw new Error('Erro ao buscar academias do professor')
-        }
-
-        const academiesData = await academiesRes.json()
-        setAcademies(academiesData.academies || [])
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Erro desconhecido')
-        setAcademies([])
-      } finally {
-        setLoading(false)
-      }
+  const fetchAcademies = async () => {
+    if (!user?.id) {
+      setAcademies([])
+      setLoading(false)
+      return
     }
 
+    try {
+      setLoading(true)
+      setError(null)
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
+
+      // Adicionar timestamp para evitar cache e garantir dados atualizados
+      const academiesRes = await fetch(
+        `${API_URL}/api/teachers/${user.id}/academies?t=${Date.now()}`,
+        { 
+          headers: { 
+            ...headers,
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0'
+          }, 
+          credentials: 'include' 
+        }
+      )
+
+      if (!academiesRes.ok) {
+        throw new Error('Erro ao buscar academias do professor')
+      }
+
+      const academiesData = await academiesRes.json()
+      setAcademies(academiesData.academies || [])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro desconhecido')
+      setAcademies([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
     fetchAcademies()
   }, [user?.id, token])
 
-  return { academies, loading, error }
+  // Listener para recarregar quando preferências forem atualizadas
+  useEffect(() => {
+    const handlePreferencesUpdated = () => {
+      fetchAcademies()
+    }
+
+    window.addEventListener('teacher:preferences:updated', handlePreferencesUpdated)
+    return () => {
+      window.removeEventListener('teacher:preferences:updated', handlePreferencesUpdated)
+    }
+  }, [user?.id, token])
+
+  return { academies, loading, error, refetch: fetchAcademies }
 }
