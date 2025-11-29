@@ -57,25 +57,48 @@ export function hasPassedLocal(utcDate: Date | string): boolean {
 }
 
 /**
- * Cria data UTC a partir de data e hora local
+ * Cria data UTC a partir de data e hora local (Brasil UTC-3)
+ * Input: '2025-11-29', '21:00' (horário de Brasília)
+ * Output: Date em UTC (2025-11-30T00:00:00.000Z)
  */
 export function createUtcFromLocal(dateStr: string, timeStr: string): Date {
-  const localDateTime = new Date(`${dateStr}T${timeStr}:00`)
-  return localToUtc(localDateTime)
+  // Parsear componentes
+  const [year, month, day] = dateStr.split('-').map(Number)
+  const [hour, minute] = timeStr.split(':').map(Number)
+  
+  // Criar Date em UTC adicionando o offset do Brasil (+3h para ir de local para UTC)
+  return new Date(Date.UTC(year, month - 1, day, hour + Math.abs(BRAZIL_TIMEZONE_OFFSET), minute, 0))
 }
 
 /**
- * Extrai hora local de uma data UTC
+ * Extrai hora local (Brasil) de uma data UTC
+ * Input: '2025-11-30T00:00:00.000Z' (UTC)
+ * Output: '21:00' (horário de Brasília)
  */
 export function getLocalTimeFromUtc(utcDate: Date | string): string {
-  const localDate = utcToLocal(utcDate)
-  return localDate.toTimeString().slice(0, 5) // HH:MM
+  const date = typeof utcDate === 'string' ? new Date(utcDate) : utcDate
+  // Subtrair offset para ir de UTC para local (UTC-3 = subtrair 3h)
+  const localHour = date.getUTCHours() - Math.abs(BRAZIL_TIMEZONE_OFFSET)
+  const adjustedHour = localHour < 0 ? localHour + 24 : localHour
+  const minute = date.getUTCMinutes()
+  return `${adjustedHour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`
 }
 
 /**
- * Extrai data local de uma data UTC
+ * Extrai data local (Brasil) de uma data UTC
+ * Input: '2025-11-30T00:00:00.000Z' (UTC)
+ * Output: '2025-11-29' (data de Brasília)
  */
 export function getLocalDateFromUtc(utcDate: Date | string): string {
-  const localDate = utcToLocal(utcDate)
-  return localDate.toISOString().split('T')[0] // YYYY-MM-DD
+  const date = typeof utcDate === 'string' ? new Date(utcDate) : utcDate
+  // Subtrair offset para ir de UTC para local
+  const localHour = date.getUTCHours() - Math.abs(BRAZIL_TIMEZONE_OFFSET)
+  
+  // Se a hora local ficou negativa, voltar um dia
+  if (localHour < 0) {
+    const adjustedDate = new Date(date.getTime() - 24 * 60 * 60 * 1000)
+    return `${adjustedDate.getUTCFullYear()}-${(adjustedDate.getUTCMonth() + 1).toString().padStart(2, '0')}-${adjustedDate.getUTCDate().toString().padStart(2, '0')}`
+  }
+  
+  return `${date.getUTCFullYear()}-${(date.getUTCMonth() + 1).toString().padStart(2, '0')}-${date.getUTCDate().toString().padStart(2, '0')}`
 }

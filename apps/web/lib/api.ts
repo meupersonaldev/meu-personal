@@ -1,12 +1,15 @@
 import { useAuthStore } from './stores/auth-store'
 
+// Para chamadas que precisam da URL completa (ex: links externos)
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
 // Função helper genérica para chamadas à API
+// Usa URL relativa para aproveitar o rewrite do Next.js (evita CORS)
 async function apiRequest(endpoint: string, options: RequestInit = {}) {
   const token = useAuthStore.getState().token
-  const url = `${API_BASE_URL}${endpoint}`
+  // Usar URL relativa - o Next.js faz o proxy via rewrite
+  const url = endpoint
 
   const isFormData =
     typeof FormData !== 'undefined' && options.body instanceof FormData
@@ -18,7 +21,6 @@ async function apiRequest(endpoint: string, options: RequestInit = {}) {
   }
 
   const config: RequestInit = {
-    credentials: 'include',
     ...options,
     headers,
   }
