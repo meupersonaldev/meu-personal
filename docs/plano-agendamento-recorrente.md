@@ -3,8 +3,6 @@
 > **Início:** 29/11/2025  
 > **Status:** 🚧 Em andamento
 
----
-
 ## Resumo
 
 Sistema que permite alunos e professores agendarem aulas com recorrência semanal. Aulas são confirmadas se houver crédito, ou reservadas caso contrário. Reservas são cobradas automaticamente 7 dias antes.
@@ -28,7 +26,6 @@ Sistema que permite alunos e professores agendarem aulas com recorrência semana
 - 6 meses / Semestre (~24 aulas)
 - 1 ano (~52 aulas)
 
----
 
 ## Checklist de Implementação
 
@@ -54,25 +51,26 @@ Sistema que permite alunos e professores agendarem aulas com recorrência semana
 - [x] 3.4 Integrar com sistema de notificações (tabela `notifications` + `booking_series_notifications`)
 - [x] 3.5 Envio de lembretes antecipados (8 dias antes)
 
-### Fase 4: Frontend - Aluno
+### Fase 4: Frontend - Aluno ✅
 - [x] 4.1 Componente: Seletor de recorrência na tela de agendamento (`/aluno/agendar`)
 - [x] 4.2 Modal de confirmação (confirmadas vs reservadas)
-- [ ] 4.3 Listagem de aulas com badges (Confirmada/Reservada/Série)
-- [ ] 4.4 Modal de cancelamento (só esta / futuras / toda série)
+- [x] 4.3 Listagem de aulas com badges (Confirmada/Reservada/Série) - `/aluno/aulas`
+- [x] 4.4 Modal de cancelamento (só esta / futuras / toda série)
 
 ### Fase 5: Frontend - Professor
-- [ ] 5.1 Agenda: mostrar reservas com visual diferenciado
-- [ ] 5.2 Disponibilidade recorrente (criar múltiplos slots)
-- [ ] 5.3 Visualizar séries de aulas agendadas
+- [x] 5.1 Agenda: mostrar reservas com visual diferenciado (cor âmbar + ícone ⏳)
+- [x] 5.2 Indicador de série recorrente (🔄 Série)
+- [x] 5.3 Modal com detalhes de reserva e série
+- [ ] 5.4 Disponibilidade recorrente (criar múltiplos slots) - futuro
 
-### Fase 6: Notificações
-- [ ] 6.1 Série criada → Aluno
-- [ ] 6.2 Série criada → Professor
-- [ ] 6.3 Lembrete 7 dias antes (reserva pendente) → Aluno
-- [ ] 6.4 Crédito debitado com sucesso → Aluno
-- [ ] 6.5 Aula cancelada por falta de crédito → Aluno
-- [ ] 6.6 Reserva cancelada → Professor
-- [ ] 6.7 Data pulada (professor indisponível) → Aluno
+### Fase 6: Notificações ✅ (já integrado no backend)
+- [x] 6.1 Série criada → Aluno (via `booking_series_notifications`)
+- [x] 6.2 Série criada → Professor (via `booking_series_notifications`)
+- [x] 6.3 Lembrete 7 dias antes (reserva pendente) → Aluno (via job)
+- [x] 6.4 Crédito debitado com sucesso → Aluno (via job + `notifications`)
+- [x] 6.5 Aula cancelada por falta de crédito → Aluno (via job + `notifications`)
+- [x] 6.6 Reserva cancelada → Professor (via job + `notifications`)
+- [x] 6.7 Data pulada (professor indisponível) → Aluno (retornado na criação)
 
 ### Fase 7: Testes e Validação
 - [ ] 7.1 Testar criação de série com créditos suficientes
@@ -280,9 +278,9 @@ async function processReservedBookings() {
 | 1 | Migração do banco | 1h | ✅ Concluído |
 | 2 | Endpoints backend | 5h | ✅ Concluído |
 | 3 | Job de cobrança | 2h | ✅ Concluído |
-| 4 | Frontend aluno | 4h | 🚧 Em andamento |
-| 5 | Frontend professor | 2h | ⬜ Pendente |
-| 6 | Notificações | 1h | ⬜ Pendente |
+| 4 | Frontend aluno | 4h | ✅ Concluído |
+| 5 | Frontend professor | 2h | ✅ Concluído |
+| 6 | Notificações | 1h | ✅ Já integrado |
 | 7 | Testes | 2h | ⬜ Pendente |
 | **Total** | | **~17h** | |
 
@@ -297,4 +295,6 @@ async function processReservedBookings() {
 | 29/11/2025 | Fase 2 concluída: todos os endpoints de `booking-series` implementados |
 | 29/11/2025 | Fase 3 concluída: job de processamento de reservas com scheduler diário |
 | 29/11/2025 | Fase 4 (parcial): seletor de recorrência e modal de confirmação na página de agendamento |
+| 29/11/2025 | Fase 4 completa: página `/aluno/aulas` com listagem e modal de cancelamento |
+| 29/11/2025 | Fase 5 completa: visual de reservas e séries na agenda do professor |
 

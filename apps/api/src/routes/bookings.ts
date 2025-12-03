@@ -298,6 +298,9 @@ router.get(
           .json({ error: 'Acesso não autorizado a este professor' })
       }
 
+      // Filtrar apenas bookings futuros para evitar limite de 1000 registros
+      const now = new Date().toISOString()
+      
       const { data: teacherBookings, error } = await supabase
         .from('bookings')
         .select(
@@ -319,12 +322,16 @@ router.get(
       `
         )
         .eq('teacher_id', teacherId)
+        .gte('date', now) // Apenas bookings futuros
         .order('date', { ascending: true })
+        .limit(10000)
 
       if (error) {
         console.error('Error fetching teacher bookings (legacy):', error)
         return res.status(500).json({ error: 'Erro ao buscar agendamentos' })
       }
+
+      console.log(`📊 GET bookings para teacher ${teacherId}: ${teacherBookings?.length || 0} bookings encontrados`)
 
       let results = teacherBookings || []
 

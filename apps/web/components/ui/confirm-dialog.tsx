@@ -5,10 +5,10 @@ import { Card } from './card'
 import {
   AlertTriangle,
   Trash2,
-  Save,
   CheckCircle,
   Info
 } from 'lucide-react'
+import { ReactNode } from 'react'
 
 interface ConfirmDialogProps {
   isOpen: boolean
@@ -20,6 +20,7 @@ interface ConfirmDialogProps {
   cancelText?: string
   type?: 'danger' | 'warning' | 'info' | 'success'
   loading?: boolean
+  children?: ReactNode
 }
 
 export default function ConfirmDialog({
@@ -31,7 +32,8 @@ export default function ConfirmDialog({
   confirmText = 'Confirmar',
   cancelText = 'Cancelar',
   type = 'danger',
-  loading = false
+  loading = false,
+  children
 }: ConfirmDialogProps) {
   if (!isOpen) return null
 
@@ -94,10 +96,14 @@ export default function ConfirmDialog({
           </div>
 
           {/* Description */}
-          <p className="text-gray-700 mb-6 leading-relaxed">{description}</p>
+          <p className="text-gray-700 leading-relaxed">{description}</p>
+
+          {children && (
+            <div className="mt-4">{children}</div>
+          )}
 
           {/* Actions */}
-          <div className="flex items-center justify-end space-x-4">
+          <div className="flex items-center justify-end space-x-4 mt-6">
             <Button
               variant="outline"
               onClick={onClose}

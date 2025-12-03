@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { supabase } from '../lib/supabase'
 import { syncContactAcademies } from '../services/franqueadora-contacts.service'
 import { requireAuth } from '../middleware/auth'
+import { bookingCanonicalService } from '../services/booking-canonical.service'
 
 const router = Router()
 
@@ -30,6 +31,123 @@ const ensureTeacherOrAdmin = (
     return false
   }
   return true
+}
+
+const DEFAULT_AVAILABILITY_DAYS = 28
+
+async function ensureDefaultAvailabilityForTeacher(teacherId: string, academyId: string) {
+  try {
+    const { data: linkRecord, error: linkError } = await supabase
+      .from('academy_teachers')
+      .select('id, default_availability_seeded_at')
+      .eq('teacher_id', teacherId)
+      .eq('academy_id', academyId)
+      .single()
+
+    if (linkError) {
+      console.error('[ensureDefaultAvailability] Erro ao buscar vínculo academy_teacher:', linkError)
+      return
+    }
+
+    if (!linkRecord) {
+      console.warn('[ensureDefaultAvailability] Vínculo academy_teacher não encontrado', { teacherId, academyId })
+      return
+    }
+
+    if (linkRecord.default_availability_seeded_at) {
+      console.log('[ensureDefaultAvailability] Seed já executado anteriormente, ignorando')
+      return
+    }
+
+    const now = new Date()
+    const { data: existingBookings, error: existingError } = await supabase
+      .from('bookings')
+      .select('id')
+      .eq('professor_id', teacherId)
+      .eq('franchise_id', academyId)
+      .eq('status', 'AVAILABLE')
+      .gte('start_at', now.toISOString())
+      .limit(1)
+
+    if (existingError) {
+      console.error('[ensureDefaultAvailability] Erro ao buscar bookings existentes:', existingError)
+      return
+    }
+
+    if (existingBookings && existingBookings.length > 0) {
+      console.log('[ensureDefaultAvailability] Já existem disponibilidades para o professor, ignorando seed')
+      return
+    }
+
+    const { data: timeSlots, error: slotsError } = await supabase
+      .from('academy_time_slots')
+      .select('day_of_week, time, is_available')
+      .eq('academy_id', academyId)
+      .eq('is_available', true)
+
+    if (slotsError) {
+      console.error('[ensureDefaultAvailability] Erro ao buscar horários da academia:', slotsError)
+      return
+    }
+
+    if (!timeSlots || timeSlots.length === 0) {
+      console.log('[ensureDefaultAvailability] Academia não possui horários configurados')
+      return
+    }
+
+    const slotsByDay = timeSlots.reduce<Record<number, string[]>>((acc, slot) => {
+      if (!acc[slot.day_of_week]) {
+        acc[slot.day_of_week] = []
+      }
+      acc[slot.day_of_week].push(slot.time)
+      return acc
+    }, {})
+
+    const startDate = new Date()
+    startDate.setHours(0, 0, 0, 0)
+    const endDate = new Date(startDate)
+    endDate.setDate(endDate.getDate() + DEFAULT_AVAILABILITY_DAYS)
+
+    const current = new Date(startDate)
+    let created = 0
+
+    while (current <= endDate) {
+      const daySlots = slotsByDay[current.getDay()] || []
+      for (const slot of daySlots) {
+        const [hour = '00', minute = '00', second = '00'] = slot.split(':')
+        const slotStart = new Date(current)
+        slotStart.setHours(Number(hour), Number(minute), Number(second ?? '0'), 0)
+        if (slotStart <= now) {
+          continue
+        }
+        const slotEnd = new Date(slotStart.getTime() + 60 * 60 * 1000)
+        try {
+          await bookingCanonicalService.createBooking({
+            source: 'PROFESSOR',
+            professorId: teacherId,
+            franchiseId: academyId,
+            startAt: slotStart,
+            endAt: slotEnd,
+            status: 'AVAILABLE',
+            professorNotes: 'Disponibilidade padrão da unidade'
+          })
+          created++
+        } catch (error) {
+          console.error('[ensureDefaultAvailability] Erro ao criar disponibilidade padrão:', error)
+        }
+      }
+      current.setDate(current.getDate() + 1)
+    }
+
+    console.log(`[ensureDefaultAvailability] Foram criados ${created} horários padrão para o professor ${teacherId} na academia ${academyId}`)
+
+    await supabase
+      .from('academy_teachers')
+      .update({ default_availability_seeded_at: new Date().toISOString() })
+      .eq('id', linkRecord.id)
+  } catch (error) {
+    console.error('[ensureDefaultAvailability] Erro inesperado:', error)
+  }
 }
 
 // GET /api/teachers/:teacherId/preferences - Buscar preferências do professor
@@ -154,6 +272,8 @@ router.put('/:teacherId/preferences', requireAuth, async (req, res) => {
             .eq('id', existingLink.id)
 
           console.log(`✅ Vínculo academy_teachers reativado: ${existingLink.id}`)
+
+          await ensureDefaultAvailabilityForTeacher(teacherId, academyId)
         }
       } else {
         // Criar novo vínculo
@@ -172,6 +292,8 @@ router.put('/:teacherId/preferences', requireAuth, async (req, res) => {
           console.error('Erro ao criar vínculo academy_teachers:', linkError)
         } else {
           console.log(`✅ Novo vínculo academy_teachers criado: ${newLink.id}`)
+
+          await ensureDefaultAvailabilityForTeacher(teacherId, academyId)
         }
       }
 
