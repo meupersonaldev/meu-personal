@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { useTeacherAcademies } from '@/lib/hooks/useTeacherAcademies'
@@ -8,7 +8,6 @@ import ProfessorLayout from '@/components/layout/professor-layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import ConfirmDialog from '@/components/ui/confirm-dialog'
 import {
   Calendar,
@@ -16,6 +15,7 @@ import {
   Clock,
   Loader2,
   ChevronLeft,
+  ChevronRight,
   Save,
   Trash2,
   Plus,
@@ -45,7 +45,8 @@ interface AcademyTimeSlot {
 }
 
 interface WeeklySchedule {
-  [dayOfWeek: number]: string[] // Array de horários selecionados
+  // chave pode ser um dateKey no formato yyyy-MM-dd
+  [key: string]: string[]
 }
 
 export default function DisponibilidadePage() {
@@ -57,7 +58,12 @@ export default function DisponibilidadePage() {
   const [academyTimeSlots, setAcademyTimeSlots] = useState<AcademyTimeSlot[]>([])
   const [weeklySchedule, setWeeklySchedule] = useState<WeeklySchedule>({})
   const [savedSchedule, setSavedSchedule] = useState<WeeklySchedule>({}) // Horários já salvos
-  const [applyMode, setApplyMode] = useState<'week' | 'month' | 'always'>('week')
+  const [bookingIdByDateTime, setBookingIdByDateTime] = useState<Record<string, Record<string, string>>>({})
+  const [startDate, setStartDate] = useState(() => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    return today
+  })
   const [loading, setLoading] = useState(false)
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -67,22 +73,20 @@ export default function DisponibilidadePage() {
   const [newBlockEnd, setNewBlockEnd] = useState('')
   const [newBlockReason, setNewBlockReason] = useState('')
   
-  // Modal de confirmação para limpar dia
-  const [clearDayModal, setClearDayModal] = useState<{ open: boolean; dayOfWeek: number | null }>({
+  // Modal de confirmação para limpar um dia (por data)
+  const [clearDayModal, setClearDayModal] = useState<{ open: boolean; dateKey: string | null }>({
     open: false,
-    dayOfWeek: null
+    dateKey: null
   })
 
   const [slotRemovalModal, setSlotRemovalModal] = useState<{
     open: boolean
-    dayOfWeek: number | null
+    dateKey: string | null
     time: string | null
-    removalMode: 'single' | 'allDay' | 'allDays' // single = próxima ocorrência, allDay = todas do dia, allDays = todos os dias
   }>({
     open: false,
-    dayOfWeek: null,
-    time: null,
-    removalMode: 'single'
+    dateKey: null,
+    time: null
   })
 
   // Função auxiliar para fazer fetch autenticado
@@ -128,8 +132,6 @@ export default function DisponibilidadePage() {
         const data = await bookingsRes.json()
         const bookings = data.bookings || []
         
-        console.log('[fetchData] Total de bookings recebidos:', bookings.length)
-        
         // Filtrar bookings disponíveis (sem aluno) da academia selecionada
         // Usar tanto camelCase quanto snake_case para compatibilidade
         const now = new Date()
@@ -147,27 +149,43 @@ export default function DisponibilidadePage() {
             bookingDate && bookingDate > now
         })
         
-        // Agrupar por dia da semana e horário (usar horário local para consistência com UI)
+        // Agrupar por DATA (yyyy-MM-dd) e horário local
         const saved: WeeklySchedule = {}
+        const bookingMap: Record<string, Record<string, string>> = {}
+
         availableBookings.forEach((b: Record<string, unknown>) => {
           const dateField = (b.date || b.start_at) as string
           if (!dateField) return
-          
+
           const date = new Date(dateField)
-          // Usar horário local para dia da semana (consistente com a UI)
-          const dayOfWeek = date.getDay()
+          const dateKey = getLocalDateKey(date)
           // Formato HH:mm:ss para bater com os slots da academia
-          const time = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-          
-          if (!saved[dayOfWeek]) {
-            saved[dayOfWeek] = []
+          const time = date.toLocaleTimeString('pt-BR', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+          })
+
+          if (!saved[dateKey]) {
+            saved[dateKey] = []
           }
-          if (!saved[dayOfWeek].includes(time)) {
-            saved[dayOfWeek].push(time)
+          if (!saved[dateKey].includes(time)) {
+            saved[dateKey].push(time)
+          }
+
+          const id = (b as any).id as string | undefined
+          if (id) {
+            if (!bookingMap[dateKey]) {
+              bookingMap[dateKey] = {}
+            }
+            if (!bookingMap[dateKey][time]) {
+              bookingMap[dateKey][time] = id
+            }
           }
         })
-        
+
         setSavedSchedule(saved)
+        setBookingIdByDateTime(bookingMap)
         // Limpar weeklySchedule - ele é usado apenas para novas seleções
         setWeeklySchedule({})
       }
@@ -192,7 +210,48 @@ export default function DisponibilidadePage() {
     return `${hour}:${minute}`
   }
 
-  // Agrupar slots por dia da semana
+  // Util para chave de data em horário local (yyyy-MM-dd)
+  const getLocalDateKey = (date: Date) => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+
+  const formatDateShort = (date: Date) => {
+    const day = String(date.getDate()).padStart(2, '0')
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const weekday = DIAS_SEMANA.find(d => d.value === date.getDay())?.short || ''
+    return `${weekday} ${day}/${month}`
+  }
+
+  const formatDateLongFromKey = (dateKey: string) => {
+    const [yearStr, monthStr, dayStr] = dateKey.split('-')
+    const year = Number(yearStr)
+    const month = Number(monthStr)
+    const day = Number(dayStr)
+    if (!year || !month || !day) return dateKey
+    const date = new Date(year, month - 1, day)
+    const weekday = DIAS_SEMANA.find(d => d.value === date.getDay())?.label || ''
+    const dayDisp = String(day).padStart(2, '0')
+    const monthDisp = String(month).padStart(2, '0')
+    return `${weekday}, ${dayDisp}/${monthDisp}/${year}`
+  }
+
+  // Janela de 7 dias visíveis
+  const visibleDays = useMemo(() => {
+    const days: { date: Date; dateKey: string; dayOfWeek: number }[] = []
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(startDate)
+      d.setDate(startDate.getDate() + i)
+      const dayOfWeek = d.getDay()
+      const dateKey = getLocalDateKey(d)
+      days.push({ date: d, dateKey, dayOfWeek })
+    }
+    return days
+  }, [startDate])
+
+  // Agrupar slots por dia da semana (configuração fixa da unidade)
   const slotsByDay = academyTimeSlots.reduce((acc, slot) => {
     if (!acc[slot.day_of_week]) {
       acc[slot.day_of_week] = []
@@ -211,129 +270,80 @@ export default function DisponibilidadePage() {
     )
   }
 
-  // Toggle horário
-  const toggleHorario = (dayOfWeek: number, horario: string) => {
+  // Toggle horário para uma data específica
+  const toggleHorario = (dateKey: string, dayOfWeek: number, horario: string) => {
     if (!isSlotAvailable(dayOfWeek, horario)) return
     
     setWeeklySchedule(prev => {
-      const daySchedule = prev[dayOfWeek] || []
+      const daySchedule = prev[dateKey] || []
       if (daySchedule.includes(horario)) {
         return {
           ...prev,
-          [dayOfWeek]: daySchedule.filter(h => h !== horario)
+          [dateKey]: daySchedule.filter(h => h !== horario)
         }
       } else {
         return {
           ...prev,
-          [dayOfWeek]: [...daySchedule, horario].sort()
+          [dateKey]: [...daySchedule, horario].sort()
         }
       }
     })
   }
 
-  // Selecionar todos de um dia (apenas os disponíveis)
-  const selectAllDay = (dayOfWeek: number) => {
+  // Selecionar todos os horários disponíveis de uma DATA específica
+  const selectAllDate = (dateKey: string, dayOfWeek: number) => {
     const availableSlots = slotsByDay[dayOfWeek] || []
     setWeeklySchedule(prev => ({
       ...prev,
-      [dayOfWeek]: [...availableSlots]
+      [dateKey]: [...availableSlots]
     }))
   }
 
-  const removeBookings = async (
-    predicate: (booking: Record<string, unknown>, referenceDate: Date) => boolean,
-    successMessage: string,
-    options?: { limit?: number }
-  ) => {
-    if (!user?.id || !selectedAcademy) return { deleted: 0, errors: 0 }
-    const res = await authFetch(`/api/bookings?teacher_id=${user.id}`)
-    if (!res.ok) throw new Error('Erro ao buscar bookings')
-
-    const data = await res.json()
-    const bookings = (data.bookings || []).sort((a: Record<string, any>, b: Record<string, any>) => {
-      const dateA = new Date((a.date || a.start_at) as string).getTime()
-      const dateB = new Date((b.date || b.start_at) as string).getTime()
-      return dateA - dateB
-    })
-    const referenceDate = new Date()
-
-    const toDelete: Record<string, unknown>[] = []
-    for (const booking of bookings) {
-      if (predicate(booking, referenceDate)) {
-        toDelete.push(booking)
-        if (options?.limit && toDelete.length >= options.limit) {
-          break
-        }
-      }
-    }
-
-    if (toDelete.length === 0) {
-      toast.info('Nenhum horário disponível para remover')
-      return { deleted: 0, errors: 0 }
-    }
-
-    let deleted = 0
-    let errors = 0
-    for (const booking of toDelete) {
-      const deleteRes = await authFetch(`/api/bookings/${booking.id}`, {
-        method: 'DELETE'
-      })
-      if (deleteRes.ok) {
-        deleted++
-      } else {
-        errors++
-      }
-    }
-
-    if (deleted > 0) {
-      toast.success(successMessage.replace('{count}', deleted.toString()))
-    }
-    if (errors > 0) {
-      toast.error(`${errors} horário(s) não puderam ser removidos`)
-    }
-
-    // Pequeno delay para garantir que o banco processou as deleções
-    await new Promise(resolve => setTimeout(resolve, 500))
-    await fetchData()
-    return { deleted, errors }
-  }
-
   // Abre modal de confirmação para limpar dia
-  const openClearDayModal = (dayOfWeek: number) => {
-    setClearDayModal({ open: true, dayOfWeek })
+  const openClearDayModal = (dateKey: string) => {
+    setClearDayModal({ open: true, dateKey })
   }
 
   const executeClearDay = async () => {
-    const dayOfWeek = clearDayModal.dayOfWeek
-    if (dayOfWeek === null) return
+    const dateKey = clearDayModal.dateKey
+    if (!dateKey) return
 
-    setClearDayModal({ open: false, dayOfWeek: null })
+    setClearDayModal({ open: false, dateKey: null })
     setLoading(true)
 
     try {
-      const dayName = DIAS_SEMANA.find(d => d.value === dayOfWeek)?.label || ''
-      await removeBookings((booking, referenceDate) => {
-        const studentId = booking.studentId || booking.student_id
-        const franchiseId = booking.franchiseId || booking.franchise_id
-        const status = booking.status || booking.status_canonical
-        const dateField = (booking.date || booking.start_at) as string
-        if (!dateField) return false
-        const bookingDate = new Date(dateField)
-        return !studentId &&
-          franchiseId === selectedAcademy &&
-          status === 'AVAILABLE' &&
-          bookingDate > referenceDate &&
-          bookingDate.getDay() === dayOfWeek
-      }, `{count} horário(s) removido(s) de ${dayName}!`)
+      const bookingsForDate = bookingIdByDateTime[dateKey] || {}
+      const ids = Object.values(bookingsForDate)
 
-      setWeeklySchedule(prev => ({
-        ...prev,
-        [dayOfWeek]: []
-      }))
-      setSavedSchedule(prev => ({
-        ...prev,
-        [dayOfWeek]: []
-      }))
+      if (ids.length === 0) {
+        toast.info('Nenhum horário disponível para remover')
+        return
+      }
+
+      let deleted = 0
+      let errors = 0
+
+      for (const id of ids) {
+        const deleteRes = await authFetch(`/api/bookings/${id}`, {
+          method: 'DELETE'
+        })
+        if (deleteRes.ok) {
+          deleted++
+        } else {
+          errors++
+        }
+      }
+
+      if (deleted > 0) {
+        toast.success(`${deleted} horário(s) removido(s) de ${formatDateLongFromKey(dateKey)}!`)
+      }
+      if (errors > 0) {
+        toast.error(`${errors} horário(s) não puderam ser removidos`)
+      }
+
+      // Pequeno delay para garantir que o banco processou as deleções
+      await new Promise(resolve => setTimeout(resolve, 500))
+      await fetchData()
     } catch {
       toast.error('Erro ao remover horários do dia')
     } finally {
@@ -341,67 +351,37 @@ export default function DisponibilidadePage() {
     }
   }
 
-  const openSlotRemovalModal = (dayOfWeek: number, time: string) => {
-    setSlotRemovalModal({ open: true, dayOfWeek, time, removalMode: 'single' })
+  const openSlotRemovalModal = (dateKey: string, time: string) => {
+    setSlotRemovalModal({ open: true, dateKey, time })
   }
 
   const executeSlotRemoval = async () => {
-    const { dayOfWeek, time, removalMode } = slotRemovalModal
-    if (dayOfWeek === null || !time) return
+    const { dateKey, time } = slotRemovalModal
+    if (!dateKey || !time) return
 
-    // Capturar valores antes de fechar o modal
-    const targetRemovalMode = removalMode
-    const targetDayOfWeek = dayOfWeek
-    const targetTime = time
+    const bookingId = bookingIdByDateTime[dateKey]?.[time]
+    if (!bookingId) {
+      toast.error('Horário não encontrado para remoção')
+      return
+    }
 
-    setSlotRemovalModal({ open: false, dayOfWeek: null, time: null, removalMode: 'single' })
+    setSlotRemovalModal({ open: false, dateKey: null, time: null })
     setLoading(true)
 
-    // Normalizar o horário para comparação (extrair apenas HH:mm)
-    const normalizeTime = (t: string) => {
-      const parts = t.split(':')
-      return `${parts[0]?.padStart(2, '0')}:${parts[1]?.padStart(2, '0')}`
-    }
-    const targetTimeNormalized = normalizeTime(targetTime)
-
     try {
-      const successMessage = targetRemovalMode === 'single'
-        ? 'Próxima ocorrência removida!'
-        : targetRemovalMode === 'allDay'
-        ? 'Todas as ocorrências futuras deste dia removidas!'
-        : 'Horário removido de todos os dias da semana!'
+      const deleteRes = await authFetch(`/api/bookings/${bookingId}`, {
+        method: 'DELETE'
+      })
 
-      await removeBookings((booking, referenceDate) => {
-        const studentId = booking.studentId || booking.student_id
-        const franchiseId = booking.franchiseId || booking.franchise_id
-        const status = booking.status || booking.status_canonical
-        const dateField = (booking.date || booking.start_at) as string
-        if (!dateField) return false
-        const bookingDate = new Date(dateField)
-        
-        // Usar horário local para dia da semana (consistente com a UI)
-        const bookingDayLocal = bookingDate.getDay()
-        const bookingTime = bookingDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-        const bookingTimeNormalized = normalizeTime(bookingTime)
-        
-        // Condição base: sem aluno, mesma academia, disponível, futuro, mesmo horário
-        const baseMatch = !studentId &&
-          franchiseId === selectedAcademy &&
-          status === 'AVAILABLE' &&
-          bookingDate > referenceDate &&
-          bookingTimeNormalized === targetTimeNormalized
-        
-        // Se allDays, não filtra por dia da semana
-        if (targetRemovalMode === 'allDays') {
-          return baseMatch
-        }
-        
-        // Se single ou allDay, filtra pelo dia da semana específico
-        return baseMatch && bookingDayLocal === targetDayOfWeek
-      }, successMessage, targetRemovalMode === 'single' ? { limit: 1 } : undefined)
+      if (!deleteRes.ok) {
+        throw new Error('Falha ao remover horário')
+      }
 
-      // Nota: fetchData() já é chamado dentro de removeBookings, 
-      // então savedSchedule e weeklySchedule são atualizados automaticamente
+      toast.success('Disponibilidade removida!')
+
+      // Pequeno delay para garantir que o banco processou a deleção
+      await new Promise(resolve => setTimeout(resolve, 500))
+      await fetchData()
     } catch {
       toast.error('Erro ao remover horário')
     } finally {
@@ -410,22 +390,22 @@ export default function DisponibilidadePage() {
   }
 
   // Selecionar horário em todos os dias (apenas onde disponível)
-  const handleSlotClick = (dayOfWeek: number, horario: string, isSaved: boolean, isSelected: boolean) => {
+  const handleSlotClick = (dateKey: string, dayOfWeek: number, horario: string, isSaved: boolean, isSelected: boolean) => {
     if (isSaved && !isSelected) {
-      openSlotRemovalModal(dayOfWeek, horario)
+      openSlotRemovalModal(dateKey, horario)
       return
     }
-    toggleHorario(dayOfWeek, horario)
+    toggleHorario(dateKey, dayOfWeek, horario)
   }
 
   const selectHorarioAllDays = (horario: string) => {
     setWeeklySchedule(prev => {
       const newSchedule = { ...prev }
-      DIAS_SEMANA.forEach(dia => {
-        if (isSlotAvailable(dia.value, horario)) {
-          const daySchedule = newSchedule[dia.value] || []
+      visibleDays.forEach(dia => {
+        if (isSlotAvailable(dia.dayOfWeek, horario)) {
+          const daySchedule = newSchedule[dia.dateKey] || []
           if (!daySchedule.includes(horario)) {
-            newSchedule[dia.value] = [...daySchedule, horario].sort()
+            newSchedule[dia.dateKey] = [...daySchedule, horario].sort()
           }
         }
       })
@@ -442,63 +422,35 @@ export default function DisponibilidadePage() {
 
     setSaving(true)
     try {
-      // Calcular datas baseado no modo
-      const today = new Date()
-      let endDate: Date
-      
-      switch (applyMode) {
-        case 'week':
-          endDate = new Date(today)
-          endDate.setDate(today.getDate() + 7)
-          break
-        case 'month':
-          endDate = new Date(today)
-          endDate.setMonth(today.getMonth() + 1)
-          break
-        case 'always':
-          endDate = new Date(today)
-          endDate.setFullYear(today.getFullYear() + 1) // 1 ano
-          break
-      }
-
       let totalCreated = 0
       let errors = 0
 
-      // Para cada dia da semana com horários selecionados
-      for (const [dayOfWeek, horarios] of Object.entries(weeklySchedule)) {
+      // Para cada data com horários selecionados
+      for (const [dateKey, horarios] of Object.entries(weeklySchedule)) {
         if (horarios.length === 0) continue
 
-        // Encontrar próximas datas desse dia da semana
-        const currentDate = new Date(today)
-        while (currentDate <= endDate) {
-          if (currentDate.getDay() === parseInt(dayOfWeek)) {
-            // Criar bookings para cada horário
-            for (const hora of horarios) {
-              const dateStr = currentDate.toISOString().split('T')[0]
-              const bookingDateUtc = createUtcFromLocal(dateStr, hora)
-              const endTimeUtc = new Date(bookingDateUtc.getTime() + 60 * 60 * 1000)
+        for (const hora of horarios) {
+          const bookingDateUtc = createUtcFromLocal(dateKey, hora)
+          const endTimeUtc = new Date(bookingDateUtc.getTime() + 60 * 60 * 1000)
 
-              const res = await authFetch('/api/bookings/availability', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  source: 'PROFESSOR',
-                  professorId: user.id,
-                  academyId: selectedAcademy,
-                  startAt: bookingDateUtc.toISOString(),
-                  endAt: endTimeUtc.toISOString(),
-                  professorNotes: 'Horário disponível'
-                })
-              })
+          const res = await authFetch('/api/bookings/availability', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              source: 'PROFESSOR',
+              professorId: user.id,
+              academyId: selectedAcademy,
+              startAt: bookingDateUtc.toISOString(),
+              endAt: endTimeUtc.toISOString(),
+              professorNotes: 'Horário disponível'
+            })
+          })
 
-              if (res.ok) {
-                totalCreated++
-              } else {
-                errors++
-              }
-            }
+          if (res.ok) {
+            totalCreated++
+          } else {
+            errors++
           }
-          currentDate.setDate(currentDate.getDate() + 1)
         }
       }
 
@@ -589,7 +541,7 @@ export default function DisponibilidadePage() {
           </Button>
           <div>
             <h1 className="text-2xl font-bold">Gerenciar Disponibilidade</h1>
-            <p className="text-sm text-gray-500">Configure seus horários semanais</p>
+            <p className="text-sm text-gray-500">Configure seus horários disponíveis por data</p>
           </div>
         </div>
 
@@ -614,7 +566,7 @@ export default function DisponibilidadePage() {
           </CardContent>
         </Card>
 
-        {/* Grade Semanal */}
+        {/* Grade de 7 dias (agenda por data) */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -662,6 +614,38 @@ export default function DisponibilidadePage() {
                   </div>
                 </div>
                 
+                <div className="flex justify-between items-center mb-4 text-sm">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const prev = new Date(startDate)
+                      prev.setDate(prev.getDate() - 7)
+                      setStartDate(prev)
+                    }}
+                  >
+                    <ChevronLeft className="h-4 w-4 mr-1" />
+                    Semana anterior
+                  </Button>
+                  <span className="text-gray-600 font-medium">
+                    {formatDateShort(visibleDays[0].date)} 
+                    {' '}até{' '} 
+                    {formatDateShort(visibleDays[visibleDays.length - 1].date)}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const next = new Date(startDate)
+                      next.setDate(next.getDate() + 7)
+                      setStartDate(next)
+                    }}
+                  >
+                    Próxima semana
+                    <ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
+                </div>
+
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse">
                   <thead>
@@ -669,23 +653,23 @@ export default function DisponibilidadePage() {
                       <th className="p-2 text-left text-sm font-medium text-gray-500 w-20">
                         <Clock className="h-4 w-4" />
                       </th>
-                      {DIAS_SEMANA.map(dia => {
-                        const daySlots = slotsByDay[dia.value] || []
+                      {visibleDays.map(dia => {
+                        const daySlots = slotsByDay[dia.dayOfWeek] || []
                         const hasSlots = daySlots.length > 0
                         return (
-                          <th key={dia.value} className={`p-2 text-center ${!hasSlots ? 'opacity-40' : ''}`}>
-                            <div className="text-sm font-medium">{dia.short}</div>
+                          <th key={dia.dateKey} className={`p-2 text-center ${!hasSlots ? 'opacity-40' : ''}`}>
+                            <div className="text-sm font-medium">{formatDateShort(dia.date)}</div>
                             {hasSlots ? (
                               <div className="flex gap-1 justify-center mt-1">
                                 <button
-                                  onClick={() => selectAllDay(dia.value)}
+                                  onClick={() => selectAllDate(dia.dateKey, dia.dayOfWeek)}
                                   className="text-[10px] text-green-600 hover:underline"
                                 >
                                   Todos
                                 </button>
                                 <span className="text-gray-300">|</span>
                                 <button
-                                  onClick={() => openClearDayModal(dia.value)}
+                                  onClick={() => openClearDayModal(dia.dateKey)}
                                   className="text-[10px] text-red-600 hover:underline"
                                 >
                                   Limpar
@@ -710,23 +694,23 @@ export default function DisponibilidadePage() {
                             {formatTimeLabel(horario)}
                           </button>
                         </td>
-                        {DIAS_SEMANA.map(dia => {
-                          const isAvailable = isSlotAvailable(dia.value, horario)
-                          const isSelected = (weeklySchedule[dia.value] || []).includes(horario)
-                          const isSaved = (savedSchedule[dia.value] || []).includes(horario)
+                        {visibleDays.map(dia => {
+                          const isAvailable = isSlotAvailable(dia.dayOfWeek, horario)
+                          const isSelected = (weeklySchedule[dia.dateKey] || []).includes(horario)
+                          const isSaved = (savedSchedule[dia.dateKey] || []).includes(horario)
                           
                           if (!isAvailable) {
                             return (
-                              <td key={dia.value} className="p-1 text-center">
+                              <td key={dia.dateKey} className="p-1 text-center">
                                 <div className="w-10 h-10 rounded-lg bg-gray-100 border-2 border-gray-100" />
                               </td>
                             )
                           }
                           
                           return (
-                            <td key={dia.value} className="p-1 text-center">
+                            <td key={dia.dateKey} className="p-1 text-center">
                               <button
-                                onClick={() => handleSlotClick(dia.value, horario, isSaved, isSelected)}
+                                onClick={() => handleSlotClick(dia.dateKey, dia.dayOfWeek, horario, isSaved, isSelected)}
                                 className={`w-10 h-10 rounded-lg border-2 transition-all ${
                                   isSelected
                                     ? 'bg-gradient-to-r from-blue-500 to-indigo-500 border-blue-500 text-white shadow-md'
@@ -747,25 +731,6 @@ export default function DisponibilidadePage() {
                 </div>
               </div>
             )}
-
-            {/* Modo de aplicação */}
-            <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-              <Label className="font-medium mb-3 block">Aplicar para:</Label>
-              <RadioGroup value={applyMode} onValueChange={(v) => setApplyMode(v as any)} className="flex gap-4">
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="week" id="week" />
-                  <Label htmlFor="week" className="cursor-pointer">Esta semana</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="month" id="month" />
-                  <Label htmlFor="month" className="cursor-pointer">Próximas 4 semanas</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="always" id="always" />
-                  <Label htmlFor="always" className="cursor-pointer">Próximo ano</Label>
-                </div>
-              </RadioGroup>
-            </div>
 
             {/* Botão Salvar */}
             <div className="mt-6 flex justify-end">
@@ -866,74 +831,35 @@ export default function DisponibilidadePage() {
         </Card>
       </div>
 
-      {/* Modal de confirmação para limpar dia */}
+      {/* Modal de confirmação para limpar todos os horários de uma data */}
       <ConfirmDialog
         isOpen={clearDayModal.open}
-        onClose={() => setClearDayModal({ open: false, dayOfWeek: null })}
+        onClose={() => setClearDayModal({ open: false, dateKey: null })}
         onConfirm={executeClearDay}
         title="Remover Disponibilidade"
-        description={`Deseja remover TODOS os horários disponíveis de ${DIAS_SEMANA.find(d => d.value === clearDayModal.dayOfWeek)?.label}? Isso vai desalocar os horários futuros deste dia. Horários com aulas marcadas não serão afetados.`}
+        description={clearDayModal.dateKey
+          ? `Deseja remover TODOS os horários disponíveis em ${formatDateLongFromKey(clearDayModal.dateKey)}? Atenção: Aulas já marcadas/reservadas não serão afetadas.`
+          : 'Deseja remover todos os horários disponíveis deste dia? Aulas já marcadas/reservadas não serão afetadas.'}
         confirmText="Sim, Remover"
         cancelText="Cancelar"
         type="danger"
         loading={loading}
       />
 
-      {/* Modal de confirmação para um horário específico */}
+      {/* Modal de confirmação para um horário específico (data + horário) */}
       <ConfirmDialog
         isOpen={slotRemovalModal.open}
-        onClose={() => setSlotRemovalModal({ open: false, dayOfWeek: null, time: null, removalMode: 'single' })}
+        onClose={() => setSlotRemovalModal({ open: false, dateKey: null, time: null })}
         onConfirm={executeSlotRemoval}
         title="Remover horário"
-        description={`Deseja remover sua disponibilidade das ${formatTimeLabel(slotRemovalModal.time || '')} em ${DIAS_SEMANA.find(d => d.value === slotRemovalModal.dayOfWeek)?.label}?`}
-        confirmText={
-          slotRemovalModal.removalMode === 'single' 
-            ? 'Remover próxima' 
-            : slotRemovalModal.removalMode === 'allDay'
-            ? 'Remover do dia'
-            : 'Remover de todos os dias'
-        }
+        description={slotRemovalModal.dateKey && slotRemovalModal.time
+          ? `Deseja remover sua disponibilidade em ${formatDateLongFromKey(slotRemovalModal.dateKey)} às ${formatTimeLabel(slotRemovalModal.time)}?`
+          : 'Deseja remover este horário de disponibilidade?'}
+        confirmText="Remover"
         cancelText="Cancelar"
         type="warning"
         loading={loading}
-      >
-        <div className="space-y-2">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="radio"
-              name="removal-mode"
-              checked={slotRemovalModal.removalMode === 'single'}
-              onChange={() => setSlotRemovalModal(prev => ({ ...prev, removalMode: 'single' }))}
-              className="text-orange-600 focus:ring-orange-500"
-            />
-            <span className="text-sm text-gray-700">Remover apenas a próxima ocorrência</span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="radio"
-              name="removal-mode"
-              checked={slotRemovalModal.removalMode === 'allDay'}
-              onChange={() => setSlotRemovalModal(prev => ({ ...prev, removalMode: 'allDay' }))}
-              className="text-orange-600 focus:ring-orange-500"
-            />
-            <span className="text-sm text-gray-700">
-              Remover todas as {DIAS_SEMANA.find(d => d.value === slotRemovalModal.dayOfWeek)?.label}s às {formatTimeLabel(slotRemovalModal.time || '')}
-            </span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="radio"
-              name="removal-mode"
-              checked={slotRemovalModal.removalMode === 'allDays'}
-              onChange={() => setSlotRemovalModal(prev => ({ ...prev, removalMode: 'allDays' }))}
-              className="text-red-600 focus:ring-red-500"
-            />
-            <span className="text-sm text-gray-700">
-              Remover {formatTimeLabel(slotRemovalModal.time || '')} de <strong>todos os dias</strong> da semana
-            </span>
-          </label>
-        </div>
-      </ConfirmDialog>
+      />
     </ProfessorLayout>
   )
 }
