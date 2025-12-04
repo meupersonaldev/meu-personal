@@ -126,8 +126,16 @@ export default function DisponibilidadePage() {
         setAcademyTimeSlots(data.slots || [])
       }
 
-      // Buscar bookings disponíveis já criados pelo professor
-      const bookingsRes = await authFetch(`/api/bookings?teacher_id=${user.id}`)
+      // Calcular intervalo visível (7 dias a partir de startDate)
+      const rangeStart = getLocalDateKey(startDate)
+      const rangeEndDate = new Date(startDate)
+      rangeEndDate.setDate(startDate.getDate() + 6)
+      const rangeEnd = getLocalDateKey(rangeEndDate)
+
+      // Buscar bookings disponíveis já criados pelo professor apenas para a janela atual
+      const bookingsRes = await authFetch(
+        `/api/bookings?teacher_id=${user.id}&from=${rangeStart}&to=${rangeEnd}`
+      )
       if (bookingsRes.ok) {
         const data = await bookingsRes.json()
         const bookings = data.bookings || []
@@ -194,7 +202,7 @@ export default function DisponibilidadePage() {
     } finally {
       setLoadingSlots(false)
     }
-  }, [selectedAcademy, user?.id, authFetch])
+  }, [selectedAcademy, user?.id, authFetch, startDate])
 
   // Buscar horários da academia e disponibilidade já salva
   useEffect(() => {
@@ -422,10 +430,9 @@ export default function DisponibilidadePage() {
 
     setSaving(true)
     try {
-      let totalCreated = 0
-      let errors = 0
+      // Montar slots em memória (bulk)
+      const slots: { startAt: string; endAt: string; professorNotes: string }[] = []
 
-      // Para cada data com horários selecionados
       for (const [dateKey, horarios] of Object.entries(weeklySchedule)) {
         if (horarios.length === 0) continue
 
@@ -433,37 +440,46 @@ export default function DisponibilidadePage() {
           const bookingDateUtc = createUtcFromLocal(dateKey, hora)
           const endTimeUtc = new Date(bookingDateUtc.getTime() + 60 * 60 * 1000)
 
-          const res = await authFetch('/api/bookings/availability', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              source: 'PROFESSOR',
-              professorId: user.id,
-              academyId: selectedAcademy,
-              startAt: bookingDateUtc.toISOString(),
-              endAt: endTimeUtc.toISOString(),
-              professorNotes: 'Horário disponível'
-            })
+          slots.push({
+            startAt: bookingDateUtc.toISOString(),
+            endAt: endTimeUtc.toISOString(),
+            professorNotes: 'Horário disponível'
           })
-
-          if (res.ok) {
-            totalCreated++
-          } else {
-            errors++
-          }
         }
       }
 
-      if (totalCreated > 0) {
-        toast.success(`${totalCreated} horário(s) disponibilizado(s)!`)
-        // Recarregar dados para mostrar horários salvos
-        await fetchData()
-        // Limpar seleções
-        setWeeklySchedule({})
+      if (slots.length === 0) {
+        toast.error('Selecione pelo menos um horário para disponibilizar')
+        return
       }
-      if (errors > 0) {
-        toast.error(`${errors} horário(s) já existiam ou tiveram erro`)
+
+      const res = await authFetch('/api/bookings/availability/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source: 'PROFESSOR',
+          professorId: user.id,
+          academyId: selectedAcademy,
+          slots
+        })
+      })
+
+      const json = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        const msg = typeof json?.error === 'string'
+          ? json.error
+          : 'Erro ao salvar disponibilidade'
+        toast.error(msg)
+        return
       }
+
+      const created = json?.created ?? slots.length
+      toast.success(`${created} horário(s) disponibilizado(s)!`)
+      // Recarregar dados para mostrar horários salvos
+      await fetchData()
+      // Limpar seleções
+      setWeeklySchedule({})
     } catch {
       toast.error('Erro ao salvar disponibilidade')
     } finally {
@@ -702,7 +718,9 @@ export default function DisponibilidadePage() {
                           if (!isAvailable) {
                             return (
                               <td key={dia.dateKey} className="p-1 text-center">
-                                <div className="w-10 h-10 rounded-lg bg-gray-100 border-2 border-gray-100" />
+                                <div className="flex justify-center">
+                                  <div className="w-10 h-10 rounded-lg bg-gray-100 border-2 border-gray-100" />
+                                </div>
                               </td>
                             )
                           }

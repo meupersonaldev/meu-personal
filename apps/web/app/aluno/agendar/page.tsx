@@ -23,12 +23,13 @@ type Slot = {
 }
 
 // Tipos de recorrência
+// IMPORTANTE: o backend limita a série a no máximo 6 meses a partir da data inicial.
+// Por isso, não oferecemos mais a opção "YEAR" aqui para evitar erro 400.
 const RECURRENCE_OPTIONS = [
   { value: '15_DAYS', label: 'Por 15 dias', description: '~2 aulas' },
   { value: 'MONTH', label: 'Por 1 mês', description: '~4 aulas' },
   { value: 'QUARTER', label: 'Por 3 meses', description: '~12 aulas' },
   { value: 'SEMESTER', label: 'Por 6 meses', description: '~24 aulas' },
-  { value: 'YEAR', label: 'Por 1 ano', description: '~52 aulas' },
 ]
 
 // Helper para obter dia da semana
@@ -50,6 +51,13 @@ export default function AgendarPage() {
   const { token, isAuthenticated } = useAuthStore()
 
   const today = useMemo(() => new Date().toISOString().slice(0, 10), [])
+  // Limite máximo de agendamento: 6 meses à frente
+  const maxDate = useMemo(() => {
+    const d = new Date()
+    // adicionar 6 meses mantendo o dia
+    d.setMonth(d.getMonth() + 6)
+    return d.toISOString().slice(0, 10)
+  }, [])
   const initialDate = useMemo(() => searchParams.get('date') || today, [searchParams, today])
   const [date, setDate] = useState<string>(initialDate)
   const [slots, setSlots] = useState<Slot[]>([])
@@ -323,6 +331,8 @@ export default function AgendarPage() {
             value={date}
             onChange={(e) => setDate(e.target.value)}
             className="border rounded px-3 py-2 w-fit"
+            min={today}
+            max={maxDate}
           />
           
           {/* Opção de Recorrência */}

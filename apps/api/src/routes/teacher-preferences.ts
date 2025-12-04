@@ -2,7 +2,6 @@ import { Router } from 'express'
 import { supabase } from '../lib/supabase'
 import { syncContactAcademies } from '../services/franqueadora-contacts.service'
 import { requireAuth } from '../middleware/auth'
-import { bookingCanonicalService } from '../services/booking-canonical.service'
 
 const router = Router()
 
@@ -33,9 +32,9 @@ const ensureTeacherOrAdmin = (
   return true
 }
 
-const DEFAULT_AVAILABILITY_DAYS = 28
+const DEFAULT_AVAILABILITY_DAYS = 180 // 6 meses
 
-async function ensureDefaultAvailabilityForTeacher(teacherId: string, academyId: string) {
+export async function ensureDefaultAvailabilityForTeacher(teacherId: string, academyId: string) {
   try {
     const { data: linkRecord, error: linkError } = await supabase
       .from('academy_teachers')
@@ -63,9 +62,9 @@ async function ensureDefaultAvailabilityForTeacher(teacherId: string, academyId:
     const { data: existingBookings, error: existingError } = await supabase
       .from('bookings')
       .select('id')
-      .eq('professor_id', teacherId)
+      .eq('teacher_id', teacherId)
       .eq('franchise_id', academyId)
-      .eq('status', 'AVAILABLE')
+      .eq('status_canonical', 'AVAILABLE')
       .gte('start_at', now.toISOString())
       .limit(1)
 
@@ -77,6 +76,31 @@ async function ensureDefaultAvailabilityForTeacher(teacherId: string, academyId:
     if (existingBookings && existingBookings.length > 0) {
       console.log('[ensureDefaultAvailability] Já existem disponibilidades para o professor, ignorando seed')
       return
+    }
+
+    // Buscar configuração da academia (schedule) para respeitar dias de funcionamento
+    const { data: academy, error: academyError } = await supabase
+      .from('academies')
+      .select('schedule')
+      .eq('id', academyId)
+      .single()
+
+    if (academyError) {
+      console.error('[ensureDefaultAvailability] Erro ao buscar academy:', academyError)
+      return
+    }
+
+    let hasSchedule = false
+    let parsedSchedule: any[] = []
+
+    if (academy?.schedule && Array.isArray(academy.schedule) && academy.schedule.length > 0) {
+      hasSchedule = true
+      try {
+        parsedSchedule =
+          typeof academy.schedule === 'string' ? JSON.parse(academy.schedule) : academy.schedule
+      } catch (e) {
+        console.error('[ensureDefaultAvailability] Erro ao parsear schedule da academy:', e)
+      }
     }
 
     const { data: timeSlots, error: slotsError } = await supabase
@@ -108,11 +132,28 @@ async function ensureDefaultAvailabilityForTeacher(teacherId: string, academyId:
     const endDate = new Date(startDate)
     endDate.setDate(endDate.getDate() + DEFAULT_AVAILABILITY_DAYS)
 
+    console.log(`[ensureDefaultAvailability] Período: ${startDate.toISOString()} até ${endDate.toISOString()} (${DEFAULT_AVAILABILITY_DAYS} dias)`)
+
+    // Acumular todos os bookings para inserção em bulk
+    const bookingsToInsert: any[] = []
     const current = new Date(startDate)
-    let created = 0
+    let daysProcessed = 0
 
     while (current <= endDate) {
-      const daySlots = slotsByDay[current.getDay()] || []
+      daysProcessed++
+
+      const dow = current.getDay()
+
+      // Se houver schedule configurado, respeitar apenas dias com isOpen = true
+      if (hasSchedule && parsedSchedule.length > 0) {
+        const daySchedule = parsedSchedule.find((s: any) => s.day === String(dow))
+        if (!daySchedule || !daySchedule.isOpen) {
+          current.setDate(current.getDate() + 1)
+          continue
+        }
+      }
+
+      const daySlots = slotsByDay[dow] || []
       for (const slot of daySlots) {
         const [hour = '00', minute = '00', second = '00'] = slot.split(':')
         const slotStart = new Date(current)
@@ -121,22 +162,53 @@ async function ensureDefaultAvailabilityForTeacher(teacherId: string, academyId:
           continue
         }
         const slotEnd = new Date(slotStart.getTime() + 60 * 60 * 1000)
-        try {
-          await bookingCanonicalService.createBooking({
-            source: 'PROFESSOR',
-            professorId: teacherId,
-            franchiseId: academyId,
-            startAt: slotStart,
-            endAt: slotEnd,
-            status: 'AVAILABLE',
-            professorNotes: 'Disponibilidade padrão da unidade'
-          })
-          created++
-        } catch (error) {
-          console.error('[ensureDefaultAvailability] Erro ao criar disponibilidade padrão:', error)
-        }
+
+        // cancellable_until só faz sentido quando há aluno (para reembolso de crédito)
+        // Para disponibilidades do professor (sem aluno), não é necessário
+
+        bookingsToInsert.push({
+          source: 'PROFESSOR',
+          student_id: null,
+          teacher_id: teacherId,
+          franchise_id: academyId,
+          unit_id: null,
+          date: slotStart.toISOString(),
+          start_at: slotStart.toISOString(),
+          end_at: slotEnd.toISOString(),
+          status: 'AVAILABLE',
+          status_canonical: 'AVAILABLE',
+          cancellable_until: null, // Não aplicável para disponibilidades sem aluno
+          professor_notes: 'Disponibilidade padrão da unidade',
+          created_at: new Date().toISOString()
+        })
       }
       current.setDate(current.getDate() + 1)
+    }
+
+    console.log(`[ensureDefaultAvailability] Processados ${daysProcessed} dias, ${bookingsToInsert.length} horários para criar`)
+
+    // Inserir todos os bookings em bulk
+    let created = 0
+    if (bookingsToInsert.length > 0) {
+      try {
+        // Inserir em lotes de 500 para evitar problemas com limites do Supabase
+        const BATCH_SIZE = 500
+        for (let i = 0; i < bookingsToInsert.length; i += BATCH_SIZE) {
+          const batch = bookingsToInsert.slice(i, i + BATCH_SIZE)
+          const { data, error } = await supabase
+            .from('bookings')
+            .insert(batch)
+            .select('id')
+
+          if (error) {
+            console.error(`[ensureDefaultAvailability] Erro ao inserir lote ${i / BATCH_SIZE + 1}:`, error)
+          } else {
+            created += data?.length || 0
+          }
+        }
+      } catch (error) {
+        console.error('[ensureDefaultAvailability] Erro ao criar disponibilidades em bulk:', error)
+      }
     }
 
     console.log(`[ensureDefaultAvailability] Foram criados ${created} horários padrão para o professor ${teacherId} na academia ${academyId}`)
@@ -147,6 +219,186 @@ async function ensureDefaultAvailabilityForTeacher(teacherId: string, academyId:
       .eq('id', linkRecord.id)
   } catch (error) {
     console.error('[ensureDefaultAvailability] Erro inesperado:', error)
+  }
+}
+
+// Mantém sempre uma janela de N dias de disponibilidade à frente,
+// sem recriar slots que já existiam (ou que o professor apagou manualmente).
+export async function ensureAvailabilityWindowForTeacher(
+  teacherId: string,
+  academyId: string,
+  daysAhead: number = DEFAULT_AVAILABILITY_DAYS
+) {
+  try {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    const targetEnd = new Date(today)
+    targetEnd.setDate(targetEnd.getDate() + daysAhead)
+
+    // Buscar último booking AVAILABLE futuro (sem aluno) para este professor/academy
+    const { data: lastBooking, error: lastError } = await supabase
+      .from('bookings')
+      .select('start_at')
+      .eq('teacher_id', teacherId)
+      .eq('franchise_id', academyId)
+      .eq('status_canonical', 'AVAILABLE')
+      .is('student_id', null)
+      .gte('start_at', today.toISOString())
+      .order('start_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (lastError) {
+      console.error('[ensureAvailabilityWindow] Erro ao buscar último booking:', lastError)
+      return
+    }
+
+    let startDate = new Date(today)
+
+    if (lastBooking?.start_at) {
+      const lastDate = new Date(lastBooking.start_at)
+      lastDate.setHours(0, 0, 0, 0)
+      // começar no dia seguinte ao último dia preenchido
+      startDate = new Date(lastDate)
+      startDate.setDate(startDate.getDate() + 1)
+    }
+
+    // Se já estamos depois de targetEnd, nada a fazer
+    if (startDate > targetEnd) {
+      console.log('[ensureAvailabilityWindow] Janela já preenchida, nada a fazer', {
+        teacherId,
+        academyId,
+        startDate: startDate.toISOString(),
+        targetEnd: targetEnd.toISOString()
+      })
+      return
+    }
+
+    // Buscar configuração da academia (schedule) para respeitar dias de funcionamento
+    const { data: academy, error: academyError } = await supabase
+      .from('academies')
+      .select('schedule')
+      .eq('id', academyId)
+      .single()
+
+    if (academyError) {
+      console.error('[ensureAvailabilityWindow] Erro ao buscar academy:', academyError)
+      return
+    }
+
+    let hasSchedule = false
+    let parsedSchedule: any[] = []
+
+    if (academy?.schedule && Array.isArray(academy.schedule) && academy.schedule.length > 0) {
+      hasSchedule = true
+      try {
+        parsedSchedule =
+          typeof academy.schedule === 'string' ? JSON.parse(academy.schedule) : academy.schedule
+      } catch (e) {
+        console.error('[ensureAvailabilityWindow] Erro ao parsear schedule da academy:', e)
+      }
+    }
+
+    const { data: timeSlots, error: slotsError } = await supabase
+      .from('academy_time_slots')
+      .select('day_of_week, time, is_available')
+      .eq('academy_id', academyId)
+      .eq('is_available', true)
+
+    if (slotsError) {
+      console.error('[ensureAvailabilityWindow] Erro ao buscar horários da academia:', slotsError)
+      return
+    }
+
+    if (!timeSlots || timeSlots.length === 0) {
+      console.log('[ensureAvailabilityWindow] Academia não possui horários configurados')
+      return
+    }
+
+    const slotsByDay = timeSlots.reduce<Record<number, string[]>>((acc, slot) => {
+      if (!acc[slot.day_of_week]) {
+        acc[slot.day_of_week] = []
+      }
+      acc[slot.day_of_week].push(slot.time)
+      return acc
+    }, {})
+
+    const bookingsToInsert: any[] = []
+    const current = new Date(startDate)
+
+    while (current <= targetEnd) {
+      const dow = current.getDay()
+
+      if (hasSchedule && parsedSchedule.length > 0) {
+        const daySchedule = parsedSchedule.find((s: any) => s.day === String(dow))
+        if (!daySchedule || !daySchedule.isOpen) {
+          current.setDate(current.getDate() + 1)
+          continue
+        }
+      }
+
+      const daySlots = slotsByDay[dow] || []
+      for (const slot of daySlots) {
+        const [hour = '00', minute = '00', second = '00'] = slot.split(':')
+        const slotStart = new Date(current)
+        slotStart.setHours(Number(hour), Number(minute), Number(second ?? '0'), 0)
+
+        // Ignorar passado absoluto
+        if (slotStart <= new Date()) continue
+
+        const slotEnd = new Date(slotStart.getTime() + 60 * 60 * 1000)
+
+        bookingsToInsert.push({
+          source: 'PROFESSOR',
+          student_id: null,
+          teacher_id: teacherId,
+          franchise_id: academyId,
+          unit_id: null,
+          date: slotStart.toISOString(),
+          start_at: slotStart.toISOString(),
+          end_at: slotEnd.toISOString(),
+          status: 'AVAILABLE',
+          status_canonical: 'AVAILABLE',
+          cancellable_until: null,
+          professor_notes: 'Disponibilidade padrão da unidade (janela automática)',
+          created_at: new Date().toISOString()
+        })
+      }
+
+      current.setDate(current.getDate() + 1)
+    }
+
+    if (!bookingsToInsert.length) {
+      console.log('[ensureAvailabilityWindow] Nenhum novo horário para criar', {
+        teacherId,
+        academyId
+      })
+      return
+    }
+
+    const BATCH_SIZE = 500
+    let created = 0
+
+    for (let i = 0; i < bookingsToInsert.length; i += BATCH_SIZE) {
+      const batch = bookingsToInsert.slice(i, i + BATCH_SIZE)
+      const { data, error } = await supabase
+        .from('bookings')
+        .insert(batch)
+        .select('id')
+
+      if (error) {
+        console.error('[ensureAvailabilityWindow] Erro ao inserir lote:', error)
+      } else {
+        created += data?.length || 0
+      }
+    }
+
+    console.log(
+      `[ensureAvailabilityWindow] Criados ${created} horários novos para manter janela de ${daysAhead} dias (teacher=${teacherId}, academy=${academyId})`
+    )
+  } catch (error) {
+    console.error('[ensureAvailabilityWindow] Erro inesperado:', error)
   }
 }
 

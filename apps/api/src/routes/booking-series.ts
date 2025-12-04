@@ -219,7 +219,23 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<any> 
     
     // Calcular datas da série
     const start = new Date(startDate + 'T00:00:00')
-    const end = calculateEndDate(start, recurrenceType)
+
+    // Limite máximo: série não pode ultrapassar 6 meses a partir da data inicial
+    const maxEndAllowed = addMonths(start, 6)
+    const calculatedEnd = calculateEndDate(start, recurrenceType)
+
+    if (isAfter(calculatedEnd, maxEndAllowed)) {
+      return res.status(400).json({
+        error: 'A série recorrente não pode ultrapassar 6 meses de duração a partir da data inicial.',
+        details: {
+          startDate,
+          requestedEndDate: format(calculatedEnd, 'yyyy-MM-dd'),
+          maxAllowedEndDate: format(maxEndAllowed, 'yyyy-MM-dd')
+        }
+      })
+    }
+
+    const end = calculatedEnd
     const seriesDates = generateSeriesDates(start, end, dayOfWeek)
     
     if (seriesDates.length === 0) {

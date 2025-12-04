@@ -185,6 +185,7 @@ import asaasRoutes from './routes/asaas'
 import bookingSeriesRoutes from './routes/booking-series'
 import { bookingScheduler } from './jobs/booking-scheduler'
 import { reservationScheduler } from './jobs/reservation-processor'
+import { teacherAvailabilityScheduler } from './jobs/teacher-availability-scheduler'
 import { asaasSyncService } from './services/asaas-sync.service'
 
 // SEGURANÇA CRÍTICA: Rate limit específico para auth (mais restritivo)
@@ -277,6 +278,16 @@ if (process.env.NODE_ENV !== 'test') {
     reservationScheduler.startDailyScheduler(reservationHour)
     console.log(
       `✅ Scheduler de reservas configurado para rodar às ${reservationHour}:00`
+    )
+
+    // Iniciar scheduler de preenchimento de agenda de professores (diário às 02:00)
+    console.log('⏰ Iniciando scheduler de disponibilidade de professores...')
+    const availabilityHour = process.env.TEACHER_AVAILABILITY_SCHEDULER_HOUR
+      ? parseInt(process.env.TEACHER_AVAILABILITY_SCHEDULER_HOUR)
+      : 2 // Padrão: 02:00
+    teacherAvailabilityScheduler.startDailyScheduler(availabilityHour)
+    console.log(
+      `✅ Scheduler de disponibilidade configurado para rodar às ${availabilityHour}:00`
     )
 
     // Sincronizar subcontas Asaas na inicialização (assíncrono, não bloqueia)

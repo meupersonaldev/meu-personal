@@ -298,13 +298,11 @@ router.get(
           .json({ error: 'Acesso não autorizado a este professor' })
       }
 
-      // Filtrar apenas bookings futuros para evitar limite de 1000 registros
-      const now = new Date().toISOString()
-      
-      const { data: teacherBookings, error } = await supabase
+      // Construir query base para o professor
+      let teacherQuery = supabase
         .from('bookings')
         .select(
-          `
+        `
         id,
         student_id,
         teacher_id,
@@ -322,7 +320,30 @@ router.get(
       `
         )
         .eq('teacher_id', teacherId)
-        .gte('date', now) // Apenas bookings futuros
+
+      // Filtro por intervalo de datas (from/to) quando fornecido.
+      // Os parâmetros from/to vêm no formato YYYY-MM-DD (data local Brasil, UTC-3).
+      // Para manter consistência com a UI (que usa datas locais), convertemos
+      // o intervalo local para UTC usando o offset -03:00.
+      if (from) {
+        const fromStr = String(from)
+        // 00:00 local (Brasil) -> UTC
+        const fromUtc = new Date(`${fromStr}T00:00:00-03:00`).toISOString()
+        teacherQuery = teacherQuery.gte('date', fromUtc)
+      } else {
+        // Caso não tenha "from", usar apenas bookings futuros para evitar excesso de registros
+        const now = new Date().toISOString()
+        teacherQuery = teacherQuery.gte('date', now)
+      }
+
+      if (to) {
+        const toStr = String(to)
+        // 23:59:59 local (Brasil) -> UTC
+        const toUtc = new Date(`${toStr}T23:59:59.999-03:00`).toISOString()
+        teacherQuery = teacherQuery.lte('date', toUtc)
+      }
+      
+      const { data: teacherBookings, error } = await teacherQuery
         .order('date', { ascending: true })
         .limit(10000)
 
@@ -334,7 +355,7 @@ router.get(
       console.log(`📊 GET bookings para teacher ${teacherId}: ${teacherBookings?.length || 0} bookings encontrados`)
 
       let results = teacherBookings || []
-
+      
       if (status) {
         const statusStr = Array.isArray(status) ? status[0] : String(status)
         const statusTarget = normalizeBookingStatus(statusStr, null)
@@ -345,24 +366,6 @@ router.get(
           )
           return current === statusTarget
         })
-      }
-
-      if (from) {
-        const fromDate = new Date(String(from))
-        if (!Number.isNaN(fromDate.getTime())) {
-          results = results.filter(
-            (booking: any) => new Date(booking.date) >= fromDate
-          )
-        }
-      }
-
-      if (to) {
-        const toDate = new Date(String(to))
-        if (!Number.isNaN(toDate.getTime())) {
-          results = results.filter(
-            (booking: any) => new Date(booking.date) <= toDate
-          )
-        }
       }
 
       const studentIds = Array.from(
@@ -693,6 +696,21 @@ const createAvailabilitySchema = z.object({
   professorNotes: z.string().optional()
 })
 
+const createBulkAvailabilitySchema = z.object({
+  source: z.literal('PROFESSOR'),
+  professorId: z.string().uuid(),
+  academyId: z.string().uuid(),
+  slots: z
+    .array(
+      z.object({
+        startAt: z.string(),
+        endAt: z.string(),
+        professorNotes: z.string().optional()
+      })
+    )
+    .min(1)
+})
+
 // POST /api/bookings/availability - Criar disponibilidade do professor
 router.post(
   '/availability',
@@ -721,6 +739,70 @@ router.post(
     })
 
     return res.status(201).json({ booking })
+  })
+)
+
+// POST /api/bookings/availability/bulk - Criar disponibilidades em bulk
+router.post(
+  '/availability/bulk',
+  requireAuth,
+  requireRole(['TEACHER', 'PROFESSOR', 'FRANQUIA', 'FRANQUEADORA']),
+  requireApprovedTeacher,
+  asyncErrorHandler(async (req, res) => {
+    console.log(
+      '[POST /api/bookings/availability/bulk] Criando disponibilidades em bulk:',
+      JSON.stringify(req.body, null, 2)
+    )
+
+    const data = createBulkAvailabilitySchema.parse(req.body)
+    const user = req.user
+
+    // Verificar se o professor está criando para si mesmo
+    if (data.professorId !== user.userId && !['FRANQUIA', 'FRANQUEADORA'].includes(user.role)) {
+      return res.status(403).json({ error: 'Você só pode criar disponibilidade para si mesmo' })
+    }
+
+    const nowIso = new Date().toISOString()
+
+    const rows = data.slots.map(slot => {
+      const start = new Date(slot.startAt)
+
+      return {
+        source: 'PROFESSOR',
+        student_id: null,
+        teacher_id: data.professorId,
+        franchise_id: data.academyId,
+        // Usar a mesma convenção dos demais fluxos: date = start_at
+        date: start.toISOString(),
+        start_at: slot.startAt,
+        end_at: slot.endAt,
+        duration: Math.max(
+          15,
+          Math.round((new Date(slot.endAt).getTime() - start.getTime()) / (60 * 1000))
+        ),
+        status_canonical: 'AVAILABLE',
+        status: 'AVAILABLE',
+        professor_notes: slot.professorNotes ?? 'Horário disponível',
+        cancellable_until: null,
+        created_at: nowIso,
+        updated_at: nowIso
+      }
+    })
+
+    const { data: inserted, error } = await supabase
+      .from('bookings')
+      .insert(rows)
+      .select('id, start_at, end_at')
+
+    if (error) {
+      console.error('[POST /api/bookings/availability/bulk] Erro ao criar disponibilidades:', error)
+      return res.status(500).json({ error: 'Erro ao criar disponibilidades em bulk' })
+    }
+
+    return res.status(201).json({
+      created: inserted?.length || 0,
+      bookings: inserted || []
+    })
   })
 )
 
