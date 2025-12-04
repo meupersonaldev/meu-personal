@@ -142,7 +142,6 @@ export default function DisponibilidadePage() {
         
         // Filtrar bookings disponíveis (sem aluno) da academia selecionada
         // Usar tanto camelCase quanto snake_case para compatibilidade
-        const now = new Date()
         const availableBookings = bookings.filter((b: Record<string, unknown>) => {
           const studentId = b.studentId || b.student_id
           const franchiseId = b.franchiseId || b.franchise_id
@@ -150,11 +149,11 @@ export default function DisponibilidadePage() {
           const dateField = (b.date || b.start_at) as string
           const bookingDate = dateField ? new Date(dateField) : null
           
-          // Apenas bookings futuros, sem aluno, da academia, com status AVAILABLE
+          // Exibir também disponibilidade no passado dentro da janela exibida
           return !studentId && 
             franchiseId === selectedAcademy &&
             status === 'AVAILABLE' &&
-            bookingDate && bookingDate > now
+            !!bookingDate
         })
         
         // Agrupar por DATA (yyyy-MM-dd) e horário local
@@ -454,12 +453,12 @@ export default function DisponibilidadePage() {
       }
 
       const res = await authFetch('/api/bookings/availability/bulk', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          source: 'PROFESSOR',
-          professorId: user.id,
-          academyId: selectedAcademy,
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              source: 'PROFESSOR',
+              professorId: user.id,
+              academyId: selectedAcademy,
           slots
         })
       })
@@ -476,10 +475,10 @@ export default function DisponibilidadePage() {
 
       const created = json?.created ?? slots.length
       toast.success(`${created} horário(s) disponibilizado(s)!`)
-      // Recarregar dados para mostrar horários salvos
-      await fetchData()
-      // Limpar seleções
-      setWeeklySchedule({})
+        // Recarregar dados para mostrar horários salvos
+        await fetchData()
+        // Limpar seleções
+        setWeeklySchedule({})
     } catch {
       toast.error('Erro ao salvar disponibilidade')
     } finally {
@@ -719,7 +718,7 @@ export default function DisponibilidadePage() {
                             return (
                               <td key={dia.dateKey} className="p-1 text-center">
                                 <div className="flex justify-center">
-                                  <div className="w-10 h-10 rounded-lg bg-gray-100 border-2 border-gray-100" />
+                                <div className="w-10 h-10 rounded-lg bg-gray-100 border-2 border-gray-100" />
                                 </div>
                               </td>
                             )
