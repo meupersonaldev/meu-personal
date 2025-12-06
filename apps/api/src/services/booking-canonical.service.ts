@@ -72,22 +72,10 @@ class BookingCanonicalService {
     if (params.cancellableUntil) {
       cancellableUntil = params.cancellableUntil
     } else {
-      // Fallback: calcular preservando hora UTC (4 horas antes de startAt)
-      // startAt já está como Date UTC puro (processado com parseUtcDate)
-      // Subtrair 4 horas do timestamp UTC e criar Date UTC puro usando Date.UTC
-      const cancellableUntilTimestamp = params.startAt.getTime() - 4 * 60 * 60 * 1000
-      
-      // Extrair componentes UTC do timestamp resultante para criar Date UTC puro
-      const tempDate = new Date(cancellableUntilTimestamp)
-      const cancellableYear = tempDate.getUTCFullYear()
-      const cancellableMonth = tempDate.getUTCMonth()
-      const cancellableDay = tempDate.getUTCDate()
-      const cancellableHour = tempDate.getUTCHours()
-      const cancellableMinute = tempDate.getUTCMinutes()
-      const cancellableSecond = tempDate.getUTCSeconds()
-      
-      // Criar Date UTC puro usando Date.UTC (preserva hora como UTC, sem conversão de timezone)
-      cancellableUntil = new Date(Date.UTC(cancellableYear, cancellableMonth, cancellableDay, cancellableHour, cancellableMinute, cancellableSecond))
+      // Fallback: calcular 4 horas antes de startAt (mais simples e confiável)
+      // Regra: cancelamento gratuito até 4 horas antes do horário agendado
+      const FOUR_HOURS_MS = 4 * 60 * 60 * 1000
+      cancellableUntil = new Date(params.startAt.getTime() - FOUR_HOURS_MS)
     }
 
     if (params.source === 'ALUNO') {
@@ -134,6 +122,7 @@ class BookingCanonicalService {
     }
 
     // Calcular cancellable_until baseado no horário do booking existente
+    // Regra: 4 horas antes do horário de início
     const bookingStartAt = existingBooking.start_at 
       ? new Date(existingBooking.start_at)
       : existingBooking.date 
@@ -144,32 +133,9 @@ class BookingCanonicalService {
       throw new Error('Booking não possui horário válido');
     }
 
-    const bookingStartAtYear = bookingStartAt.getUTCFullYear();
-    const bookingStartAtMonth = bookingStartAt.getUTCMonth();
-    const bookingStartAtDay = bookingStartAt.getUTCDate();
-    const bookingStartAtHour = bookingStartAt.getUTCHours();
-    const bookingStartAtMinute = bookingStartAt.getUTCMinutes();
-    const bookingStartAtSecond = bookingStartAt.getUTCSeconds();
-    
-    let cancellableHour = bookingStartAtHour - 4;
-    let cancellableDay = bookingStartAtDay;
-    let cancellableMonth = bookingStartAtMonth;
-    let cancellableYear = bookingStartAtYear;
-    
-    if (cancellableHour < 0) {
-      cancellableHour += 24;
-      cancellableDay -= 1;
-      if (cancellableDay < 1) {
-        cancellableMonth -= 1;
-        if (cancellableMonth < 0) {
-          cancellableMonth = 11;
-          cancellableYear -= 1;
-        }
-        cancellableDay = new Date(Date.UTC(cancellableYear, cancellableMonth + 1, 0)).getUTCDate();
-      }
-    }
-    
-    const cancellableUntil = new Date(Date.UTC(cancellableYear, cancellableMonth, cancellableDay, cancellableHour, bookingStartAtMinute, bookingStartAtSecond));
+    // Simplificar: subtrair 4 horas em milissegundos (mais confiável)
+    const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
+    const cancellableUntil = new Date(bookingStartAt.getTime() - FOUR_HOURS_MS);
 
     // Atualizar o booking existente
     const updateData: any = {

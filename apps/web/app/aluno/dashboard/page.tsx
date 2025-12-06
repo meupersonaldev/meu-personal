@@ -293,11 +293,13 @@ export default function StudentDashboardPage() {
 
   const cutoffLabel = (b: BookingItem) => {
     const bookingTime = getBookingTime(b)
-    const cutoffIso = b.cancellableUntil || new Date(bookingTime.getTime() - 4 * 60 * 60 * 1000).toISOString()
+    // Calcular 4 horas antes do horário do booking (regra: cancelamento gratuito até 4h antes)
+    const FOUR_HOURS_MS = 4 * 60 * 60 * 1000
+    const cutoffIso = b.cancellableUntil || new Date(bookingTime.getTime() - FOUR_HOURS_MS).toISOString()
     const cutoff = new Date(cutoffIso)
-    // Usar getUTCHours/getUTCMinutes porque a hora UTC armazenada representa diretamente a hora de Brasília
-    const hour = String(cutoff.getUTCHours()).padStart(2, '0')
-    const minute = String(cutoff.getUTCMinutes()).padStart(2, '0')
+    // Usar getHours/getMinutes (hora local) para exibir corretamente
+    const hour = String(cutoff.getHours()).padStart(2, '0')
+    const minute = String(cutoff.getMinutes()).padStart(2, '0')
     const d = cutoff.toLocaleDateString('pt-BR')
     return `${d} ${hour}:${minute}`
   }
