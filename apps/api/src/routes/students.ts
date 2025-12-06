@@ -568,10 +568,10 @@ router.get('/:id/stats', async (req, res) => {
 
     // Buscar estatísticas
     const [bookingsData, transactionsData, subscriptionData] = await Promise.all([
-      // Total de aulas
+      // Total de aulas - buscar status_canonical também
       supabase
         .from('bookings')
-        .select('id, status, date, credits_cost')
+        .select('id, status, status_canonical, date, start_at, credits_cost')
         .eq('student_id', id),
 
       // Transações
@@ -600,11 +600,34 @@ router.get('/:id/stats', async (req, res) => {
     const transactions = transactionsData.data || []
     const subscription = subscriptionData.data
 
+    // Lógica correta usando status_canonical:
+    // - Concluídas: status_canonical === 'DONE' OU (status_canonical === 'PAID' E já passou)
+    // - Canceladas: status_canonical === 'CANCELED'
+    const now = new Date()
+    const completed = bookings.filter(b => {
+      const canonical = (b.status_canonical || '').toUpperCase()
+      if (canonical === 'DONE') {
+        return true
+      }
+      // Aulas PAID que já passaram são consideradas concluídas (já ocorreram)
+      if (canonical === 'PAID') {
+        const bookingTime = b.start_at ? new Date(b.start_at) : (b.date ? new Date(b.date) : null)
+        if (bookingTime) {
+          return bookingTime <= now // Já passou = concluída
+        }
+      }
+      return false
+    })
+    
+    const cancelled = bookings.filter(b => {
+      const canonical = (b.status_canonical || '').toUpperCase()
+      return canonical === 'CANCELED' || canonical === 'CANCELLED'
+    })
+
     const stats = {
       total_bookings: bookings.length,
-      completed_bookings: bookings.filter(b => b.status === 'COMPLETED').length,
-      pending_bookings: bookings.filter(b => b.status === 'PENDING').length,
-      cancelled_bookings: bookings.filter(b => b.status === 'CANCELLED').length,
+      completed_bookings: completed.length,
+      cancelled_bookings: cancelled.length,
       total_credits_spent: bookings.reduce((sum, b) => sum + (b.credits_cost || 0), 0),
       total_transactions: transactions.length,
       total_spent: transactions

@@ -11,6 +11,13 @@ import {
   Save,
   Eye,
   EyeOff,
+  CheckCircle,
+  Clock,
+  Wallet,
+  CalendarDays,
+  ChevronRight,
+  MapPin,
+  AlertCircle
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -26,7 +33,6 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"
 interface StudentStats {
   totalBookings: number
   completed: number
-  pending: number
   cancelled: number
 }
 
@@ -41,7 +47,6 @@ export default function StudentDashboardPage() {
   const [stats, setStats] = useState<StudentStats>({
     totalBookings: 0,
     completed: 0,
-    pending: 0,
     cancelled: 0
   })
   const [isLoading, setIsLoading] = useState(true)
@@ -85,18 +90,18 @@ export default function StudentDashboardPage() {
     if (!timeString) {
       return new Date(0)
     }
-    
+
     // Se a string já tem Z (timezone UTC), usar diretamente
     // O JavaScript vai converter automaticamente para o timezone local
     if (timeString.endsWith('Z')) {
       return new Date(timeString)
     }
-    
+
     // Se tem timezone offset (+03:00, -03:00), usar diretamente
     if (timeString.includes('+') || (timeString.includes('-') && timeString.length > 19 && timeString[10] === 'T' && (timeString[19] === '-' || timeString[19] === '+'))) {
       return new Date(timeString)
     }
-    
+
     // Se não tem timezone, assumir que é UTC e adicionar Z
     // Formato esperado: "2025-11-28T11:00:00" ou "2025-11-28T11:00:00.000"
     const isoString = `${timeString}Z`
@@ -110,7 +115,7 @@ export default function StudentDashboardPage() {
   const isBookingUpcoming = (booking: BookingItem): boolean => {
     const bookingTime = getBookingTime(booking)
     const now = new Date()
-    
+
     // Obter componentes UTC do booking (que representam a hora de Brasília)
     const bookingYear = bookingTime.getUTCFullYear()
     const bookingMonth = bookingTime.getUTCMonth()
@@ -118,9 +123,9 @@ export default function StudentDashboardPage() {
     const bookingHour = bookingTime.getUTCHours()
     const bookingMinute = bookingTime.getUTCMinutes()
     const bookingSecond = bookingTime.getUTCSeconds()
-    
+
     // Obter componentes da data atual em Brasília usando toLocaleString
-    const nowBRString = now.toLocaleString('en-US', { 
+    const nowBRString = now.toLocaleString('en-US', {
       timeZone: 'America/Sao_Paulo',
       year: 'numeric',
       month: '2-digit',
@@ -130,12 +135,12 @@ export default function StudentDashboardPage() {
       second: '2-digit',
       hour12: false
     })
-    
+
     // Parsear a string: "MM/DD/YYYY, HH:MM:SS"
     const [datePart, timePart] = nowBRString.split(', ')
     const [month, day, year] = datePart.split('/').map(Number)
     const [hour, minute, second] = timePart.split(':').map(Number)
-    
+
     // Comparar ano, mês, dia, hora, minuto, segundo
     if (bookingYear !== year) return bookingYear > year
     if (bookingMonth !== month - 1) return bookingMonth > month - 1 // month é 1-indexed no toLocaleString
@@ -171,7 +176,6 @@ export default function StudentDashboardPage() {
           setStats({
             totalBookings: data.total_bookings || 0,
             completed: data.completed_bookings || 0,
-            pending: data.pending_bookings || 0,
             cancelled: data.cancelled_bookings || 0
           })
         }
@@ -190,7 +194,8 @@ export default function StudentDashboardPage() {
     setProfileData({
       name: user?.name || "",
       email: user?.email || "",
-      phone: user?.phone || ""
+      phone: user?.phone || "",
+      gender: (user as any)?.gender || "PREFER_NOT_TO_SAY"
     })
     setAvatarPreview(user?.avatar_url || null)
   }, [user?.name, user?.email, user?.phone, user?.avatar_url])
@@ -224,13 +229,13 @@ export default function StudentDashboardPage() {
       const json = await res.json()
       console.log('Bookings recebidos do backend:', json)
       console.log('Número de bookings:', json.bookings?.length || 0)
-      
+
       if (!json.bookings || json.bookings.length === 0) {
         console.warn('Nenhum booking retornado do backend')
         setBookings([])
         return
       }
-      
+
       const items: BookingItem[] = (json.bookings || []).map((b: any) => {
         const item = {
           id: b.id,
@@ -247,7 +252,7 @@ export default function StudentDashboardPage() {
         console.log('Mapeando booking:', b, '->', item)
         return item
       })
-      
+
       console.log('Bookings mapeados:', items)
       console.log('Bookings futuros:', items.filter(b => isBookingUpcoming(b)))
       setBookings(items)
@@ -270,7 +275,7 @@ export default function StudentDashboardPage() {
       const data = await res.json().catch(() => ({}))
       const available = Number(data?.balance?.available_classes ?? (data?.balance ? (data.balance.total_purchased - data.balance.total_consumed - data.balance.locked_qty) : 0))
       setBalanceAvailable(Number.isFinite(available) ? available : 0)
-    } catch {}
+    } catch { }
   }
 
   const fetchNext = async () => {
@@ -288,7 +293,7 @@ export default function StudentDashboardPage() {
       const upcoming = items.filter(b => isBookingUpcoming(b))
       upcoming.sort((a, b) => getBookingTime(a).getTime() - getBookingTime(b).getTime())
       setNextBooking(upcoming[0] || null)
-    } catch {}
+    } catch { }
   }
 
   const cutoffLabel = (b: BookingItem) => {
@@ -306,7 +311,7 @@ export default function StudentDashboardPage() {
 
   const cancelBooking = async (id: string) => {
     if (!token || cancellingBookingId) return // Prevenir múltiplos cliques
-    
+
     setCancellingBookingId(id)
     try {
       const res = await fetch(`${API_BASE_URL}/api/bookings/${id}`, {
@@ -682,7 +687,7 @@ export default function StudentDashboardPage() {
 
   if (section === 'aulas') {
     // Remover duplicatas antes de filtrar
-    const uniqueBookings = bookings.filter((booking, index, self) => 
+    const uniqueBookings = bookings.filter((booking, index, self) =>
       index === self.findIndex(b => b.id === booking.id)
     )
     const upcoming = uniqueBookings.filter(b => isBookingUpcoming(b) && !(b.status === 'CANCELED' || b.status === 'CANCELLED'))
@@ -701,88 +706,130 @@ export default function StudentDashboardPage() {
           <p className="text-xs sm:text-sm text-gray-600">Gerencie suas aulas e cancelamentos</p>
         </div>
 
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 sm:p-4 text-xs sm:text-sm text-amber-900">
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 sm:p-4 text-xs sm:text-sm text-amber-900">
           <strong className="block sm:inline">Cancelamento gratuito</strong> até 4 horas antes do horário agendado. Se cancelar antes desse prazo, o crédito será estornado. Após esse prazo, o crédito não será estornado.
         </div>
 
-        <Card className="border-2 border-gray-200">
-          <CardHeader>
-            <CardTitle className="text-base md:text-lg">Próximas aulas</CardTitle>
+        <Card className="border-none shadow-none bg-transparent">
+          <CardHeader className="px-1">
+            <CardTitle className="text-xl font-bold text-gray-900">Próximas aulas</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="p-0 space-y-3">
             {bookingsLoading ? (
-              <div className="text-gray-600">Carregando suas aulas...</div>
+              <div className="flex flex-col items-center justify-center py-12 bg-white rounded-2xl border border-gray-100 shadow-sm">
+                <Loader2 className="h-8 w-8 animate-spin text-blue-600 mb-3" />
+                <p className="text-gray-500 font-medium">Carregando suas aulas...</p>
+              </div>
             ) : upcoming.length === 0 ? (
-              <div className="text-gray-600">Você não tem aulas futuras.</div>
+              <div className="flex flex-col items-center justify-center py-12 bg-white rounded-2xl border border-gray-100 shadow-sm text-center">
+                <Calendar className="h-10 w-10 text-gray-300 mb-3" />
+                <p className="text-gray-500">Você não tem aulas futuras agendadas.</p>
+              </div>
             ) : (
-              upcoming.map((b) => (
-                <div key={b.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between rounded-lg border border-gray-200 p-3 sm:p-4 gap-3 sm:gap-4 hover:border-meu-primary/30 transition-colors">
-                  <div className="flex-1 space-y-1">
-                    <div className="text-sm sm:text-base font-semibold text-gray-900">{b.teacherName || 'Professor'}</div>
-                    <div className="text-xs sm:text-sm text-gray-600">
-                      {(() => {
-                        const date = getBookingTime(b)
-                        // IMPORTANTE: Usar getHours() (hora local) porque o sistema armazena UTC que representa BRT
-                        const hour = String(date.getHours()).padStart(2, '0')
-                        const minute = String(date.getMinutes()).padStart(2, '0')
-                        return `${date.toLocaleDateString('pt-BR')} • ${hour}:${minute} • ${b.duration} min`
-                      })()}
+              upcoming.map((booking) => {
+                const date = getBookingTime(booking)
+                const month = date.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')
+                const day = date.getDate()
+                const hour = String(date.getHours()).padStart(2, '0')
+                const minute = String(date.getMinutes()).padStart(2, '0')
+
+                return (
+                  <div
+                    key={booking.id}
+                    className="group flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 rounded-2xl border border-gray-100 bg-white hover:border-blue-100 hover:shadow-md transition-all duration-300 gap-4"
+                  >
+                    <div className="flex items-center gap-4 w-full sm:w-auto">
+                      <div className="flex flex-col items-center justify-center w-14 h-14 bg-blue-50 text-blue-600 rounded-xl border border-blue-100 shrink-0 group-hover:bg-blue-600 group-hover:text-white transition-colors duration-300">
+                        <span className="text-[10px] uppercase font-bold tracking-wider leading-none mb-1">{month}</span>
+                        <span className="text-xl font-bold leading-none">{day}</span>
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-bold text-gray-900 truncate group-hover:text-blue-700 transition-colors">{booking.teacherName || 'Professor'}</h3>
+                        <div className="flex items-center gap-3 text-xs sm:text-sm text-gray-500 mt-1">
+                          <div className="flex items-center gap-1.5">
+                            <Clock className="h-3.5 w-3.5" />
+                            <span>{hour}:{minute}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <MapPin className="h-3.5 w-3.5" />
+                            <span className="truncate max-w-[120px] sm:max-w-[200px]">{booking.franchiseName || 'Unidade'}</span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    {b.franchiseName && (
-                      <div className="text-xs text-gray-500">{b.franchiseName}</div>
-                    )}
-                    <div className="text-[10px] sm:text-[11px] text-amber-700 font-medium">Cancelamento gratuito até {cutoffLabel(b)}</div>
+
+                    <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto mt-2 sm:mt-0 pt-3 sm:pt-0 border-t sm:border-t-0 border-gray-50">
+                      <div className="text-xs text-gray-500 sm:text-right sm:mr-2">
+                        <span className="block sm:hidden">Duração: {booking.duration} min</span>
+                        <span className="hidden sm:block text-amber-600 font-medium text-[10px]">{cutoffLabel(booking)}</span>
+                      </div>
+
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors text-xs h-8 px-3"
+                        onClick={() => setConfirm({ open: true, bookingId: booking.id })}
+                        disabled={cancellingBookingId === booking.id}
+                      >
+                        {cancellingBookingId === booking.id ? (
+                          <Loader2 className="h-3 w-3 animate-spin text-red-600" />
+                        ) : 'Cancelar'}
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex sm:block">
-                    <Button 
-                      variant="outline" 
-                      className="w-full sm:w-auto h-10 sm:h-9 text-sm text-red-600 border-red-200 hover:bg-red-50" 
-                      onClick={() => setConfirm({ open: true, bookingId: b.id })}
-                      disabled={cancellingBookingId === b.id}
-                    >
-                      {cancellingBookingId === b.id ? (
-                        <>
-                          <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                          Cancelando...
-                        </>
-                      ) : (
-                        'Cancelar'
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              ))
+                )
+              })
             )}
           </CardContent>
         </Card>
 
-        <Card className="border-2 border-gray-200">
-          <CardHeader>
-            <CardTitle className="text-base md:text-lg">Aulas passadas</CardTitle>
+        <Card className="border-none shadow-none bg-transparent mt-4">
+          <CardHeader className="px-1">
+            <CardTitle className="text-xl font-bold text-gray-900">Aulas passadas</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="p-0 space-y-3">
             {bookingsLoading ? (
-              <div className="text-gray-600">Carregando...</div>
+              <div className="text-gray-500 text-center py-8">Carregando...</div>
             ) : past.length === 0 ? (
-              <div className="text-gray-600">Nenhuma aula no histórico recente.</div>
+              <div className="text-gray-500 text-center py-8 italic">Nenhuma aula no histórico recente.</div>
             ) : (
-              past.map((b) => (
-                <div key={b.id} className="flex items-center justify-between rounded-lg border p-3">
-                  <div>
-                    <div className="text-sm font-semibold text-gray-900">{b.teacherName || 'Professor'}</div>
-                    <div className="text-xs text-gray-600">
-                      {(() => {
-                        const date = getBookingTime(b)
-                        // IMPORTANTE: Usar getHours() (hora local) porque o sistema armazena UTC que representa BRT
-                        const hour = String(date.getHours()).padStart(2, '0')
-                        const minute = String(date.getMinutes()).padStart(2, '0')
-                        return `${date.toLocaleDateString('pt-BR')} • ${hour}:${minute} • ${b.duration} min`
-                      })()}
+              past.map((booking) => {
+                const date = getBookingTime(booking)
+                const month = date.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')
+                const day = date.getDate()
+                const hour = String(date.getHours()).padStart(2, '0')
+                const minute = String(date.getMinutes()).padStart(2, '0')
+
+                return (
+                  <div
+                    key={booking.id}
+                    className="flex items-center justify-between p-4 rounded-xl border border-gray-100 bg-white/60 hover:bg-white transition-colors gap-4"
+                  >
+                    <div className="flex items-center gap-4 flex-1">
+                      <div className="flex flex-col items-center justify-center w-12 h-12 bg-gray-100 text-gray-500 rounded-lg shrink-0">
+                        <span className="text-[9px] uppercase font-bold tracking-wider leading-none mb-1">{month}</span>
+                        <span className="text-lg font-bold leading-none">{day}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-gray-900 truncate">{booking.teacherName || 'Professor'}</p>
+                        <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
+                          <span>{hour}:{minute}</span>
+                          <span>•</span>
+                          <span className="truncate">{booking.franchiseName || 'Unidade'}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 ml-3">
+                      {booking.status === 'CANCELLED' ? (
+                        <span className="text-[10px] px-2.5 py-1 rounded-full bg-red-50 text-red-600 font-medium border border-red-100">Cancelada</span>
+                      ) : (
+                        <span className="text-[10px] px-2.5 py-1 rounded-full bg-green-50 text-green-600 font-medium border border-green-100">Concluída</span>
+                      )}
                     </div>
                   </div>
-                  <div className="text-xs text-gray-500">{b.status}</div>
-                </div>
-              ))
+                )
+              })
             )}
           </CardContent>
         </Card>
@@ -795,8 +842,8 @@ export default function StudentDashboardPage() {
               <div>
                 {/* Lightweight inline confirm dialog - reuse existing dialog if available */}
                 {confirm.open && (
-                  <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-5 sm:p-6">
+                  <div className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-5 sm:p-6 animate-in fade-in zoom-in-95 duration-200">
                       <h3 className="text-base sm:text-lg font-bold text-gray-900 mb-2">Cancelar aula</h3>
                       <p className="text-sm text-gray-600 mb-4">{desc}</p>
                       <div className="flex gap-3">
@@ -833,7 +880,7 @@ export default function StudentDashboardPage() {
           const now = new Date()
           const cutoff = b?.cancellableUntil ? new Date(b.cancellableUntil) : (b ? new Date(getBookingTime(b).getTime() - 4 * 60 * 60 * 1000) : new Date())
           const isBeforeCutoff = now <= cutoff
-          
+
           // Mensagem para período de cancelamento gratuito
           const freeCancelMessage = (
             <div className="space-y-2">
@@ -851,7 +898,7 @@ export default function StudentDashboardPage() {
               </p>
             </div>
           )
-          
+
           // Mensagem para período após cancelamento gratuito
           const lateCancelMessage = (
             <div className="space-y-2">
@@ -869,28 +916,28 @@ export default function StudentDashboardPage() {
               </p>
             </div>
           )
-          
+
           return (
             <div>
               {/* Lightweight inline confirm dialog - reuse existing dialog if available */}
               {confirm.open && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                <div className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center p-4">
                   <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-5 sm:p-6">
                     <h3 className="text-base sm:text-lg font-bold text-gray-900 mb-4">Cancelar aula</h3>
                     <div className="mb-5 sm:mb-6">
                       {isBeforeCutoff ? freeCancelMessage : lateCancelMessage}
                     </div>
                     <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
-                      <Button 
-                        variant="outline" 
-                        className="w-full sm:w-auto h-11 sm:h-10 order-2 sm:order-1" 
+                      <Button
+                        variant="outline"
+                        className="w-full sm:w-auto h-11 sm:h-10 order-2 sm:order-1"
                         onClick={() => setConfirm({ open: false, bookingId: null })}
                         disabled={!!cancellingBookingId}
                       >
                         Voltar
                       </Button>
-                      <Button 
-                        className="w-full sm:w-auto h-11 sm:h-10 bg-red-600 hover:bg-red-700 text-white order-1 sm:order-2" 
+                      <Button
+                        className="w-full sm:w-auto h-11 sm:h-10 bg-red-600 hover:bg-red-700 text-white order-1 sm:order-2"
                         onClick={() => confirm.bookingId && cancelBooking(confirm.bookingId)}
                         disabled={cancellingBookingId === confirm.bookingId}
                       >
@@ -935,7 +982,7 @@ export default function StudentDashboardPage() {
             {bookings.filter(b => isBookingUpcoming(b) && !(b.status === 'CANCELED' || b.status === 'CANCELLED')).length} aulas agendadas • {balanceAvailable ?? 0} créditos disponíveis
           </p>
         </div>
-        <Button 
+        <Button
           className="w-full sm:w-auto h-11 sm:h-10 bg-[#002C4E] hover:bg-[#003d6b] text-sm sm:text-base font-semibold"
           onClick={() => { window.location.href = '/aluno/professores' }}
         >
@@ -945,155 +992,173 @@ export default function StudentDashboardPage() {
       </div>
 
       {/* Stats em grid responsivo */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <Card className="border border-gray-200 shadow-sm">
-          <CardContent className="p-4 sm:p-5 md:pt-6">
-            <div className="text-xl sm:text-2xl font-bold text-gray-900">{stats.totalBookings}</div>
-            <p className="text-[10px] sm:text-xs text-gray-500 mt-1">Total de aulas</p>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
+        <Card className="border border-gray-100 shadow-sm hover:shadow-md transition-all duration-300 bg-white group overflow-hidden relative">
+          <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+            <CalendarDays className="h-12 w-12 text-blue-600" />
+          </div>
+          <CardContent className="p-4 sm:p-5 md:pt-6 relative z-10">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
+                <CalendarDays className="h-5 w-5" />
+              </div>
+              <p className="text-xs sm:text-sm font-medium text-gray-500">Total de aulas</p>
+            </div>
+            <div className="text-2xl sm:text-3xl font-bold text-gray-900">{stats.totalBookings}</div>
           </CardContent>
         </Card>
-        <Card className="border border-gray-200 shadow-sm">
-          <CardContent className="p-4 sm:p-5 md:pt-6">
-            <div className="text-xl sm:text-2xl font-bold text-green-600">{stats.completed}</div>
-            <p className="text-[10px] sm:text-xs text-gray-500 mt-1">Concluídas</p>
+
+        <Card className="border border-gray-100 shadow-sm hover:shadow-md transition-all duration-300 bg-white group overflow-hidden relative">
+          <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+            <CheckCircle className="h-12 w-12 text-green-600" />
+          </div>
+          <CardContent className="p-4 sm:p-5 md:pt-6 relative z-10">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 bg-green-50 rounded-lg text-green-600">
+                <CheckCircle className="h-5 w-5" />
+              </div>
+              <p className="text-xs sm:text-sm font-medium text-gray-500">Concluídas</p>
+            </div>
+            <div className="text-2xl sm:text-3xl font-bold text-gray-900">{stats.completed}</div>
           </CardContent>
         </Card>
-        <Card className="border border-gray-200 shadow-sm">
-          <CardContent className="p-4 sm:p-5 md:pt-6">
-            <div className="text-xl sm:text-2xl font-bold text-blue-600">{stats.pending}</div>
-            <p className="text-[10px] sm:text-xs text-gray-500 mt-1">Pendentes</p>
+
+        <Card className="border border-gray-100 shadow-sm hover:shadow-md transition-all duration-300 bg-white group overflow-hidden relative">
+          <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+            <Wallet className="h-12 w-12 text-amber-600" />
+          </div>
+          <CardContent className="p-4 sm:p-5 md:pt-6 relative z-10">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 bg-amber-50 rounded-lg text-amber-600">
+                <Wallet className="h-5 w-5" />
+              </div>
+              <p className="text-xs sm:text-sm font-medium text-gray-500">Créditos</p>
+            </div>
+            <div className="text-2xl sm:text-3xl font-bold text-gray-900">{balanceAvailable ?? 0}</div>
           </CardContent>
         </Card>
-        <Card className="border border-gray-200 shadow-sm">
-          <CardContent className="p-4 sm:p-5 md:pt-6">
-            <div className="text-xl sm:text-2xl font-bold text-gray-900">{balanceAvailable ?? 0}</div>
-            <p className="text-[10px] sm:text-xs text-gray-500 mt-1">Créditos</p>
+
+        <Card className="border border-gray-100 shadow-sm hover:shadow-md transition-all duration-300 bg-white group overflow-hidden relative">
+          <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+            <AlertCircle className="h-12 w-12 text-red-600" />
+          </div>
+          <CardContent className="p-4 sm:p-5 md:pt-6 relative z-10">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 bg-red-50 rounded-lg text-red-600">
+                <AlertCircle className="h-5 w-5" />
+              </div>
+              <p className="text-xs sm:text-sm font-medium text-gray-500">Canceladas</p>
+            </div>
+            <div className="text-2xl sm:text-3xl font-bold text-gray-900">{stats.cancelled}</div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Próximas Aulas */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg font-semibold">Próximas Aulas</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <Card className="border-none shadow-none bg-transparent">
+        <div className="flex items-center justify-between mb-4 px-1">
+          <h2 className="text-xl font-bold text-gray-900">Próximas Aulas</h2>
+          <Button
+            variant="ghost"
+            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 text-sm h-auto py-1 px-2"
+            onClick={() => { const url = new URL(window.location.href); url.searchParams.set('section', 'aulas'); window.location.href = url.toString() }}
+          >
+            Ver todas <ChevronRight className="h-4 w-4 ml-1" />
+          </Button>
+        </div>
+        <CardContent className="p-0">
           {bookingsLoading ? (
-            <div className="text-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-gray-400 mx-auto mb-2" />
-              <p className="text-sm text-gray-500">Carregando...</p>
+            <div className="flex flex-col items-center justify-center py-12 bg-white rounded-2xl border border-gray-100 shadow-sm">
+              <Loader2 className="h-8 w-8 animate-spin text-blue-600 mb-3" />
+              <p className="text-gray-500 font-medium">Carregando seus agendamentos...</p>
             </div>
           ) : (() => {
             const upcomingBookings = bookings.filter(b => {
-              // Excluir cancelados, igual à seção "aulas"
-              if (b.status === 'CANCELED' || b.status === 'CANCELLED') {
-                return false
-              }
-              const isUpcoming = isBookingUpcoming(b)
-              const bookingTime = getBookingTime(b)
-              const now = new Date()
-              console.log('Booking:', b.id, 'Date:', b.date, 'StartAt:', b.startAt, 'Time:', bookingTime.toISOString(), 'Now:', now.toISOString(), 'IsUpcoming:', isUpcoming, 'Diff:', bookingTime.getTime() - now.getTime(), 'ms')
-              return isUpcoming
+              if (b.status === 'CANCELED' || b.status === 'CANCELLED') return false
+              return isBookingUpcoming(b)
             })
-            // Remover duplicatas baseado no ID
-            const uniqueUpcomingBookings = upcomingBookings.filter((booking, index, self) => 
+
+            const uniqueUpcomingBookings = upcomingBookings.filter((booking, index, self) =>
               index === self.findIndex(b => b.id === booking.id)
             )
-            console.log('Total bookings:', bookings.length, 'Upcoming:', upcomingBookings.length)
-            console.log('All bookings:', bookings.map(b => ({ 
-              id: b.id, 
-              date: b.date, 
-              startAt: b.startAt, 
-              time: getBookingTime(b).toISOString(),
-              isUpcoming: isBookingUpcoming(b)
-            })))
-            
-            if (upcomingBookings.length === 0) {
-              // Se não há bookings futuros, mas há bookings, mostrar mensagem diferente
-              if (bookings.length > 0) {
-                return (
-                  <div className="text-center py-12">
-                    <Calendar className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                    <p className="text-sm text-gray-600 mb-4">Nenhuma aula futura agendada</p>
-                    <p className="text-xs text-gray-500 mb-4">Você tem {bookings.length} aula(s) no histórico</p>
-                    <Button onClick={() => { window.location.href = '/aluno/professores' }}>
-                      Agendar Nova Aula
-                    </Button>
-                  </div>
-                )
-              }
+
+            if (uniqueUpcomingBookings.length === 0) {
               return (
-                <div className="text-center py-12">
-                  <Calendar className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                  <p className="text-sm text-gray-600 mb-4">Nenhuma aula agendada</p>
-                  <Button onClick={() => { window.location.href = '/aluno/professores' }}>
-                    Encontrar Professor
+                <div className="flex flex-col items-center justify-center py-16 px-4 bg-white rounded-2xl border border-gray-100 shadow-sm text-center">
+                  <div className="bg-blue-50 p-4 rounded-full mb-4">
+                    <Calendar className="h-8 w-8 text-blue-600" />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-900 mb-2">Sua agenda está livre</h3>
+                  <p className="text-gray-500 mb-6 max-w-xs mx-auto">Você não tem aulas agendadas para os próximos dias. Que tal marcar um treino agora?</p>
+                  <Button
+                    className="bg-[#002C4E] hover:bg-[#003d6b] text-white shadow-lg shadow-blue-900/10 transition-all hover:scale-105"
+                    onClick={() => { window.location.href = '/aluno/professores' }}
+                  >
+                    Agendar Aula
                   </Button>
                 </div>
               )
             }
-            
+
             return (
               <div className="space-y-3">
                 {uniqueUpcomingBookings
                   .sort((a, b) => getBookingTime(a).getTime() - getBookingTime(b).getTime())
                   .slice(0, 4)
                   .map((booking) => {
-                    console.log('Rendering booking:', booking.id, booking.teacherName, booking.startAt || booking.date)
+                    const date = getBookingTime(booking)
+                    // Use locale for consistent capitalization if needed, or CSS uppercase
+                    const month = date.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')
+                    const day = date.getDate()
+                    const hour = String(date.getHours()).padStart(2, '0')
+                    const minute = String(date.getMinutes()).padStart(2, '0')
+
                     return (
-                      <div 
-                        key={booking.id} 
-                        className="flex items-center justify-between p-4 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+                      <div
+                        key={booking.id}
+                        className="group flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 rounded-2xl border border-gray-100 bg-white hover:border-blue-100 hover:shadow-md transition-all duration-300 gap-4"
                       >
-                        <div className="flex items-center gap-3 flex-1">
-                          <div className="h-10 w-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-700 font-semibold text-sm">
-                            {(booking.teacherName || 'P').charAt(0).toUpperCase()}
+                        <div className="flex items-center gap-4 w-full sm:w-auto">
+                          {/* Date Box */}
+                          <div className="flex flex-col items-center justify-center w-14 h-14 bg-blue-50 text-blue-600 rounded-xl border border-blue-100 shrink-0 group-hover:bg-blue-600 group-hover:text-white transition-colors duration-300">
+                            <span className="text-[10px] uppercase font-bold tracking-wider leading-none mb-1">{month}</span>
+                            <span className="text-xl font-bold leading-none">{day}</span>
                           </div>
-                          <div className="flex-1">
-                            <p className="font-medium text-gray-900">{booking.teacherName || 'Professor'}</p>
-                            <p className="text-sm text-gray-600">
-                              {(() => {
-                                // Usar getBookingTime que já trata corretamente startAt ou date
-                                const date = getBookingTime(booking)
-                                const weekday = date.toLocaleDateString('pt-BR', { weekday: 'short' })
-                                const dayMonth = date.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })
-                                // IMPORTANTE: Usar getHours() (hora local) porque o sistema armazena UTC que representa BRT
-                                // Quando criamos new Date() com string UTC, o JavaScript converte para hora local
-                                // Então getHours() retorna a hora correta de Brasília
-                                const hour = String(date.getHours()).padStart(2, '0')
-                                const minute = String(date.getMinutes()).padStart(2, '0')
-                                return `${weekday}, ${dayMonth} às ${hour}:${minute}`
-                              })()}
-                            </p>
-                            <p className="text-[10px] sm:text-[11px] text-amber-700 font-medium mt-1">
-                              Cancelamento gratuito até {cutoffLabel(booking)}
-                            </p>
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {booking.franchiseName || '—'}
+
+                          {/* Info */}
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-bold text-gray-900 truncate group-hover:text-blue-700 transition-colors">{booking.teacherName || 'Professor'}</h3>
+                            <div className="flex items-center gap-3 text-xs sm:text-sm text-gray-500 mt-1">
+                              <div className="flex items-center gap-1.5">
+                                <Clock className="h-3.5 w-3.5" />
+                                <span>{hour}:{minute}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <MapPin className="h-3.5 w-3.5" />
+                                <span className="truncate max-w-[120px] sm:max-w-[200px]">{booking.franchiseName || 'Unidade'}</span>
+                              </div>
+                            </div>
                           </div>
                         </div>
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                          onClick={() => setConfirm({ open: true, bookingId: booking.id })}
-                        >
-                          Cancelar
-                        </Button>
+
+                        {/* Actions */}
+                        <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto mt-2 sm:mt-0 pt-3 sm:pt-0 border-t sm:border-t-0 border-gray-50">
+                          <div className="text-xs text-gray-500 sm:text-right sm:mr-2">
+                            <span className="block sm:hidden">Duração: {booking.duration} min</span>
+                            <span className="hidden sm:block text-amber-600 font-medium text-[10px]">{cutoffLabel(booking)}</span>
+                          </div>
+
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors text-xs h-8 px-3"
+                            onClick={() => setConfirm({ open: true, bookingId: booking.id })}
+                          >
+                            Cancelar
+                          </Button>
+                        </div>
                       </div>
                     )
                   })}
-              
-                {uniqueUpcomingBookings.length > 0 && (
-                  <Button 
-                    variant="outline" 
-                    className="w-full mt-3"
-                    onClick={() => { const url = new URL(window.location.href); url.searchParams.set('section','aulas'); window.location.href = url.toString() }}
-                  >
-                    Ver todas ({uniqueUpcomingBookings.length})
-                  </Button>
-                )}
               </div>
             )
           })()}
@@ -1101,54 +1166,54 @@ export default function StudentDashboardPage() {
       </Card>
 
       {bookings.filter(b => isBookingPast(b)).length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg font-semibold">Histórico Recente</CardTitle>
-            <p className="text-sm text-gray-500 mt-1">Últimas aulas realizadas</p>
+        <Card className="border-none shadow-none bg-transparent mt-4">
+          <CardHeader className="px-1 pt-0">
+            <CardTitle className="text-lg font-semibold text-gray-700">Histórico Recente</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
+          <CardContent className="p-0">
+            <div className="space-y-3">
               {bookings
                 .filter(b => isBookingPast(b))
                 .sort((a, b) => {
-                  // Ordenar por updatedAt (mais recentemente atualizado primeiro), com fallback para data/hora do agendamento
                   const aUpdated = a.updatedAt ? new Date(a.updatedAt).getTime() : getBookingTime(a).getTime()
                   const bUpdated = b.updatedAt ? new Date(b.updatedAt).getTime() : getBookingTime(b).getTime()
-                  return bUpdated - aUpdated // Mais recentemente atualizados primeiro
+                  return bUpdated - aUpdated
                 })
                 .slice(0, 3)
                 .map((booking) => {
+                  const date = getBookingTime(booking)
+                  const month = date.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')
+                  const day = date.getDate()
+                  const hour = String(date.getHours()).padStart(2, '0')
+                  const minute = String(date.getMinutes()).padStart(2, '0')
+
                   return (
-                  <div 
-                    key={booking.id} 
-                    className="flex items-center justify-between p-3 rounded-lg bg-gray-50"
-                  >
-                    <div className="flex items-center gap-3 flex-1">
-                      <div className="h-8 w-8 rounded-lg bg-white flex items-center justify-center text-gray-600 font-medium text-xs">
-                        {(booking.teacherName || 'P').charAt(0).toUpperCase()}
+                    <div
+                      key={booking.id}
+                      className="flex items-center justify-between p-4 rounded-xl border border-gray-100 bg-white/60 hover:bg-white transition-colors gap-4"
+                    >
+                      <div className="flex items-center gap-4 flex-1">
+                        <div className="flex flex-col items-center justify-center w-12 h-12 bg-gray-100 text-gray-500 rounded-lg shrink-0">
+                          <span className="text-[9px] uppercase font-bold tracking-wider leading-none mb-1">{month}</span>
+                          <span className="text-lg font-bold leading-none">{day}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold text-gray-900 truncate">{booking.teacherName || 'Professor'}</p>
+                          <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
+                            <span>{hour}:{minute}</span>
+                            <span>•</span>
+                            <span className="truncate">{booking.franchiseName || 'Unidade'}</span>
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-900">{booking.teacherName || 'Professor'}</p>
-                        <p className="text-xs text-gray-500">
-                          {(() => {
-                            // Usar getBookingTime que já trata corretamente startAt ou date
-                            const date = getBookingTime(booking)
-                            // IMPORTANTE: Usar getHours() (hora local) porque o sistema armazena UTC que representa BRT
-                            // Quando criamos new Date() com string UTC, o JavaScript converte para hora local
-                            // Então getHours() retorna a hora correta de Brasília
-                            const hour = String(date.getHours()).padStart(2, '0')
-                            const minute = String(date.getMinutes()).padStart(2, '0')
-                            return `${date.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })} às ${hour}:${minute}`
-                          })()}
-                        </p>
+                      <div className="flex items-center gap-2 ml-3">
+                        {booking.status === 'CANCELLED' ? (
+                          <span className="text-[10px] px-2.5 py-1 rounded-full bg-red-50 text-red-600 font-medium border border-red-100">Cancelada</span>
+                        ) : (
+                          <span className="text-[10px] px-2.5 py-1 rounded-full bg-green-50 text-green-600 font-medium border border-green-100">Concluída</span>
+                        )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 ml-3">
-                      {booking.status === 'CANCELLED' && (
-                        <span className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-700">Cancelada</span>
-                      )}
-                    </div>
-                  </div>
                   )
                 })}
             </div>
@@ -1161,20 +1226,20 @@ export default function StudentDashboardPage() {
         const b = bookings.find(x => x.id === confirm.bookingId) || nextBooking
         if (!b) {
           return (
-            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center p-4">
               <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Cancelar aula</h3>
                 <p className="text-sm text-gray-700 mb-6">Tem certeza que deseja cancelar?</p>
                 <div className="flex justify-end gap-3">
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     onClick={() => setConfirm({ open: false, bookingId: null })}
                     disabled={!!cancellingBookingId}
                   >
                     Não
                   </Button>
-                  <Button 
-                    className="bg-red-600 hover:bg-red-700" 
+                  <Button
+                    className="bg-red-600 hover:bg-red-700"
                     onClick={() => confirm.bookingId && cancelBooking(confirm.bookingId)}
                     disabled={cancellingBookingId === confirm.bookingId}
                   >
@@ -1192,12 +1257,12 @@ export default function StudentDashboardPage() {
             </div>
           )
         }
-        
+
         const text = cutoffLabel(b)
         const now = new Date()
         const cutoff = b?.cancellableUntil ? new Date(b.cancellableUntil) : new Date(getBookingTime(b).getTime() - 4 * 60 * 60 * 1000)
         const isBeforeCutoff = now <= cutoff
-        
+
         const freeCancelMessage = (
           <div className="space-y-2">
             <p className="text-sm text-gray-700 leading-relaxed">
@@ -1214,7 +1279,7 @@ export default function StudentDashboardPage() {
             </p>
           </div>
         )
-        
+
         const lateCancelMessage = (
           <div className="space-y-2">
             <p className="text-sm text-gray-700 leading-relaxed">
@@ -1231,24 +1296,24 @@ export default function StudentDashboardPage() {
             </p>
           </div>
         )
-        
+
         return (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+          <div className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6 animate-in fade-in zoom-in-95 duration-200">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Cancelar aula</h3>
               <div className="mb-6">
                 {isBeforeCutoff ? freeCancelMessage : lateCancelMessage}
               </div>
               <div className="flex justify-end gap-3">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   onClick={() => setConfirm({ open: false, bookingId: null })}
                   disabled={!!cancellingBookingId}
                 >
                   Voltar
                 </Button>
-                <Button 
-                  className="bg-amber-600 hover:bg-amber-700 text-white" 
+                <Button
+                  className="bg-amber-600 hover:bg-amber-700 text-white"
                   onClick={() => confirm.bookingId && cancelBooking(confirm.bookingId!)}
                   disabled={cancellingBookingId === confirm.bookingId}
                 >
