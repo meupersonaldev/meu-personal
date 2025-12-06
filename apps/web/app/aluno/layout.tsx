@@ -45,6 +45,8 @@ export default function AlunoLayout({ children }: { children: React.ReactNode })
     return () => clearTimeout(timer)
   }, [isPublicAuthRoute, pathname, router])
 
+
+
   useEffect(() => {
     if (isPublicAuthRoute || isChecking) return
 
@@ -91,6 +93,9 @@ export default function AlunoLayout({ children }: { children: React.ReactNode })
         </div>
       </div>
     )
+  }
+  if (pathname && REDIRECT_ROUTES[pathname]) {
+    return null
   }
 
   return <StudentLayout>{children}</StudentLayout>

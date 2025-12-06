@@ -1090,7 +1090,7 @@ export default function AulasPage() {
       </div>
 
       <Tabs defaultValue="aulas" className="w-full space-y-6">
-        <TabsList className="w-full md:w-auto grid grid-cols-3 md:inline-flex p-1 bg-gray-100/80 rounded-xl">
+        <TabsList className="w-full md:w-auto grid grid-cols-2 md:inline-flex h-auto p-1 bg-gray-100/80 rounded-xl">
           <TabsTrigger value="aulas" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-blue-700">Aulas e Agenda</TabsTrigger>
           <TabsTrigger value="historico" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-blue-700">Histórico</TabsTrigger>
           <TabsTrigger value="extrato" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-blue-700">Extrato</TabsTrigger>
@@ -1745,17 +1745,17 @@ export default function AulasPage() {
                     }
 
                     return (
-                      <div key={tx.id} className="flex items-center justify-between p-4 rounded-xl border border-gray-100 bg-white shadow-sm hover:bg-gray-50 transition-colors">
+                      <div key={tx.id} className="flex flex-col md:flex-row md:items-center justify-between p-4 rounded-xl border border-gray-100 bg-white shadow-sm hover:bg-gray-50 transition-colors gap-4">
                         <div className="flex items-center gap-4">
-                          <div className={`h-10 w-10 rounded-full flex items-center justify-center ${isCredit ? 'bg-green-100' : 'bg-red-50'}`}>
+                          <div className={`h-10 w-10 shrink-0 rounded-full flex items-center justify-center ${isCredit ? 'bg-green-100' : 'bg-red-50'}`}>
                             {icon}
                           </div>
                           <div>
-                            <p className="font-semibold text-gray-900">{tx.description || label}</p>
+                            <p className="font-semibold text-gray-900 text-sm md:text-base">{tx.description || label}</p>
                             <p className="text-xs text-gray-500">{new Date(tx.created_at).toLocaleDateString('pt-BR')} às {new Date(tx.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
                           </div>
                         </div>
-                        <div className={`font-bold text-sm md:text-base ${isCredit ? 'text-green-600' : 'text-gray-900'}`}>
+                        <div className={`font-bold text-sm md:text-base ${isCredit ? 'text-green-600' : 'text-gray-900'} ml-14 md:ml-0`}>
                           {actionText}
                         </div>
                       </div>
@@ -1820,11 +1820,12 @@ export default function AulasPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="hidden sm:flex"
+                    className="shrink-0"
                     onClick={() => setShowEditProfileModal(true)}
                   >
-                    <Settings className="h-4 w-4 mr-2" />
-                    Editar Perfil
+                    <Settings className="h-4 w-4 md:mr-2" />
+                    <span className="hidden md:inline">Editar Perfil</span>
+                    <span className="md:hidden">Editar</span>
                   </Button>
                 </div>
 

@@ -23,7 +23,7 @@ export default function Home() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false)
 
-  
+
   useEffect(() => {
     setMounted(true)
 
@@ -31,7 +31,7 @@ export default function Home() {
       // Redirecionar baseado no role do usuário
       switch (user.role) {
         case 'STUDENT':
-          router.push('/aluno/inicio')
+          router.push('/aluno/dashboard')
           break
         case 'TEACHER':
           router.push('/professor/dashboard')
@@ -85,7 +85,7 @@ export default function Home() {
                   Comece agora
                 </Button>
               </Link>
-              
+
               {/* Mobile Menu Button */}
               <div className="md:hidden">
                 <Button
@@ -256,7 +256,7 @@ export default function Home() {
           </div>
         </div>
 
-        </section>
+      </section>
 
       {/* Para Alunos Section */}
       <section
@@ -322,9 +322,9 @@ export default function Home() {
             </div>
             <div className="relative">
               <div className="relative w-full h-[400px] sm:h-[500px] bg-gradient-to-br from-meu-primary to-meu-primary-dark rounded-3xl overflow-hidden border border-meu-accent/20">
-                <Image 
-                  src="/images/photo-1571019614242-c5c5dee9f50b.jpg" 
-                  alt="Aluno treinando" 
+                <Image
+                  src="/images/photo-1571019614242-c5c5dee9f50b.jpg"
+                  alt="Aluno treinando"
                   fill
                   sizes="(min-width: 1024px) 40vw, 90vw"
                   className="object-cover opacity-80"
@@ -345,9 +345,9 @@ export default function Home() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
             <div className="order-last lg:order-first relative">
               <div className="relative w-full h-[400px] sm:h-[500px] bg-gradient-to-br from-meu-primary to-meu-primary-dark rounded-3xl overflow-hidden border border-meu-cyan/20">
-                <Image 
-                  src="/images/photo-1571019613454-1cb2f99b2d8b.jpg" 
-                  alt="Personal trainer" 
+                <Image
+                  src="/images/photo-1571019613454-1cb2f99b2d8b.jpg"
+                  alt="Personal trainer"
                   fill
                   sizes="(min-width: 1024px) 40vw, 90vw"
                   className="object-cover opacity-80"
@@ -461,7 +461,7 @@ export default function Home() {
                   </div>
                 </div>
               </div>
-              <Button 
+              <Button
                 onClick={() => setIsLeadModalOpen(true)}
                 className="w-full sm:w-auto bg-gradient-to-r from-meu-accent to-yellow-400 hover:from-yellow-400 hover:to-meu-accent text-meu-primary font-bold px-8 py-4 text-base lg:text-lg rounded-xl shadow-2xl hover:shadow-meu-accent/50 transition-all duration-300 transform hover:scale-105"
               >
@@ -471,9 +471,9 @@ export default function Home() {
             </div>
             <div className="relative">
               <div className="relative w-full h-[400px] sm:h-[500px] bg-gradient-to-br from-meu-primary to-meu-primary-dark rounded-3xl overflow-hidden border border-meu-accent/20">
-                <Image 
-                  src="/images/photo-1534438327276-14e5300c3a48-600.jpg" 
-                  alt="Academia franquia" 
+                <Image
+                  src="/images/photo-1534438327276-14e5300c3a48-600.jpg"
+                  alt="Academia franquia"
                   fill
                   sizes="(min-width: 1024px) 40vw, 90vw"
                   className="object-cover opacity-80"
@@ -534,7 +534,7 @@ export default function Home() {
         </div>
       </section>
 
-  
+
       {/* Final CTA Section */}
       <section className="py-16 sm:py-20 lg:py-24 bg-gradient-to-br from-meu-primary-dark via-meu-primary to-meu-primary-dark relative overflow-hidden fade-in-on-load">
         {/* Background Image */}
@@ -554,7 +554,7 @@ export default function Home() {
           <p className="text-lg sm:text-xl lg:text-2xl text-gray-300 mb-12 lg:mb-16 max-w-4xl mx-auto leading-relaxed">
             Seja você um aluno buscando resultados ou um professor pronto para fazer a diferença, estamos aqui para transformar ideias em realidade.
           </p>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8 max-w-5xl mx-auto">
             {/* Alunos */}
             <div className="bg-meu-primary/50 backdrop-blur-sm p-6 lg:p-8 rounded-2xl border-2 border-meu-accent/30 hover:border-meu-accent transition-all duration-300 hover:transform hover:scale-105">
@@ -593,7 +593,7 @@ export default function Home() {
               <p className="text-gray-300 mb-6">
                 Em breve, leve nosso conceito para sua cidade
               </p>
-              <Button 
+              <Button
                 onClick={() => setIsLeadModalOpen(true)}
                 className="w-full bg-gradient-to-r from-meu-accent to-yellow-400 hover:from-yellow-400 hover:to-meu-accent text-meu-primary font-bold px-8 py-4 text-base lg:text-lg rounded-xl shadow-2xl hover:shadow-meu-accent/50 transition-all duration-300 transform hover:scale-105"
               >
@@ -609,9 +609,9 @@ export default function Home() {
       <SiteFooter />
 
       {/* Modal de Formulário de Leads */}
-      <FranchiseLeadModal 
-        isOpen={isLeadModalOpen} 
-        onClose={() => setIsLeadModalOpen(false)} 
+      <FranchiseLeadModal
+        isOpen={isLeadModalOpen}
+        onClose={() => setIsLeadModalOpen(false)}
       />
     </div>
   )
