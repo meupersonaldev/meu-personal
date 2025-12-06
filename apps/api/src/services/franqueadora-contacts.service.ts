@@ -26,19 +26,25 @@ function sanitizeUuidArray(value: any): string[] {
 }
 
 async function fetchDefaultFranqueadoraId(): Promise<string | null> {
-  if (cachedDefaultFranqueadoraId !== undefined) {
-    return cachedDefaultFranqueadoraId
+  // Sempre buscar a franqueadora principal pelo email para garantir que é a correta
+  // Priorizar a que tem o email meupersonalfranquia@gmail.com
+  const { data: principalFranqueadora, error: principalError } = await supabase
+    .from('franqueadora')
+    .select('id')
+    .eq('email', 'meupersonalfranquia@gmail.com')
+    .eq('is_active', true)
+    .single()
+
+  if (!principalError && principalFranqueadora?.id) {
+    cachedDefaultFranqueadoraId = principalFranqueadora.id
+    return principalFranqueadora.id
   }
 
-  const envId = process.env.DEFAULT_FRANQUEADORA_ID?.trim()
-  if (envId) {
-    cachedDefaultFranqueadoraId = envId
-    return envId
-  }
-
+  // Fallback: buscar qualquer franqueadora ativa
   const { data, error } = await supabase
     .from('franqueadora')
     .select('id')
+    .eq('is_active', true)
     .order('created_at', { ascending: true })
     .limit(1)
 
