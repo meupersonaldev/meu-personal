@@ -694,8 +694,8 @@ const createAvailabilitySchema = z.object({
   source: z.literal('PROFESSOR'),
   professorId: z.string().uuid(),
   academyId: z.string().uuid(),
-  startAt: z.string(),
-  endAt: z.string(),
+  startAt: z.string().min(1, 'startAt não pode ser vazio'),
+  endAt: z.string().min(1, 'endAt não pode ser vazio'),
   status: z.literal('AVAILABLE').optional(),
   professorNotes: z.string().optional()
 })
@@ -707,8 +707,8 @@ const createBulkAvailabilitySchema = z.object({
   slots: z
     .array(
       z.object({
-        startAt: z.string(),
-        endAt: z.string(),
+        startAt: z.string().min(1, 'startAt não pode ser vazio'),
+        endAt: z.string().min(1, 'endAt não pode ser vazio'),
         professorNotes: z.string().optional()
       })
     )
@@ -807,13 +807,13 @@ router.post(
     const nowIso = new Date().toISOString()
 
     // Remover duplicados dentro do próprio payload (mesmo startAt repetido)
+    // O schema já valida que startAt e endAt não são vazios, então podemos confiar nos valores
     const uniqueSlotsMap = new Map<
       string,
       { startAt: string; endAt: string; professorNotes?: string }
     >()
     for (const slot of data.slots) {
-      // Garantir que startAt e endAt existem antes de adicionar
-      if (slot.startAt && slot.endAt && !uniqueSlotsMap.has(slot.startAt)) {
+      if (!uniqueSlotsMap.has(slot.startAt)) {
         uniqueSlotsMap.set(slot.startAt, {
           startAt: slot.startAt,
           endAt: slot.endAt,
