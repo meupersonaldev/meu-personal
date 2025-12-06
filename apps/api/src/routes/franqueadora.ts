@@ -14,7 +14,7 @@ import { auditSensitiveOperation } from '../middleware/audit'
 import { resolveDefaultFranqueadoraId } from '../services/franqueadora-contacts.service'
 import { auditService } from '../services/audit.service'
 import { cacheService } from '../services/cache.service'
-import { FRANQUEADORA_CONTACTS_SELECT } from '../dto/franqueadora-contacts'
+import { FRANQUEADORA_CONTACTS_SELECT, FRANQUEADORA_CONTACTS_USER_FIELDS } from '../dto/franqueadora-contacts'
 
 const router = Router()
 
@@ -55,6 +55,67 @@ router.get('/me', requireAuth, requireRole(['SUPER_ADMIN']), requireFranqueadora
   }
 })
 
+// GET /api/franqueadora/users-stats - Estatísticas reais de usuários (não paginado)
+router.get('/users-stats',
+  requireAuth,
+  requireRole(['SUPER_ADMIN']),
+  asyncErrorHandler(async (req, res) => {
+    const queryParams = (req.query || {}) as Record<string, string | undefined>
+
+    let franqueadoraId = queryParams.franqueadora_id || (req.franqueadoraAdmin && req.franqueadoraAdmin.franqueadora_id) || null
+
+    if (!franqueadoraId && req.user && req.user.role === 'SUPER_ADMIN') {
+      franqueadoraId = await resolveDefaultFranqueadoraId()
+    }
+
+    if (!franqueadoraId) {
+      return res.json({
+        success: true,
+        stats: { total: 0, active: 0, teachers: 0, students: 0 }
+      })
+    }
+
+    // Buscar contagens reais da tabela users (não apenas franqueadora_contacts)
+    // para incluir todos os usuários da plataforma
+    const [totalResult, activeResult, teachersResult, studentsResult] = await Promise.all([
+      // Total de usuários (STUDENT e TEACHER)
+      supabase
+        .from('users')
+        .select('*', { count: 'exact', head: true })
+        .in('role', ['STUDENT', 'TEACHER']),
+
+      // Usuários ativos
+      supabase
+        .from('users')
+        .select('*', { count: 'exact', head: true })
+        .in('role', ['STUDENT', 'TEACHER'])
+        .eq('is_active', true),
+
+      // Professores
+      supabase
+        .from('users')
+        .select('*', { count: 'exact', head: true })
+        .eq('role', 'TEACHER'),
+
+      // Alunos
+      supabase
+        .from('users')
+        .select('*', { count: 'exact', head: true })
+        .eq('role', 'STUDENT')
+    ])
+
+    return res.json({
+      success: true,
+      stats: {
+        total: totalResult.count || 0,
+        active: activeResult.count || 0,
+        teachers: teachersResult.count || 0,
+        students: studentsResult.count || 0
+      }
+    })
+  })
+)
+
 
 router.get('/contacts',
   requireAuth,
@@ -71,17 +132,6 @@ router.get('/contacts',
       franqueadoraId = await resolveDefaultFranqueadoraId();
     }
 
-    let query = supabase
-      .from('franqueadora_contacts')
-      .select(
-        FRANQUEADORA_CONTACTS_SELECT,
-        { count: 'exact' }
-      );
-
-    if (franqueadoraId) {
-      query = query.eq('franqueadora_id', franqueadoraId);
-    }
-
     const roleFilter = queryParams.role ? String(queryParams.role).toUpperCase() : undefined;
     const statusFilter = queryParams.status ? String(queryParams.status).toUpperCase() : undefined;
     const assignedFlag = queryParams.assigned ? String(queryParams.assigned) : undefined;
@@ -93,62 +143,135 @@ router.get('/contacts',
     const isStudent = roleFilter === 'STUDENT';
     const search = queryParams.search ? String(queryParams.search).trim() : undefined;
 
+    // Buscar todos os usuários (STUDENT e TEACHER) diretamente da tabela users
+    // para incluir também os que não estão na tabela franqueadora_contacts
+    let usersQuery = supabase
+      .from('users')
+      .select(FRANQUEADORA_CONTACTS_USER_FIELDS, { count: 'exact' })
+      .in('role', ['STUDENT', 'TEACHER'])
+      .eq('is_active', true); // Por padrão, buscar apenas usuários ativos
+
+    // Aplicar filtros de usuário
     if (roleFilter && ['STUDENT', 'TEACHER'].includes(roleFilter)) {
-      query = query.eq('role', roleFilter);
+      usersQuery = usersQuery.eq('role', roleFilter);
     }
 
+    // Se userActive for explicitamente false, buscar inativos
+    if (typeof userActive === 'boolean' && !userActive) {
+      usersQuery = usersQuery.eq('is_active', false);
+    }
+
+    if (search) {
+      const escapedSearch = search.replace(/[%_]/g, function (match) { return '\\' + match; });
+      const like = '%' + escapedSearch + '%';
+      usersQuery = usersQuery.or(`name.ilike.${like},email.ilike.${like}`);
+    }
+
+    // Buscar todos os usuários primeiro (sem paginação para contar total)
+    const { data: allUsers, error: usersError, count: totalUsersCount } = await usersQuery;
+
+    if (usersError) {
+      throw new Error('Erro ao buscar usuários: ' + usersError.message);
+    }
+
+    // Buscar contatos da franqueadora para enriquecer os dados
+    // Buscar TODOS os contatos (não filtrar por franqueadora_id aqui)
+    // porque queremos incluir todos os usuários, mesmo os sem contato
+    const { data: allContacts, error: contactsError } = await supabase
+      .from('franqueadora_contacts')
+      .select('*');
+
+    if (contactsError) {
+      throw new Error('Erro ao buscar contatos: ' + contactsError.message);
+    }
+
+    // Criar mapa de contatos por user_id
+    // Se houver franqueadoraId, priorizar contatos dessa franqueadora
+    const contactsMap = new Map();
+    (allContacts || []).forEach((contact: any) => {
+      const existing = contactsMap.get(contact.user_id);
+      // Se já existe um contato e temos franqueadoraId, priorizar o da franqueadora correta
+      if (!existing || (franqueadoraId && contact.franqueadora_id === franqueadoraId)) {
+        contactsMap.set(contact.user_id, contact);
+      }
+    });
+
+    // Combinar usuários com contatos e aplicar filtros adicionais
+    // INCLUIR TODOS OS USUÁRIOS, mesmo os sem contato
+    // Como agora só há uma franqueadora, incluir todos os usuários
+    let combinedData = (allUsers || []).map((user: any) => {
+      const contact = contactsMap.get(user.id);
+      
+      // Como agora só há uma franqueadora, incluir todos os usuários
+      // Se houver contato, usar os dados do contato; caso contrário, criar estrutura padrão
+      return {
+        id: contact?.id || null,
+        franqueadora_id: contact?.franqueadora_id || franqueadoraId || null,
+        user_id: user.id,
+        role: user.role,
+        status: contact?.status || 'UNASSIGNED',
+        origin: contact?.origin || 'SELF_REGISTRATION',
+        assigned_academy_ids: contact?.assigned_academy_ids || [],
+        last_assignment_at: contact?.last_assignment_at || null,
+        created_at: contact?.created_at || user.created_at,
+        updated_at: contact?.updated_at || user.updated_at,
+        user: user
+      };
+    });
+
+    // Aplicar filtros de contato
     if (statusFilter && ['UNASSIGNED', 'ASSIGNED', 'INACTIVE'].includes(statusFilter)) {
       if (isStudent) {
-        // Para STUDENT, ignorar ASSIGNED/UNASSIGNED (aluno não fica atrelado a unidade). Permitir apenas INACTIVE.
         if (statusFilter === 'INACTIVE') {
-          query = query.eq('status', 'INACTIVE');
+          combinedData = combinedData.filter((item: any) => item.status === 'INACTIVE');
         }
       } else {
-        query = query.eq('status', statusFilter);
+        combinedData = combinedData.filter((item: any) => item.status === statusFilter);
       }
     }
 
     // Filtros de atribuição só fazem sentido para TEACHER
     if (!isStudent && academyId) {
-      query = query.contains('assigned_academy_ids', [academyId]);
+      combinedData = combinedData.filter((item: any) => 
+        (item.assigned_academy_ids || []).includes(academyId)
+      );
     }
 
     if (!isStudent) {
       if (assignedFlag === 'true') {
-        query = query.not('assigned_academy_ids', 'eq', '{}');
+        combinedData = combinedData.filter((item: any) => 
+          (item.assigned_academy_ids || []).length > 0
+        );
       } else if (assignedFlag === 'false') {
-        query = query.eq('assigned_academy_ids', '{}');
+        combinedData = combinedData.filter((item: any) => 
+          (item.assigned_academy_ids || []).length === 0
+        );
       }
     }
 
-    // Filtro de status do usuário (ativo/inativo) proveniente da UI
-    if (typeof userActive === 'boolean') {
-      query = query.eq('user.is_active', userActive);
-    }
-
-    if (search) {
-      const escapedSearch = search.replace(/[%_]/g, function(match) { return '\\' + match; });
-      const like = '%' + escapedSearch + '%';
-      query = query.or('user.name.ilike.' + like + ',user.email.ilike.' + like);
-    }
-
+    // Ordenação
     const allowedSorts = ['created_at', 'updated_at', 'last_assignment_at'];
     const sortColumn = allowedSorts.indexOf(pagination.sortBy) !== -1 ? pagination.sortBy : 'created_at';
     const ascending = pagination.sortOrder === 'asc';
+    
+    combinedData.sort((a: any, b: any) => {
+      const aVal = a[sortColumn] || '';
+      const bVal = b[sortColumn] || '';
+      return ascending 
+        ? (aVal > bVal ? 1 : -1)
+        : (aVal < bVal ? 1 : -1);
+    });
 
-    query = query
-      .order(sortColumn, { ascending })
-      .range(pagination.offset, pagination.offset + pagination.limit - 1);
-
-    const { data, error, count } = await query;
-
-    if (error) {
-      throw new Error('Erro ao buscar contatos da franqueadora: ' + error.message);
-    }
+    // Paginação
+    const total = combinedData.length;
+    const paginatedData = combinedData.slice(
+      pagination.offset,
+      pagination.offset + pagination.limit
+    );
 
     const response = buildPaginatedResponse(
-      data || [],
-      count || 0,
+      paginatedData,
+      total,
       pagination,
       {
         role: roleFilter || null,
@@ -301,7 +424,7 @@ router.put('/packages/:id',
       // Log de tentativa de acesso não autorizado
       const auditLogger = auditService
       await auditLogger.logPermissionDenied(req, 'franchise_packages', 'update', id)
-      
+
       return res.status(403).json({
         success: false,
         error: 'INSUFFICIENT_PERMISSIONS',
@@ -365,7 +488,7 @@ router.delete('/packages/:id',
       // Log de tentativa de acesso não autorizado
       const auditLogger = auditService
       await auditLogger.logPermissionDenied(req, 'franchise_packages', 'delete', id)
-      
+
       return res.status(403).json({
         success: false,
         error: 'INSUFFICIENT_PERMISSIONS',
@@ -402,7 +525,7 @@ router.get('/leads',
     console.log('[LEADS GET] Franqueadora ID do admin:', franqueadoraId)
     console.log('[LEADS GET] User ID:', req.user?.userId)
     console.log('[LEADS GET] User Role:', req.user?.role)
-    
+
     if (!franqueadoraId) {
       console.log('[LEADS GET] ⚠️ Nenhum franqueadora_id encontrado, retornando array vazio')
       return res.json({
@@ -500,12 +623,12 @@ router.post('/leads', asyncErrorHandler(async (req, res) => {
         .order('created_at', { ascending: true })
         .limit(1)
         .single()
-      
+
       if (anyError || !anyFranqueadora) {
         console.error('[LEADS] Erro ao buscar franqueadora:', anyError || franqueadoraError)
         console.error('[LEADS] Nenhuma franqueadora encontrada no banco de dados')
-        return res.status(500).json({ 
-          error: 'Erro ao processar solicitação. Sistema temporariamente indisponível.' 
+        return res.status(500).json({
+          error: 'Erro ao processar solicitação. Sistema temporariamente indisponível.'
         })
       }
       defaultFranqueadora = anyFranqueadora
@@ -538,29 +661,29 @@ router.post('/leads', asyncErrorHandler(async (req, res) => {
       console.error('[LEADS] Código do erro:', error.code)
       console.error('[LEADS] Mensagem do erro:', error.message)
       console.error('[LEADS] Detalhes do erro:', JSON.stringify(error, null, 2))
-      
+
       // Se a tabela não existir, retornar erro específico
       if (error.code === '42P01' || error.message?.includes('does not exist')) {
         console.error('[LEADS] Tabela franchise_leads não existe! Execute a migração.')
-        return res.status(500).json({ 
-          error: 'Tabela de leads não configurada. Contate o suporte técnico.' 
+        return res.status(500).json({
+          error: 'Tabela de leads não configurada. Contate o suporte técnico.'
         })
       }
-      
+
       throw error
     }
 
     console.log('[LEADS] Lead criado com sucesso:', data?.id)
 
-    return res.status(201).json({ 
+    return res.status(201).json({
       success: true,
       message: 'Sua solicitação foi enviada com sucesso! Entraremos em contato em breve.',
-      lead: data 
+      lead: data
     })
   } catch (error: any) {
     console.error('[LEADS] Error creating franchise lead:', error)
     console.error('[LEADS] Stack:', error.stack)
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: error.message || 'Erro ao processar solicitação',
       details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     })
@@ -690,13 +813,13 @@ router.get('/academies/:id/stats', requireAuth, requireRole(['SUPER_ADMIN']), re
   if (statsError) {
     // Fallback para consultas separadas se RPC não estiver disponível
     console.warn('RPC get_academy_stats não disponível, usando fallback')
-    
+
     // Buscar IDs dos professores da academia para buscar bookings
     const { data: academyTeachers } = await supabase
       .from('academy_teachers')
       .select('teacher_id')
       .eq('academy_id', id)
-    
+
     const teacherIds = (academyTeachers || []).map(t => t.teacher_id).filter(Boolean)
 
     // Consultas paralelas para melhor performance
@@ -713,44 +836,44 @@ router.get('/academies/:id/stats', requireAuth, requireRole(['SUPER_ADMIN']), re
         .from('academy_teachers')
         .select('*', { count: 'exact', head: true })
         .eq('academy_id', id),
-      
+
       // Alunos (dados para contar ativos)
       supabase
         .from('academy_students')
         .select('status')
         .eq('academy_id', id),
-      
+
       // Bookings por academy_id
       supabase
         .from('bookings')
         .select('id, status_canonical')
         .eq('academy_id', id),
-      
+
       // Bookings por franchise_id
       supabase
         .from('bookings')
         .select('id, status_canonical')
         .eq('franchise_id', id),
-      
+
       // Bookings por unit_id
       supabase
         .from('bookings')
         .select('id, status_canonical')
         .eq('unit_id', id),
-      
+
       // Bookings por professores (se houver professores)
       teacherIds.length > 0
         ? supabase
-            .from('bookings')
-            .select('id, status_canonical')
-            .in('teacher_id', teacherIds)
+          .from('bookings')
+          .select('id, status_canonical')
+          .in('teacher_id', teacherIds)
         : Promise.resolve({ data: [], error: null, count: 0 })
     ])
 
     // Combinar todos os bookings únicos (usando Set para evitar duplicatas)
     const allBookingsIds = new Set<string>()
     const allBookings: Array<{ id: string; status_canonical: string }> = []
-    
+
     const addBookings = (bookings: any[]) => {
       if (Array.isArray(bookings)) {
         bookings.forEach(b => {
@@ -803,7 +926,7 @@ router.get('/academies/:id/stats', requireAuth, requireRole(['SUPER_ADMIN']), re
         .from('users')
         .select('credits')
         .in('id', activeStudentIds)
-      
+
       creditsBalance = (studentCredits || []).reduce((sum, u) => sum + (u.credits || 0), 0)
     }
 
@@ -982,25 +1105,25 @@ router.get('/users',
           .from('professor_units')
           .select('professor_id, unit_id, units(name, city, state)')
           .in('professor_id', teacherIds) : Promise.resolve({ data: [] }),
-        
+
         // Student units  
         studentIds.length > 0 ? supabase
           .from('student_units')
           .select('student_id, unit_id, units(name, city, state), total_bookings, first_booking_date, last_booking_date')
           .in('student_id', studentIds) : Promise.resolve({ data: [] }),
-        
+
         // Booking stats
         userIds.length > 0 ? supabase
           .from('bookings')
           .select('professor_id, student_id, status_canonical')
           .or(`professor_id.in.(${userIds.join(',')}),student_id.in.(${userIds.join(',')})`) : Promise.resolve({ data: [] }),
-        
+
         // Student balances
         studentIds.length > 0 ? supabase
           .from('student_class_balance')
           .select('student_id, unit_id, total_purchased, total_consumed, locked_qty')
           .in('student_id', studentIds) : Promise.resolve({ data: [] }),
-        
+
         // Professor balances
         teacherIds.length > 0 ? supabase
           .from('prof_hour_balance')
@@ -1045,7 +1168,7 @@ router.get('/users',
       // Enriquecer usuários com dados agrupados
       const enrichedUsers = users.map((user: any) => {
         const userBookings = bookingStatsMap.get(user.id) || [];
-        
+
         return {
           ...user,
           operational_links: {
@@ -1085,3 +1208,4 @@ router.get('/users',
 );
 
 export default router
+

@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { toast } from 'sonner'
 import { useNotificationsStore } from './notifications-store'
+import { setAuthCookie, clearAuthCookie } from './auth-store'
 
 // Utilitário para tratamento seguro de valores numéricos
 const safeNumber = (value: any, defaultValue: number = 0): number => {
@@ -382,26 +383,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             return false
           }
           if (typeof document !== 'undefined') {
-            const maxAge = 7 * 24 * 60 * 60
-            // Definir SameSite/Secure dinamicamente para evitar perder o cookie em HTTP local
-            let sameSite = 'Lax'
-            let secure = ''
-            try {
-              const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-              const pageOrigin = typeof window !== 'undefined' ? window.location.origin : ''
-              const apiOrigin = new URL(apiUrl).origin
-              const crossSite = pageOrigin && apiOrigin && apiOrigin !== pageOrigin
-              const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:'
-              if (crossSite) {
-                // Para requests cross-site (diferente origin), precisamos SameSite=None e Secure
-                sameSite = 'None'
-                secure = '; Secure'
-              } else if (isHttps) {
-                // Mesmo site em HTTPS pode (opcionalmente) usar Secure
-                secure = '; Secure'
-              }
-            } catch {}
-            document.cookie = `auth-token=${data.token}; Path=/; Max-Age=${maxAge}; SameSite=${sameSite}${secure}`
+            setAuthCookie(data.token)
           }
           set({
             token: data.token,
@@ -473,10 +455,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           analytics: null
         })
         if (typeof document !== 'undefined') {
-          const isProd = process.env.NODE_ENV === 'production'
-          const sameSite = isProd ? 'None' : 'Lax'
-          const secure = (isProd || (typeof window !== 'undefined' && window.location.protocol === 'https:')) ? '; Secure' : ''
-          document.cookie = `auth-token=; Path=/; Max-Age=0; SameSite=${sameSite}${secure}`
+          clearAuthCookie()
           window.location.href = '/'
         }
       },
@@ -615,12 +594,10 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
               return false
             }
             const errorData = await resp.json().catch(() => ({}))
-            console.error('[updateAcademy] Erro na resposta:', resp.status, errorData)
             throw new Error(errorData.error || 'Failed to update academy')
           }
           
           const updatedAcademy = await resp.json()
-          console.log('[updateAcademy] Franquia atualizada:', updatedAcademy)
           
           // Atualizar estado local imediatamente
           set(state => ({
@@ -632,8 +609,8 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           // Recarregar dados do servidor para garantir sincronização
           await get().fetchAcademies()
           return true
-        } catch (error: any) {
-          console.error('[updateAcademy] Erro ao atualizar franquia:', error)
+        } catch {
+          try { const { toast } = await import('sonner'); toast.error('Erro ao atualizar franquia.') } catch {}
           return false
         }
       },
@@ -1033,34 +1010,40 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
 
           const contacts: any[] = Array.isArray(payload.data) ? payload.data : []
           // Mapear contacts -> User para reuso da UI
-          const mappedUsers: User[] = contacts.map((c) => ({
-            id: c.user?.id || c.id,
-            name: c.user?.name || '',
-            email: c.user?.email || '',
-            phone: c.user?.phone || '',
-            cpf: c.user?.cpf || '',
-            cref: c.user?.cref || '',
-            role: c.user?.role || 'STUDENT',
-            avatar_url: c.user?.avatar_url,
-            cref_card_url: c.user?.cref_card_url || null,
-            approval_status: c.user?.approval_status || 'pending',
-            approved_at: c.user?.approved_at,
-            approved_by: c.user?.approved_by,
-            created_at: c.user?.created_at || new Date().toISOString(),
-            updated_at: c.user?.updated_at || new Date().toISOString(),
-            last_login_at: c.user?.last_login_at,
-            active: c.user?.is_active ?? true,
-            email_verified: c.user?.email_verified ?? false,
-            phone_verified: c.user?.phone_verified ?? false,
-            franchisor_id: c.user?.franchisor_id,
-            franchise_id: c.user?.franchise_id,
-            teacher_profiles: c.user?.teacher_profiles || [],
-            student_profiles: c.user?.student_profiles || [],
-            operational_links: c.user?.operational_links || undefined,
-            booking_stats: c.user?.booking_stats || undefined,
-            balance_info: c.user?.balance_info || undefined,
-            hours_info: c.user?.hours_info || undefined,
-          }))
+          // FILTRAR APENAS STUDENT E TEACHER - garantir que outros roles não apareçam
+          const mappedUsers: User[] = contacts
+            .filter((c) => {
+              const role = c.user?.role || c.role
+              return role === 'STUDENT' || role === 'TEACHER'
+            })
+            .map((c) => ({
+              id: c.user?.id || c.id,
+              name: c.user?.name || '',
+              email: c.user?.email || '',
+              phone: c.user?.phone || '',
+              cpf: c.user?.cpf || '',
+              cref: c.user?.cref || '',
+              role: c.user?.role || 'STUDENT',
+              avatar_url: c.user?.avatar_url,
+              cref_card_url: c.user?.cref_card_url || null,
+              approval_status: c.user?.approval_status || 'pending',
+              approved_at: c.user?.approved_at,
+              approved_by: c.user?.approved_by,
+              created_at: c.user?.created_at || new Date().toISOString(),
+              updated_at: c.user?.updated_at || new Date().toISOString(),
+              last_login_at: c.user?.last_login_at,
+              active: c.user?.is_active ?? true,
+              email_verified: c.user?.email_verified ?? false,
+              phone_verified: c.user?.phone_verified ?? false,
+              franchisor_id: c.user?.franchisor_id,
+              franchise_id: c.user?.franchise_id,
+              teacher_profiles: c.user?.teacher_profiles || [],
+              student_profiles: c.user?.student_profiles || [],
+              operational_links: c.user?.operational_links || undefined,
+              booking_stats: c.user?.booking_stats || undefined,
+              balance_info: c.user?.balance_info || undefined,
+              hours_info: c.user?.hours_info || undefined,
+            }))
 
           const result: UsersResponse = {
             data: mappedUsers,
