@@ -690,8 +690,8 @@ const createAvailabilitySchema = z.object({
   source: z.literal('PROFESSOR'),
   professorId: z.string().uuid(),
   academyId: z.string().uuid(),
-  startAt: z.string(),
-  endAt: z.string(),
+  startAt: z.string().min(1, 'startAt não pode ser vazio'),
+  endAt: z.string().min(1, 'endAt não pode ser vazio'),
   status: z.literal('AVAILABLE').optional(),
   professorNotes: z.string().optional()
 })
