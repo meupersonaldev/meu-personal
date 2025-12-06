@@ -1,1337 +1,556 @@
-"use client"
+'use client'
 
-import { useEffect, useMemo, useState } from "react"
-import { useSearchParams } from "next/navigation"
+import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   Calendar,
-  Loader2,
-  User as UserIcon,
-  Lock,
-  Camera,
-  Save,
-  Eye,
-  EyeOff,
-  CheckCircle,
   Clock,
-  Wallet,
-  CalendarDays,
-  ChevronRight,
   MapPin,
-  AlertCircle
-} from "lucide-react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { useAuthStore } from "@/lib/stores/auth-store"
-import { toast } from "sonner"
+  Loader2,
+  Repeat,
+  AlertCircle,
+  CheckCircle2,
+  XCircle,
+  ChevronRight
+} from 'lucide-react'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Label } from '@/components/ui/label'
+import { useAuthStore } from '@/lib/stores/auth-store'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"
-
-interface StudentStats {
-  totalBookings: number
-  completed: number
-  cancelled: number
+interface Booking {
+  id: string
+  start_at: string
+  end_at: string
+  status: string
+  status_canonical?: string
+  is_reserved: boolean
+  series_id: string | null
+  teacher_id: string
+  teacherName?: string
+  teacher_name?: string
+  avatar_url?: string
+  academy_id?: string
+  franchiseName?: string
+  franchise_name?: string
+  unit_id?: string
 }
 
-export default function StudentDashboardPage() {
-  const searchParams = useSearchParams()
-  const section = useMemo(() => searchParams.get("section"), [searchParams])
-  const { user, isAuthenticated, token, updateUser } = useAuthStore()
-  const [confirm, setConfirm] = useState<{ open: boolean; bookingId: string | null }>({ open: false, bookingId: null })
-  const [cancellingBookingId, setCancellingBookingId] = useState<string | null>(null)
+interface BookingSeries {
+  id: string
+  day_of_week: number
+  start_time: string
+  end_time: string
+  recurrence_type: string
+  start_date: string
+  end_date: string
+  status: string
+  teacher: {
+    id: string
+    name: string
+  }
+  academy: {
+    id: string
+    name: string
+  }
+}
 
-  // Dashboard state
-  const [stats, setStats] = useState<StudentStats>({
-    totalBookings: 0,
-    completed: 0,
-    cancelled: 0
+const DAY_NAMES = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
+
+const RECURRENCE_LABELS: Record<string, string> = {
+  '15_DAYS': '15 dias',
+  'MONTH': '1 mês',
+  'QUARTER': '3 meses',
+  'SEMESTER': '6 meses',
+  'YEAR': '1 ano'
+}
+
+function formatDate(dateStr: string): string {
+  const date = new Date(dateStr)
+  return date.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
   })
+}
+
+function formatTime(dateStr: string): string {
+  const date = new Date(dateStr)
+  return date.toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+export default function AulasPage() {
+  const router = useRouter()
+  const { user, token, isAuthenticated } = useAuthStore()
+
+  const [bookings, setBookings] = useState<Booking[]>([])
+  const [series, setSeries] = useState<BookingSeries[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  // Settings state
-  const [profileData, setProfileData] = useState({
-    name: user?.name || "",
-    email: user?.email || "",
-    phone: user?.phone || "",
-    gender: (user as any)?.gender || "PREFER_NOT_TO_SAY"
-  })
-  const [passwordData, setPasswordData] = useState({
-    currentPassword: "",
-    newPassword: "",
-    confirmPassword: ""
-  })
-  const [showPassword, setShowPassword] = useState(false)
-  const [showNewPassword, setShowNewPassword] = useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
-  const [avatarFile, setAvatarFile] = useState<File | null>(null)
-  const [saving, setSaving] = useState(false)
+  // Modal de cancelamento
+  const [showCancelModal, setShowCancelModal] = useState(false)
+  const [cancellingBooking, setCancellingBooking] = useState<Booking | null>(null)
+  const [cancelType, setCancelType] = useState<'single' | 'future' | 'all'>('single')
+  const [isCancelling, setIsCancelling] = useState(false)
+  const [cancelError, setCancelError] = useState<string | null>(null)
 
-  // Aulas state
-  type BookingItem = { id: string; date: string; startAt?: string; endAt?: string; duration: number; status: string; teacherName?: string; franchiseName?: string; cancellableUntil?: string; updatedAt?: string }
-  const [bookings, setBookings] = useState<BookingItem[]>([])
-  const [bookingsLoading, setBookingsLoading] = useState(false)
-  const [balanceAvailable, setBalanceAvailable] = useState<number | null>(null)
-  const [nextBooking, setNextBooking] = useState<BookingItem | null>(null)
+  const fetchBookings = useCallback(async () => {
+    if (!token || !user?.id) return
 
-  // Função auxiliar para obter o tempo do booking (startAt ou date)
-  // IMPORTANTE: O sistema armazena horários em UTC, mas a hora UTC representa diretamente a hora de Brasília
-  // Exemplo: 11:00 UTC armazenado = 11:00 BRT (não 08:00 BRT)
-  // Quando criamos new Date() com string UTC (com Z), o JavaScript converte para hora local
-  // Então getHours() retorna a hora correta de Brasília (11:00 UTC vira 11:00 local se o navegador estiver em BRT)
-  const getBookingTime = (booking: BookingItem): Date => {
-    if (!booking.date && !booking.startAt) {
-      return new Date(0) // Data inválida
-    }
-    const timeString = booking.startAt || booking.date
-    if (!timeString) {
-      return new Date(0)
-    }
+    setIsLoading(true)
+    setError(null)
 
-    // Se a string já tem Z (timezone UTC), usar diretamente
-    // O JavaScript vai converter automaticamente para o timezone local
-    if (timeString.endsWith('Z')) {
-      return new Date(timeString)
-    }
-
-    // Se tem timezone offset (+03:00, -03:00), usar diretamente
-    if (timeString.includes('+') || (timeString.includes('-') && timeString.length > 19 && timeString[10] === 'T' && (timeString[19] === '-' || timeString[19] === '+'))) {
-      return new Date(timeString)
-    }
-
-    // Se não tem timezone, assumir que é UTC e adicionar Z
-    // Formato esperado: "2025-11-28T11:00:00" ou "2025-11-28T11:00:00.000"
-    const isoString = `${timeString}Z`
-    return new Date(isoString)
-  }
-
-  // Função auxiliar para verificar se um booking é futuro
-  // IMPORTANTE: O sistema armazena horários em UTC, mas a hora UTC representa diretamente a hora de Brasília
-  // Exemplo: 18:00 UTC armazenado = 18:00 BRT (não 15:00 BRT)
-  // Por isso, usamos getUTCHours() para obter a hora "real" de Brasília
-  const isBookingUpcoming = (booking: BookingItem): boolean => {
-    const bookingTime = getBookingTime(booking)
-    const now = new Date()
-
-    // Obter componentes UTC do booking (que representam a hora de Brasília)
-    const bookingYear = bookingTime.getUTCFullYear()
-    const bookingMonth = bookingTime.getUTCMonth()
-    const bookingDay = bookingTime.getUTCDate()
-    const bookingHour = bookingTime.getUTCHours()
-    const bookingMinute = bookingTime.getUTCMinutes()
-    const bookingSecond = bookingTime.getUTCSeconds()
-
-    // Obter componentes da data atual em Brasília usando toLocaleString
-    const nowBRString = now.toLocaleString('en-US', {
-      timeZone: 'America/Sao_Paulo',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false
-    })
-
-    // Parsear a string: "MM/DD/YYYY, HH:MM:SS"
-    const [datePart, timePart] = nowBRString.split(', ')
-    const [month, day, year] = datePart.split('/').map(Number)
-    const [hour, minute, second] = timePart.split(':').map(Number)
-
-    // Comparar ano, mês, dia, hora, minuto, segundo
-    if (bookingYear !== year) return bookingYear > year
-    if (bookingMonth !== month - 1) return bookingMonth > month - 1 // month é 1-indexed no toLocaleString
-    if (bookingDay !== day) return bookingDay > day
-    if (bookingHour !== hour) return bookingHour > hour
-    if (bookingMinute !== minute) return bookingMinute > minute
-    return bookingSecond > second
-  }
-
-  // Função auxiliar para verificar se um booking deve aparecer como "passado"
-  // Cancelados sempre aparecem como passados, mesmo que ainda não tenham passado
-  const isBookingPast = (booking: BookingItem): boolean => {
-    // Se foi cancelado, sempre é considerado passado
-    if (booking.status === 'CANCELED' || booking.status === 'CANCELLED') {
-      return true
-    }
-    // Caso contrário, verifica se já passou
-    return !isBookingUpcoming(booking)
-  }
-
-
-  useEffect(() => {
-    const fetchStats = async () => {
-      if (!user?.id) return
-
-      setIsLoading(true)
-      try {
-        const response = await fetch(
-          `${API_BASE_URL}/api/students/${user.id}/stats`
-        )
-        if (response.ok) {
-          const data = await response.json()
-          setStats({
-            totalBookings: data.total_bookings || 0,
-            completed: data.completed_bookings || 0,
-            cancelled: data.cancelled_bookings || 0
-          })
-        }
-      } catch (error) {
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    if (section !== "config") {
-      fetchStats()
-    }
-  }, [user?.id, section])
-
-  useEffect(() => {
-    setProfileData({
-      name: user?.name || "",
-      email: user?.email || "",
-      phone: user?.phone || "",
-      gender: (user as any)?.gender || "PREFER_NOT_TO_SAY"
-    })
-    setAvatarPreview(user?.avatar_url || null)
-  }, [user?.name, user?.email, user?.phone, user?.avatar_url])
-
-  useEffect(() => {
-    if (!user?.id || !token) return
-    if (section === 'aulas') {
-      void fetchBookings()
-    }
-    if (!section || (section !== 'config' && section !== 'aulas')) {
-      void fetchBalance()
-      void fetchNext()
-      void fetchBookings()
-    }
-  }, [user?.id, token, section])
-
-
-  const fetchBookings = async () => {
-    if (!user?.id || !token) return
     try {
-      setBookingsLoading(true)
-      const params = new URLSearchParams({ student_id: user.id })
-      const res = await fetch(`${API_BASE_URL}/api/bookings?${params.toString()}`, {
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+
+      // Buscar bookings futuros do aluno
+      const bookingsResp = await fetch(`${API_BASE_URL}/api/bookings?student_id=${user.id}&future=true`, {
         headers: { Authorization: `Bearer ${token}` }
       })
-      if (!res.ok) {
-        const errorText = await res.text()
-        console.error('Erro ao buscar bookings:', res.status, errorText)
-        throw new Error('Erro ao carregar suas aulas')
-      }
-      const json = await res.json()
-      console.log('Bookings recebidos do backend:', json)
-      console.log('Número de bookings:', json.bookings?.length || 0)
 
-      if (!json.bookings || json.bookings.length === 0) {
-        console.warn('Nenhum booking retornado do backend')
-        setBookings([])
-        return
+      if (bookingsResp.ok) {
+        const data = await bookingsResp.json()
+        setBookings(Array.isArray(data) ? data : data.bookings || [])
       }
 
-      const items: BookingItem[] = (json.bookings || []).map((b: any) => {
-        const item = {
-          id: b.id,
-          date: b.date,
-          startAt: b.startAt,
-          endAt: b.endAt,
-          duration: b.duration ?? 60,
-          status: String(b.status),
-          teacherName: b.teacherName,
-          franchiseName: b.franchiseName,
-          cancellableUntil: b.cancellableUntil,
-          updatedAt: b.updatedAt || b.updated_at
-        }
-        console.log('Mapeando booking:', b, '->', item)
-        return item
+      // Buscar séries do aluno
+      const seriesResp = await fetch(`${API_BASE_URL}/api/booking-series/student/my-series`, {
+        headers: { Authorization: `Bearer ${token}` }
       })
 
-      console.log('Bookings mapeados:', items)
-      console.log('Bookings futuros:', items.filter(b => isBookingUpcoming(b)))
-      setBookings(items)
-    } catch (e) {
-      console.error('Erro ao buscar bookings:', e)
-      // ignore error here, handled via UI state
-      setBookings([])
+      if (seriesResp.ok) {
+        const data = await seriesResp.json()
+        setSeries(Array.isArray(data) ? data : [])
+      }
+    } catch (err) {
+      setError('Erro ao carregar aulas')
+      console.error('Erro ao buscar aulas:', err)
     } finally {
-      setBookingsLoading(false)
+      setIsLoading(false)
     }
+  }, [token, user?.id])
+
+  useEffect(() => {
+    if (isAuthenticated && token) {
+      fetchBookings()
+    }
+  }, [isAuthenticated, token, fetchBookings])
+
+  const handleCancelClick = (booking: Booking) => {
+    setCancellingBooking(booking)
+    setCancelType('single')
+    setCancelError(null)
+    setShowCancelModal(true)
   }
 
-  const fetchBalance = async () => {
-    if (!token) return
+  const handleCancelConfirm = async () => {
+    if (!cancellingBooking || !token) return
+
+    setIsCancelling(true)
+    setCancelError(null)
+
     try {
-      const res = await fetch(`${API_BASE_URL}/api/packages/student/balance`, {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-      if (!res.ok) return
-      const data = await res.json().catch(() => ({}))
-      const available = Number(data?.balance?.available_classes ?? (data?.balance ? (data.balance.total_purchased - data.balance.total_consumed - data.balance.locked_qty) : 0))
-      setBalanceAvailable(Number.isFinite(available) ? available : 0)
-    } catch { }
-  }
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      let url: string
+      const method = 'DELETE'
 
-  const fetchNext = async () => {
-    if (!user?.id || !token) return
-    try {
-      const params = new URLSearchParams({ student_id: user.id })
-      const res = await fetch(`${API_BASE_URL}/api/bookings?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-      if (!res.ok) return
-      const json = await res.json()
-      const items: BookingItem[] = (json.bookings || []).map((b: any) => ({
-        id: b.id, date: b.date, duration: b.duration ?? 60, status: String(b.status), teacherName: b.teacherName, franchiseName: b.franchiseName, cancellableUntil: b.cancellableUntil
-      }))
-      const upcoming = items.filter(b => isBookingUpcoming(b))
-      upcoming.sort((a, b) => getBookingTime(a).getTime() - getBookingTime(b).getTime())
-      setNextBooking(upcoming[0] || null)
-    } catch { }
-  }
-
-  const cutoffLabel = (b: BookingItem) => {
-    const bookingTime = getBookingTime(b)
-    // Calcular 4 horas antes do horário do booking (regra: cancelamento gratuito até 4h antes)
-    const FOUR_HOURS_MS = 4 * 60 * 60 * 1000
-    const cutoffIso = b.cancellableUntil || new Date(bookingTime.getTime() - FOUR_HOURS_MS).toISOString()
-    const cutoff = new Date(cutoffIso)
-    // Usar getHours/getMinutes (hora local) para exibir corretamente
-    const hour = String(cutoff.getHours()).padStart(2, '0')
-    const minute = String(cutoff.getMinutes()).padStart(2, '0')
-    const d = cutoff.toLocaleDateString('pt-BR')
-    return `${d} ${hour}:${minute}`
-  }
-
-  const cancelBooking = async (id: string) => {
-    if (!token || cancellingBookingId) return // Prevenir múltiplos cliques
-
-    setCancellingBookingId(id)
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/bookings/${id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` }
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => null)
-        toast.error(data?.error || data?.message || 'Erro ao cancelar')
-        return
+      if (cancellingBooking.series_id) {
+        // Cancelar via endpoint de série
+        url = `${API_BASE_URL}/api/booking-series/${cancellingBooking.series_id}/bookings/${cancellingBooking.id}?cancelType=${cancelType}`
+      } else {
+        // Cancelar booking avulso
+        url = `${API_BASE_URL}/api/bookings/${cancellingBooking.id}`
       }
-      toast.success('Agendamento cancelado com sucesso')
-      setBookings(prev => prev.map(b => (b.id === id ? { ...b, status: 'CANCELLED' } : b)))
-      // Recarregar balance após cancelamento
-      await fetchBalance()
-    } catch {
-      toast.error('Erro ao cancelar')
+
+      const resp = await fetch(url, {
+        method,
+        headers: { Authorization: `Bearer ${token}` }
+      })
+
+      const json = await resp.json()
+
+      if (!resp.ok) {
+        throw new Error(json.error || 'Erro ao cancelar')
+      }
+
+      setShowCancelModal(false)
+      setCancellingBooking(null)
+
+      // Recarregar dados
+      await fetchBookings()
+    } catch (err: any) {
+      setCancelError(err?.message || 'Erro ao cancelar aula')
     } finally {
-      setConfirm({ open: false, bookingId: null })
-      setCancellingBookingId(null)
+      setIsCancelling(false)
     }
   }
 
+  const getStatusBadge = (booking: Booking) => {
+    const status = booking.status_canonical || booking.status
+    if (status === 'CANCELED' || status === 'CANCELLED') {
+      return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Cancelada</Badge>
+    }
 
-  if (!user || !isAuthenticated) {
+    if (booking.is_reserved) {
+      return (
+        <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
+          <Clock className="h-3 w-3 mr-1" />
+          Reservada
+        </Badge>
+      )
+    }
+
+    if (booking.series_id) {
+      return (
+        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+          <Repeat className="h-3 w-3 mr-1" />
+          Série
+        </Badge>
+      )
+    }
+
+    return (
+      <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+        <CheckCircle2 className="h-3 w-3 mr-1" />
+        Confirmada
+      </Badge>
+    )
+  }
+
+  if (!isAuthenticated || !user) {
     return null
   }
 
-  const firstName = user?.name?.split(" ")[0] || "Aluno"
-
-  const authorizedFetch = async (path: string, init: RequestInit = {}) => {
-    if (!token) {
-      throw new Error("Sessão expirada. Faça login novamente.")
-    }
-    let headers: Record<string, string> = {}
-    if (init.headers instanceof Headers) {
-      headers = Object.fromEntries(init.headers.entries())
-    } else if (Array.isArray(init.headers)) {
-      headers = Object.fromEntries(init.headers)
-    } else if (init.headers) {
-      headers = { ...(init.headers as Record<string, string>) }
-    }
-    const endpoint = path.startsWith("/") ? path : `/${path}`
-    return fetch(`${API_BASE_URL}${endpoint}`, {
-      ...init,
-      headers: {
-        ...headers,
-        Authorization: `Bearer ${token}`
-      },
-      credentials: "include"
-    })
-  }
-
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      setAvatarFile(file)
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        setAvatarPreview(reader.result as string)
-      }
-      reader.readAsDataURL(file)
-    }
-  }
-
-  const handleAvatarUpload = async () => {
-    if (!avatarFile || !user?.id) return
-    setSaving(true)
-    try {
-      const formData = new FormData()
-      formData.append("avatar", avatarFile)
-      formData.append("userId", user.id)
-      const response = await authorizedFetch(`/api/users/${user.id}/avatar`, {
-        method: "POST",
-        body: formData
-      })
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || "Erro ao fazer upload")
-      }
-      const data = await response.json()
-      updateUser({ ...user, avatar_url: data.avatar_url })
-      toast.success("Foto atualizada com sucesso!")
-      setAvatarFile(null)
-      setAvatarPreview(data.avatar_url)
-    } catch (error: any) {
-      toast.error(error.message || "Erro ao fazer upload da foto")
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleProfileUpdate = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setSaving(true)
-    try {
-      const response = await authorizedFetch(`/api/users/${user?.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(profileData)
-      })
-      if (response.ok) {
-        const data = await response.json()
-        updateUser(data.user)
-        toast.success("Perfil atualizado com sucesso!")
-      } else {
-        toast.error("Erro ao atualizar perfil")
-      }
-    } catch (error) {
-      toast.error("Erro ao processar requisição")
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handlePasswordUpdate = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
-      toast.error("As senhas não coincidem")
-      return
-    }
-    if (passwordData.newPassword.length < 6) {
-      toast.error("A senha deve ter no mínimo 6 caracteres")
-      return
-    }
-    setSaving(true)
-    try {
-      const response = await authorizedFetch(`/api/users/${user?.id}/password`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          currentPassword: passwordData.currentPassword,
-          newPassword: passwordData.newPassword
-        })
-      })
-      if (response.ok) {
-        toast.success("Senha alterada com sucesso!")
-        setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "" })
-      } else {
-        const data = await response.json().catch(() => null)
-        toast.error(data?.error || "Senha atual incorreta")
-      }
-    } catch (error) {
-      toast.error("Erro ao processar requisição")
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  if (section === "config") {
-    return (
-      <div className="w-full flex flex-col gap-6 p-4 md:p-6">
-        <div className="flex flex-col gap-2">
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Configurações</h1>
-          <p className="text-sm text-gray-600">Atualize seu perfil, foto e senha</p>
-        </div>
-
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2 space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <UserIcon className="h-5 w-5 text-meu-primary" />
-                  Dados Pessoais
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleProfileUpdate} className="space-y-4">
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="name">Nome</Label>
-                      <Input
-                        id="name"
-                        value={profileData.name}
-                        onChange={(e) => setProfileData((p) => ({ ...p, name: e.target.value }))}
-                        placeholder="Seu nome"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="phone">Telefone</Label>
-                      <Input
-                        id="phone"
-                        value={profileData.phone}
-                        onChange={(e) => setProfileData((p) => ({ ...p, phone: e.target.value }))}
-                        placeholder="(00) 00000-0000"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="gender">Gênero</Label>
-                      <Select value={profileData.gender} onValueChange={(v) => setProfileData((p) => ({ ...p, gender: v }))}>
-                        <SelectTrigger id="gender" className="w-full">
-                          <SelectValue placeholder="Selecione seu gênero" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="MALE">Masculino</SelectItem>
-                          <SelectItem value="FEMALE">Feminino</SelectItem>
-                          <SelectItem value="NON_BINARY">Não-binário</SelectItem>
-                          <SelectItem value="OTHER">Outro</SelectItem>
-                          <SelectItem value="PREFER_NOT_TO_SAY">Prefiro não dizer</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2 md:col-span-2">
-                      <Label htmlFor="email">Email</Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        value={profileData.email}
-                        onChange={(e) => setProfileData((p) => ({ ...p, email: e.target.value }))}
-                        placeholder="seu@email.com"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex justify-end">
-                    <Button type="submit" disabled={saving} className="bg-meu-primary text-white hover:bg-meu-primary-dark">
-                      {saving ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Salvando...
-                        </>
-                      ) : (
-                        <>
-                          <Save className="mr-2 h-4 w-4" /> Salvar alterações
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Lock className="h-5 w-5 text-meu-primary" />
-                  Segurança
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handlePasswordUpdate} className="space-y-4">
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="currentPassword">Senha atual</Label>
-                      <div className="relative">
-                        <Input
-                          id="currentPassword"
-                          type={showPassword ? "text" : "password"}
-                          value={passwordData.currentPassword}
-                          onChange={(e) =>
-                            setPasswordData((p) => ({ ...p, currentPassword: e.target.value }))
-                          }
-                          placeholder="••••••"
-                        />
-                        <button
-                          type="button"
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500"
-                          onClick={() => setShowPassword((s) => !s)}
-                        >
-                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </button>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="newPassword">Nova senha</Label>
-                      <div className="relative">
-                        <Input
-                          id="newPassword"
-                          type={showNewPassword ? "text" : "password"}
-                          value={passwordData.newPassword}
-                          onChange={(e) =>
-                            setPasswordData((p) => ({ ...p, newPassword: e.target.value }))
-                          }
-                          placeholder="Mínimo 6 caracteres"
-                        />
-                        <button
-                          type="button"
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500"
-                          onClick={() => setShowNewPassword((s) => !s)}
-                        >
-                          {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </button>
-                      </div>
-                    </div>
-                    <div className="space-y-2 md:col-span-2">
-                      <Label htmlFor="confirmPassword">Confirmar nova senha</Label>
-                      <div className="relative">
-                        <Input
-                          id="confirmPassword"
-                          type={showConfirmPassword ? "text" : "password"}
-                          value={passwordData.confirmPassword}
-                          onChange={(e) =>
-                            setPasswordData((p) => ({ ...p, confirmPassword: e.target.value }))
-                          }
-                          placeholder="Repita a nova senha"
-                        />
-                        <button
-                          type="button"
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500"
-                          onClick={() => setShowConfirmPassword((s) => !s)}
-                        >
-                          {showConfirmPassword ? (
-                            <EyeOff className="h-4 w-4" />
-                          ) : (
-                            <Eye className="h-4 w-4" />
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex justify-end">
-                    <Button type="submit" disabled={saving} className="bg-meu-primary text-white hover:bg-meu-primary-dark">
-                      {saving ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Atualizando...
-                        </>
-                      ) : (
-                        <>
-                          <Save className="mr-2 h-4 w-4" /> Alterar senha
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Camera className="h-5 w-5 text-meu-primary" />
-                  Foto de Perfil
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center gap-4">
-                  <Avatar className="h-16 w-16 ring-2 ring-meu-primary/20">
-                    {avatarPreview ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={avatarPreview} alt={user.name || "Avatar"} className="h-full w-full rounded-full object-cover" />
-                    ) : (
-                      <AvatarFallback className="bg-meu-primary/10 text-meu-primary font-bold">
-                        {user?.name?.charAt(0).toUpperCase() || "A"}
-                      </AvatarFallback>
-                    )}
-                  </Avatar>
-                  <div className="flex-1">
-                    <Label htmlFor="avatar">Atualizar foto</Label>
-                    <Input id="avatar" type="file" accept="image/*" onChange={handleAvatarChange} />
-                    <p className="mt-1 text-xs text-gray-500">PNG, JPG ou WEBP até 5MB</p>
-                  </div>
-                </div>
-                {avatarFile && (
-                  <Button onClick={handleAvatarUpload} disabled={saving} className="bg-meu-primary text-white hover:bg-meu-primary-dark">
-                    {saving ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Enviando...
-                      </>
-                    ) : (
-                      <>
-                        <Save className="mr-2 h-4 w-4" /> Salvar nova foto
-                      </>
-                    )}
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  if (section === 'aulas') {
-    // Remover duplicatas antes de filtrar
-    const uniqueBookings = bookings.filter((booking, index, self) =>
-      index === self.findIndex(b => b.id === booking.id)
-    )
-    const upcoming = uniqueBookings.filter(b => isBookingUpcoming(b) && !(b.status === 'CANCELED' || b.status === 'CANCELLED'))
-    const past = uniqueBookings
-      .filter(b => isBookingPast(b))
-      .sort((a, b) => {
-        // Ordenar por updatedAt (mais recentemente atualizado primeiro), com fallback para data/hora do agendamento
-        const aUpdated = a.updatedAt ? new Date(a.updatedAt).getTime() : getBookingTime(a).getTime()
-        const bUpdated = b.updatedAt ? new Date(b.updatedAt).getTime() : getBookingTime(b).getTime()
-        return bUpdated - aUpdated // Mais recentemente atualizados primeiro
-      })
-    return (
-      <div className="w-full flex flex-col gap-4 sm:gap-6 p-3 sm:p-4 md:p-6">
-        <div className="flex flex-col gap-1.5 sm:gap-2">
-          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900">Minhas Aulas</h1>
-          <p className="text-xs sm:text-sm text-gray-600">Gerencie suas aulas e cancelamentos</p>
-        </div>
-
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 sm:p-4 text-xs sm:text-sm text-amber-900">
-          <strong className="block sm:inline">Cancelamento gratuito</strong> até 4 horas antes do horário agendado. Se cancelar antes desse prazo, o crédito será estornado. Após esse prazo, o crédito não será estornado.
-        </div>
-
-        <Card className="border-none shadow-none bg-transparent">
-          <CardHeader className="px-1">
-            <CardTitle className="text-xl font-bold text-gray-900">Próximas aulas</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0 space-y-3">
-            {bookingsLoading ? (
-              <div className="flex flex-col items-center justify-center py-12 bg-white rounded-2xl border border-gray-100 shadow-sm">
-                <Loader2 className="h-8 w-8 animate-spin text-blue-600 mb-3" />
-                <p className="text-gray-500 font-medium">Carregando suas aulas...</p>
-              </div>
-            ) : upcoming.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 bg-white rounded-2xl border border-gray-100 shadow-sm text-center">
-                <Calendar className="h-10 w-10 text-gray-300 mb-3" />
-                <p className="text-gray-500">Você não tem aulas futuras agendadas.</p>
-              </div>
-            ) : (
-              upcoming.map((booking) => {
-                const date = getBookingTime(booking)
-                const month = date.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')
-                const day = date.getDate()
-                const hour = String(date.getHours()).padStart(2, '0')
-                const minute = String(date.getMinutes()).padStart(2, '0')
-
-                return (
-                  <div
-                    key={booking.id}
-                    className="group flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 rounded-2xl border border-gray-100 bg-white hover:border-blue-100 hover:shadow-md transition-all duration-300 gap-4"
-                  >
-                    <div className="flex items-center gap-4 w-full sm:w-auto">
-                      <div className="flex flex-col items-center justify-center w-14 h-14 bg-blue-50 text-blue-600 rounded-xl border border-blue-100 shrink-0 group-hover:bg-blue-600 group-hover:text-white transition-colors duration-300">
-                        <span className="text-[10px] uppercase font-bold tracking-wider leading-none mb-1">{month}</span>
-                        <span className="text-xl font-bold leading-none">{day}</span>
-                      </div>
-
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-bold text-gray-900 truncate group-hover:text-blue-700 transition-colors">{booking.teacherName || 'Professor'}</h3>
-                        <div className="flex items-center gap-3 text-xs sm:text-sm text-gray-500 mt-1">
-                          <div className="flex items-center gap-1.5">
-                            <Clock className="h-3.5 w-3.5" />
-                            <span>{hour}:{minute}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <MapPin className="h-3.5 w-3.5" />
-                            <span className="truncate max-w-[120px] sm:max-w-[200px]">{booking.franchiseName || 'Unidade'}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto mt-2 sm:mt-0 pt-3 sm:pt-0 border-t sm:border-t-0 border-gray-50">
-                      <div className="text-xs text-gray-500 sm:text-right sm:mr-2">
-                        <span className="block sm:hidden">Duração: {booking.duration} min</span>
-                        <span className="hidden sm:block text-amber-600 font-medium text-[10px]">{cutoffLabel(booking)}</span>
-                      </div>
-
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors text-xs h-8 px-3"
-                        onClick={() => setConfirm({ open: true, bookingId: booking.id })}
-                        disabled={cancellingBookingId === booking.id}
-                      >
-                        {cancellingBookingId === booking.id ? (
-                          <Loader2 className="h-3 w-3 animate-spin text-red-600" />
-                        ) : 'Cancelar'}
-                      </Button>
-                    </div>
-                  </div>
-                )
-              })
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="border-none shadow-none bg-transparent mt-4">
-          <CardHeader className="px-1">
-            <CardTitle className="text-xl font-bold text-gray-900">Aulas passadas</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0 space-y-3">
-            {bookingsLoading ? (
-              <div className="text-gray-500 text-center py-8">Carregando...</div>
-            ) : past.length === 0 ? (
-              <div className="text-gray-500 text-center py-8 italic">Nenhuma aula no histórico recente.</div>
-            ) : (
-              past.map((booking) => {
-                const date = getBookingTime(booking)
-                const month = date.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')
-                const day = date.getDate()
-                const hour = String(date.getHours()).padStart(2, '0')
-                const minute = String(date.getMinutes()).padStart(2, '0')
-
-                return (
-                  <div
-                    key={booking.id}
-                    className="flex items-center justify-between p-4 rounded-xl border border-gray-100 bg-white/60 hover:bg-white transition-colors gap-4"
-                  >
-                    <div className="flex items-center gap-4 flex-1">
-                      <div className="flex flex-col items-center justify-center w-12 h-12 bg-gray-100 text-gray-500 rounded-lg shrink-0">
-                        <span className="text-[9px] uppercase font-bold tracking-wider leading-none mb-1">{month}</span>
-                        <span className="text-lg font-bold leading-none">{day}</span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold text-gray-900 truncate">{booking.teacherName || 'Professor'}</p>
-                        <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
-                          <span>{hour}:{minute}</span>
-                          <span>•</span>
-                          <span className="truncate">{booking.franchiseName || 'Unidade'}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 ml-3">
-                      {booking.status === 'CANCELLED' ? (
-                        <span className="text-[10px] px-2.5 py-1 rounded-full bg-red-50 text-red-600 font-medium border border-red-100">Cancelada</span>
-                      ) : (
-                        <span className="text-[10px] px-2.5 py-1 rounded-full bg-green-50 text-green-600 font-medium border border-green-100">Concluída</span>
-                      )}
-                    </div>
-                  </div>
-                )
-              })
-            )}
-          </CardContent>
-        </Card>
-
-        {(() => {
-          const b = bookings.find(x => x.id === confirm.bookingId)
-          if (!b) {
-            const desc = 'Confirmar cancelamento?'
-            return (
-              <div>
-                {/* Lightweight inline confirm dialog - reuse existing dialog if available */}
-                {confirm.open && (
-                  <div className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center p-4">
-                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-5 sm:p-6 animate-in fade-in zoom-in-95 duration-200">
-                      <h3 className="text-base sm:text-lg font-bold text-gray-900 mb-2">Cancelar aula</h3>
-                      <p className="text-sm text-gray-600 mb-4">{desc}</p>
-                      <div className="flex gap-3">
-                        <Button
-                          variant="outline"
-                          className="flex-1"
-                          onClick={() => setConfirm({ open: false, bookingId: null })}
-                          disabled={!!cancellingBookingId}
-                        >
-                          Cancelar
-                        </Button>
-                        <Button
-                          className="flex-1 bg-red-600 hover:bg-red-700"
-                          onClick={() => confirm.bookingId && cancelBooking(confirm.bookingId)}
-                          disabled={cancellingBookingId === confirm.bookingId}
-                        >
-                          {cancellingBookingId === confirm.bookingId ? (
-                            <>
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              Cancelando...
-                            </>
-                          ) : (
-                            'Confirmar'
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )
-          }
-          const text = cutoffLabel(b)
-          const now = new Date()
-          const cutoff = b?.cancellableUntil ? new Date(b.cancellableUntil) : (b ? new Date(getBookingTime(b).getTime() - 4 * 60 * 60 * 1000) : new Date())
-          const isBeforeCutoff = now <= cutoff
-
-          // Mensagem para período de cancelamento gratuito
-          const freeCancelMessage = (
-            <div className="space-y-2">
-              <p className="text-xs sm:text-sm text-gray-700 leading-relaxed">
-                Você está dentro do período de <strong className="text-green-600">cancelamento gratuito</strong>.
-              </p>
-              <p className="text-xs sm:text-sm text-gray-600">
-                Prazo: até {text}
-              </p>
-              <p className="text-xs sm:text-sm text-green-700 font-medium">
-                ✓ Seu crédito será estornado automaticamente.
-              </p>
-              <p className="text-xs sm:text-sm text-gray-700 mt-3">
-                Deseja confirmar o cancelamento?
-              </p>
-            </div>
-          )
-
-          // Mensagem para período após cancelamento gratuito
-          const lateCancelMessage = (
-            <div className="space-y-2">
-              <p className="text-xs sm:text-sm text-gray-700 leading-relaxed">
-                O período de <strong className="text-amber-600">cancelamento gratuito</strong> já passou.
-              </p>
-              <p className="text-xs sm:text-sm text-gray-600">
-                Prazo era: até {text}
-              </p>
-              <p className="text-xs sm:text-sm text-amber-700 font-medium">
-                ⚠️ Seu crédito não será estornado.
-              </p>
-              <p className="text-xs sm:text-sm text-gray-700 mt-3">
-                Deseja confirmar o cancelamento mesmo assim?
-              </p>
-            </div>
-          )
-
-          return (
-            <div>
-              {/* Lightweight inline confirm dialog - reuse existing dialog if available */}
-              {confirm.open && (
-                <div className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center p-4">
-                  <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-5 sm:p-6">
-                    <h3 className="text-base sm:text-lg font-bold text-gray-900 mb-4">Cancelar aula</h3>
-                    <div className="mb-5 sm:mb-6">
-                      {isBeforeCutoff ? freeCancelMessage : lateCancelMessage}
-                    </div>
-                    <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
-                      <Button
-                        variant="outline"
-                        className="w-full sm:w-auto h-11 sm:h-10 order-2 sm:order-1"
-                        onClick={() => setConfirm({ open: false, bookingId: null })}
-                        disabled={!!cancellingBookingId}
-                      >
-                        Voltar
-                      </Button>
-                      <Button
-                        className="w-full sm:w-auto h-11 sm:h-10 bg-red-600 hover:bg-red-700 text-white order-1 sm:order-2"
-                        onClick={() => confirm.bookingId && cancelBooking(confirm.bookingId)}
-                        disabled={cancellingBookingId === confirm.bookingId}
-                      >
-                        {cancellingBookingId === confirm.bookingId ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Cancelando...
-                          </>
-                        ) : (
-                          'Confirmar Cancelamento'
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )
-        })()}
-      </div>
-    )
-  }
-
-  if (isLoading) {
-    return (
-      <div className="w-full flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-meu-primary mx-auto mb-4" />
-          <p className="text-gray-600">Carregando estatísticas...</p>
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <div className="w-full max-w-6xl mx-auto p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6">
+    <div className="w-full flex flex-col gap-6 p-4 md:p-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
-        <div className="flex-1">
-          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900">Olá, {firstName}!</h1>
-          <p className="text-xs sm:text-sm text-gray-500 mt-1">
-            {bookings.filter(b => isBookingUpcoming(b) && !(b.status === 'CANCELED' || b.status === 'CANCELLED')).length} aulas agendadas • {balanceAvailable ?? 0} créditos disponíveis
+      <div className="flex flex-col gap-2">
+        <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
+          Minhas Aulas
+        </h1>
+        <p className="text-sm text-gray-600">
+          Aulas agendadas e séries recorrentes
+        </p>
+      </div>
+
+      {/* Resumo */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card className="border-2 border-green-200">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Confirmadas</p>
+                <p className="text-2xl font-bold text-green-700">
+                  {bookings.filter(b => !b.is_reserved && (b.status_canonical || b.status) !== 'CANCELED' && (b.status_canonical || b.status) !== 'CANCELLED').length}
+                </p>
+              </div>
+              <CheckCircle2 className="h-8 w-8 text-green-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-2 border-amber-200">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Reservadas</p>
+                <p className="text-2xl font-bold text-amber-700">
+                  {bookings.filter(b => b.is_reserved && (b.status_canonical || b.status) !== 'CANCELED' && (b.status_canonical || b.status) !== 'CANCELLED').length}
+                </p>
+              </div>
+              <Clock className="h-8 w-8 text-amber-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-2 border-blue-200">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Séries Ativas</p>
+                <p className="text-2xl font-bold text-blue-700">
+                  {series.filter(s => s.status === 'ACTIVE').length}
+                </p>
+              </div>
+              <Repeat className="h-8 w-8 text-blue-600" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Aviso sobre reservas */}
+      {bookings.some(b => b.is_reserved) && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          <strong className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4" />
+            Aulas reservadas
+          </strong>
+          <p className="mt-1">
+            Aulas reservadas precisam de crédito até 7 dias antes. Sem crédito, serão canceladas automaticamente.
           </p>
         </div>
-        <Button
-          className="w-full sm:w-auto h-11 sm:h-10 bg-[#002C4E] hover:bg-[#003d6b] text-sm sm:text-base font-semibold"
-          onClick={() => { window.location.href = '/aluno/professores' }}
-        >
-          <Calendar className="h-4 w-4 mr-2" />
-          Agendar Aula
-        </Button>
-      </div>
+      )}
 
-      {/* Stats em grid responsivo */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
-        <Card className="border border-gray-100 shadow-sm hover:shadow-md transition-all duration-300 bg-white group overflow-hidden relative">
-          <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
-            <CalendarDays className="h-12 w-12 text-blue-600" />
-          </div>
-          <CardContent className="p-4 sm:p-5 md:pt-6 relative z-10">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
-                <CalendarDays className="h-5 w-5" />
-              </div>
-              <p className="text-xs sm:text-sm font-medium text-gray-500">Total de aulas</p>
+      {/* Lista de Aulas */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Calendar className="h-5 w-5 text-meu-primary" />
+            Próximas Aulas
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="h-6 w-6 animate-spin text-meu-primary" />
             </div>
-            <div className="text-2xl sm:text-3xl font-bold text-gray-900">{stats.totalBookings}</div>
-          </CardContent>
-        </Card>
-
-        <Card className="border border-gray-100 shadow-sm hover:shadow-md transition-all duration-300 bg-white group overflow-hidden relative">
-          <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
-            <CheckCircle className="h-12 w-12 text-green-600" />
-          </div>
-          <CardContent className="p-4 sm:p-5 md:pt-6 relative z-10">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 bg-green-50 rounded-lg text-green-600">
-                <CheckCircle className="h-5 w-5" />
-              </div>
-              <p className="text-xs sm:text-sm font-medium text-gray-500">Concluídas</p>
+          ) : error ? (
+            <div className="flex items-center gap-2 text-red-600 py-4">
+              <AlertCircle className="h-5 w-5" />
+              <span>{error}</span>
             </div>
-            <div className="text-2xl sm:text-3xl font-bold text-gray-900">{stats.completed}</div>
-          </CardContent>
-        </Card>
-
-        <Card className="border border-gray-100 shadow-sm hover:shadow-md transition-all duration-300 bg-white group overflow-hidden relative">
-          <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
-            <Wallet className="h-12 w-12 text-amber-600" />
-          </div>
-          <CardContent className="p-4 sm:p-5 md:pt-6 relative z-10">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 bg-amber-50 rounded-lg text-amber-600">
-                <Wallet className="h-5 w-5" />
-              </div>
-              <p className="text-xs sm:text-sm font-medium text-gray-500">Créditos</p>
+          ) : bookings.filter(b => (b.status_canonical || b.status) !== 'CANCELED' && (b.status_canonical || b.status) !== 'CANCELLED').length === 0 ? (
+            <div className="text-center py-10 text-gray-500">
+              <Calendar className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+              <p className="font-medium">Nenhuma aula agendada</p>
+              <p className="text-sm mt-1">Agende sua primeira aula!</p>
+              <Button
+                className="mt-4"
+                onClick={() => router.push('/aluno/professores')}
+              >
+                Agendar Aula
+              </Button>
             </div>
-            <div className="text-2xl sm:text-3xl font-bold text-gray-900">{balanceAvailable ?? 0}</div>
-          </CardContent>
-        </Card>
-
-        <Card className="border border-gray-100 shadow-sm hover:shadow-md transition-all duration-300 bg-white group overflow-hidden relative">
-          <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
-            <AlertCircle className="h-12 w-12 text-red-600" />
-          </div>
-          <CardContent className="p-4 sm:p-5 md:pt-6 relative z-10">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 bg-red-50 rounded-lg text-red-600">
-                <AlertCircle className="h-5 w-5" />
-              </div>
-              <p className="text-xs sm:text-sm font-medium text-gray-500">Canceladas</p>
-            </div>
-            <div className="text-2xl sm:text-3xl font-bold text-gray-900">{stats.cancelled}</div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card className="border-none shadow-none bg-transparent">
-        <div className="flex items-center justify-between mb-4 px-1">
-          <h2 className="text-xl font-bold text-gray-900">Próximas Aulas</h2>
-          <Button
-            variant="ghost"
-            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 text-sm h-auto py-1 px-2"
-            onClick={() => { const url = new URL(window.location.href); url.searchParams.set('section', 'aulas'); window.location.href = url.toString() }}
-          >
-            Ver todas <ChevronRight className="h-4 w-4 ml-1" />
-          </Button>
-        </div>
-        <CardContent className="p-0">
-          {bookingsLoading ? (
-            <div className="flex flex-col items-center justify-center py-12 bg-white rounded-2xl border border-gray-100 shadow-sm">
-              <Loader2 className="h-8 w-8 animate-spin text-blue-600 mb-3" />
-              <p className="text-gray-500 font-medium">Carregando seus agendamentos...</p>
-            </div>
-          ) : (() => {
-            const upcomingBookings = bookings.filter(b => {
-              if (b.status === 'CANCELED' || b.status === 'CANCELLED') return false
-              return isBookingUpcoming(b)
-            })
-
-            const uniqueUpcomingBookings = upcomingBookings.filter((booking, index, self) =>
-              index === self.findIndex(b => b.id === booking.id)
-            )
-
-            if (uniqueUpcomingBookings.length === 0) {
-              return (
-                <div className="flex flex-col items-center justify-center py-16 px-4 bg-white rounded-2xl border border-gray-100 shadow-sm text-center">
-                  <div className="bg-blue-50 p-4 rounded-full mb-4">
-                    <Calendar className="h-8 w-8 text-blue-600" />
-                  </div>
-                  <h3 className="text-lg font-bold text-gray-900 mb-2">Sua agenda está livre</h3>
-                  <p className="text-gray-500 mb-6 max-w-xs mx-auto">Você não tem aulas agendadas para os próximos dias. Que tal marcar um treino agora?</p>
-                  <Button
-                    className="bg-[#002C4E] hover:bg-[#003d6b] text-white shadow-lg shadow-blue-900/10 transition-all hover:scale-105"
-                    onClick={() => { window.location.href = '/aluno/professores' }}
+          ) : (
+            <div className="space-y-3">
+              {bookings
+                .filter(b => b.status_canonical !== 'CANCELED')
+                .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
+                .map((booking) => (
+                  <div
+                    key={booking.id}
+                    className="flex items-center justify-between p-4 rounded-lg border hover:border-meu-primary/50 transition-colors"
                   >
-                    Agendar Aula
-                  </Button>
-                </div>
-              )
-            }
+                    <div className="flex items-center gap-4">
+                      <Avatar className="h-12 w-12">
+                        <AvatarImage src={booking.avatar_url} />
+                        <AvatarFallback className="bg-meu-primary/10 text-meu-primary">
+                          {(booking.teacherName || booking.teacher_name || 'Professor')?.charAt(0) || 'P'}
+                        </AvatarFallback>
+                      </Avatar>
 
-            return (
-              <div className="space-y-3">
-                {uniqueUpcomingBookings
-                  .sort((a, b) => getBookingTime(a).getTime() - getBookingTime(b).getTime())
-                  .slice(0, 4)
-                  .map((booking) => {
-                    const date = getBookingTime(booking)
-                    // Use locale for consistent capitalization if needed, or CSS uppercase
-                    const month = date.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')
-                    const day = date.getDate()
-                    const hour = String(date.getHours()).padStart(2, '0')
-                    const minute = String(date.getMinutes()).padStart(2, '0')
-
-                    return (
-                      <div
-                        key={booking.id}
-                        className="group flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 rounded-2xl border border-gray-100 bg-white hover:border-blue-100 hover:shadow-md transition-all duration-300 gap-4"
-                      >
-                        <div className="flex items-center gap-4 w-full sm:w-auto">
-                          {/* Date Box */}
-                          <div className="flex flex-col items-center justify-center w-14 h-14 bg-blue-50 text-blue-600 rounded-xl border border-blue-100 shrink-0 group-hover:bg-blue-600 group-hover:text-white transition-colors duration-300">
-                            <span className="text-[10px] uppercase font-bold tracking-wider leading-none mb-1">{month}</span>
-                            <span className="text-xl font-bold leading-none">{day}</span>
-                          </div>
-
-                          {/* Info */}
-                          <div className="flex-1 min-w-0">
-                            <h3 className="font-bold text-gray-900 truncate group-hover:text-blue-700 transition-colors">{booking.teacherName || 'Professor'}</h3>
-                            <div className="flex items-center gap-3 text-xs sm:text-sm text-gray-500 mt-1">
-                              <div className="flex items-center gap-1.5">
-                                <Clock className="h-3.5 w-3.5" />
-                                <span>{hour}:{minute}</span>
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <MapPin className="h-3.5 w-3.5" />
-                                <span className="truncate max-w-[120px] sm:max-w-[200px]">{booking.franchiseName || 'Unidade'}</span>
-                              </div>
-                            </div>
-                          </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium">{(booking.teacherName || booking.teacher_name || 'Professor') || 'Professor'}</p>
+                          {getStatusBadge(booking)}
                         </div>
-
-                        {/* Actions */}
-                        <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto mt-2 sm:mt-0 pt-3 sm:pt-0 border-t sm:border-t-0 border-gray-50">
-                          <div className="text-xs text-gray-500 sm:text-right sm:mr-2">
-                            <span className="block sm:hidden">Duração: {booking.duration} min</span>
-                            <span className="hidden sm:block text-amber-600 font-medium text-[10px]">{cutoffLabel(booking)}</span>
-                          </div>
-
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors text-xs h-8 px-3"
-                            onClick={() => setConfirm({ open: true, bookingId: booking.id })}
-                          >
-                            Cancelar
-                          </Button>
+                        <div className="flex items-center gap-3 text-sm text-gray-500 mt-1">
+                          <span className="flex items-center gap-1">
+                            <Calendar className="h-3.5 w-3.5" />
+                            {formatDate(booking.start_at)}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-3.5 w-3.5" />
+                            {formatTime(booking.start_at)}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <MapPin className="h-3.5 w-3.5" />
+                            {(booking.franchiseName || booking.franchise_name || 'Academia') || 'Academia'}
+                          </span>
                         </div>
                       </div>
-                    )
-                  })}
-              </div>
-            )
-          })()}
+                    </div>
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      onClick={() => handleCancelClick(booking)}
+                    >
+                      <XCircle className="h-4 w-4 mr-1" />
+                      Cancelar
+                    </Button>
+                  </div>
+                ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {bookings.filter(b => isBookingPast(b)).length > 0 && (
-        <Card className="border-none shadow-none bg-transparent mt-4">
-          <CardHeader className="px-1 pt-0">
-            <CardTitle className="text-lg font-semibold text-gray-700">Histórico Recente</CardTitle>
+      {/* Séries Ativas */}
+      {series.filter(s => s.status === 'ACTIVE').length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Repeat className="h-5 w-5 text-meu-primary" />
+              Séries Recorrentes
+            </CardTitle>
           </CardHeader>
-          <CardContent className="p-0">
+          <CardContent>
             <div className="space-y-3">
-              {bookings
-                .filter(b => isBookingPast(b))
-                .sort((a, b) => {
-                  const aUpdated = a.updatedAt ? new Date(a.updatedAt).getTime() : getBookingTime(a).getTime()
-                  const bUpdated = b.updatedAt ? new Date(b.updatedAt).getTime() : getBookingTime(b).getTime()
-                  return bUpdated - aUpdated
-                })
-                .slice(0, 3)
-                .map((booking) => {
-                  const date = getBookingTime(booking)
-                  const month = date.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')
-                  const day = date.getDate()
-                  const hour = String(date.getHours()).padStart(2, '0')
-                  const minute = String(date.getMinutes()).padStart(2, '0')
-
-                  return (
-                    <div
-                      key={booking.id}
-                      className="flex items-center justify-between p-4 rounded-xl border border-gray-100 bg-white/60 hover:bg-white transition-colors gap-4"
-                    >
-                      <div className="flex items-center gap-4 flex-1">
-                        <div className="flex flex-col items-center justify-center w-12 h-12 bg-gray-100 text-gray-500 rounded-lg shrink-0">
-                          <span className="text-[9px] uppercase font-bold tracking-wider leading-none mb-1">{month}</span>
-                          <span className="text-lg font-bold leading-none">{day}</span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold text-gray-900 truncate">{booking.teacherName || 'Professor'}</p>
-                          <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
-                            <span>{hour}:{minute}</span>
-                            <span>•</span>
-                            <span className="truncate">{booking.franchiseName || 'Unidade'}</span>
-                          </div>
-                        </div>
+              {series
+                .filter(s => s.status === 'ACTIVE')
+                .map((s) => (
+                  <div
+                    key={s.id}
+                    className="flex items-center justify-between p-4 rounded-lg border bg-blue-50/50"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium">{s.teacher?.name || 'Professor'}</p>
+                        <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-200">
+                          {RECURRENCE_LABELS[s.recurrence_type] || s.recurrence_type}
+                        </Badge>
                       </div>
-                      <div className="flex items-center gap-2 ml-3">
-                        {booking.status === 'CANCELLED' ? (
-                          <span className="text-[10px] px-2.5 py-1 rounded-full bg-red-50 text-red-600 font-medium border border-red-100">Cancelada</span>
-                        ) : (
-                          <span className="text-[10px] px-2.5 py-1 rounded-full bg-green-50 text-green-600 font-medium border border-green-100">Concluída</span>
-                        )}
+                      <div className="flex items-center gap-3 text-sm text-gray-500 mt-1">
+                        <span className="flex items-center gap-1">
+                          <Calendar className="h-3.5 w-3.5" />
+                          {DAY_NAMES[s.day_of_week]}s
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Clock className="h-3.5 w-3.5" />
+                          {s.start_time}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <MapPin className="h-3.5 w-3.5" />
+                          {s.academy?.name || 'Academia'}
+                        </span>
                       </div>
+                      <p className="text-xs text-gray-400 mt-1">
+                        De {formatDate(s.start_date)} até {formatDate(s.end_date)}
+                      </p>
                     </div>
-                  )
-                })}
+
+                    <ChevronRight className="h-5 w-5 text-gray-400" />
+                  </div>
+                ))}
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Inline confirm dialog for cancel */}
-      {confirm.open && (() => {
-        const b = bookings.find(x => x.id === confirm.bookingId) || nextBooking
-        if (!b) {
-          return (
-            <div className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center p-4">
-              <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Cancelar aula</h3>
-                <p className="text-sm text-gray-700 mb-6">Tem certeza que deseja cancelar?</p>
-                <div className="flex justify-end gap-3">
-                  <Button
-                    variant="outline"
-                    onClick={() => setConfirm({ open: false, bookingId: null })}
-                    disabled={!!cancellingBookingId}
-                  >
-                    Não
-                  </Button>
-                  <Button
-                    className="bg-red-600 hover:bg-red-700"
-                    onClick={() => confirm.bookingId && cancelBooking(confirm.bookingId)}
-                    disabled={cancellingBookingId === confirm.bookingId}
-                  >
-                    {cancellingBookingId === confirm.bookingId ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Cancelando...
-                      </>
-                    ) : (
-                      'Sim, cancelar'
-                    )}
-                  </Button>
+      {/* Modal de Cancelamento */}
+      <Dialog open={showCancelModal} onOpenChange={setShowCancelModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <XCircle className="h-5 w-5" />
+              Cancelar Aula
+            </DialogTitle>
+            <DialogDescription>
+              {cancellingBooking?.series_id
+                ? 'Esta aula faz parte de uma série recorrente.'
+                : 'Confirme o cancelamento desta aula.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4">
+            {/* Detalhes da aula */}
+            <div className="bg-gray-50 rounded-lg p-4 mb-4">
+              <div className="flex items-center gap-3">
+                <Avatar className="h-10 w-10">
+                  <AvatarFallback className="bg-meu-primary/10 text-meu-primary">
+                    {(cancellingBooking?.teacherName || cancellingBooking?.teacher_name || 'P').charAt(0)}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="font-medium">{cancellingBooking?.teacherName || cancellingBooking?.teacher_name || 'Professor'}</p>
+                  <p className="text-sm text-gray-500">
+                    {cancellingBooking && formatDate(cancellingBooking.start_at)} às {cancellingBooking && formatTime(cancellingBooking.start_at)}
+                  </p>
                 </div>
               </div>
             </div>
-          )
-        }
 
-        const text = cutoffLabel(b)
-        const now = new Date()
-        const cutoff = b?.cancellableUntil ? new Date(b.cancellableUntil) : new Date(getBookingTime(b).getTime() - 4 * 60 * 60 * 1000)
-        const isBeforeCutoff = now <= cutoff
-
-        const freeCancelMessage = (
-          <div className="space-y-2">
-            <p className="text-sm text-gray-700 leading-relaxed">
-              Você está dentro do período de <strong className="text-green-600">cancelamento gratuito</strong>.
-            </p>
-            <p className="text-sm text-gray-600">
-              Prazo: até {text}
-            </p>
-            <p className="text-sm text-green-700 font-medium">
-              ✓ Seu crédito será estornado automaticamente.
-            </p>
-            <p className="text-sm text-gray-700 mt-3">
-              Deseja confirmar o cancelamento?
-            </p>
-          </div>
-        )
-
-        const lateCancelMessage = (
-          <div className="space-y-2">
-            <p className="text-sm text-gray-700 leading-relaxed">
-              O período de <strong className="text-amber-600">cancelamento gratuito</strong> já passou.
-            </p>
-            <p className="text-sm text-gray-600">
-              Prazo era: até {text}
-            </p>
-            <p className="text-sm text-amber-700 font-medium">
-              ⚠️ Seu crédito não será estornado.
-            </p>
-            <p className="text-sm text-gray-700 mt-3">
-              Deseja confirmar o cancelamento mesmo assim?
-            </p>
-          </div>
-        )
-
-        return (
-          <div className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center p-4">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6 animate-in fade-in zoom-in-95 duration-200">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Cancelar aula</h3>
-              <div className="mb-6">
-                {isBeforeCutoff ? freeCancelMessage : lateCancelMessage}
+            {/* Opções de cancelamento para séries */}
+            {cancellingBooking?.series_id && (
+              <div className="space-y-3">
+                <p className="text-sm font-medium text-gray-700">O que você deseja cancelar?</p>
+                <RadioGroup value={cancelType} onValueChange={(v) => setCancelType(v as any)}>
+                  <div className="flex items-center space-x-2 p-3 rounded-lg border hover:bg-gray-50">
+                    <RadioGroupItem value="single" id="single" />
+                    <Label htmlFor="single" className="flex-1 cursor-pointer">
+                      <span className="font-medium">Apenas esta aula</span>
+                      <span className="block text-xs text-gray-500">
+                        {cancellingBooking && formatDate(cancellingBooking.start_at)}
+                      </span>
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2 p-3 rounded-lg border hover:bg-gray-50">
+                    <RadioGroupItem value="future" id="future" />
+                    <Label htmlFor="future" className="flex-1 cursor-pointer">
+                      <span className="font-medium">Esta e todas as próximas</span>
+                      <span className="block text-xs text-gray-500">
+                        Mantém aulas anteriores
+                      </span>
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2 p-3 rounded-lg border hover:bg-gray-50">
+                    <RadioGroupItem value="all" id="all" />
+                    <Label htmlFor="all" className="flex-1 cursor-pointer">
+                      <span className="font-medium">Toda a série</span>
+                      <span className="block text-xs text-gray-500">
+                        Cancela todas as aulas da série
+                      </span>
+                    </Label>
+                  </div>
+                </RadioGroup>
               </div>
-              <div className="flex justify-end gap-3">
-                <Button
-                  variant="outline"
-                  onClick={() => setConfirm({ open: false, bookingId: null })}
-                  disabled={!!cancellingBookingId}
-                >
-                  Voltar
-                </Button>
-                <Button
-                  className="bg-amber-600 hover:bg-amber-700 text-white"
-                  onClick={() => confirm.bookingId && cancelBooking(confirm.bookingId!)}
-                  disabled={cancellingBookingId === confirm.bookingId}
-                >
-                  {cancellingBookingId === confirm.bookingId ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Cancelando...
-                    </>
-                  ) : (
-                    'Cancelar Aula'
-                  )}
-                </Button>
-              </div>
-            </div>
-          </div>
-        )
-      })()}
+            )}
 
+            {/* Aviso de crédito */}
+            {!cancellingBooking?.is_reserved && (
+              <div className="mt-4 text-xs text-gray-500 bg-gray-100 p-2 rounded">
+                <strong>Nota:</strong> O crédito será estornado se cancelar até 4 horas antes do horário.
+              </div>
+            )}
+
+            {/* Erro */}
+            {cancelError && (
+              <div className="mt-4 flex items-center gap-2 text-red-600 bg-red-50 p-3 rounded-lg">
+                <AlertCircle className="h-4 w-4" />
+                <span className="text-sm">{cancelError}</span>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="flex gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowCancelModal(false)
+                setCancellingBooking(null)
+                setCancelError(null)
+              }}
+              disabled={isCancelling}
+            >
+              Voltar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleCancelConfirm}
+              disabled={isCancelling}
+            >
+              {isCancelling ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Cancelando...
+                </>
+              ) : (
+                'Confirmar Cancelamento'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
