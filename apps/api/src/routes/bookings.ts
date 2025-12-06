@@ -789,8 +789,13 @@ router.post(
     // Remover duplicados dentro do próprio payload (mesmo startAt repetido)
     const uniqueSlotsMap = new Map<string, { startAt: string; endAt: string; professorNotes?: string }>()
     for (const slot of data.slots) {
-      if (!uniqueSlotsMap.has(slot.startAt)) {
-        uniqueSlotsMap.set(slot.startAt, slot)
+      // Garantir que startAt e endAt existem antes de adicionar
+      if (slot.startAt && slot.endAt && !uniqueSlotsMap.has(slot.startAt)) {
+        uniqueSlotsMap.set(slot.startAt, {
+          startAt: slot.startAt,
+          endAt: slot.endAt,
+          professorNotes: slot.professorNotes
+        })
       }
     }
     const uniqueSlots = Array.from(uniqueSlotsMap.values())
