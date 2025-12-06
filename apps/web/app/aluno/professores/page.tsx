@@ -121,10 +121,7 @@ export default function StudentProfessoresPage() {
   )
 
   const activeTeachers = useMemo(
-    () =>
-      teachers.filter(
-        (teacher) => teacher.is_active && (teacher.teacher_profiles?.[0]?.is_available ?? true),
-      ),
+    () => teachers, // Já vem filtrado do fetch
     [teachers],
   )
 
@@ -143,12 +140,11 @@ export default function StudentProfessoresPage() {
         const data = await teachersAPI.getAll({ academy_id: selectedAcademyId })
         if (!cancelled) {
           const list = Array.isArray(data) ? data : data?.teachers || []
-          setTeachers(
-            list.filter(
-              (teacher: Teacher) =>
-                teacher.is_active && (teacher.teacher_profiles?.[0]?.is_available ?? true),
-            ),
-          )
+          console.log(`[DEBUG] Total professores recebidos da API: ${list.length}`)
+          // Filtrar apenas por is_active - remover filtro de is_available
+          const filtered = list.filter((teacher: Teacher) => teacher.is_active)
+          console.log(`[DEBUG] Professores ativos: ${filtered.length}`)
+          setTeachers(filtered)
         }
       } catch (error) {
         console.error('Erro ao carregar professores:', error)
@@ -184,20 +180,20 @@ export default function StudentProfessoresPage() {
 
         {/* Stepper */}
         <div id="aluno-professores-stepper-container" className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
-        <WizardStepper
-          steps={["Unidade", "Dia", "Professor"]}
-          current={currentStep}
-          onSelect={(idx) => {
-            if (idx <= currentStep) {
-              setCurrentStep(idx)
-              if (idx < 2) {
-                setAvailableTeacherIds(new Set())
-                setAvailabilityError(null)
-                setCheckingAvailability(false)
+          <WizardStepper
+            steps={["Unidade", "Dia", "Professor"]}
+            current={currentStep}
+            onSelect={(idx) => {
+              if (idx <= currentStep) {
+                setCurrentStep(idx)
+                if (idx < 2) {
+                  setAvailableTeacherIds(new Set())
+                  setAvailabilityError(null)
+                  setCheckingAvailability(false)
+                }
               }
-            }
-          }}
-        />
+            }}
+          />
         </div>
 
         {/* Container único para todos os steps - apenas o ativo é exibido */}
@@ -334,10 +330,10 @@ export default function StudentProfessoresPage() {
                                 console.log(`[DEBUG] Professor ${t.name} (${t.id}): ${bookingsList.length} bookings`)
                                 // Se há pelo menos um booking disponível (retornado pelo endpoint), o professor está disponível
                                 const anyFree = bookingsList.length > 0
-                                
+
                                 // Para compatibilidade, manter a estrutura de bookings
                                 const dayBookings = bookingsList
-                                
+
                                 return { id: t.id, available: anyFree, bookings: dayBookings }
                               } catch (error) {
                                 console.error('Erro ao verificar disponibilidade', error)
@@ -414,142 +410,147 @@ export default function StudentProfessoresPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent id="aluno-professores-step-3-content" className="p-4 sm:p-6 md:p-8">
-              {checkingAvailability ? (
-                <div id="aluno-professores-step-3-loading" className="flex items-center justify-center py-10 sm:py-12">
-                  <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-meu-primary" />
-                </div>
-              ) : activeTeachers.length === 0 ? (
-                <div id="aluno-professores-step-3-empty" className="text-center py-10 sm:py-12 text-gray-500">
-                  <Users className="h-12 w-12 sm:h-16 sm:w-16 mx-auto mb-3 sm:mb-4 text-gray-300" />
-                  <p id="aluno-professores-step-3-empty-title" className="text-base sm:text-lg font-medium">Nenhum professor encontrado</p>
-                  <p id="aluno-professores-step-3-empty-message" className="text-xs sm:text-sm mt-1.5 sm:mt-2 px-4">
-                    Não há professores cadastrados nesta academia no momento.
-                  </p>
-                </div>
-              ) : (
-                (() => {
-                  // Filtrar professores que têm disponibilidade na data selecionada
-                  const teachersList = activeTeachers.filter(t => availableTeacherIds.has(t.id))
-                  
-                  if (teachersList.length === 0) {
-                    return (
-                      <div id="aluno-professores-step-3-no-availability" className="text-center py-10 sm:py-12 text-gray-500">
-                        <Users className="h-12 w-12 sm:h-16 sm:w-16 mx-auto mb-3 sm:mb-4 text-gray-300" />
-                        <p id="aluno-professores-step-3-no-availability-title" className="text-base sm:text-lg font-medium">Nenhum professor disponível</p>
-                        <p id="aluno-professores-step-3-no-availability-message" className="text-xs sm:text-sm mt-1.5 sm:mt-2 px-4">
-                          Nenhum professor tem horários livres para a data selecionada ({new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR')}).
-                        </p>
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            setCurrentStep(1)
-                            setAvailableTeacherIds(new Set())
-                          }}
-                          className="mt-4"
-                        >
-                          Escolher outra data
-                        </Button>
-                      </div>
-                    )
-                  }
-                  return (
-                    <>
-                      <div id="aluno-professores-step-3-header-actions" className="flex items-center justify-between mb-6 pb-4 border-b">
-                        <p id="aluno-professores-step-3-count" className="text-sm text-gray-600">
-                          <span className="font-semibold text-meu-primary">{teachersList.length}</span> {teachersList.length === 1 ? 'professor disponível' : 'professores disponíveis'}
-                        </p>
-                        <Button
-                          id="aluno-professores-step-3-change-date-btn"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setCurrentStep(1)
-                            setAvailableTeacherIds(new Set())
-                          }}
-                          className="text-xs sm:text-sm"
-                        >
-                          <Calendar className="mr-1.5 h-3.5 w-3.5" />
-                          Alterar Data
-                        </Button>
-                      </div>
-                      <div id="aluno-professores-step-3-grid" className="grid gap-5 sm:gap-6 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
-                        {teachersList.map((teacher) => (
-                          <Card
-                            key={teacher.id}
-                            id={`aluno-professores-teacher-card-${teacher.id}`}
-                            className="group relative border-2 border-gray-200 hover:border-meu-primary/70 hover:shadow-2xl transition-all duration-300 overflow-hidden bg-white"
+                {checkingAvailability ? (
+                  <div id="aluno-professores-step-3-loading" className="flex items-center justify-center py-10 sm:py-12">
+                    <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-meu-primary" />
+                  </div>
+                ) : activeTeachers.length === 0 ? (
+                  <div id="aluno-professores-step-3-empty" className="text-center py-10 sm:py-12 text-gray-500">
+                    <Users className="h-12 w-12 sm:h-16 sm:w-16 mx-auto mb-3 sm:mb-4 text-gray-300" />
+                    <p id="aluno-professores-step-3-empty-title" className="text-base sm:text-lg font-medium">Nenhum professor encontrado</p>
+                    <p id="aluno-professores-step-3-empty-message" className="text-xs sm:text-sm mt-1.5 sm:mt-2 px-4">
+                      Não há professores cadastrados nesta academia no momento.
+                    </p>
+                  </div>
+                ) : (
+                  (() => {
+                    // Filtrar professores que têm disponibilidade na data selecionada
+                    const teachersList = activeTeachers.filter(t => availableTeacherIds.has(t.id))
+
+                    if (teachersList.length === 0) {
+                      return (
+                        <div id="aluno-professores-step-3-no-availability" className="text-center py-10 sm:py-12 text-gray-500">
+                          <Users className="h-12 w-12 sm:h-16 sm:w-16 mx-auto mb-3 sm:mb-4 text-gray-300" />
+                          <p id="aluno-professores-step-3-no-availability-title" className="text-base sm:text-lg font-medium">Nenhum professor disponível</p>
+                          <p id="aluno-professores-step-3-no-availability-message" className="text-xs sm:text-sm mt-1.5 sm:mt-2 px-4">
+                            Nenhum professor tem horários livres para a data selecionada ({new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR')}).
+                          </p>
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              setCurrentStep(1)
+                              setAvailableTeacherIds(new Set())
+                            }}
+                            className="mt-4"
                           >
-                            {/* Badge de disponibilidade flutuante */}
-                            {(() => {
-                              // CORREÇÃO: Usar a mesma lógica do endpoint bookings-by-date
-                              // Só mostrar tag se houver verificação de disponibilidade E houver horários realmente disponíveis
-                              // O endpoint já filtra horários ocupados (com student_id não nulo)
-                              const hasAvailableSlots = availableTeacherIds.size > 0 
-                                ? availableTeacherIds.has(teacher.id)
-                                : false // Não mostrar tag se ainda não foi feita a verificação
-                              
-                              // Mostrar badge apenas se realmente há horários disponíveis na data selecionada
-                              if (!hasAvailableSlots) return null
-                              
-                              return (
-                                <div id={`aluno-professores-teacher-badge-${teacher.id}`} className="absolute top-4 right-4 z-10">
-                                  <Badge className="bg-green-500 text-white border-0 text-xs font-semibold shadow-lg px-3 py-1">
-                                    ✓ Disponível
-                                  </Badge>
-                                </div>
-                              )
-                            })()}
+                            Escolher outra data
+                          </Button>
+                        </div>
+                      )
+                    }
+                    return (
+                      <>
+                        <div id="aluno-professores-step-3-header-actions" className="flex items-center justify-between mb-6 pb-4 border-b">
+                          <p id="aluno-professores-step-3-count" className="text-sm text-gray-600">
+                            <span className="font-semibold text-meu-primary">{teachersList.length}</span> {teachersList.length === 1 ? 'professor disponível' : 'professores disponíveis'}
+                          </p>
+                          <Button
+                            id="aluno-professores-step-3-change-date-btn"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setCurrentStep(1)
+                              setAvailableTeacherIds(new Set())
+                            }}
+                            className="text-xs sm:text-sm"
+                          >
+                            <Calendar className="mr-1.5 h-3.5 w-3.5" />
+                            Alterar Data
+                          </Button>
+                        </div>
+                        <div id="aluno-professores-step-3-grid" className="grid gap-5 sm:gap-6 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
+                          {teachersList.map((teacher) => (
+                            <Card
+                              key={teacher.id}
+                              id={`aluno-professores-teacher-card-${teacher.id}`}
+                              className="group relative border-2 border-gray-200 hover:border-meu-primary/70 hover:shadow-2xl transition-all duration-300 overflow-hidden bg-white"
+                            >
+                              {/* Badge de disponibilidade flutuante */}
+                              {(() => {
+                                // CORREÇÃO: Usar a mesma lógica do endpoint bookings-by-date
+                                // Só mostrar tag se houver verificação de disponibilidade E houver horários realmente disponíveis
+                                // O endpoint já filtra horários ocupados (com student_id não nulo)
+                                const hasAvailableSlots = availableTeacherIds.size > 0
+                                  ? availableTeacherIds.has(teacher.id)
+                                  : false // Não mostrar tag se ainda não foi feita a verificação
 
-                            <CardContent id={`aluno-professores-teacher-card-content-${teacher.id}`} className="p-0">
-                              <div className="flex flex-col h-full">
-                                {/* Header com Avatar - Design mais compacto */}
-                                <div id={`aluno-professores-teacher-header-${teacher.id}`} className="relative bg-gradient-to-br from-meu-primary/5 via-meu-primary/3 to-transparent p-6 pb-8">
-                                  <div className="flex flex-col items-center text-center gap-3">
-                                    <Avatar id={`aluno-professores-teacher-avatar-${teacher.id}`} className="h-24 w-24 border-4 border-white shadow-xl ring-4 ring-meu-primary/10 group-hover:ring-meu-primary/30 transition-all">
-                                      {teacher.avatar_url && (
-                                        <AvatarImage src={teacher.avatar_url} alt={teacher.name} />
-                                      )}
-                                      <AvatarFallback className="bg-gradient-to-br from-meu-primary to-meu-primary-dark text-white font-bold text-2xl">
-                                        {teacher.name.slice(0, 2).toUpperCase()}
-                                      </AvatarFallback>
-                                    </Avatar>
-                                    <div id={`aluno-professores-teacher-info-${teacher.id}`} className="w-full">
-                                      <h3 id={`aluno-professores-teacher-name-${teacher.id}`} className="font-bold text-lg text-gray-900 mb-1 line-clamp-1">{teacher.name}</h3>
-                                    </div>
+                                // Mostrar badge apenas se realmente há horários disponíveis na data selecionada
+                                if (!hasAvailableSlots) return null
+
+                                return (
+                                  <div id={`aluno-professores-teacher-badge-${teacher.id}`} className="absolute top-4 right-4 z-10">
+                                    <Badge className="bg-green-500 text-white border-0 text-xs font-semibold shadow-lg px-3 py-1">
+                                      ✓ Disponível
+                                    </Badge>
                                   </div>
-                                </div>
+                                )
+                              })()}
 
-                                {/* Conteúdo - Mais espaçado */}
-                                <div id={`aluno-professores-teacher-body-${teacher.id}`} className="p-5 flex-1 flex flex-col gap-5">
-                                  {/* Especialidades */}
-                                  {teacher.teacher_profiles?.[0]?.specialties && teacher.teacher_profiles[0].specialties.length > 0 && (
-                                    <div id={`aluno-professores-teacher-specialties-${teacher.id}`} className="space-y-2">
-                                      <p id={`aluno-professores-teacher-specialties-label-${teacher.id}`} className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
-                                        <span className="w-1 h-4 bg-meu-primary rounded-full"></span>
-                                        Especialidades
-                                      </p>
-                                      <div id={`aluno-professores-teacher-specialties-list-${teacher.id}`} className="flex flex-wrap gap-2">
-                                        {teacher.teacher_profiles[0].specialties.slice(0, 3).map((specialty: string, idx: number) => (
-                                          <Badge 
-                                            key={idx}
-                                            id={`aluno-professores-teacher-specialty-${teacher.id}-${idx}`}
-                                            variant="outline" 
-                                            className="text-xs font-medium border-meu-primary/40 text-gray-700 bg-meu-primary/5 hover:bg-meu-primary/10 transition-colors px-3 py-1"
-                                          >
-                                            {specialty}
-                                          </Badge>
-                                        ))}
-                                        {teacher.teacher_profiles[0].specialties.length > 3 && (
-                                          <Badge id={`aluno-professores-teacher-specialties-more-${teacher.id}`} variant="outline" className="text-xs text-gray-500 border-gray-300">
-                                            +{teacher.teacher_profiles[0].specialties.length - 3}
-                                          </Badge>
+                              <CardContent id={`aluno-professores-teacher-card-content-${teacher.id}`} className="p-0">
+                                <div className="flex flex-col h-full">
+                                  {/* Header com Avatar - Design mais compacto */}
+                                  <div id={`aluno-professores-teacher-header-${teacher.id}`} className="relative bg-gradient-to-br from-meu-primary/5 via-meu-primary/3 to-transparent p-6 pb-8">
+                                    <div className="flex flex-col items-center text-center gap-3">
+                                      <Avatar id={`aluno-professores-teacher-avatar-${teacher.id}`} className="h-24 w-24 border-4 border-white shadow-xl ring-4 ring-meu-primary/10 group-hover:ring-meu-primary/30 transition-all">
+                                        {teacher.avatar_url && (
+                                          <AvatarImage src={teacher.avatar_url} alt={teacher.name} />
+                                        )}
+                                        <AvatarFallback className="bg-gradient-to-br from-meu-primary to-meu-primary-dark text-white font-bold text-2xl">
+                                          {teacher.name.slice(0, 2).toUpperCase()}
+                                        </AvatarFallback>
+                                      </Avatar>
+                                      <div id={`aluno-professores-teacher-info-${teacher.id}`} className="w-full">
+                                        <h3 id={`aluno-professores-teacher-name-${teacher.id}`} className="font-bold text-lg text-gray-900 mb-1 line-clamp-1">{teacher.name}</h3>
+                                        {teacher.teacher_profiles?.[0]?.bio && (
+                                          <p id={`aluno-professores-teacher-bio-${teacher.id}`} className="text-sm text-gray-600 line-clamp-2 mt-1">
+                                            {teacher.teacher_profiles[0].bio}
+                                          </p>
                                         )}
                                       </div>
                                     </div>
-                                  )}
+                                  </div>
 
-                                  {/* Botões de ação - Melhor hierarquia */}
-                                  <div id={`aluno-professores-teacher-actions-${teacher.id}`} className="flex flex-col gap-2.5 mt-auto pt-4 border-t border-gray-100">
+                                  {/* Conteúdo - Mais espaçado */}
+                                  <div id={`aluno-professores-teacher-body-${teacher.id}`} className="p-5 flex-1 flex flex-col gap-5">
+                                    {/* Especialidades */}
+                                    {teacher.teacher_profiles?.[0]?.specialties && teacher.teacher_profiles[0].specialties.length > 0 && (
+                                      <div id={`aluno-professores-teacher-specialties-${teacher.id}`} className="space-y-2">
+                                        <p id={`aluno-professores-teacher-specialties-label-${teacher.id}`} className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                                          <span className="w-1 h-4 bg-meu-primary rounded-full"></span>
+                                          Especialidades
+                                        </p>
+                                        <div id={`aluno-professores-teacher-specialties-list-${teacher.id}`} className="flex flex-wrap gap-2">
+                                          {teacher.teacher_profiles[0].specialties.slice(0, 3).map((specialty: string, idx: number) => (
+                                            <Badge
+                                              key={idx}
+                                              id={`aluno-professores-teacher-specialty-${teacher.id}-${idx}`}
+                                              variant="outline"
+                                              className="text-xs font-medium border-meu-primary/40 text-gray-700 bg-meu-primary/5 hover:bg-meu-primary/10 transition-colors px-3 py-1"
+                                            >
+                                              {specialty}
+                                            </Badge>
+                                          ))}
+                                          {teacher.teacher_profiles[0].specialties.length > 3 && (
+                                            <Badge id={`aluno-professores-teacher-specialties-more-${teacher.id}`} variant="outline" className="text-xs text-gray-500 border-gray-300">
+                                              +{teacher.teacher_profiles[0].specialties.length - 3}
+                                            </Badge>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Botões de ação - Melhor hierarquia */}
+                                    <div id={`aluno-professores-teacher-actions-${teacher.id}`} className="flex flex-col gap-2.5 mt-auto pt-4 border-t border-gray-100">
                                       {teacherBookings[teacher.id]?.length ? (
                                         <p className="text-xs text-gray-500">
                                           {teacherBookings[teacher.id].length}{' '}
@@ -559,37 +560,37 @@ export default function StudentProfessoresPage() {
                                           para esta data.
                                         </p>
                                       ) : null}
-                                    <Button
-                                      id={`aluno-professores-teacher-book-btn-${teacher.id}`}
-                                      className="w-full h-12 text-sm font-bold bg-gradient-to-r from-meu-primary to-meu-primary-dark text-white hover:shadow-xl hover:scale-[1.02] transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-                                      disabled={balanceAvailable !== null && balanceAvailable <= 0}
-                                      title={balanceAvailable !== null && balanceAvailable <= 0 ? 'Sem créditos suficientes' : 'Agendar aula'}
-                                      onClick={() => router.push(`/aluno/agendar?teacher_id=${teacher.id}&academy_id=${selectedAcademyId}${selectedDate ? `&date=${selectedDate}` : ''}`)}
-                                    >
-                                      <Calendar className="mr-2 h-4 w-4" />
-                                      Agendar Aula
-                                    </Button>
-                                    {balanceAvailable !== null && balanceAvailable <= 0 && (
                                       <Button
-                                        id={`aluno-professores-teacher-buy-credits-btn-${teacher.id}`}
-                                        variant="outline"
-                                        onClick={() => router.push('/aluno/comprar')}
-                                        className="w-full h-10 text-xs font-semibold border-2 border-meu-primary/30 text-meu-primary hover:bg-meu-primary/5"
+                                        id={`aluno-professores-teacher-book-btn-${teacher.id}`}
+                                        className="w-full h-12 text-sm font-bold bg-gradient-to-r from-meu-primary to-meu-primary-dark text-white hover:shadow-xl hover:scale-[1.02] transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                                        disabled={balanceAvailable !== null && balanceAvailable <= 0}
+                                        title={balanceAvailable !== null && balanceAvailable <= 0 ? 'Sem créditos suficientes' : 'Agendar aula'}
+                                        onClick={() => router.push(`/aluno/agendar?teacher_id=${teacher.id}&academy_id=${selectedAcademyId}${selectedDate ? `&date=${selectedDate}` : ''}`)}
                                       >
-                                        💳 Comprar Créditos
+                                        <Calendar className="mr-2 h-4 w-4" />
+                                        Agendar Aula
                                       </Button>
-                                    )}
+                                      {balanceAvailable !== null && balanceAvailable <= 0 && (
+                                        <Button
+                                          id={`aluno-professores-teacher-buy-credits-btn-${teacher.id}`}
+                                          variant="outline"
+                                          onClick={() => router.push('/aluno/comprar')}
+                                          className="w-full h-10 text-xs font-semibold border-2 border-meu-primary/30 text-meu-primary hover:bg-meu-primary/5"
+                                        >
+                                          💳 Comprar Créditos
+                                        </Button>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        ))}
-                      </div>
-                    </>
-                  )
-                })()
-              )}
+                              </CardContent>
+                            </Card>
+                          ))}
+                        </div>
+                      </>
+                    )
+                  })()
+                )}
               </CardContent>
             </div>
           )}

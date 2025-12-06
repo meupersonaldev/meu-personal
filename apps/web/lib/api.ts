@@ -33,7 +33,7 @@ async function apiRequest(endpoint: string, options: RequestInit = {}) {
         console.log('API request returned 401. Logging out.')
         useAuthStore.getState().logout()
         // Interrompe a cadeia de promessas
-        return new Promise<never>(() => {})
+        return new Promise<never>(() => { })
       }
 
       const error = await response
@@ -101,9 +101,7 @@ export const teachersAPI = {
   async getAll(params?: { academy_id?: string }) {
     const query = new URLSearchParams()
     if (params?.academy_id) query.append('academy_id', params.academy_id)
-    const path = `/api/teachers${
-      query.toString() ? `?${query.toString()}` : ''
-    }`
+    const path = `/api/teachers${query.toString() ? `?${query.toString()}` : ''}`
     return apiRequest(path)
   },
 
@@ -170,9 +168,8 @@ export const bookingsAPI = {
     if (params?.teacher_id)
       queryParams.append('teacher_id', params.teacher_id)
     if (params?.status) queryParams.append('status', params.status)
-    const endpoint = `/api/bookings${
-      queryParams.toString() ? '?' + queryParams.toString() : ''
-    }`
+    const endpoint = `/api/bookings${queryParams.toString() ? '?' + queryParams.toString() : ''
+      }`
     return apiRequest(endpoint)
   },
 
@@ -317,9 +314,8 @@ export const checkinsAPI = {
     const query = new URLSearchParams()
     if (params?.teacher_id) query.append('teacher_id', params.teacher_id)
     if (params?.student_id) query.append('student_id', params.student_id)
-    const path = `/api/checkins${
-      query.toString() ? `?${query.toString()}` : ''
-    }`
+    const path = `/api/checkins${query.toString() ? `?${query.toString()}` : ''
+      }`
     return apiRequest(path)
   },
 }

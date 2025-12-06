@@ -58,7 +58,9 @@ export default function DisponibilidadePage() {
   const [academyTimeSlots, setAcademyTimeSlots] = useState<AcademyTimeSlot[]>([])
   const [weeklySchedule, setWeeklySchedule] = useState<WeeklySchedule>({})
   const [savedSchedule, setSavedSchedule] = useState<WeeklySchedule>({}) // Horários já salvos
+  const [blockedSchedule, setBlockedSchedule] = useState<WeeklySchedule>({}) // Horários bloqueados
   const [bookingIdByDateTime, setBookingIdByDateTime] = useState<Record<string, Record<string, string>>>({})
+  const [blockedBookingIdByDateTime, setBlockedBookingIdByDateTime] = useState<Record<string, Record<string, string>>>({})
   const [startDate, setStartDate] = useState(() => {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -80,6 +82,16 @@ export default function DisponibilidadePage() {
   })
 
   const [slotRemovalModal, setSlotRemovalModal] = useState<{
+    open: boolean
+    dateKey: string | null
+    time: string | null
+  }>({
+    open: false,
+    dateKey: null,
+    time: null
+  })
+
+  const [blockedSlotRemovalModal, setBlockedSlotRemovalModal] = useState<{
     open: boolean
     dateKey: string | null
     time: string | null
@@ -139,7 +151,7 @@ export default function DisponibilidadePage() {
       if (bookingsRes.ok) {
         const data = await bookingsRes.json()
         const bookings = data.bookings || []
-        
+
         // Filtrar bookings disponíveis (sem aluno) da academia selecionada
         // Usar tanto camelCase quanto snake_case para compatibilidade
         const availableBookings = bookings.filter((b: Record<string, unknown>) => {
@@ -155,10 +167,26 @@ export default function DisponibilidadePage() {
             status === 'AVAILABLE' &&
             !!bookingDate
         })
+
+        // Filtrar bookings bloqueados (sem aluno) da academia selecionada
+        const blockedBookings = bookings.filter((b: Record<string, unknown>) => {
+          const studentId = b.studentId || b.student_id
+          const franchiseId = b.franchiseId || b.franchise_id
+          const status = b.status || b.status_canonical
+          const dateField = (b.date || b.start_at) as string
+          const bookingDate = dateField ? new Date(dateField) : null
+
+          return !studentId &&
+            franchiseId === selectedAcademy &&
+            status === 'BLOCKED' &&
+            !!bookingDate
+        })
         
         // Agrupar por DATA (yyyy-MM-dd) e horário local
         const saved: WeeklySchedule = {}
+        const blocked: WeeklySchedule = {}
         const bookingMap: Record<string, Record<string, string>> = {}
+        const blockedBookingMap: Record<string, Record<string, string>> = {}
 
         availableBookings.forEach((b: Record<string, unknown>) => {
           const dateField = (b.date || b.start_at) as string
@@ -191,8 +219,40 @@ export default function DisponibilidadePage() {
           }
         })
 
+        blockedBookings.forEach((b: Record<string, unknown>) => {
+          const dateField = (b.date || b.start_at) as string
+          if (!dateField) return
+
+          const date = new Date(dateField)
+          const dateKey = getLocalDateKey(date)
+          const time = date.toLocaleTimeString('pt-BR', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+          })
+
+          if (!blocked[dateKey]) {
+            blocked[dateKey] = []
+          }
+          if (!blocked[dateKey].includes(time)) {
+            blocked[dateKey].push(time)
+          }
+
+          const id = (b as any).id as string | undefined
+          if (id) {
+            if (!blockedBookingMap[dateKey]) {
+              blockedBookingMap[dateKey] = {}
+            }
+            if (!blockedBookingMap[dateKey][time]) {
+              blockedBookingMap[dateKey][time] = id
+            }
+          }
+        })
+
         setSavedSchedule(saved)
+        setBlockedSchedule(blocked)
         setBookingIdByDateTime(bookingMap)
+        setBlockedBookingIdByDateTime(blockedBookingMap)
         // Limpar weeklySchedule - ele é usado apenas para novas seleções
         setWeeklySchedule({})
       }
@@ -368,6 +428,25 @@ export default function DisponibilidadePage() {
 
     const bookingId = bookingIdByDateTime[dateKey]?.[time]
     if (!bookingId) {
+      const blockedBookingId = blockedBookingIdByDateTime[dateKey]?.[time]
+      if (!blockedBookingId) {
+        toast.error('Horário não encontrado para remoção')
+        return
+      }
+      try {
+        const deleteRes = await authFetch(`/api/bookings/${blockedBookingId}`, {
+          method: 'DELETE'
+        })
+        if (!deleteRes.ok) {
+          throw new Error('Falha ao remover horário')
+        }
+        toast.success('Bloqueio removido!')
+        // Pequeno delay para garantir que o banco processou a deleção
+        await new Promise(resolve => setTimeout(resolve, 500))
+        await fetchData()
+      } catch {
+        toast.error('Erro ao remover bloqueio')
+      }
       toast.error('Horário não encontrado para remoção')
       return
     }
@@ -453,12 +532,12 @@ export default function DisponibilidadePage() {
       }
 
       const res = await authFetch('/api/bookings/availability/bulk', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              source: 'PROFESSOR',
-              professorId: user.id,
-              academyId: selectedAcademy,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source: 'PROFESSOR',
+          professorId: user.id,
+          academyId: selectedAcademy,
           slots
         })
       })
@@ -474,11 +553,21 @@ export default function DisponibilidadePage() {
       }
 
       const created = json?.created ?? slots.length
-      toast.success(`${created} horário(s) disponibilizado(s)!`)
-        // Recarregar dados para mostrar horários salvos
-        await fetchData()
-        // Limpar seleções
-        setWeeklySchedule({})
+      const skipped = json?.skipped ?? 0
+
+      if (created > 0) {
+        toast.success(`${created} horário(s) disponibilizado(s)!`)
+      } else if (skipped > 0) {
+        toast.info('Nenhum novo horário criado: todos os horários selecionados já estavam disponibilizados.')
+      } else {
+        // Fallback genérico
+        toast.success('Disponibilidade salva.')
+      }
+
+      // Recarregar dados para mostrar horários salvos
+      await fetchData()
+      // Limpar seleções
+      setWeeklySchedule({})
     } catch {
       toast.error('Erro ao salvar disponibilidade')
     } finally {
@@ -528,6 +617,8 @@ export default function DisponibilidadePage() {
       setNewBlockStart('')
       setNewBlockEnd('')
       setNewBlockReason('')
+      // Recarregar grade para refletir bloqueios visualmente
+      await fetchData()
     } catch {
       toast.error('Erro ao criar bloqueio')
     } finally {
@@ -618,6 +709,10 @@ export default function DisponibilidadePage() {
                   <div className="flex items-center gap-2">
                     <div className="w-6 h-6 rounded bg-gradient-to-r from-blue-500 to-indigo-500"></div>
                     <span className="text-gray-600">Nova seleção</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded bg-gradient-to-r from-red-500 to-rose-500"></div>
+                    <span className="text-gray-600">Bloqueado</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="w-6 h-6 rounded bg-white border-2 border-gray-200"></div>
@@ -713,17 +808,32 @@ export default function DisponibilidadePage() {
                           const isAvailable = isSlotAvailable(dia.dayOfWeek, horario)
                           const isSelected = (weeklySchedule[dia.dateKey] || []).includes(horario)
                           const isSaved = (savedSchedule[dia.dateKey] || []).includes(horario)
-                          
+                          const isBlocked = (blockedSchedule[dia.dateKey] || []).includes(horario)
+
                           if (!isAvailable) {
                             return (
                               <td key={dia.dateKey} className="p-1 text-center">
                                 <div className="flex justify-center">
-                                <div className="w-10 h-10 rounded-lg bg-gray-100 border-2 border-gray-100" />
+                                  <div className="w-10 h-10 rounded-lg bg-gray-100 border-2 border-gray-100" />
                                 </div>
                               </td>
                             )
                           }
-                          
+
+                          if (isBlocked) {
+                            return (
+                              <td key={dia.dateKey} className="p-1 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => openBlockedSlotRemovalModal(dia.dateKey, horario)}
+                                  className="w-10 h-10 rounded-lg border-2 bg-gradient-to-r from-red-500 to-rose-500 border-red-500 text-white opacity-80 flex items-center justify-center text-[10px] hover:opacity-100"
+                                >
+                                  B
+                                </button>
+                              </td>
+                            )
+                          }
+
                           return (
                             <td key={dia.dateKey} className="p-1 text-center">
                               <button

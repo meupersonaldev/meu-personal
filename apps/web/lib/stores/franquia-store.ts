@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { supabase } from '@/lib/supabase'
+import { setAuthCookie, clearAuthCookie } from './auth-store'
 
 // Types
 export interface FranquiaUser {
@@ -255,12 +256,16 @@ export const useFranquiaStore = create<FranquiaState>()(
           // 1. Fazer login via API
           const response = await fetch(`${API_URL}/api/auth/login`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*',
+              'Access-Control-Allow-Headers': 'Origin, X-Requested-With, Content-Type, Accept'
+            },
+            credentials: 'include',
             body: JSON.stringify({ email, password })
           })
 
           if (!response.ok) {
-            const error = await response.json()
             set({ isLoading: false })
             return false
           }
@@ -274,12 +279,12 @@ export const useFranquiaStore = create<FranquiaState>()(
           }
 
           // Salvar token e cookie para o middleware
-          localStorage.setItem('auth_token', token)
           try {
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('auth_token', token)
+            }
             if (typeof document !== 'undefined') {
-              // 7 dias de validade
-              const maxAge = 7 * 24 * 60 * 60
-              document.cookie = `auth-token=${token}; Path=/; Max-Age=${maxAge}; SameSite=Lax`
+              setAuthCookie(token)
             }
           } catch {}
 
@@ -350,12 +355,12 @@ export const useFranquiaStore = create<FranquiaState>()(
               fetchStudentPlans()
               // Não buscar approval_requests - apenas para agendamentos
             ])
-          } catch (error) {
+          } catch {
             // Não falhar o login por causa disso
           }
 
           return true
-        } catch (error) {
+        } catch {
           set({ isLoading: false })
           return false
         }
@@ -386,7 +391,7 @@ export const useFranquiaStore = create<FranquiaState>()(
         try {
           if (typeof window !== 'undefined') {
             localStorage.removeItem('auth_token')
-            document.cookie = 'auth-token=; Path=/; Max-Age=0; SameSite=Lax'
+            clearAuthCookie()
           }
         } catch {}
 
@@ -410,35 +415,28 @@ export const useFranquiaStore = create<FranquiaState>()(
           const { academy, franquiaUser } = get()
           const academyId = academy?.id || franquiaUser?.academyId
           if (!academyId) {
-            console.log('[fetchTeachers] academyId não encontrado')
             set({ teachers: [] })
             return
           }
-          // Buscar via API Express (com Auth)
           const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
           
-          console.log(`[fetchTeachers] Buscando professores para academia ${academyId}`)
           const resp = await fetch(`${API_URL}/api/teachers/by-academy?academy_id=${academyId}` , {
             headers: token ? { Authorization: `Bearer ${token}` } : {}
           })
           if (!resp.ok) {
-            console.error(`[fetchTeachers] Erro na resposta: ${resp.status}`)
             set({ teachers: [] })
             return
           }
           const payload = await resp.json()
-          // A API pode retornar { teachers: [...] } ou apenas [...]
           const teachers = Array.isArray(payload?.teachers) 
             ? payload.teachers 
             : Array.isArray(payload) 
             ? payload 
             : []
-          console.log(`[fetchTeachers] Encontrados ${teachers.length} professores`)
           set({ teachers })
-        } catch (error) {
-          console.error('[fetchTeachers] Erro:', error)
+        } catch {
           set({ teachers: [] })
         }
       },
@@ -487,7 +485,7 @@ export const useFranquiaStore = create<FranquiaState>()(
 
           await get().fetchTeachers()
           return true
-        } catch (error) {
+        } catch {
           return false
         }
       },
@@ -533,7 +531,7 @@ export const useFranquiaStore = create<FranquiaState>()(
 
           await get().fetchTeachers()
           return true
-        } catch (error) {
+        } catch {
           return false
         }
       },
@@ -561,7 +559,6 @@ export const useFranquiaStore = create<FranquiaState>()(
           const { academy, franquiaUser } = get()
           const academyId = academy?.id || franquiaUser?.academyId
           if (!academyId) {
-            console.log('[fetchStudents] academyId não encontrado')
             set({ students: [] })
             return
           }
@@ -569,12 +566,10 @@ export const useFranquiaStore = create<FranquiaState>()(
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
           
-          console.log(`[fetchStudents] Buscando alunos para academia ${academyId}`)
           const resp = await fetch(`${API_URL}/api/students?academy_id=${academyId}`, {
             headers: token ? { Authorization: `Bearer ${token}` } : {}
           })
           if (!resp.ok) {
-            console.error(`[fetchStudents] Erro na resposta: ${resp.status}`)
             set({ students: [] })
             return
           }
@@ -591,10 +586,8 @@ export const useFranquiaStore = create<FranquiaState>()(
             planId: u.academy_students?.plan_id,
             plan_id: u.academy_students?.plan_id
           }))
-          console.log(`[fetchStudents] Encontrados ${students.length} alunos`)
           set({ students })
-        } catch (error) {
-          console.error('[fetchStudents] Erro:', error)
+        } catch {
           set({ students: [] })
         }
       },
@@ -800,18 +793,14 @@ export const useFranquiaStore = create<FranquiaState>()(
           const { academy, franquiaUser, teachers, students, classes } = get()
           const academyId = academy?.id || franquiaUser?.academyId
           if (!academyId) {
-            console.log('[fetchAnalytics] academyId não encontrado')
             return
           }
-
-          console.log(`[fetchAnalytics] Calculando analytics para academia ${academyId}`)
 
           // Calcular crescimento mensal real baseado em join_date
           let monthlyGrowth = 0
           const now = new Date()
           const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1)
           const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-          const twoMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, 1)
 
           // Alunos que entraram no mês atual
           const currentMonthStudents = students.filter(s => {
@@ -856,12 +845,10 @@ export const useFranquiaStore = create<FranquiaState>()(
                 const isNotCancelled = b.status_canonical !== 'CANCELED' && b.status !== 'CANCELLED'
                 return hasStudent && hasTeacher && isNotCancelled
               })
-              
               totalClassesThisMonth = validBookings.length
-              console.log(`[fetchAnalytics] Encontrados ${bookings.length} bookings, ${totalClassesThisMonth} válidos (com aluno e professor, não cancelados)`)
             }
-          } catch (error) {
-            console.error('[fetchAnalytics] Erro ao buscar bookings:', error)
+          } catch {
+            // manter analytics mesmo se bookings falhar
           }
 
           // Calcular analytics básicos
@@ -875,10 +862,9 @@ export const useFranquiaStore = create<FranquiaState>()(
             monthlyGrowth: Number(monthlyGrowth.toFixed(1))
           }
 
-          console.log('[fetchAnalytics] Analytics calculados:', analytics)
           set({ analytics })
-        } catch (error) {
-          console.error('[fetchAnalytics] Erro:', error)
+        } catch {
+          set({ analytics: null })
         }
       },
 
@@ -917,7 +903,7 @@ export const useFranquiaStore = create<FranquiaState>()(
             }
           })
           set({ classes })
-        } catch (error) {
+        } catch {
           set({ classes: [] })
         }
       },
@@ -995,7 +981,7 @@ export const useFranquiaStore = create<FranquiaState>()(
             created_at: slot.created_at
           }))
           set({ timeSlots })
-        } catch (error) {
+        } catch {
           set({ timeSlots: [] })
         }
       },
@@ -1149,8 +1135,8 @@ export const useFranquiaStore = create<FranquiaState>()(
           if (!resp.ok) { set({ studentPlans: [] }); return }
           const payload = await resp.json()
           set({ studentPlans: payload.plans || [] })
-        } catch (error) {
-          set({ studentPlans: [] })
+        } catch {
+          set({ students: [] })
         }
       },
 

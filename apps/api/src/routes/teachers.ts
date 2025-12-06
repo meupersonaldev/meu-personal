@@ -16,7 +16,7 @@ const ensureTeacherScope = (
   const ADMIN_ROLES = ['ADMIN', 'FRANQUEADORA', 'FRANQUIA']
   const hasAdminAccess = Boolean(user && ADMIN_ROLES.includes(user.role as string))
   const hasTeacherAccess = Boolean(user && user.userId === teacherId)
-  
+
   if (!user || (!hasAdminAccess && !hasTeacherAccess)) {
     res.status(403).json({ error: 'Acesso negado' })
     return false
@@ -40,10 +40,15 @@ router.get('/', requireAuth, async (req, res) => {
       unit_id?: string
     }
 
-    // Query equivalente ao SQL fornecido - Query nativa
+    // Query com teacher_profiles para incluir bio e specialties
     const { data: teachers } = await supabase
       .from('users')
-      .select('id, name, email, phone, avatar_url, created_at, is_active, role')
+      .select(`
+        id, name, email, phone, avatar_url, created_at, is_active, role,
+        teacher_profiles (
+          *
+        )
+      `)
       .eq('role', 'TEACHER')
       .eq('is_active', true)
       .order('created_at', { ascending: false })
@@ -52,7 +57,26 @@ router.get('/', requireAuth, async (req, res) => {
       return res.json([])
     }
 
-    res.json(teachers)
+    // Normalizar dados para frontend (mapear specialization -> specialties)
+    const normalizedTeachers = teachers.map((teacher: any) => {
+      const profilesArray = Array.isArray(teacher.teacher_profiles)
+        ? teacher.teacher_profiles
+        : teacher.teacher_profiles
+          ? [teacher.teacher_profiles]
+          : []
+
+      const normalizedProfiles = profilesArray.map((profile: any) => ({
+        ...profile,
+        specialties: profile.specialties ?? profile.specialization ?? []
+      }))
+
+      return {
+        ...teacher,
+        teacher_profiles: normalizedProfiles
+      }
+    })
+
+    res.json(normalizedTeachers)
 
   } catch (error) {
     console.error('Erro ao buscar professores:', error)
@@ -201,7 +225,7 @@ router.get('/by-academy-id', requireAuth, async (req, res) => {
   try {
     // Permitir acesso para ADMIN, STUDENT, ALUNO, FRANCHISE_ADMIN, FRANQUEADORA
     const user = req.user
-    const allowedRoles = ['ADMIN', 'STUDENT', 'ALUNO', 'FRANCHISE_ADMIN', 'FRANQUEADORA', 'SUPER_ADMIN']
+    const allowedRoles = ['ADMIN', 'STUDENT', 'ALUNO', 'TEACHER', 'FRANCHISE_ADMIN', 'FRANQUEADORA', 'SUPER_ADMIN']
     if (!user || !allowedRoles.includes(user.role)) {
       return res.status(403).json({ error: 'Acesso negado' })
     }
@@ -226,7 +250,7 @@ router.get('/by-academy', requireAuth, async (req, res) => {
   try {
     // Permitir acesso para ADMIN, STUDENT, ALUNO, FRANCHISE_ADMIN, FRANQUEADORA
     const user = req.user
-    const allowedRoles = ['ADMIN', 'STUDENT', 'ALUNO', 'FRANCHISE_ADMIN', 'FRANQUEADORA', 'SUPER_ADMIN']
+    const allowedRoles = ['ADMIN', 'STUDENT', 'ALUNO', 'TEACHER', 'FRANCHISE_ADMIN', 'FRANQUEADORA', 'SUPER_ADMIN']
     if (!user || !allowedRoles.includes(user.role)) {
       return res.status(403).json({ error: 'Acesso negado' })
     }
@@ -298,7 +322,7 @@ router.get('/:id/bookings-by-date', requireAuth, async (req, res) => {
     const normalizedBookings = (bookings || [])
       .map((booking: any) => {
         const startTime = booking.start_at ? new Date(booking.start_at) : booking.date ? new Date(booking.date) : null
-        const endTime = booking.end_at 
+        const endTime = booking.end_at
           ? new Date(booking.end_at)
           : startTime && booking.duration
             ? new Date(startTime.getTime() + booking.duration * 60 * 1000)
@@ -419,7 +443,7 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
           .select('id')
           .eq('email', student.email)
           .single()
-        
+
         if (user) {
           studentRateMap.set(user.id, student.hourly_rate)
         }
@@ -433,14 +457,14 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
     }))
 
     const completedBookings = normalizedBookings.filter((b: any) => b._status === 'COMPLETED')
-    
+
     // Calcular faturamento total (academia + particular)
     // 1. Horas ganhas da academia (todas as transações CONSUME)
     const totalAcademyEarnings = hourTransactions.reduce((sum: number, t: any) => {
       const rate = profile?.hourly_rate || 0
       return sum + (t.hours * rate)
     }, 0)
-    
+
     // 2. Aulas particulares concluídas (COMPLETED com aluno * hourly_rate do aluno)
     const totalPrivateEarnings = completedBookings
       .filter((b: any) => b.student_id) // Tem aluno
@@ -448,7 +472,7 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
         const studentRate = studentRateMap.get(b.student_id) || 0
         return sum + studentRate
       }, 0)
-    
+
     const totalRevenue = totalAcademyEarnings + totalPrivateEarnings
 
     const totalCreditsUsed = normalizedBookings
@@ -479,32 +503,32 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
       monthly_earnings: {
         current_month: (() => {
           const now = new Date()
-          
+
           // 1. Horas ganhas da academia (horas consumidas * hourly_rate do professor)
           const academyEarnings = hourTransactions
             .filter((t: any) => {
               const txDate = new Date(t.created_at)
               return txDate.getMonth() === now.getMonth() &&
-                     txDate.getFullYear() === now.getFullYear()
+                txDate.getFullYear() === now.getFullYear()
             })
             .reduce((sum: number, t: any) => {
               const rate = profile?.hourly_rate || 0
               return sum + (t.hours * rate)
             }, 0)
-          
+
           // 2. Aulas particulares concluídas (COMPLETED com aluno * hourly_rate do aluno)
           const privateEarnings = completedBookings
             .filter((b: any) => {
               const bookingDate = new Date(b.date)
               return b.student_id && // Tem aluno
-                     bookingDate.getMonth() === now.getMonth() &&
-                     bookingDate.getFullYear() === now.getFullYear()
+                bookingDate.getMonth() === now.getMonth() &&
+                bookingDate.getFullYear() === now.getFullYear()
             })
             .reduce((sum: number, b: any) => {
               const studentRate = studentRateMap.get(b.student_id) || 0
               return sum + studentRate
             }, 0)
-          
+
           return academyEarnings + privateEarnings
         })()
       }
@@ -549,10 +573,10 @@ router.get('/:id/transactions', requireAuth, async (req, res) => {
 router.get('/:id/history', requireAuth, async (req, res) => {
   try {
     const { id } = req.params
-    const { 
-      month, 
-      year, 
-      student_id, 
+    const {
+      month,
+      year,
+      student_id,
       type // 'academy' ou 'private'
     } = req.query
 
@@ -576,7 +600,7 @@ router.get('/:id/history', requireAuth, async (req, res) => {
     // Criar mapa de hourly_rate por user_id
     const studentRateMap = new Map<string, number>()
     const studentEmailMap = new Map<string, string>()
-    
+
     if (students) {
       for (const student of students) {
         if (student.email) {
@@ -585,7 +609,7 @@ router.get('/:id/history', requireAuth, async (req, res) => {
             .select('id, name')
             .eq('email', student.email)
             .single()
-          
+
           if (user) {
             studentRateMap.set(user.id, student.hourly_rate || 0)
             studentEmailMap.set(user.id, student.email)
@@ -729,23 +753,23 @@ router.get('/:id/history', requireAuth, async (req, res) => {
     // Agrupar por mês (últimos 12 meses)
     const monthlyData = []
     const now = new Date()
-    
+
     for (let i = 11; i >= 0; i--) {
       const targetDate = new Date(now.getFullYear(), now.getMonth() - i, 1)
       const targetMonth = targetDate.getMonth()
       const targetYear = targetDate.getFullYear()
-      
+
       const monthBookings = normalizedBookings.filter((b: any) => {
         const bookingDate = new Date(b.date)
         return bookingDate.getMonth() === targetMonth &&
-               bookingDate.getFullYear() === targetYear &&
-               b._status === 'COMPLETED'
+          bookingDate.getFullYear() === targetYear &&
+          b._status === 'COMPLETED'
       })
 
       const monthHourTransactions = (hourTransactions || []).filter((t: any) => {
         const txDate = new Date(t.created_at)
         return txDate.getMonth() === targetMonth &&
-               txDate.getFullYear() === targetYear
+          txDate.getFullYear() === targetYear
       })
 
       const monthAcademyEarnings = monthHourTransactions.reduce((sum: number, t: any) => {
@@ -836,7 +860,7 @@ router.get('/:id', requireAuth, async (req, res) => {
       .single()
 
     if (error || !teacher) {
-        return res.status(404).json({ error: 'Professor não encontrado' })
+      return res.status(404).json({ error: 'Professor não encontrado' })
     }
 
     res.json({ teacher })
@@ -910,7 +934,7 @@ router.get('/:id/academies', requireAuth, async (req, res) => {
       console.error('Erro ao buscar preferências do professor:', preferencesError)
     }
 
-    const preferenceAcademyIds = Array.isArray(teacherPreferences?.academy_ids) 
+    const preferenceAcademyIds = Array.isArray(teacherPreferences?.academy_ids)
       ? teacherPreferences.academy_ids.filter(Boolean)
       : []
 
@@ -918,7 +942,7 @@ router.get('/:id/academies', requireAuth, async (req, res) => {
 
     // Mapear academias, filtrando aquelas que não existem ou estão inativas
     let academies: any[] = []
-    
+
     // Se o relacionamento retornou academias nulas, buscar diretamente
     const academyIdsFromLinks = (academyTeachers || [])
       .map((at: any) => at.academy_id)
@@ -943,7 +967,7 @@ router.get('/:id/academies', requireAuth, async (req, res) => {
           .filter(Boolean)
       ]
       console.log(`[GET /api/teachers/:id/academies] IDs de academias dos bookings:`, bookingAcademyIds)
-      
+
       // Adicionar aos IDs de preferências
       preferenceAcademyIds.push(...bookingAcademyIds)
     }
@@ -978,7 +1002,7 @@ router.get('/:id/academies', requireAuth, async (req, res) => {
     if (teacherProfile?.academy_id) {
       const academyId = teacherProfile.academy_id
       const alreadyIncluded = academies.some((a: any) => a.id === academyId)
-      
+
       if (!alreadyIncluded) {
         const { data: academy } = await supabase
           .from('academies')
@@ -994,9 +1018,9 @@ router.get('/:id/academies', requireAuth, async (req, res) => {
     }
 
     // Filtrar academias duplicadas e garantir que todas estão ativas
-    const uniqueAcademies = academies.filter((academy: any, index: number, self: any[]) => 
-      academy && 
-      academy.id && 
+    const uniqueAcademies = academies.filter((academy: any, index: number, self: any[]) =>
+      academy &&
+      academy.id &&
       academy.is_active !== false &&
       index === self.findIndex((a: any) => a.id === academy.id)
     )
@@ -1093,6 +1117,97 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
   } catch (error: any) {
     console.error('Erro ao buscar estatísticas do professor:', error)
     res.status(500).json({ error: error.message })
+  }
+})
+
+// PUT /api/teachers/:id - Atualizar perfil profissional do professor
+router.put('/:id', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params
+    const { bio, specialties, hourly_rate, is_available } = req.body
+
+    // Verificar se o usuário tem permissão (próprio professor ou admin)
+    if (!ensureTeacherScope(req, res, id)) {
+      return
+    }
+
+    // Verificar se professor existe
+    const { data: teacher, error: teacherError } = await supabase
+      .from('users')
+      .select('id, role')
+      .eq('id', id)
+      .eq('role', 'TEACHER')
+      .single()
+
+    if (teacherError || !teacher) {
+      return res.status(404).json({ error: 'Professor não encontrado' })
+    }
+
+    // Verificar se já existe perfil
+    const { data: existingProfile } = await supabase
+      .from('teacher_profiles')
+      .select('id')
+      .eq('user_id', id)
+      .single()
+
+    // Mapear campos do frontend para campos reais da tabela
+    const profileData: any = {
+      updated_at: new Date().toISOString()
+    }
+    if (bio !== undefined) profileData.bio = bio
+    // A tabela usa 'specialization' não 'specialties'
+    if (specialties !== undefined) profileData.specialization = specialties
+    if (hourly_rate !== undefined) profileData.hourly_rate = Number(hourly_rate)
+    if (is_available !== undefined) profileData.is_available = is_available
+
+    let result
+    if (existingProfile) {
+      // Atualizar perfil existente
+      const { data, error } = await supabase
+        .from('teacher_profiles')
+        .update(profileData)
+        .eq('user_id', id)
+        .select()
+        .single()
+
+      if (error) {
+        console.error('Erro ao atualizar perfil:', error)
+        return res.status(500).json({ error: 'Erro ao atualizar perfil profissional' })
+      }
+      result = data
+    } else {
+      // Criar novo perfil com valores padrão
+      const { data, error } = await supabase
+        .from('teacher_profiles')
+        .insert({
+          user_id: id,
+          rating: 0,
+          total_reviews: 0,
+          total_sessions: 0,
+          rating_avg: 0,
+          available_online: true,
+          available_in_person: true,
+          created_at: new Date().toISOString(),
+          ...profileData
+        })
+        .select()
+        .single()
+
+      if (error) {
+        console.error('Erro ao criar perfil:', error)
+        return res.status(500).json({ error: 'Erro ao criar perfil profissional' })
+      }
+      result = data
+    }
+
+    res.json({
+      message: 'Perfil profissional atualizado com sucesso',
+      profile: result
+    })
+
+  } catch (error: any) {
+    console.error('Erro ao atualizar perfil do professor:', error)
+    res.status(500).json({ error: error.message || 'Erro interno do servidor' })
   }
 })
 

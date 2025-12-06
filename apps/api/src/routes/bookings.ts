@@ -728,6 +728,28 @@ router.post(
       return res.status(403).json({ error: 'Você só pode criar disponibilidade para si mesmo' })
     }
 
+    // Deduplicação básica: evitar criar mais de um AVAILABLE para o mesmo professor/unidade/start_at
+    const { data: existing, error: existingError } = await supabase
+      .from('bookings')
+      .select('id')
+      .eq('teacher_id', data.professorId)
+      .eq('franchise_id', data.academyId)
+      .eq('status_canonical', 'AVAILABLE')
+      .eq('start_at', data.startAt)
+      .limit(1)
+
+    if (existingError) {
+      console.error('[POST /api/bookings/availability] Erro ao verificar duplicidade:', existingError)
+    }
+
+    if (existing && existing.length > 0) {
+      // Já existe disponibilidade para este horário; considerar como sucesso idempotente
+      return res.status(200).json({
+        booking: existing[0],
+        created: false
+      })
+    }
+
     const booking = await bookingCanonicalService.createBooking({
       source: 'PROFESSOR',
       professorId: data.professorId,
@@ -763,31 +785,67 @@ router.post(
     }
 
     const nowIso = new Date().toISOString()
-
-    const rows = data.slots.map(slot => {
-      const start = new Date(slot.startAt)
-
-      return {
-        source: 'PROFESSOR',
-        student_id: null,
-        teacher_id: data.professorId,
-        franchise_id: data.academyId,
-        // Usar a mesma convenção dos demais fluxos: date = start_at
-        date: start.toISOString(),
-        start_at: slot.startAt,
-        end_at: slot.endAt,
-        duration: Math.max(
-          15,
-          Math.round((new Date(slot.endAt).getTime() - start.getTime()) / (60 * 1000))
-        ),
-        status_canonical: 'AVAILABLE',
-        status: 'AVAILABLE',
-        professor_notes: slot.professorNotes ?? 'Horário disponível',
-        cancellable_until: null,
-        created_at: nowIso,
-        updated_at: nowIso
+    
+    // Remover duplicados dentro do próprio payload (mesmo startAt repetido)
+    const uniqueSlotsMap = new Map<string, { startAt: string; endAt: string; professorNotes?: string }>()
+    for (const slot of data.slots) {
+      if (!uniqueSlotsMap.has(slot.startAt)) {
+        uniqueSlotsMap.set(slot.startAt, slot)
       }
-    })
+    }
+    const uniqueSlots = Array.from(uniqueSlotsMap.values())
+
+    // Deduplicação contra o banco: buscar slots AVAILABLE existentes para este professor/unidade
+    const startAts = uniqueSlots.map(slot => slot.startAt)
+    const { data: existing, error: existingError } = await supabase
+      .from('bookings')
+      .select('id, start_at')
+      .eq('teacher_id', data.professorId)
+      .eq('franchise_id', data.academyId)
+      .eq('status_canonical', 'AVAILABLE')
+      .in('start_at', startAts)
+
+    if (existingError) {
+      console.error('[POST /api/bookings/availability/bulk] Erro ao verificar duplicidade:', existingError)
+    }
+
+    const existingSet = new Set((existing || []).map(b => b.start_at as string))
+
+    const rows = uniqueSlots
+      .filter(slot => !existingSet.has(slot.startAt))
+      .map(slot => {
+        const start = new Date(slot.startAt)
+
+        return {
+          source: 'PROFESSOR',
+          student_id: null,
+          teacher_id: data.professorId,
+          franchise_id: data.academyId,
+          // Usar a mesma convenção dos demais fluxos: date = start_at
+          date: start.toISOString(),
+          start_at: slot.startAt,
+          end_at: slot.endAt,
+          duration: Math.max(
+            15,
+            Math.round((new Date(slot.endAt).getTime() - start.getTime()) / (60 * 1000))
+          ),
+          status_canonical: 'AVAILABLE',
+          status: 'AVAILABLE',
+          professor_notes: slot.professorNotes ?? 'Horário disponível',
+          cancellable_until: null,
+          created_at: nowIso,
+          updated_at: nowIso
+        }
+      })
+
+    if (rows.length === 0) {
+      // Nada novo para criar — já existiam todos os horários solicitados
+      return res.status(200).json({
+        created: 0,
+        bookings: [],
+        skipped: uniqueSlots.length
+      })
+    }
 
     const { data: inserted, error } = await supabase
       .from('bookings')
