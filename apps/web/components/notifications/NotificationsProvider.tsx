@@ -36,7 +36,8 @@ export default function NotificationsProvider({ children }: { children: React.Re
     fetchInitial({ franqueadoraId: franqueadora.id })
     // Conexão SSE única da franqueadora
     connectFranqueadora(franqueadora.id)
-  }, [franqueadora?.id, academies?.length, connectFranqueadora, fetchInitial, fetchAcademies])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [franqueadora?.id, academies?.length])
 
   return <>{children}</>
 }

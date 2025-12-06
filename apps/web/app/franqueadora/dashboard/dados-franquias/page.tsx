@@ -70,7 +70,8 @@ export default function DadosFranquiasPage() {
     if (hydrated) {
       fetchAcademies()
     }
-  }, [hydrated, fetchAcademies])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated])
 
   // Limpar estado do admin quando o modal for fechado
   useEffect(() => {

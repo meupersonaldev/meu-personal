@@ -71,7 +71,8 @@ export default function FranquiaDetailsPage() {
     if (hydrated) {
       fetchAcademies()
     }
-  }, [hydrated, fetchAcademies])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated])
 
   const fetchFranchiseStats = useCallback(async () => {
     if (!franchiseId) return

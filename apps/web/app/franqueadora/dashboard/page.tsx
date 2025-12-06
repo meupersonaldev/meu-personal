@@ -37,7 +37,8 @@ export default function FranqueadoraDashboard() {
       fetchAcademies()
       fetchAnalytics()
     }
-  }, [hydrated, isAuthenticated, fetchAcademies, fetchAnalytics])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated, isAuthenticated])
 
   if (!hydrated || isLoading) {
     return (

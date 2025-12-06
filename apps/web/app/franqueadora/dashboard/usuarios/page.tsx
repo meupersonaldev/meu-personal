@@ -186,7 +186,8 @@ function UsuariosPageContent() {
     if (!academies || academies.length === 0) {
       fetchAcademies()
     }
-  }, [hydrated, isAuthenticated, academies, fetchAcademies])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated, isAuthenticated])
 
   const handleApproveUser = async () => {
     if (!selectedUser) return

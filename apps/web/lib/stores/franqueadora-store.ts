@@ -294,6 +294,7 @@ interface FranqueadoraState {
   // Loading
   isLoading: boolean
   isPackagesLoading: boolean
+  isFetchingAcademies: boolean
 
   // Actions
   login: (email: string, password: string) => Promise<boolean>
@@ -336,6 +337,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
       user: null,
       franqueadora: null,
       isAuthenticated: false,
+      isFetchingAcademies: false,
       token: null,
       academies: [],
       packages: [],
@@ -467,6 +469,11 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           if (!get().isAuthenticated) {
             return
           }
+          // Evitar múltiplas chamadas simultâneas
+          if (get().isFetchingAcademies) {
+            return
+          }
+          set({ isFetchingAcademies: true })
           const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           // Preferir contexto explícito da franqueadora quando disponível
           let franqueadoraId = get().franqueadora?.id
@@ -508,8 +515,10 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             checkin_tolerance: safeNumber(academy.checkin_tolerance, 30)
           }))
 
-          set({ academies: safeAcademies })
-        } catch {}
+          set({ academies: safeAcademies, isFetchingAcademies: false })
+        } catch {
+          set({ isFetchingAcademies: false })
+        }
       },
 
       addAcademy: async (academyData: CreateAcademyPayload) => {

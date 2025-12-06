@@ -68,7 +68,8 @@ function PoliticasPageContent() {
   useEffect(() => {
     setIsLoading(true)
     fetchAcademies().finally(() => setIsLoading(false))
-  }, [fetchAcademies])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     const t = searchParams.get('tab')
