@@ -24,8 +24,9 @@ import { useAuthStore } from '@/lib/stores/auth-store'
 
 interface Booking {
   id: string
-  start_at: string
-  end_at: string
+  start_at?: string
+  date?: string
+  end_at?: string
   status: string
   status_canonical?: string
   is_reserved: boolean
@@ -38,6 +39,7 @@ interface Booking {
   franchiseName?: string
   franchise_name?: string
   unit_id?: string
+  cancellableUntil?: string
 }
 
 interface BookingSeries {
@@ -69,8 +71,10 @@ const RECURRENCE_LABELS: Record<string, string> = {
   'YEAR': '1 ano'
 }
 
-function formatDate(dateStr: string): string {
+function formatDate(dateStr: string | undefined): string {
+  if (!dateStr) return 'Data não disponível'
   const date = new Date(dateStr)
+  if (isNaN(date.getTime())) return 'Data inválida'
   return date.toLocaleDateString('pt-BR', {
     day: '2-digit',
     month: 'short',
@@ -78,8 +82,10 @@ function formatDate(dateStr: string): string {
   })
 }
 
-function formatTime(dateStr: string): string {
+function formatTime(dateStr: string | undefined): string {
+  if (!dateStr) return 'Hora não disponível'
   const date = new Date(dateStr)
+  if (isNaN(date.getTime())) return 'Hora inválida'
   return date.toLocaleTimeString('pt-BR', {
     hour: '2-digit',
     minute: '2-digit'
@@ -333,7 +339,12 @@ export default function AulasPage() {
             <div className="space-y-3">
               {bookings
                 .filter(b => b.status_canonical !== 'CANCELED')
-                .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
+                .sort((a, b) => {
+                  const aTime = (a.start_at || a.date || '').toString()
+                  const bTime = (b.start_at || b.date || '').toString()
+                  if (!aTime || !bTime) return 0
+                  return new Date(aTime).getTime() - new Date(bTime).getTime()
+                })
                 .map((booking) => (
                   <div
                     key={booking.id}
@@ -355,11 +366,11 @@ export default function AulasPage() {
                         <div className="flex items-center gap-3 text-sm text-gray-500 mt-1">
                           <span className="flex items-center gap-1">
                             <Calendar className="h-3.5 w-3.5" />
-                            {formatDate(booking.start_at)}
+                            {formatDate(booking.start_at || booking.date)}
                           </span>
                           <span className="flex items-center gap-1">
                             <Clock className="h-3.5 w-3.5" />
-                            {formatTime(booking.start_at)}
+                            {formatTime(booking.start_at || booking.date)}
                           </span>
                           <span className="flex items-center gap-1">
                             <MapPin className="h-3.5 w-3.5" />
@@ -464,7 +475,7 @@ export default function AulasPage() {
                 <div>
                   <p className="font-medium">{cancellingBooking?.teacherName || cancellingBooking?.teacher_name || 'Professor'}</p>
                   <p className="text-sm text-gray-500">
-                    {cancellingBooking && formatDate(cancellingBooking.start_at)} às {cancellingBooking && formatTime(cancellingBooking.start_at)}
+                    {cancellingBooking && formatDate(cancellingBooking.start_at || cancellingBooking.date)} às {cancellingBooking && formatTime(cancellingBooking.start_at || cancellingBooking.date)}
                   </p>
                 </div>
               </div>
@@ -480,7 +491,7 @@ export default function AulasPage() {
                     <Label htmlFor="single" className="flex-1 cursor-pointer">
                       <span className="font-medium">Apenas esta aula</span>
                       <span className="block text-xs text-gray-500">
-                        {cancellingBooking && formatDate(cancellingBooking.start_at)}
+                        {cancellingBooking && formatDate(cancellingBooking.start_at || cancellingBooking.date)}
                       </span>
                     </Label>
                   </div>
@@ -506,12 +517,56 @@ export default function AulasPage() {
               </div>
             )}
 
-            {/* Aviso de crédito */}
-            {!cancellingBooking?.is_reserved && (
-              <div className="mt-4 text-xs text-gray-500 bg-gray-100 p-2 rounded">
-                <strong>Nota:</strong> O crédito será estornado se cancelar até 4 horas antes do horário.
-              </div>
-            )}
+            {/* Aviso de crédito - verificar se está dentro do prazo de cancelamento gratuito */}
+            {(() => {
+              if (cancellingBooking?.is_reserved) return null
+              
+              const bookingTime = cancellingBooking?.start_at || cancellingBooking?.date
+              if (!bookingTime) return null
+              
+              const now = new Date()
+              const bookingDate = new Date(bookingTime)
+              const cutoffTime = cancellingBooking?.cancellableUntil 
+                ? new Date(cancellingBooking.cancellableUntil)
+                : new Date(bookingDate.getTime() - 4 * 60 * 60 * 1000) // 4 horas antes
+              
+              const isFreeCancel = now <= cutoffTime
+              const cutoffFormatted = cutoffTime.toLocaleString('pt-BR', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              })
+              
+              if (isFreeCancel) {
+                return (
+                  <div className="mt-4 text-xs text-green-700 bg-green-50 p-3 rounded-lg border border-green-200">
+                    <div className="flex items-start gap-2">
+                      <CheckCircle2 className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <strong className="block mb-1">Cancelamento gratuito disponível</strong>
+                        <p>Você está dentro do período de cancelamento gratuito. O crédito será estornado automaticamente.</p>
+                        <p className="mt-1 text-green-600">Prazo: até {cutoffFormatted}</p>
+                      </div>
+                    </div>
+                  </div>
+                )
+              } else {
+                return (
+                  <div className="mt-4 text-xs text-amber-700 bg-amber-50 p-3 rounded-lg border border-amber-200">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <strong className="block mb-1">Cancelamento após o prazo</strong>
+                        <p>O período de cancelamento gratuito já passou. O crédito não será estornado.</p>
+                        <p className="mt-1 text-amber-600">Prazo era: até {cutoffFormatted}</p>
+                      </div>
+                    </div>
+                  </div>
+                )
+              }
+            })()}
 
             {/* Erro */}
             {cancelError && (
