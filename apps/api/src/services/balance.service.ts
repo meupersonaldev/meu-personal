@@ -97,6 +97,47 @@ class BalanceService {
   }
 
   async createStudentBalance(studentId: string, franqueadoraId: string): Promise<StudentClassBalance> {
+    // Validar que a franqueadora existe antes de inserir
+    const { data: franqueadora, error: franqueadoraError } = await supabase
+      .from('franqueadora')
+      .select('id')
+      .eq('id', franqueadoraId)
+      .eq('is_active', true)
+      .single();
+
+    if (franqueadoraError || !franqueadora) {
+      // Se a franqueadora não existe, buscar a principal
+      const { data: principalFranqueadora } = await supabase
+        .from('franqueadora')
+        .select('id')
+        .eq('email', 'meupersonalfranquia@gmail.com')
+        .eq('is_active', true)
+        .single();
+
+      if (!principalFranqueadora?.id) {
+        throw new Error(`Franqueadora inválida: ${franqueadoraId}. Não foi possível encontrar a franqueadora principal.`);
+      }
+
+      // Usar a franqueadora principal como fallback
+      const validFranqueadoraId = principalFranqueadora.id;
+      console.warn(`[BalanceService] Franqueadora ${franqueadoraId} não encontrada. Usando franqueadora principal: ${validFranqueadoraId}`);
+
+      const { data, error } = await supabase
+        .from('student_class_balance')
+        .insert({
+          student_id: studentId,
+          franqueadora_id: validFranqueadoraId,
+          total_purchased: 0,
+          total_consumed: 0,
+          locked_qty: 0
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data as StudentClassBalance;
+    }
+
     const { data, error } = await supabase
       .from('student_class_balance')
       .insert({
