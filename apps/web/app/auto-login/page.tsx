@@ -2,7 +2,7 @@
 
 import { useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useAuthStore } from '@/lib/stores/auth-store'
+import { useAuthStore, setAuthCookie } from '@/lib/stores/auth-store'
 
 function AutoLoginContent() {
   const router = useRouter()
@@ -48,27 +48,9 @@ function AutoLoginContent() {
           isLoading: false
         })
 
-        // Definir cookie
+        // Definir cookie com helper centralizado
         if (typeof document !== 'undefined') {
-          const maxAge = 7 * 24 * 60 * 60
-          let sameSite: 'Lax' | 'None' = 'Lax'
-          let secure = ''
-          
-          try {
-            const pageOrigin = window.location.origin
-            const apiOrigin = new URL(API_URL).origin
-            const crossSite = pageOrigin && apiOrigin && apiOrigin !== pageOrigin
-            const isHttps = window.location.protocol === 'https:'
-            
-            if (crossSite) {
-              sameSite = 'None'
-              secure = '; Secure'
-            } else if (isHttps) {
-              secure = '; Secure'
-            }
-          } catch {}
-          
-          document.cookie = `auth-token=${token}; Path=/; Max-Age=${maxAge}; SameSite=${sameSite}${secure}`
+          setAuthCookie(token)
         }
 
         // Redirecionar baseado no role
@@ -83,8 +65,7 @@ function AutoLoginContent() {
 
         router.push(finalRedirect)
       })
-      .catch((error) => {
-        console.error('Erro no auto-login:', error)
+      .catch(() => {
         router.push('/login')
       })
   }, [router, searchParams])

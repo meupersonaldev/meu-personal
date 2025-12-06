@@ -1,7 +1,12 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
-export type UserRole = 'STUDENT' | 'TEACHER' | 'ADMIN'
+export type UserRole =
+  | 'STUDENT'
+  | 'TEACHER'
+  | 'ADMIN'
+  | 'SUPER_ADMIN'
+  | 'FRANCHISE_ADMIN'
 
 export interface User {
   id: string
@@ -33,6 +38,34 @@ interface AuthState {
   logout: (options?: { redirect?: boolean }) => Promise<void>
   updateUser: (userData: Partial<User>) => Promise<void>
   initialize: () => Promise<void>
+}
+
+// Helper central para criar/remover cookie considerando cross-site/HTTPS
+export function setAuthCookie(token: string) {
+  const maxAge = 7 * 24 * 60 * 60 // 7 dias
+  let sameSite: 'Lax' | 'None' = 'Lax'
+  let secure = ''
+  try {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+    const pageOrigin = typeof window !== 'undefined' ? window.location.origin : ''
+    const apiOrigin = new URL(apiUrl).origin
+    const crossSite = pageOrigin && apiOrigin && apiOrigin !== pageOrigin
+    const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:'
+    if (crossSite) {
+      sameSite = 'None'
+      secure = '; Secure'
+    } else if (isHttps) {
+      secure = '; Secure'
+    }
+  } catch {}
+  document.cookie = `auth-token=${token}; Path=/; Max-Age=${maxAge}; SameSite=${sameSite}${secure}`
+}
+
+export function clearAuthCookie() {
+  const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:'
+  // Remover tanto Lax quanto None possíveis
+  document.cookie = `auth-token=; Path=/; Max-Age=0; SameSite=Lax${isHttps ? '; Secure' : ''}`
+  document.cookie = `auth-token=; Path=/; Max-Age=0; SameSite=None; Secure`
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -126,29 +159,7 @@ export const useAuthStore = create<AuthState>()(
 
             // Setar cookie auth-token com SameSite/Secure apropriados (SSE precisa do cookie)
             if (typeof document !== 'undefined' && data.token) {
-              const maxAge = 7 * 24 * 60 * 60 // 7 dias
-              let sameSite: 'Lax' | 'None' = 'Lax'
-              let secure = ''
-              try {
-                const apiUrl =
-                  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-                const pageOrigin =
-                  typeof window !== 'undefined' ? window.location.origin : ''
-                const apiOrigin = new URL(apiUrl).origin
-                const crossSite =
-                  pageOrigin && apiOrigin && apiOrigin !== pageOrigin
-                const isHttps =
-                  typeof window !== 'undefined' &&
-                  window.location.protocol === 'https:'
-                if (crossSite) {
-                  // Cross-site exige SameSite=None e Secure (navegadores rejeitam None sem Secure)
-                  sameSite = 'None'
-                  secure = '; Secure'
-                } else if (isHttps) {
-                  secure = '; Secure'
-                }
-              } catch {}
-              document.cookie = `auth-token=${data.token}; Path=/; Max-Age=${maxAge}; SameSite=${sameSite}${secure}`
+              setAuthCookie(data.token)
             }
             return true
           }
@@ -211,28 +222,7 @@ export const useAuthStore = create<AuthState>()(
 
             // Setar cookie auth-token com SameSite/Secure apropriados (SSE precisa do cookie)
             if (typeof document !== 'undefined' && data.token) {
-              const maxAge = 7 * 24 * 60 * 60
-              let sameSite: 'Lax' | 'None' = 'Lax'
-              let secure = ''
-              try {
-                const apiUrl =
-                  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-                const pageOrigin =
-                  typeof window !== 'undefined' ? window.location.origin : ''
-                const apiOrigin = new URL(apiUrl).origin
-                const crossSite =
-                  pageOrigin && apiOrigin && apiOrigin !== pageOrigin
-                const isHttps =
-                  typeof window !== 'undefined' &&
-                  window.location.protocol === 'https:'
-                if (crossSite) {
-                  sameSite = 'None'
-                  secure = '; Secure'
-                } else if (isHttps) {
-                  secure = '; Secure'
-                }
-              } catch {}
-              document.cookie = `auth-token=${data.token}; Path=/; Max-Age=${maxAge}; SameSite=${sameSite}${secure}`
+              setAuthCookie(data.token)
             }
             return true
           }
@@ -256,12 +246,7 @@ export const useAuthStore = create<AuthState>()(
 
           // Remover cookie do middleware
           if (typeof document !== 'undefined') {
-            const secure =
-              typeof window !== 'undefined' &&
-              window.location.protocol === 'https:'
-                ? '; Secure'
-                : ''
-            document.cookie = `auth-token=; Path=/; Max-Age=0; SameSite=Lax${secure}`
+            clearAuthCookie()
           }
 
           // Redirecionar para página de login
