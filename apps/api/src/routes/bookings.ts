@@ -302,7 +302,7 @@ router.get(
       let teacherQuery = supabase
         .from('bookings')
         .select(
-        `
+          `
         id,
         student_id,
         teacher_id,
@@ -342,7 +342,7 @@ router.get(
         const toUtc = new Date(`${toStr}T23:59:59.999-03:00`).toISOString()
         teacherQuery = teacherQuery.lte('date', toUtc)
       }
-      
+
       const { data: teacherBookings, error } = await teacherQuery
         .order('date', { ascending: true })
         .limit(10000)
@@ -352,10 +352,14 @@ router.get(
         return res.status(500).json({ error: 'Erro ao buscar agendamentos' })
       }
 
-      console.log(`📊 GET bookings para teacher ${teacherId}: ${teacherBookings?.length || 0} bookings encontrados`)
+      console.log(
+        `📊 GET bookings para teacher ${teacherId}: ${
+          teacherBookings?.length || 0
+        } bookings encontrados`
+      )
 
       let results = teacherBookings || []
-      
+
       if (status) {
         const statusStr = Array.isArray(status) ? status[0] : String(status)
         const statusTarget = normalizeBookingStatus(statusStr, null)
@@ -690,8 +694,8 @@ const createAvailabilitySchema = z.object({
   source: z.literal('PROFESSOR'),
   professorId: z.string().uuid(),
   academyId: z.string().uuid(),
-  startAt: z.string().min(1, 'startAt não pode ser vazio'),
-  endAt: z.string().min(1, 'endAt não pode ser vazio'),
+  startAt: z.string(),
+  endAt: z.string(),
   status: z.literal('AVAILABLE').optional(),
   professorNotes: z.string().optional()
 })
@@ -718,14 +722,22 @@ router.post(
   requireRole(['TEACHER', 'PROFESSOR', 'FRANQUIA', 'FRANQUEADORA']),
   requireApprovedTeacher,
   asyncErrorHandler(async (req, res) => {
-    console.log('[POST /api/bookings/availability] Criando disponibilidade:', JSON.stringify(req.body, null, 2))
+    console.log(
+      '[POST /api/bookings/availability] Criando disponibilidade:',
+      JSON.stringify(req.body, null, 2)
+    )
 
     const data = createAvailabilitySchema.parse(req.body)
     const user = req.user
 
     // Verificar se o professor está criando para si mesmo
-    if (data.professorId !== user.userId && !['FRANQUIA', 'FRANQUEADORA'].includes(user.role)) {
-      return res.status(403).json({ error: 'Você só pode criar disponibilidade para si mesmo' })
+    if (
+      data.professorId !== user.userId &&
+      !['FRANQUIA', 'FRANQUEADORA'].includes(user.role)
+    ) {
+      return res
+        .status(403)
+        .json({ error: 'Você só pode criar disponibilidade para si mesmo' })
     }
 
     // Deduplicação básica: evitar criar mais de um AVAILABLE para o mesmo professor/unidade/start_at
@@ -739,7 +751,10 @@ router.post(
       .limit(1)
 
     if (existingError) {
-      console.error('[POST /api/bookings/availability] Erro ao verificar duplicidade:', existingError)
+      console.error(
+        '[POST /api/bookings/availability] Erro ao verificar duplicidade:',
+        existingError
+      )
     }
 
     if (existing && existing.length > 0) {
@@ -780,14 +795,22 @@ router.post(
     const user = req.user
 
     // Verificar se o professor está criando para si mesmo
-    if (data.professorId !== user.userId && !['FRANQUIA', 'FRANQUEADORA'].includes(user.role)) {
-      return res.status(403).json({ error: 'Você só pode criar disponibilidade para si mesmo' })
+    if (
+      data.professorId !== user.userId &&
+      !['FRANQUIA', 'FRANQUEADORA'].includes(user.role)
+    ) {
+      return res
+        .status(403)
+        .json({ error: 'Você só pode criar disponibilidade para si mesmo' })
     }
 
     const nowIso = new Date().toISOString()
-    
+
     // Remover duplicados dentro do próprio payload (mesmo startAt repetido)
-    const uniqueSlotsMap = new Map<string, { startAt: string; endAt: string; professorNotes?: string }>()
+    const uniqueSlotsMap = new Map<
+      string,
+      { startAt: string; endAt: string; professorNotes?: string }
+    >()
     for (const slot of data.slots) {
       // Garantir que startAt e endAt existem antes de adicionar
       if (slot.startAt && slot.endAt && !uniqueSlotsMap.has(slot.startAt)) {
@@ -811,7 +834,10 @@ router.post(
       .in('start_at', startAts)
 
     if (existingError) {
-      console.error('[POST /api/bookings/availability/bulk] Erro ao verificar duplicidade:', existingError)
+      console.error(
+        '[POST /api/bookings/availability/bulk] Erro ao verificar duplicidade:',
+        existingError
+      )
     }
 
     const existingSet = new Set((existing || []).map(b => b.start_at as string))
@@ -832,7 +858,9 @@ router.post(
           end_at: slot.endAt,
           duration: Math.max(
             15,
-            Math.round((new Date(slot.endAt).getTime() - start.getTime()) / (60 * 1000))
+            Math.round(
+              (new Date(slot.endAt).getTime() - start.getTime()) / (60 * 1000)
+            )
           ),
           status_canonical: 'AVAILABLE',
           status: 'AVAILABLE',
@@ -858,8 +886,13 @@ router.post(
       .select('id, start_at, end_at')
 
     if (error) {
-      console.error('[POST /api/bookings/availability/bulk] Erro ao criar disponibilidades:', error)
-      return res.status(500).json({ error: 'Erro ao criar disponibilidades em bulk' })
+      console.error(
+        '[POST /api/bookings/availability/bulk] Erro ao criar disponibilidades:',
+        error
+      )
+      return res
+        .status(500)
+        .json({ error: 'Erro ao criar disponibilidades em bulk' })
     }
 
     return res.status(201).json({
