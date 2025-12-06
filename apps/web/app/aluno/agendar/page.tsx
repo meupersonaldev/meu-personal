@@ -67,7 +67,7 @@ export default function AgendarPage() {
   const [errorCode, setErrorCode] = useState<string | null>(null)
   const [isBooking, setIsBooking] = useState<boolean>(false)
   const [bookingSlot, setBookingSlot] = useState<string | null>(null)
-  
+
   // Estados de recorrência
   const [isRecurring, setIsRecurring] = useState<boolean>(false)
   const [recurrenceType, setRecurrenceType] = useState<string>('MONTH')
@@ -157,7 +157,7 @@ export default function AgendarPage() {
   // Função para buscar preview da série recorrente
   async function fetchRecurringPreview(_slot: Slot) {
     if (!token || !teacherId || !academyId) return
-    
+
     setLoadingPreview(true)
     try {
       // Buscar saldo do aluno - endpoint retorna { balance: { available_classes: X } }
@@ -167,7 +167,7 @@ export default function AgendarPage() {
       const balanceData = await balanceResp.json()
       // Extrair available_classes do objeto balance
       const studentCredits = balanceData?.balance?.available_classes ?? 0
-      
+
       // Calcular número aproximado de aulas baseado no tipo de recorrência
       const recurrenceWeeks: Record<string, number> = {
         '15_DAYS': 2,
@@ -180,7 +180,7 @@ export default function AgendarPage() {
       const creditsNum = Math.max(0, Number(studentCredits) || 0)
       const confirmedCount = Math.min(creditsNum, totalWeeks)
       const reservedCount = Math.max(0, totalWeeks - confirmedCount)
-      
+
       setRecurringPreview({
         confirmedCount,
         reservedCount,
@@ -197,13 +197,13 @@ export default function AgendarPage() {
   // Função para criar série recorrente
   async function handleRecurringBook() {
     if (!selectedSlot || !token || !teacherId || !academyId) return
-    
+
     setIsBooking(true)
     setModalError(null)
-    
+
     try {
       const dayOfWeek = getDayOfWeek(date)
-      
+
       const resp = await fetch('/api/booking-series', {
         method: 'POST',
         headers: {
@@ -220,20 +220,20 @@ export default function AgendarPage() {
           startDate: date
         }),
       })
-      
+
       const json = await resp.json()
-      
+
       if (!resp.ok) {
         // Mostrar erro dentro do modal
         setModalError(json.error || 'Erro ao criar série de agendamentos')
         return
       }
-      
+
       setShowConfirmModal(false)
       setModalError(null)
       setSuccess(`Série criada! ${json.confirmedCount} aulas confirmadas${json.reservedCount > 0 ? ` e ${json.reservedCount} reservadas` : ''}.`)
-      
-      setTimeout(() => router.push('/aluno/aulas'), 1500)
+
+      setTimeout(() => router.push('/aluno/dashboard'), 1500)
     } catch (e: any) {
       setModalError(e?.message || 'Erro ao criar série de agendamentos')
     } finally {
@@ -334,7 +334,7 @@ export default function AgendarPage() {
             min={today}
             max={maxDate}
           />
-          
+
           {/* Opção de Recorrência */}
           <div className="border-t pt-4">
             <div className="flex items-center justify-between">
@@ -356,7 +356,7 @@ export default function AgendarPage() {
                 onCheckedChange={setIsRecurring}
               />
             </div>
-            
+
             {isRecurring && (
               <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-100">
                 <div className="flex flex-col gap-3">
@@ -377,7 +377,7 @@ export default function AgendarPage() {
                       </SelectContent>
                     </Select>
                   </div>
-                  
+
                   <div className="text-xs text-blue-700 bg-blue-100 p-2 rounded">
                     <strong>Como funciona:</strong> Ao selecionar um horário, serão agendadas aulas toda <strong>{getDayName(getDayOfWeek(date))}</strong> no mesmo horário.
                     Aulas sem crédito ficam como <em>reserva</em> e são confirmadas automaticamente 7 dias antes, se houver crédito.
@@ -468,7 +468,7 @@ export default function AgendarPage() {
               Revise os detalhes da série de aulas antes de confirmar.
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="space-y-4 py-4">
             {/* Detalhes da série */}
             <div className="bg-gray-50 rounded-lg p-4 space-y-2">
@@ -487,7 +487,7 @@ export default function AgendarPage() {
                 </span>
               </div>
             </div>
-            
+
             {/* Preview de créditos */}
             {loadingPreview ? (
               <div className="flex items-center justify-center py-4">
@@ -501,7 +501,7 @@ export default function AgendarPage() {
                     <strong>{recurringPreview.confirmedCount}</strong> aula(s) serão confirmadas imediatamente
                   </span>
                 </div>
-                
+
                 {recurringPreview.reservedCount > 0 && (
                   <div className="flex items-center gap-2 text-amber-700 bg-amber-50 p-3 rounded-lg">
                     <Clock className="h-5 w-5 flex-shrink-0" />
@@ -510,21 +510,21 @@ export default function AgendarPage() {
                     </span>
                   </div>
                 )}
-                
+
                 {recurringPreview.reservedCount > 0 && (
                   <div className="text-xs text-gray-500 bg-gray-100 p-2 rounded">
                     <strong>Atenção:</strong> Reservas precisam de crédito até 7 dias antes da aula.
                     Sem crédito, a reserva será cancelada automaticamente.
                   </div>
                 )}
-                
+
                 <div className="text-xs text-gray-500 border-t pt-3">
                   Seu saldo atual: <strong>{recurringPreview.studentCredits}</strong> crédito(s)
                 </div>
               </div>
             )}
           </div>
-          
+
           {/* Erro dentro do modal */}
           {modalError && (
             <div className="flex items-start gap-2 text-red-700 bg-red-50 p-3 rounded-lg border border-red-200">
@@ -535,7 +535,7 @@ export default function AgendarPage() {
               </div>
             </div>
           )}
-          
+
           <DialogFooter className="flex gap-2 sm:gap-0">
             <Button
               variant="outline"
