@@ -20,7 +20,8 @@ import {
   Trash2,
   Plus,
   AlertCircle,
-  Check
+  Check,
+  Lock
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { createUtcFromLocal } from '@/lib/timezone-utils'
@@ -59,8 +60,10 @@ export default function DisponibilidadePage() {
   const [weeklySchedule, setWeeklySchedule] = useState<WeeklySchedule>({})
   const [savedSchedule, setSavedSchedule] = useState<WeeklySchedule>({}) // Horários já salvos
   const [blockedSchedule, setBlockedSchedule] = useState<WeeklySchedule>({}) // Horários bloqueados
+  const [occupiedSchedule, setOccupiedSchedule] = useState<WeeklySchedule>({}) // Horários ocupados (com aluno, incluindo séries)
   const [bookingIdByDateTime, setBookingIdByDateTime] = useState<Record<string, Record<string, string>>>({})
   const [blockedBookingIdByDateTime, setBlockedBookingIdByDateTime] = useState<Record<string, Record<string, string>>>({})
+  const [occupiedBookingIdByDateTime, setOccupiedBookingIdByDateTime] = useState<Record<string, Record<string, string>>>({})
   const [startDate, setStartDate] = useState(() => {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -181,12 +184,34 @@ export default function DisponibilidadePage() {
             status === 'BLOCKED' &&
             !!bookingDate
         })
+
+        // Filtrar bookings ocupados (com aluno, incluindo séries recorrentes)
+        // Isso inclui PAID, RESERVED, CONFIRMED - qualquer booking com aluno
+        const occupiedBookings = bookings.filter((b: Record<string, unknown>) => {
+          const studentId = b.studentId || b.student_id
+          const franchiseId = b.franchiseId || b.franchise_id
+          const status = b.status || b.status_canonical
+          const dateField = (b.date || b.start_at) as string
+          const bookingDate = dateField ? new Date(dateField) : null
+          const seriesId = b.seriesId || b.series_id
+
+          // Incluir bookings com aluno (PAID, RESERVED, CONFIRMED) da academia selecionada
+          // Excluir CANCELED
+          return studentId &&
+            franchiseId === selectedAcademy &&
+            status !== 'CANCELED' &&
+            status !== 'AVAILABLE' &&
+            status !== 'BLOCKED' &&
+            !!bookingDate
+        })
         
         // Agrupar por DATA (yyyy-MM-dd) e horário local
         const saved: WeeklySchedule = {}
         const blocked: WeeklySchedule = {}
+        const occupied: WeeklySchedule = {}
         const bookingMap: Record<string, Record<string, string>> = {}
         const blockedBookingMap: Record<string, Record<string, string>> = {}
+        const occupiedBookingMap: Record<string, Record<string, string>> = {}
 
         availableBookings.forEach((b: Record<string, unknown>) => {
           const dateField = (b.date || b.start_at) as string
@@ -249,10 +274,46 @@ export default function DisponibilidadePage() {
           }
         })
 
+        // Processar bookings ocupados (com aluno, incluindo séries)
+        occupiedBookings.forEach((b: Record<string, unknown>) => {
+          const dateField = (b.date || b.start_at) as string
+          if (!dateField) return
+
+          const date = new Date(dateField)
+          const dateKey = getLocalDateKey(date)
+          // Normalizar formato do horário para garantir compatibilidade
+          const timeRaw = date.toLocaleTimeString('pt-BR', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+          })
+          const time = normalizeTime(timeRaw)
+
+          if (!occupied[dateKey]) {
+            occupied[dateKey] = []
+          }
+          // Normalizar antes de comparar
+          if (!occupied[dateKey].map(normalizeTime).includes(time)) {
+            occupied[dateKey].push(time)
+          }
+
+          const id = (b as any).id as string | undefined
+          if (id) {
+            if (!occupiedBookingMap[dateKey]) {
+              occupiedBookingMap[dateKey] = {}
+            }
+            if (!occupiedBookingMap[dateKey][time]) {
+              occupiedBookingMap[dateKey][time] = id
+            }
+          }
+        })
+
         setSavedSchedule(saved)
         setBlockedSchedule(blocked)
+        setOccupiedSchedule(occupied)
         setBookingIdByDateTime(bookingMap)
         setBlockedBookingIdByDateTime(blockedBookingMap)
+        setOccupiedBookingIdByDateTime(occupiedBookingMap)
         // Limpar weeklySchedule - ele é usado apenas para novas seleções
         setWeeklySchedule({})
       }
@@ -269,6 +330,16 @@ export default function DisponibilidadePage() {
     // Limpar seleções ao trocar de academia
     setWeeklySchedule({})
   }, [fetchData])
+
+  // Helper para normalizar formato de horário (HH:mm:ss ou HH:mm -> HH:mm:ss)
+  const normalizeTime = (time: string): string => {
+    if (!time) return ''
+    const parts = time.split(':')
+    const hour = parts[0]?.padStart(2, '0') || '00'
+    const minute = parts[1]?.padStart(2, '0') || '00'
+    const second = parts[2]?.padStart(2, '0') || '00'
+    return `${hour}:${minute}:${second}`
+  }
 
   // Helper para exibir o horário sem os segundos
   const formatTimeLabel = (time: string) => {
@@ -341,12 +412,21 @@ export default function DisponibilidadePage() {
   const toggleHorario = (dateKey: string, dayOfWeek: number, horario: string) => {
     if (!isSlotAvailable(dayOfWeek, horario)) return
     
+    // Verificar se está ocupado (não permitir adicionar)
+    const normalizedHorario = normalizeTime(horario)
+    const isOccupied = (occupiedSchedule[dateKey] || []).map(normalizeTime).includes(normalizedHorario)
+    if (isOccupied) {
+      toast.warning('Este horário já está ocupado por uma aula agendada')
+      return
+    }
+    
     setWeeklySchedule(prev => {
       const daySchedule = prev[dateKey] || []
-      if (daySchedule.includes(horario)) {
+      const normalizedSchedule = daySchedule.map(normalizeTime)
+      if (normalizedSchedule.includes(normalizedHorario)) {
         return {
           ...prev,
-          [dateKey]: daySchedule.filter(h => h !== horario)
+          [dateKey]: daySchedule.filter(h => normalizeTime(h) !== normalizedHorario)
         }
       } else {
         return {
@@ -360,9 +440,19 @@ export default function DisponibilidadePage() {
   // Selecionar todos os horários disponíveis de uma DATA específica
   const selectAllDate = (dateKey: string, dayOfWeek: number) => {
     const availableSlots = slotsByDay[dayOfWeek] || []
+    
+    // Filtrar horários ocupados (normalizando para comparação)
+    const occupiedTimes = (occupiedSchedule[dateKey] || []).map(normalizeTime)
+    const availableAndNotOccupied = availableSlots.filter(time => !occupiedTimes.includes(normalizeTime(time)))
+
+    if (availableAndNotOccupied.length === 0 && availableSlots.length > 0) {
+      toast.warning('Todos os horários disponíveis desta data já estão ocupados por aulas agendadas')
+      return
+    }
+
     setWeeklySchedule(prev => ({
       ...prev,
-      [dateKey]: [...availableSlots]
+      [dateKey]: [...availableAndNotOccupied]
     }))
   }
 
@@ -477,6 +567,13 @@ export default function DisponibilidadePage() {
 
   // Selecionar horário em todos os dias (apenas onde disponível)
   const handleSlotClick = (dateKey: string, dayOfWeek: number, horario: string, isSaved: boolean, isSelected: boolean) => {
+    // Verificar se está ocupado (não permitir seleção)
+    const isOccupied = (occupiedSchedule[dateKey] || []).includes(horario)
+    if (isOccupied) {
+      toast.warning('Este horário já está ocupado por uma aula agendada')
+      return
+    }
+
     if (isSaved && !isSelected) {
       openSlotRemovalModal(dateKey, horario)
       return
@@ -487,10 +584,14 @@ export default function DisponibilidadePage() {
   const selectHorarioAllDays = (horario: string) => {
     setWeeklySchedule(prev => {
       const newSchedule = { ...prev }
+      const normalizedHorario = normalizeTime(horario)
       visibleDays.forEach(dia => {
-        if (isSlotAvailable(dia.dayOfWeek, horario)) {
+        // Verificar se está ocupado antes de adicionar (normalizando para comparação)
+        const isOccupied = (occupiedSchedule[dia.dateKey] || []).map(normalizeTime).includes(normalizedHorario)
+        if (isSlotAvailable(dia.dayOfWeek, horario) && !isOccupied) {
           const daySchedule = newSchedule[dia.dateKey] || []
-          if (!daySchedule.includes(horario)) {
+          const normalizedSchedule = daySchedule.map(normalizeTime)
+          if (!normalizedSchedule.includes(normalizedHorario)) {
             newSchedule[dia.dateKey] = [...daySchedule, horario].sort()
           }
         }
@@ -508,6 +609,24 @@ export default function DisponibilidadePage() {
 
     setSaving(true)
     try {
+      // Verificar se algum horário selecionado está ocupado (normalizando para comparação)
+      const occupiedSlots: string[] = []
+      for (const [dateKey, horarios] of Object.entries(weeklySchedule)) {
+        if (horarios.length === 0) continue
+        const normalizedOccupied = (occupiedSchedule[dateKey] || []).map(normalizeTime)
+        for (const hora of horarios) {
+          if (normalizedOccupied.includes(normalizeTime(hora))) {
+            occupiedSlots.push(`${dateKey} ${hora}`)
+          }
+        }
+      }
+
+      if (occupiedSlots.length > 0) {
+        toast.error(`Não é possível disponibilizar horários já ocupados por aulas agendadas. ${occupiedSlots.length} horário(s) conflitante(s).`)
+        setSaving(false)
+        return
+      }
+
       // Montar slots em memória (bulk)
       const slots: { startAt: string; endAt: string; professorNotes: string }[] = []
 
@@ -528,6 +647,7 @@ export default function DisponibilidadePage() {
 
       if (slots.length === 0) {
         toast.error('Selecione pelo menos um horário para disponibilizar')
+        setSaving(false)
         return
       }
 
@@ -711,6 +831,10 @@ export default function DisponibilidadePage() {
                     <span className="text-gray-600">Nova seleção</span>
                   </div>
                   <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded bg-gradient-to-r from-amber-500 to-orange-400 border-2 border-amber-500 flex items-center justify-center text-[10px]">🔒</div>
+                    <span className="text-gray-600">Ocupado (aula agendada)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
                     <div className="w-6 h-6 rounded bg-gradient-to-r from-red-500 to-rose-500"></div>
                     <span className="text-gray-600">Bloqueado</span>
                   </div>
@@ -806,9 +930,11 @@ export default function DisponibilidadePage() {
                         </td>
                         {visibleDays.map(dia => {
                           const isAvailable = isSlotAvailable(dia.dayOfWeek, horario)
-                          const isSelected = (weeklySchedule[dia.dateKey] || []).includes(horario)
-                          const isSaved = (savedSchedule[dia.dateKey] || []).includes(horario)
-                          const isBlocked = (blockedSchedule[dia.dateKey] || []).includes(horario)
+                          const normalizedHorario = normalizeTime(horario)
+                          const isSelected = (weeklySchedule[dia.dateKey] || []).map(normalizeTime).includes(normalizedHorario)
+                          const isSaved = (savedSchedule[dia.dateKey] || []).map(normalizeTime).includes(normalizedHorario)
+                          const isBlocked = (blockedSchedule[dia.dateKey] || []).map(normalizeTime).includes(normalizedHorario)
+                          const isOccupied = (occupiedSchedule[dia.dateKey] || []).map(normalizeTime).includes(normalizedHorario)
 
                           if (!isAvailable) {
                             return (
@@ -816,6 +942,22 @@ export default function DisponibilidadePage() {
                                 <div className="flex justify-center">
                                   <div className="w-10 h-10 rounded-lg bg-gray-100 border-2 border-gray-100" />
                                 </div>
+                              </td>
+                            )
+                          }
+
+                          // Horários ocupados (com aluno, incluindo séries) - não podem ser selecionados
+                          if (isOccupied) {
+                            return (
+                              <td key={dia.dateKey} className="p-1 text-center">
+                                <button
+                                  type="button"
+                                  disabled
+                                  className="w-10 h-10 rounded-lg border-2 bg-gradient-to-r from-amber-500 to-orange-400 border-amber-500 text-white shadow-md transition-all cursor-not-allowed"
+                                  title="Horário ocupado (aula agendada)"
+                                >
+                                  <Lock className="h-4 w-4 mx-auto" />
+                                </button>
                               </td>
                             )
                           }

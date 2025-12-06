@@ -37,6 +37,7 @@ interface BalanceType {
   total_purchased: number
   total_consumed: number
   locked_qty: number
+  available_classes?: number
 }
 
 const currencyFormatter = new Intl.NumberFormat('pt-BR', {
@@ -141,8 +142,10 @@ export default function StudentDashboardPage() {
 
   const selectedUnit: StudentUnit | null = activeUnit || units.find((u) => u.is_active) || null
 
+  // Usar available_classes da API (fonte única de verdade)
+  // Se não estiver disponível, calcular como fallback
   const availableCredits = balance
-    ? balance.total_purchased - balance.total_consumed - balance.locked_qty
+    ? (balance.available_classes ?? (balance.total_purchased - balance.total_consumed - balance.locked_qty))
     : 0
 
   const handleActivateUnit = async (unit: StudentUnit | Unit) => {

@@ -96,7 +96,9 @@ router.get(
         source: booking.source || undefined,
         hourlyRate: booking.hourly_rate || undefined,
         cancellableUntil: booking.cancellable_until || fallbackCutoff,
-        updatedAt: booking.updated_at || undefined
+        updatedAt: booking.updated_at || undefined,
+        series_id: booking.series_id ?? null,
+        is_reserved: booking.is_reserved ?? false
       }
     }
 
@@ -126,10 +128,10 @@ router.get(
       // ORDER BY COALESCE(b.start_at, b.date::timestamptz) ASC
 
       // Query ORM equivalente ao SQL fornecido
-      // Primeiro buscar os bookings
+      // Primeiro buscar os bookings (incluindo series_id e is_reserved para séries recorrentes)
       const { data: studentBookings, error } = await supabase
         .from('bookings')
-        .select('*')
+        .select('*, series_id, is_reserved')
         .eq('student_id', studentId)
         .in('status_canonical', ['PAID', 'RESERVED', 'CANCELED']) // Incluir cancelados também
         .order('start_at', { ascending: true, nullsFirst: false })
@@ -276,7 +278,9 @@ router.get(
           notes: booking.notes || undefined,
           creditsCost: booking.credits_cost ?? 0,
           cancellableUntil: booking.cancellable_until || fallbackCutoff,
-          updatedAt: booking.updated_at || undefined
+          updatedAt: booking.updated_at || undefined,
+          series_id: booking.series_id ?? null,
+          is_reserved: booking.is_reserved ?? false
         }
 
         console.log('Mapped booking:', mapped)
@@ -298,7 +302,7 @@ router.get(
           .json({ error: 'Acesso não autorizado a este professor' })
       }
 
-      // Construir query base para o professor
+      // Construir query base para o professor (incluindo series_id e is_reserved para séries recorrentes)
       let teacherQuery = supabase
         .from('bookings')
         .select(
@@ -316,31 +320,32 @@ router.get(
         notes,
         credits_cost,
         source,
-        cancellable_until
+        cancellable_until,
+        series_id,
+        is_reserved
       `
         )
         .eq('teacher_id', teacherId)
 
       // Filtro por intervalo de datas (from/to) quando fornecido.
-      // Os parâmetros from/to vêm no formato YYYY-MM-DD (data local Brasil, UTC-3).
-      // Para manter consistência com a UI (que usa datas locais), convertemos
-      // o intervalo local para UTC usando o offset -03:00.
+      // Os parâmetros from/to vêm no formato YYYY-MM-DD (data local).
+      // O campo 'date' é do tipo DATE (apenas data, sem hora), então comparamos diretamente com YYYY-MM-DD.
       if (from) {
         const fromStr = String(from)
-        // 00:00 local (Brasil) -> UTC
-        const fromUtc = new Date(`${fromStr}T00:00:00-03:00`).toISOString()
-        teacherQuery = teacherQuery.gte('date', fromUtc)
+        // Campo date é apenas data, então comparamos diretamente com YYYY-MM-DD
+        teacherQuery = teacherQuery.gte('date', fromStr)
       } else {
         // Caso não tenha "from", usar apenas bookings futuros para evitar excesso de registros
-        const now = new Date().toISOString()
-        teacherQuery = teacherQuery.gte('date', now)
+        // Extrair apenas a data de hoje no formato YYYY-MM-DD
+        const now = new Date()
+        const todayStr = now.toISOString().split('T')[0] // YYYY-MM-DD
+        teacherQuery = teacherQuery.gte('date', todayStr)
       }
 
       if (to) {
         const toStr = String(to)
-        // 23:59:59 local (Brasil) -> UTC
-        const toUtc = new Date(`${toStr}T23:59:59.999-03:00`).toISOString()
-        teacherQuery = teacherQuery.lte('date', toUtc)
+        // Campo date é apenas data, então comparamos diretamente com YYYY-MM-DD
+        teacherQuery = teacherQuery.lte('date', toStr)
       }
 
       const { data: teacherBookings, error } = await teacherQuery
@@ -352,11 +357,32 @@ router.get(
         return res.status(500).json({ error: 'Erro ao buscar agendamentos' })
       }
 
+      // Log detalhado para debug de séries recorrentes
+      const totalBookings = teacherBookings?.length || 0
+      const seriesBookings = teacherBookings?.filter((b: any) => b.series_id) || []
+      const seriesCount = seriesBookings.length
+      const uniqueSeries = new Set(seriesBookings.map((b: any) => b.series_id))
+      
       console.log(
-        `📊 GET bookings para teacher ${teacherId}: ${
-          teacherBookings?.length || 0
-        } bookings encontrados`
+        `📊 GET bookings para teacher ${teacherId}: ${totalBookings} bookings encontrados`
       )
+      console.log(
+        `📋 [DEBUG] Séries recorrentes: ${seriesCount} bookings de ${uniqueSeries.size} séries únicas`
+      )
+      if (seriesCount > 0) {
+        console.log(
+          `📋 [DEBUG] Series IDs encontrados: ${Array.from(uniqueSeries).join(', ')}`
+        )
+        // Log das datas dos bookings de séries
+        const seriesDates = seriesBookings.map((b: any) => ({
+          id: b.id,
+          series_id: b.series_id,
+          date: b.date,
+          start_at: b.start_at,
+          student_id: b.student_id
+        }))
+        console.log(`📋 [DEBUG] Detalhes dos bookings de séries:`, JSON.stringify(seriesDates, null, 2))
+      }
 
       let results = teacherBookings || []
 
@@ -524,7 +550,9 @@ router.get(
                   new Date(booking.date).getTime() - 4 * 60 * 60 * 1000
                 ).toISOString()
               : undefined),
-          updatedAt: booking.updated_at || undefined
+          updatedAt: booking.updated_at || undefined,
+          series_id: booking.series_id ?? null,
+          is_reserved: booking.is_reserved ?? false
         }
       })
 

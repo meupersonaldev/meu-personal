@@ -374,9 +374,9 @@ router.post('/student/checkout', requireAuth, requireRole(['STUDENT', 'ALUNO']),
       });
     } catch (error: any) {
       console.error('❌ Erro ao processar pacote grátis:', error);
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'Erro ao processar aula grátis',
-        details: error.message 
+        details: error.message
       });
     }
   }
@@ -545,9 +545,9 @@ router.post('/professor/checkout', requireAuth, requireRole(['TEACHER', 'PROFESS
       });
     } catch (error: any) {
       console.error('❌ Erro ao processar pacote grátis:', error);
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'Erro ao processar horas grátis',
-        details: error.message 
+        details: error.message
       });
     }
   }
@@ -731,7 +731,7 @@ router.get('/student/transactions', requireAuth, requireRole(['STUDENT', 'ALUNO'
     franqueadoraId: franqueadora_id,
     unitId: unit_id,
     contextFranqueadoraId: getContextFranqueadoraId(req),
-    allowFallback: false
+    allowFallback: true
   });
 
   if (!franqueadoraId) {
@@ -769,7 +769,7 @@ router.get('/professor/transactions', requireAuth, requireRole(['TEACHER', 'PROF
     franqueadoraId: franqueadora_id,
     unitId: unit_id,
     contextFranqueadoraId: getContextFranqueadoraId(req),
-    allowFallback: false
+    allowFallback: true
   });
 
   if (!franqueadoraId) {

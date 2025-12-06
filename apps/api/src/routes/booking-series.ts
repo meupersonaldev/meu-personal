@@ -3,6 +3,8 @@ import { z } from 'zod'
 import { supabase } from '../lib/supabase'
 import { requireAuth } from '../middleware/auth'
 import { addDays, addWeeks, addMonths, startOfDay, format, getDay, setDay, isBefore, isAfter } from 'date-fns'
+import { balanceService } from '../services/balance.service'
+
 
 const router = Router()
 
@@ -98,61 +100,141 @@ function createUtcDateTime(dateStr: string, timeStr: string): Date {
 /**
  * Busca o saldo de créditos do aluno
  */
-async function getStudentCredits(studentId: string): Promise<number> {
-  const { data, error } = await supabase
-    .from('student_class_balance')
-    .select('balance')
-    .eq('student_id', studentId)
-    .single()
+// Helper para calcular saldo disponível
+function calculateAvailableCredits(balance: any): number {
+  return (balance.total_purchased || 0) - (balance.total_consumed || 0) - (balance.locked_qty || 0)
+}
 
-  if (error || !data) {
+// Helper para buscar franqueadora
+async function fetchFranqueadoraIdFromAcademy(academyId: string): Promise<string> {
+  const { data } = await supabase
+    .from('academies')
+    .select('franqueadora_id')
+    .eq('id', academyId)
+    .single()
+  return data?.franqueadora_id || ''
+}
+
+/**
+ * Busca créditos do aluno usando balanceService
+ */
+async function getStudentCredits(studentId: string, academyId: string): Promise<number> {
+  try {
+    const franqueadoraId = await fetchFranqueadoraIdFromAcademy(academyId)
+    if (!franqueadoraId) return 0
+
+    const balance = await balanceService.getStudentBalance(studentId, franqueadoraId)
+    return calculateAvailableCredits(balance)
+  } catch (err) {
+    console.error('Erro ao buscar saldo:', err)
     return 0
   }
-
-  return data.balance || 0
 }
 
 /**
  * Debita créditos do aluno
  */
-async function debitStudentCredits(studentId: string, amount: number, bookingId: string): Promise<boolean> {
-  // Primeiro, buscar o saldo atual
-  const currentBalance = await getStudentCredits(studentId)
+async function debitStudentCredits(studentId: string, amount: number, bookingId: string, academyId: string): Promise<boolean> {
+  try {
+    const franqueadoraId = await fetchFranqueadoraIdFromAcademy(academyId)
+    if (!franqueadoraId) return false
 
-  if (currentBalance < amount) {
+    // Verificar saldo antes
+    const available = await getStudentCredits(studentId, academyId)
+    if (available < amount) return false
+
+    await balanceService.consumeStudentClasses(
+      studentId,
+      franqueadoraId,
+      amount,
+      bookingId,
+      {
+        unitId: null,
+        source: 'ALUNO',
+        metaJson: {
+          booking_id: bookingId,
+          origin: 'booking_series_recurrence'
+        }
+      }
+    )
+
+    // Sincronizar cache em users
+    const newBalance = await balanceService.getStudentBalance(studentId, franqueadoraId)
+    const newAvailable = calculateAvailableCredits(newBalance)
+
+    await supabase
+      .from('users')
+      .update({
+        credits: Math.max(0, newAvailable),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', studentId)
+
+    return true
+  } catch (err) {
+    console.error('Erro ao debitar créditos:', err)
     return false
   }
-
-  // Atualizar o saldo
-  const { error: updateError } = await supabase
-    .from('student_class_balance')
-    .update({
-      balance: currentBalance - amount,
-      updated_at: new Date().toISOString()
-    })
-    .eq('student_id', studentId)
-
-  if (updateError) {
-    console.error('Erro ao debitar créditos:', updateError)
-    return false
-  }
-
-  // Registrar a transação
-  await supabase
-    .from('student_class_tx')
-    .insert({
-      student_id: studentId,
-      delta: -amount,
-      reason: 'BOOKING_RECURRING',
-      ref_id: bookingId,
-      created_at: new Date().toISOString()
-    })
-
-  return true
 }
 
 /**
- * Verifica se o professor tem disponibilidade em uma data/hora específica
+ * Estorna créditos do aluno
+ */
+async function refundStudentCredits(studentId: string, amount: number, refId: string, academyId: string, reason: string = 'Booking Refund'): Promise<boolean> {
+  try {
+    const franqueadoraId = await fetchFranqueadoraIdFromAcademy(academyId)
+    if (!franqueadoraId) return false
+
+    const balance = await balanceService.getStudentBalance(studentId, franqueadoraId)
+
+    // Diminuir total_consumed (estorno)
+    const newConsumed = Math.max(0, balance.total_consumed - amount)
+
+    await balanceService.updateStudentBalance(studentId, franqueadoraId, {
+      total_consumed: newConsumed
+    })
+
+    // Registrar transação usando balanceService
+    await balanceService.createStudentTransaction(
+      studentId,
+      franqueadoraId,
+      'REFUND',
+      amount,
+      {
+        source: 'SYSTEM',
+        metaJson: {
+          reason,
+          ref_id: refId
+        }
+      }
+    )
+
+    // Sincronizar cache em users
+    const newBalance = await balanceService.getStudentBalance(studentId, franqueadoraId)
+    const newAvailable = calculateAvailableCredits(newBalance)
+
+    await supabase
+      .from('users')
+      .update({
+        credits: Math.max(0, newAvailable),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', studentId)
+
+    return true
+  } catch (err) {
+    console.error('Erro ao estornar créditos:', err)
+    return false
+  }
+}
+
+/**
+ * Verifica se o professor tem disponibilidade em uma data/hora específica para série recorrente
+ * Para séries recorrentes, verificamos APENAS se não há conflito (booking ocupado).
+ * Não exigimos slot AVAILABLE porque o professor já aceita a série inteira.
+ * 
+ * Retorna true se:
+ * - Não existe nenhum booking ocupado (com aluno) no horário
  */
 async function checkTeacherAvailability(
   teacherId: string,
@@ -165,24 +247,34 @@ async function checkTeacherAvailability(
   const startAt = createUtcDateTime(date, startTime)
   const endAt = createUtcDateTime(date, endTime)
 
-  // Verificar se existe um slot AVAILABLE do professor neste horário
-  // NOTA: Não filtramos por academy_id porque slots AVAILABLE têm academy_id = NULL
-  const { data: availableSlots, error } = await supabase
-    .from('bookings')
-    .select('id')
-    .eq('teacher_id', teacherId)
-    .eq('status_canonical', 'AVAILABLE')
-    .is('student_id', null)
-    .gte('start_at', startAt.toISOString())
-    .lt('start_at', endAt.toISOString())
-    .limit(1)
+  console.log(`[checkTeacherAvailability] Verificando disponibilidade para data=${date}, startTime=${startTime}, startAt=${startAt.toISOString()}, endAt=${endAt.toISOString()}`)
 
-  if (error) {
-    console.error('Erro ao verificar disponibilidade:', error)
-    return false
+  // Para séries recorrentes, verificar APENAS se há conflito
+  // Não exigimos slot AVAILABLE porque ao criar uma série, o professor está concordando com todas as datas
+  const { data: occupiedBookings, error: occupiedError } = await supabase
+    .from('bookings')
+    .select('id, start_at, status_canonical, student_id')
+    .eq('teacher_id', teacherId)
+    .not('student_id', 'is', null) // Tem aluno
+    .neq('status_canonical', 'CANCELED') // Não cancelado
+    .eq('start_at', startAt.toISOString()) // Mesmo horário exato
+
+  if (occupiedError) {
+    console.error(`[checkTeacherAvailability] Erro ao verificar conflitos para ${date}:`, occupiedError)
+    // Em caso de erro, assumir que está disponível (permissivo)
+    return true
   }
 
-  return (availableSlots?.length || 0) > 0
+  const hasConflict = (occupiedBookings?.length || 0) > 0
+
+  if (hasConflict) {
+    console.log(`[checkTeacherAvailability] ❌ Conflito encontrado para ${date}: ${JSON.stringify(occupiedBookings)}`)
+  } else {
+    console.log(`[checkTeacherAvailability] ✅ Sem conflito para ${date}, professor disponível`)
+  }
+
+  // Se não há booking ocupado, professor está disponível
+  return !hasConflict
 }
 
 // ============================================
@@ -255,11 +347,13 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<any> 
     }
 
     // Buscar créditos do aluno
-    const studentCredits = await getStudentCredits(user.userId)
+    const studentCredits = await getStudentCredits(user.userId, academyId)
 
     // Verificar disponibilidade do professor para cada data
     const availableDates: string[] = []
     const skippedDates: { date: string; reason: string }[] = []
+
+    console.log(`[booking-series] Datas geradas para a série: ${seriesDates.map(d => format(d, 'yyyy-MM-dd')).join(', ')}`)
 
     for (const date of seriesDates) {
       const dateStr = format(date, 'yyyy-MM-dd')
@@ -270,6 +364,11 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<any> 
       } else {
         skippedDates.push({ date: dateStr, reason: 'Professor sem disponibilidade' })
       }
+    }
+
+    console.log(`[booking-series] Resumo verificação: ${availableDates.length} datas disponíveis, ${skippedDates.length} datas puladas`)
+    if (skippedDates.length > 0) {
+      console.log(`[booking-series] Datas puladas: ${JSON.stringify(skippedDates)}`)
     }
 
     if (availableDates.length === 0) {
@@ -306,103 +405,157 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<any> 
 
     // Criar bookings para cada data
     const bookings: any[] = []
+    const bookingErrors: { date: string; error: string }[] = []
     let creditsUsed = 0
     let confirmedCount = 0
     let reservedCount = 0
+
+    console.log(`[booking-series] Iniciando criação de ${availableDates.length} bookings para série ${series.id}`)
 
     for (let i = 0; i < availableDates.length; i++) {
       const dateStr = availableDates[i]
       const startAt = createUtcDateTime(dateStr, startTime)
       const endAt = createUtcDateTime(dateStr, endTime)
 
-      // Verificar se ainda há créditos
-      const hasCredit = creditsUsed < studentCredits
-      const isReserved = !hasCredit
+      try {
+        // Verificar se ainda há créditos
+        const hasCredit = creditsUsed < studentCredits
+        const isReserved = !hasCredit
 
-      // Buscar o slot disponível do professor para usar como base
-      const { data: slot } = await supabase
-        .from('bookings')
-        .select('id')
-        .eq('teacher_id', teacherId)
-        .eq('academy_id', academyId)
-        .eq('status_canonical', 'AVAILABLE')
-        .is('student_id', null)
-        .gte('start_at', startAt.toISOString())
-        .lt('end_at', endAt.toISOString())
-        .single()
+        console.log(`[booking-series] Processando data ${dateStr} (${i + 1}/${availableDates.length}) - Créditos disponíveis: ${studentCredits - creditsUsed}, Reservado: ${isReserved}`)
 
-      if (slot) {
-        // Atualizar o slot existente
-        const { data: booking, error: bookingError } = await supabase
+        // Buscar o slot disponível do professor para usar como base
+        // NOTA: Não filtramos por academy_id/franchise_id porque slots AVAILABLE geralmente têm franchise_id = NULL
+        // Usar .maybeSingle() ao invés de .single() para não falhar se não encontrar
+        // Buscar slot que começa no horário exato (start_at = startAt)
+        const { data: slot, error: slotError } = await supabase
           .from('bookings')
-          .update({
-            student_id: studentId,
-            status_canonical: isReserved ? 'RESERVED' : 'PAID',
-            series_id: series.id,
-            is_reserved: isReserved,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', slot.id)
-          .select()
-          .single()
+          .select('id')
+          .eq('teacher_id', teacherId)
+          .eq('status_canonical', 'AVAILABLE')
+          .is('student_id', null)
+          .eq('start_at', startAt.toISOString())
+          .maybeSingle()
 
-        if (!bookingError && booking) {
-          bookings.push({
-            id: booking.id,
-            date: dateStr,
-            startTime,
-            endTime,
-            status: booking.status_canonical,
-            isReserved
-          })
+        if (slotError && slotError.code !== 'PGRST116') { // PGRST116 = nenhum resultado encontrado (é esperado)
+          console.error(`[booking-series] Erro ao buscar slot para ${dateStr}:`, slotError)
+        }
 
-          if (!isReserved) {
-            // Debitar crédito
-            await debitStudentCredits(studentId!, 1, booking.id)
-            creditsUsed++
-            confirmedCount++
-          } else {
-            reservedCount++
+        if (slot) {
+          // Atualizar o slot existente
+          // Garantir que franchise_id seja definido ao atualizar o slot
+          console.log(`[booking-series] Slot encontrado ${slot.id} para ${dateStr}, atualizando...`)
+          const { data: booking, error: bookingError } = await supabase
+            .from('bookings')
+            .update({
+              student_id: studentId,
+              franchise_id: academyId,
+              status_canonical: isReserved ? 'RESERVED' : 'PAID',
+              series_id: series.id,
+              is_reserved: isReserved,
+              date: dateStr, // Campo date deve ser apenas a data (YYYY-MM-DD), não data/hora
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', slot.id)
+            .select()
+            .single()
+
+          if (bookingError) {
+            console.error(`[booking-series] Erro ao atualizar slot ${slot.id} para ${dateStr}:`, bookingError)
+            bookingErrors.push({ date: dateStr, error: bookingError.message || 'Erro ao atualizar slot' })
+            continue // Continuar para próxima data mesmo se falhar
+          }
+
+          if (booking) {
+            console.log(`[booking-series] ✅ Slot atualizado: booking_id=${booking.id}, franchise_id=${booking.franchise_id}, status=${booking.status_canonical}`)
+            bookings.push({
+              id: booking.id,
+              date: dateStr,
+              startTime,
+              endTime,
+              status: booking.status_canonical,
+              isReserved
+            })
+
+            if (!isReserved) {
+              // Debitar crédito
+              const debited = await debitStudentCredits(studentId!, 1, booking.id, academyId)
+              if (debited) {
+                creditsUsed++
+                confirmedCount++
+              } else {
+                console.error(`[booking-series] ⚠️ Falha ao debitar crédito para booking ${booking.id}`)
+              }
+            } else {
+              reservedCount++
+            }
+          }
+        } else {
+          // Criar novo booking (caso não encontre slot existente)
+          console.log(`[booking-series] Nenhum slot encontrado para ${dateStr}, criando novo booking...`)
+          const { data: booking, error: bookingError } = await supabase
+            .from('bookings')
+            .insert({
+              teacher_id: teacherId,
+              student_id: studentId,
+              franchise_id: academyId, // CORRIGIDO: usar franchise_id ao invés de academy_id
+              start_at: startAt.toISOString(),
+              end_at: endAt.toISOString(),
+              date: dateStr, // Campo date deve ser apenas a data (YYYY-MM-DD), não data/hora
+              status_canonical: isReserved ? 'RESERVED' : 'PAID',
+              series_id: series.id,
+              is_reserved: isReserved,
+              source: 'ALUNO',
+              created_at: new Date().toISOString()
+            })
+            .select()
+            .single()
+
+          if (bookingError) {
+            console.error(`[booking-series] ❌ Erro ao criar booking para ${dateStr}:`, bookingError)
+            bookingErrors.push({ date: dateStr, error: bookingError.message || 'Erro ao criar booking' })
+            continue // Continuar para próxima data mesmo se falhar
+          }
+
+          if (booking) {
+            console.log(`[booking-series] ✅ Booking criado: booking_id=${booking.id}, franchise_id=${booking.franchise_id}, status=${booking.status_canonical}`)
+            bookings.push({
+              id: booking.id,
+              date: dateStr,
+              startTime,
+              endTime,
+              status: booking.status_canonical,
+              isReserved
+            })
+
+            if (!isReserved) {
+              const debited = await debitStudentCredits(studentId!, 1, booking.id, academyId)
+              if (debited) {
+                creditsUsed++
+                confirmedCount++
+              } else {
+                console.error(`[booking-series] ⚠️ Falha ao debitar crédito para booking ${booking.id}`)
+              }
+            } else {
+              reservedCount++
+            }
           }
         }
-      } else {
-        // Criar novo booking (caso não encontre slot existente)
-        const { data: booking, error: bookingError } = await supabase
-          .from('bookings')
-          .insert({
-            teacher_id: teacherId,
-            student_id: studentId,
-            academy_id: academyId,
-            start_at: startAt.toISOString(),
-            end_at: endAt.toISOString(),
-            status_canonical: isReserved ? 'RESERVED' : 'PAID',
-            series_id: series.id,
-            is_reserved: isReserved,
-            source: 'ALUNO',
-            created_at: new Date().toISOString()
-          })
-          .select()
-          .single()
-
-        if (!bookingError && booking) {
-          bookings.push({
-            id: booking.id,
-            date: dateStr,
-            startTime,
-            endTime,
-            status: booking.status_canonical,
-            isReserved
-          })
-
-          if (!isReserved) {
-            await debitStudentCredits(studentId!, 1, booking.id)
-            creditsUsed++
-            confirmedCount++
-          } else {
-            reservedCount++
-          }
-        }
+      } catch (error: any) {
+        console.error(`[booking-series] ❌ Erro inesperado ao processar ${dateStr}:`, error)
+        bookingErrors.push({ date: dateStr, error: error.message || 'Erro inesperado' })
+        // Continuar para próxima data mesmo se falhar
       }
+    }
+
+    console.log(`[booking-series] Resumo: ${bookings.length} bookings criados/atualizados, ${confirmedCount} confirmados, ${reservedCount} reservados, ${bookingErrors.length} erros`)
+
+    // Se houver erros mas pelo menos alguns bookings foram criados, avisar mas não falhar completamente
+    if (bookingErrors.length > 0 && bookings.length === 0) {
+      return res.status(500).json({
+        error: 'Erro ao criar bookings da série',
+        details: bookingErrors
+      })
     }
 
     // Criar notificação de série criada
@@ -434,9 +587,12 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<any> 
       totalCreditsUsed: creditsUsed,
       skippedDates,
       bookings,
-      message: reservedCount > 0
-        ? `Série criada! ${confirmedCount} aulas confirmadas e ${reservedCount} reservadas. As reservas precisam de crédito até 7 dias antes.`
-        : `Série criada com ${confirmedCount} aulas confirmadas!`
+      bookingErrors: bookingErrors.length > 0 ? bookingErrors : undefined,
+      message: bookingErrors.length > 0
+        ? `Série criada com ${confirmedCount} aulas confirmadas e ${reservedCount} reservadas. ${bookingErrors.length} data(s) falharam ao criar booking.`
+        : reservedCount > 0
+          ? `Série criada! ${confirmedCount} aulas confirmadas e ${reservedCount} reservadas. As reservas precisam de crédito até 7 dias antes.`
+          : `Série criada com ${confirmedCount} aulas confirmadas!`
     })
 
   } catch (error) {
@@ -516,6 +672,138 @@ router.get('/:seriesId', requireAuth, async (req: Request, res: Response): Promi
 })
 
 /**
+ * DELETE /api/booking-series/:seriesId
+ * Deleta a série inteira e todos os bookings associados
+ * Usado quando não há bookingId disponível ou para forçar remoção completa
+ */
+router.delete('/:seriesId', requireAuth, async (req: Request, res: Response): Promise<any> => {
+  try {
+    const user = req.user
+    if (!user) {
+      return res.status(401).json({ error: 'Usuário não autenticado' })
+    }
+
+    const { seriesId } = req.params
+
+    console.log(`[booking-series/delete] Iniciando deleção da série ${seriesId}`)
+
+    // Buscar série
+    const { data: series, error: seriesError } = await supabase
+      .from('booking_series')
+      .select('*')
+      .eq('id', seriesId)
+      .single()
+
+    if (seriesError || !series) {
+      console.error(`[booking-series/delete] Série não encontrada: ${seriesId}`)
+      return res.status(404).json({ error: 'Série não encontrada' })
+    }
+
+    // Verificar permissão
+    const isOwner = series.student_id === user.userId || series.teacher_id === user.userId
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'FRANCHISE_ADMIN', 'FRANQUEADORA'].includes(user.role)
+
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ error: 'Sem permissão para deletar esta série' })
+    }
+
+    // Buscar todos os bookings da série para estornar créditos
+    const { data: allBookings, error: bookingsError } = await supabase
+      .from('bookings')
+      .select('id, is_reserved, status_canonical')
+      .eq('series_id', seriesId)
+
+    if (bookingsError) {
+      console.error(`[booking-series/delete] Erro ao buscar bookings:`, bookingsError)
+    }
+
+    console.log(`[booking-series/delete] Encontrados ${allBookings?.length || 0} bookings para a série`)
+
+    // Contar créditos a estornar (apenas bookings que foram confirmados/pagos)
+    const confirmedBookings = allBookings?.filter(b =>
+      !b.is_reserved &&
+      b.status_canonical !== 'CANCELED' &&
+      b.status_canonical !== 'CANCELLED'
+    ) || []
+    const refundedCredits = confirmedBookings.length
+
+    console.log(`[booking-series/delete] Créditos a estornar: ${refundedCredits}`)
+
+    // Deletar todos os bookings da série (não apenas marcar como cancelado, mas remover)
+    if (allBookings && allBookings.length > 0) {
+      const ids = allBookings.map(b => b.id)
+
+      const { error: deleteBookingsError } = await supabase
+        .from('bookings')
+        .delete()
+        .in('id', ids)
+
+      if (deleteBookingsError) {
+        console.error(`[booking-series/delete] Erro ao deletar bookings:`, deleteBookingsError)
+        // Fallback: tentar marcar como cancelado
+        await supabase
+          .from('bookings')
+          .update({ status_canonical: 'CANCELED', updated_at: new Date().toISOString() })
+          .in('id', ids)
+      } else {
+        console.log(`[booking-series/delete] ${ids.length} bookings deletados`)
+      }
+    }
+
+    // Estornar créditos
+    if (refundedCredits > 0 && series.student_id) {
+      const refunded = await refundStudentCredits(
+        series.student_id,
+        refundedCredits,
+        seriesId,
+        series.academy_id,
+        'BOOKING_SERIES_DELETED'
+      )
+
+      if (refunded) {
+        console.log(`[booking-series/delete] ${refundedCredits} créditos estornados para ${series.student_id}`)
+      } else {
+        console.error(`[booking-series/delete] Falha ao estornar créditos para ${series.student_id}`)
+      }
+    }
+
+    // Deletar notificações da série
+    await supabase
+      .from('booking_series_notifications')
+      .delete()
+      .eq('series_id', seriesId)
+
+    // Deletar a série
+    const { error: deleteSeriesError } = await supabase
+      .from('booking_series')
+      .delete()
+      .eq('id', seriesId)
+
+    if (deleteSeriesError) {
+      console.error(`[booking-series/delete] Erro ao deletar série:`, deleteSeriesError)
+      // Fallback: marcar como cancelada
+      await supabase
+        .from('booking_series')
+        .update({ status: 'CANCELLED', updated_at: new Date().toISOString() })
+        .eq('id', seriesId)
+    } else {
+      console.log(`[booking-series/delete] Série ${seriesId} deletada`)
+    }
+
+    return res.json({
+      success: true,
+      deletedBookings: allBookings?.length || 0,
+      refundedCredits,
+      message: `Série deletada com sucesso. ${allBookings?.length || 0} agendamento(s) removido(s).${refundedCredits > 0 ? ` ${refundedCredits} crédito(s) estornado(s).` : ''}`
+    })
+
+  } catch (error) {
+    console.error('Erro ao deletar série:', error)
+    return res.status(500).json({ error: 'Erro interno do servidor' })
+  }
+})
+
+/**
  * DELETE /api/booking-series/:seriesId/bookings/:bookingId
  * Cancela um booking de uma série (com opção de cancelar futuros ou todos)
  */
@@ -574,13 +862,14 @@ router.delete('/:seriesId/bookings/:bookingId', requireAuth, async (req: Request
 
       // Estornar crédito se não era reserva
       if (!booking.is_reserved && booking.student_id) {
-        const currentBalance = await getStudentCredits(booking.student_id)
-        await supabase
-          .from('student_class_balance')
-          .update({ balance: currentBalance + 1, updated_at: new Date().toISOString() })
-          .eq('student_id', booking.student_id)
-
-        refundedCredits = 1
+        const refunded = await refundStudentCredits(
+          booking.student_id,
+          1,
+          booking.id,
+          booking.franchise_id || series.academy_id, // fallback for academy
+          'BOOKING_CANCELLED_SINGLE'
+        )
+        if (refunded) refundedCredits = 1
       }
 
     } else if (cancelType === 'future') {
@@ -607,11 +896,13 @@ router.delete('/:seriesId/bookings/:bookingId', requireAuth, async (req: Request
         refundedCredits = confirmedBookings.length
 
         if (refundedCredits > 0 && booking.student_id) {
-          const currentBalance = await getStudentCredits(booking.student_id)
-          await supabase
-            .from('student_class_balance')
-            .update({ balance: currentBalance + refundedCredits, updated_at: new Date().toISOString() })
-            .eq('student_id', booking.student_id)
+          await refundStudentCredits(
+            booking.student_id,
+            refundedCredits,
+            booking.id, // using current booking id as ref
+            booking.franchise_id || series.academy_id,
+            'BOOKING_CANCELLED_FUTURE'
+          )
         }
       }
 
@@ -638,11 +929,13 @@ router.delete('/:seriesId/bookings/:bookingId', requireAuth, async (req: Request
         refundedCredits = confirmedBookings.length
 
         if (refundedCredits > 0 && series.student_id) {
-          const currentBalance = await getStudentCredits(series.student_id)
-          await supabase
-            .from('student_class_balance')
-            .update({ balance: currentBalance + refundedCredits, updated_at: new Date().toISOString() })
-            .eq('student_id', series.student_id)
+          await refundStudentCredits(
+            series.student_id,
+            refundedCredits,
+            seriesId, // using series id as ref
+            series.academy_id,
+            'BOOKING_CANCELLED_ALL'
+          )
         }
 
         // Atualizar status da série
@@ -715,6 +1008,7 @@ router.get('/student/my-series', requireAuth, async (req: Request, res: Response
 /**
  * GET /api/booking-series/teacher/my-series
  * Lista séries do professor logado
+ * Inclui contagem de bookings confirmados vs reservados (Requirement 3.4)
  */
 router.get('/teacher/my-series', requireAuth, async (req: Request, res: Response): Promise<any> => {
   try {
@@ -738,7 +1032,30 @@ router.get('/teacher/my-series', requireAuth, async (req: Request, res: Response
       return res.status(500).json({ error: 'Erro ao buscar séries' })
     }
 
-    return res.json(series || [])
+    // Enrich each series with booking counts (Requirement 3.4)
+    const enrichedSeries = await Promise.all(
+      (series || []).map(async (s: any) => {
+        const { data: bookings } = await supabase
+          .from('bookings')
+          .select('id, is_reserved, status_canonical')
+          .eq('series_id', s.id)
+
+        const confirmedCount = bookings?.filter(
+          (b: any) => !b.is_reserved && b.status_canonical !== 'CANCELED'
+        ).length || 0
+        const reservedCount = bookings?.filter(
+          (b: any) => b.is_reserved && b.status_canonical !== 'CANCELED'
+        ).length || 0
+
+        return {
+          ...s,
+          confirmedCount,
+          reservedCount
+        }
+      })
+    )
+
+    return res.json(enrichedSeries)
 
   } catch (error) {
     console.error('Erro ao buscar séries do professor:', error)
@@ -836,7 +1153,7 @@ router.post('/process-reservations', requireAuth, async (req: Request, res: Resp
 
     const { data: reservations, error } = await supabase
       .from('bookings')
-      .select('id, student_id, teacher_id, start_at, series_id')
+      .select('id, student_id, teacher_id, start_at, series_id, franchise_id')
       .eq('is_reserved', true)
       .neq('status_canonical', 'CANCELED')
       .gte('start_at', sevenDaysFromNow.toISOString())
@@ -860,11 +1177,11 @@ router.post('/process-reservations', requireAuth, async (req: Request, res: Resp
 
       try {
         // Verificar créditos do aluno
-        const balance = await getStudentCredits(reservation.student_id)
+        const balance = await getStudentCredits(reservation.student_id, reservation.franchise_id)
 
         if (balance >= 1) {
           // Debitar crédito e confirmar
-          const debited = await debitStudentCredits(reservation.student_id, 1, reservation.id)
+          const debited = await debitStudentCredits(reservation.student_id, 1, reservation.id, reservation.franchise_id)
 
           if (debited) {
             await supabase
@@ -956,6 +1273,182 @@ router.post('/process-reservations', requireAuth, async (req: Request, res: Resp
 
   } catch (error) {
     console.error('Erro ao processar reservas:', error)
+    return res.status(500).json({ error: 'Erro interno do servidor' })
+  }
+})
+
+/**
+ * POST /api/booking-series/:seriesId/regenerate
+ * Regenera os bookings faltantes de uma série existente
+ * Útil para corrigir séries que foram criadas com bugs
+ */
+router.post('/:seriesId/regenerate', requireAuth, async (req: Request, res: Response): Promise<any> => {
+  try {
+    const user = req.user
+    if (!user) {
+      return res.status(401).json({ error: 'Usuário não autenticado' })
+    }
+
+    const { seriesId } = req.params
+
+    // Buscar série
+    const { data: series, error: seriesError } = await supabase
+      .from('booking_series')
+      .select('*')
+      .eq('id', seriesId)
+      .single()
+
+    if (seriesError || !series) {
+      return res.status(404).json({ error: 'Série não encontrada' })
+    }
+
+    // Verificar permissão
+    const isOwner = series.student_id === user.userId || series.teacher_id === user.userId
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'FRANCHISE_ADMIN', 'FRANQUEADORA'].includes(user.role)
+
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ error: 'Sem permissão para regenerar esta série' })
+    }
+
+    console.log(`[booking-series/regenerate] Regenerando bookings para série ${seriesId}`)
+    console.log(`[booking-series/regenerate] Dados da série:`, {
+      start_date: series.start_date,
+      end_date: series.end_date,
+      day_of_week: series.day_of_week,
+      start_time: series.start_time,
+      end_time: series.end_time,
+      recurrence_type: series.recurrence_type
+    })
+
+    // Calcular datas da série
+    const start = new Date(series.start_date + 'T00:00:00')
+    const end = new Date(series.end_date + 'T00:00:00')
+    const seriesDates = generateSeriesDates(start, end, series.day_of_week)
+
+    console.log(`[booking-series/regenerate] Datas da série: ${seriesDates.map(d => format(d, 'yyyy-MM-dd')).join(', ')}`)
+
+    // Buscar bookings existentes da série pelo start_at exato (não apenas pela data)
+    const { data: existingBookings, error: existingError } = await supabase
+      .from('bookings')
+      .select('id, date, start_at, status_canonical')
+      .eq('series_id', seriesId)
+
+    if (existingError) {
+      console.error('[booking-series/regenerate] Erro ao buscar bookings existentes:', existingError)
+    }
+
+    // Usar start_at como chave para evitar duplicatas em horários diferentes do mesmo dia
+    const existingStartAts = new Set(
+      (existingBookings || []).map(b => b.start_at).filter(Boolean)
+    )
+
+    console.log(`[booking-series/regenerate] Bookings existentes: ${existingBookings?.length || 0}`)
+    console.log(`[booking-series/regenerate] start_at existentes: ${existingStartAts.size}`)
+
+    // Calcular quais start_at precisam ser criados
+    const bookingsToCreate: { dateStr: string; startAt: string; endAt: string }[] = []
+
+    for (const date of seriesDates) {
+      const dateStr = format(date, 'yyyy-MM-dd')
+      const startAt = createUtcDateTime(dateStr, series.start_time)
+      const startAtStr = startAt.toISOString()
+
+      if (!existingStartAts.has(startAtStr)) {
+        const endAt = createUtcDateTime(dateStr, series.end_time)
+        bookingsToCreate.push({
+          dateStr,
+          startAt: startAtStr,
+          endAt: endAt.toISOString()
+        })
+      }
+    }
+
+    console.log(`[booking-series/regenerate] Bookings a criar: ${bookingsToCreate.length}`)
+
+    if (bookingsToCreate.length === 0) {
+      return res.json({
+        success: true,
+        message: 'Todos os bookings da série já existem',
+        existingCount: existingBookings?.length || 0,
+        createdCount: 0
+      })
+    }
+
+    // Buscar créditos disponíveis do aluno
+    let studentCredits = 0
+    if (series.student_id) {
+      studentCredits = await getStudentCredits(series.student_id, series.academy_id)
+      console.log(`[booking-series/regenerate] Créditos do aluno: ${studentCredits}`)
+    }
+
+    // Criar bookings faltantes
+    const createdBookings: any[] = []
+    const errors: { date: string; error: string }[] = []
+    let creditsUsed = 0
+
+    for (const { dateStr, startAt, endAt } of bookingsToCreate) {
+      try {
+        // Verificar se ainda há créditos
+        const hasCredit = creditsUsed < studentCredits
+        const isReserved = !hasCredit
+
+        console.log(`[booking-series/regenerate] Criando booking para ${dateStr} - hasCredit: ${hasCredit}, isReserved: ${isReserved}`)
+
+        const { data: booking, error: bookingError } = await supabase
+          .from('bookings')
+          .insert({
+            teacher_id: series.teacher_id,
+            student_id: series.student_id,
+            franchise_id: series.academy_id,
+            start_at: startAt,
+            end_at: endAt,
+            date: dateStr,
+            status_canonical: isReserved ? 'RESERVED' : 'PAID',
+            series_id: seriesId,
+            is_reserved: isReserved,
+            source: 'ALUNO',
+            created_at: new Date().toISOString()
+          })
+          .select()
+          .single()
+
+        if (bookingError) {
+          console.error(`[booking-series/regenerate] ❌ Erro ao criar booking para ${dateStr}:`, bookingError)
+          errors.push({ date: dateStr, error: bookingError.message || 'Erro ao criar' })
+        } else if (booking) {
+          console.log(`[booking-series/regenerate] ✅ Booking criado: ${booking.id}, status: ${booking.status_canonical}`)
+          createdBookings.push({
+            id: booking.id,
+            date: dateStr,
+            status: booking.status_canonical
+          })
+
+          // Debitar crédito se não for reserva
+          if (!isReserved && series.student_id) {
+            const debited = await debitStudentCredits(series.student_id, 1, booking.id, series.academy_id)
+            if (debited) {
+              creditsUsed++
+            }
+          }
+        }
+      } catch (error: any) {
+        console.error(`[booking-series/regenerate] ❌ Erro inesperado para ${dateStr}:`, error)
+        errors.push({ date: dateStr, error: error.message || 'Erro inesperado' })
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: `Regeneração concluída: ${createdBookings.length} bookings criados, ${errors.length} erros`,
+      existingCount: existingBookings?.length || 0,
+      createdCount: createdBookings.length,
+      creditsUsed,
+      createdBookings,
+      errors: errors.length > 0 ? errors : undefined
+    })
+
+  } catch (error) {
+    console.error('Erro ao regenerar série:', error)
     return res.status(500).json({ error: 'Erro interno do servidor' })
   }
 })

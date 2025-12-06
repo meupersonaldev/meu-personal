@@ -107,7 +107,8 @@ export const useAuthStore = create<AuthState>()(
                 phone: user.phone,
                 role: user.role,
                 avatar_url: user.avatarUrl ?? user.avatar_url,
-                approval_status: user.approval_status
+                approval_status: user.approval_status,
+                gender: user.gender
               },
               isAuthenticated: true,
               isLoading: false
@@ -286,7 +287,8 @@ export const useAuthStore = create<AuthState>()(
                 ...currentUser,
                 ...user,
                 avatar_url: user.avatarUrl ?? user.avatar_url,
-                approval_status: user.approval_status
+                approval_status: user.approval_status,
+                gender: user.gender
               }
             })
           }

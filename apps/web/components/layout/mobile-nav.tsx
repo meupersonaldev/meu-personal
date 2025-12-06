@@ -22,7 +22,6 @@ export function MobileNav() {
         { href: '/aluno/buscar', label: 'Buscar', icon: Search },
         { href: '/aluno/dashboard?section=aulas', label: 'Aulas', icon: Calendar },
         { href: '/aluno/perfil', label: 'Perfil', icon: User },
-        { href: '/aluno/dashboard?section=config', label: 'Configurações', icon: Settings },
       ]
     }
     

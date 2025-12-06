@@ -7,7 +7,7 @@ import {
 
 async function fetchFranqueadoraIdFromAcademy(academyId: string): Promise<string> {
   console.log(`🔍 Buscando franqueadora_id para academyId: ${academyId}`)
-  
+
   const { data: academy, error: academyError } = await supabase
     .from('academies')
     .select('franqueadora_id, name')
@@ -123,9 +123,9 @@ class BookingCanonicalService {
 
     // Calcular cancellable_until baseado no horário do booking existente
     // Regra: 4 horas antes do horário de início
-    const bookingStartAt = existingBooking.start_at 
+    const bookingStartAt = existingBooking.start_at
       ? new Date(existingBooking.start_at)
-      : existingBooking.date 
+      : existingBooking.date
         ? new Date(existingBooking.date)
         : null;
 
@@ -177,7 +177,33 @@ class BookingCanonicalService {
       }
     );
 
+    // Sincronizar cache de créditos do usuário
+    await this.syncUserCredits(params.studentId, franqueadoraId);
+
     return updatedBooking;
+  }
+
+  private async syncUserCredits(studentId: string, franqueadoraId: string): Promise<void> {
+    try {
+      const balance = await balanceService.getStudentBalance(studentId, franqueadoraId);
+      const available = getAvailableClasses(balance);
+
+      const { error } = await supabase
+        .from('users')
+        .update({
+          credits: Math.max(0, available),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', studentId);
+
+      if (error) {
+        console.error('[syncUserCredits] Erro ao sincronizar créditos:', error);
+      } else {
+        console.log(`[syncUserCredits] Créditos sincronizados para usuário ${studentId}: ${available}`);
+      }
+    } catch (err) {
+      console.error('[syncUserCredits] Erro ao buscar saldo:', err);
+    }
   }
 
   private async createStudentLedBooking(
@@ -206,7 +232,7 @@ class BookingCanonicalService {
       .eq('is_active', true)
       .limit(1)
       .single();
-    
+
     if (unit?.capacity_per_slot) {
       unitCapacity = unit.capacity_per_slot;
     } else {
@@ -216,7 +242,7 @@ class BookingCanonicalService {
         .select('capacity_per_slot')
         .eq('id', params.franchiseId)
         .single();
-      
+
       if (academy?.capacity_per_slot) {
         unitCapacity = academy.capacity_per_slot;
       }
@@ -238,10 +264,10 @@ class BookingCanonicalService {
     // Verificar sobreposição de horários na unidade
     const overlappingUnitBookings = (unitBookings || []).filter((b: any) => {
       const bookingStart = b.start_at ? new Date(b.start_at) : new Date(b.date);
-      const bookingEnd = b.end_at 
+      const bookingEnd = b.end_at
         ? new Date(b.end_at)
         : new Date(bookingStart.getTime() + (b.duration || 60) * 60000);
-      
+
       // Verificar se há sobreposição: o novo agendamento começa antes do existente terminar
       // e o novo agendamento termina depois do existente começar
       return (params.startAt < bookingEnd && params.endAt > bookingStart);
@@ -253,7 +279,7 @@ class BookingCanonicalService {
 
     // VALIDAÇÃO 2: Verificar conflito de professor (mesmo professor não pode atender 2 alunos ao mesmo tempo)
     const startAtISO = params.startAt.toISOString();
-    
+
     // Buscar bookings do professor que sobrepõem com o horário solicitado
     const { data: teacherBookings, error: teacherBookingsError } = await supabase
       .from('bookings')
@@ -271,10 +297,10 @@ class BookingCanonicalService {
     // Verificar sobreposição de horários do professor
     const teacherOverlapping = (teacherBookings || []).filter((b: any) => {
       const bookingStart = b.start_at ? new Date(b.start_at) : new Date(b.date);
-      const bookingEnd = b.end_at 
+      const bookingEnd = b.end_at
         ? new Date(b.end_at)
         : new Date(bookingStart.getTime() + (b.duration || 60) * 60000);
-      
+
       // Verificar se há sobreposição
       return (params.startAt < bookingEnd && params.endAt > bookingStart);
     });
@@ -404,6 +430,9 @@ class BookingCanonicalService {
       }
     );
 
+    // Sincronizar cache de créditos
+    await this.syncUserCredits(params.studentId, franqueadoraId);
+
     // Professor recebe as horas direto (já confirmado)
     // NÃO passar unitId - sempre null
     await balanceService.purchaseProfessorHours(
@@ -483,7 +512,7 @@ class BookingCanonicalService {
       .eq('is_active', true)
       .limit(1)
       .single();
-    
+
     if (unit?.capacity_per_slot) {
       unitCapacity = unit.capacity_per_slot;
     } else {
@@ -493,7 +522,7 @@ class BookingCanonicalService {
         .select('capacity_per_slot')
         .eq('id', params.franchiseId)
         .single();
-      
+
       if (academy?.capacity_per_slot) {
         unitCapacity = academy.capacity_per_slot;
       }
@@ -515,10 +544,10 @@ class BookingCanonicalService {
     // Verificar sobreposição de horários na unidade
     const overlappingUnitBookings = (unitBookings || []).filter((b: any) => {
       const bookingStart = b.start_at ? new Date(b.start_at) : new Date(b.date);
-      const bookingEnd = b.end_at 
+      const bookingEnd = b.end_at
         ? new Date(b.end_at)
         : new Date(bookingStart.getTime() + (b.duration || 60) * 60000);
-      
+
       // Verificar se há sobreposição: o novo agendamento começa antes do existente terminar
       // e o novo agendamento termina depois do existente começar
       return (params.startAt < bookingEnd && params.endAt > bookingStart);
@@ -546,10 +575,10 @@ class BookingCanonicalService {
     // Verificar sobreposição de horários do professor
     const teacherOverlapping = (teacherBookings || []).filter((b: any) => {
       const bookingStart = b.start_at ? new Date(b.start_at) : new Date(b.date);
-      const bookingEnd = b.end_at 
+      const bookingEnd = b.end_at
         ? new Date(b.end_at)
         : new Date(bookingStart.getTime() + (b.duration || 60) * 60000);
-      
+
       // Verificar se há sobreposição
       return (params.startAt < bookingEnd && params.endAt > bookingStart);
     });
@@ -595,11 +624,11 @@ class BookingCanonicalService {
     // Professor agendando para aluno: consome horas do PROFESSOR
     // (Professor paga pela aula do aluno)
     const profBalance = await balanceService.getProfessorBalance(params.professorId, franqueadoraId);
-    
+
     if (profBalance.available_hours < 1) {
       throw new Error('Saldo de horas insuficiente');
     }
-    
+
     // Decrementar available_hours direto (já confirmado como PAID)
     await balanceService.updateProfessorBalance(
       params.professorId,
@@ -608,7 +637,7 @@ class BookingCanonicalService {
         available_hours: profBalance.available_hours - 1
       }
     );
-    
+
     // Registrar transação de consumo
     await balanceService.createHourTransaction(
       params.professorId,
@@ -672,7 +701,7 @@ class BookingCanonicalService {
 
     // Verificar quem fez o agendamento (source) para aplicar política de cancelamento
     const hasStudent = Boolean(booking.student_id);
-    
+
     if (hasStudent && booking.source === 'ALUNO') {
       // Regra 4h: cancelamento gratuito até 4h antes estorna o crédito; após esse prazo, não estorna.
       const nowUtc = new Date();
@@ -693,17 +722,17 @@ class BookingCanonicalService {
       if (freeCancel) {
         try {
           console.log('[CANCEL BOOKING] ✅ Cancelamento dentro do prazo - estornando crédito');
-          
+
           // Cancelamento antes de 4h: estornar o crédito do aluno e reverter a hora do professor
           const studentBalance = await balanceService.getStudentBalance(booking.student_id, franqueadoraId);
-          
+
           console.log('[CANCEL BOOKING] Balance antes do estorno:', {
             total_purchased: studentBalance.total_purchased,
             total_consumed: studentBalance.total_consumed,
             locked_qty: studentBalance.locked_qty,
             available: getAvailableClasses(studentBalance)
           });
-          
+
           // Criar transação de estorno (REFUND)
           const refundTransaction = await balanceService.createStudentTransaction(
             booking.student_id,
@@ -728,7 +757,7 @@ class BookingCanonicalService {
           // Buscar balance novamente para garantir que está atualizado
           const currentBalance = await balanceService.getStudentBalance(booking.student_id, franqueadoraId);
           const newConsumed = Math.max(0, currentBalance.total_consumed - 1);
-          
+
           const restoredBalance = await balanceService.updateStudentBalance(
             booking.student_id,
             franqueadoraId,
@@ -764,20 +793,8 @@ class BookingCanonicalService {
             });
           }
 
-          // Calcular créditos disponíveis e atualizar campo credits na tabela users
-          const availableAfterRefund = getAvailableClasses(restoredBalance);
-
-          const { error: updateUserError } = await supabase
-            .from('users')
-            .update({ credits: Math.max(0, availableAfterRefund), updated_at: new Date().toISOString() })
-            .eq('id', booking.student_id);
-
-          if (updateUserError) {
-            console.error('[CANCEL BOOKING] ❌ Erro ao atualizar campo credits do usuário:', updateUserError);
-            throw updateUserError;
-          } else {
-            console.log('[CANCEL BOOKING] ✅ Campo credits atualizado:', availableAfterRefund);
-          }
+          // Sincronizar cache de créditos
+          await this.syncUserCredits(booking.student_id, franqueadoraId);
         } catch (error) {
           console.error('[CANCEL BOOKING] ❌ Erro ao estornar crédito:', error);
           // Não lançar o erro para não impedir o cancelamento, mas logar para debug
@@ -808,7 +825,7 @@ class BookingCanonicalService {
     } else if (hasStudent && booking.source === 'PROFESSOR') {
       // PROFESSOR agendou para aluno: devolver horas ao PROFESSOR
       const profBalance = await balanceService.getProfessorBalance(booking.teacher_id, franqueadoraId);
-      
+
       // Incrementar available_hours de volta (refund)
       await balanceService.updateProfessorBalance(
         booking.teacher_id,
@@ -817,7 +834,7 @@ class BookingCanonicalService {
           available_hours: profBalance.available_hours + 1
         }
       );
-      
+
       // Registrar transação de refund
       await balanceService.createHourTransaction(
         booking.teacher_id,

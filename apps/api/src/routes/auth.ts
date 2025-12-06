@@ -524,6 +524,7 @@ router.get('/me', async (req, res) => {
 
     res.json({
       user: {
+        gender: user.gender,
         id: user.id,
         name: user.name,
         email: user.email,

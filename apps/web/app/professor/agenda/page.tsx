@@ -7,7 +7,8 @@ import ProfessorLayout from '@/components/layout/professor-layout'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
 import {
   Calendar,
   MapPin,
@@ -23,6 +24,8 @@ import { toast } from 'sonner'
 interface Booking {
   id: string
   date: string
+  startAt?: string
+  endAt?: string
   duration: number
   status: string
   studentId?: string
@@ -37,59 +40,59 @@ interface Booking {
 type ViewMode = 'day' | 'week' | 'month'
 
 const STATUS_COLORS: Record<string, { bg: string; text: string; label: string; icon: string; accent: string; gradient: string }> = {
-  AVAILABLE: { 
-    bg: 'bg-gradient-to-r from-emerald-500 to-teal-400', 
-    text: 'text-white', 
-    label: 'Disponível', 
-    icon: '✓', 
+  AVAILABLE: {
+    bg: 'bg-gradient-to-r from-emerald-500 to-teal-400',
+    text: 'text-white',
+    label: 'Disponível',
+    icon: '✓',
     accent: 'border-l-emerald-600',
     gradient: 'from-emerald-500/20 to-teal-400/20'
   },
-  PAID: { 
-    bg: 'bg-gradient-to-r from-blue-500 to-indigo-500', 
-    text: 'text-white', 
-    label: 'Confirmada', 
-    icon: '👤', 
+  PAID: {
+    bg: 'bg-gradient-to-r from-blue-500 to-indigo-500',
+    text: 'text-white',
+    label: 'Confirmada',
+    icon: '👤',
     accent: 'border-l-blue-600',
     gradient: 'from-blue-500/20 to-indigo-500/20'
   },
-  CONFIRMED: { 
-    bg: 'bg-gradient-to-r from-blue-500 to-indigo-500', 
-    text: 'text-white', 
-    label: 'Confirmada', 
-    icon: '👤', 
+  CONFIRMED: {
+    bg: 'bg-gradient-to-r from-blue-500 to-indigo-500',
+    text: 'text-white',
+    label: 'Confirmada',
+    icon: '👤',
     accent: 'border-l-blue-600',
     gradient: 'from-blue-500/20 to-indigo-500/20'
   },
-  RESERVED: { 
-    bg: 'bg-gradient-to-r from-amber-500 to-orange-400', 
-    text: 'text-white', 
-    label: 'Reservada', 
-    icon: '⏳', 
+  RESERVED: {
+    bg: 'bg-gradient-to-r from-amber-500 to-orange-400',
+    text: 'text-white',
+    label: 'Reservada',
+    icon: '⏳',
     accent: 'border-l-amber-600',
     gradient: 'from-amber-500/20 to-orange-400/20'
   },
-  COMPLETED: { 
-    bg: 'bg-gradient-to-r from-slate-400 to-slate-500', 
-    text: 'text-white', 
-    label: 'Concluída', 
-    icon: '✔', 
+  COMPLETED: {
+    bg: 'bg-gradient-to-r from-slate-400 to-slate-500',
+    text: 'text-white',
+    label: 'Concluída',
+    icon: '✔',
     accent: 'border-l-slate-500',
     gradient: 'from-slate-400/20 to-slate-500/20'
   },
-  CANCELED: { 
-    bg: 'bg-gradient-to-r from-red-500 to-rose-500', 
-    text: 'text-white', 
-    label: 'Cancelada', 
-    icon: '✕', 
+  CANCELED: {
+    bg: 'bg-gradient-to-r from-red-500 to-rose-500',
+    text: 'text-white',
+    label: 'Cancelada',
+    icon: '✕',
     accent: 'border-l-red-600',
     gradient: 'from-red-500/20 to-rose-500/20'
   },
-  BLOCKED: { 
-    bg: 'bg-gradient-to-r from-orange-500 to-red-400', 
-    text: 'text-white', 
-    label: 'Bloqueado', 
-    icon: '🚫', 
+  BLOCKED: {
+    bg: 'bg-gradient-to-r from-orange-500 to-red-400',
+    text: 'text-white',
+    label: 'Bloqueado',
+    icon: '🚫',
     accent: 'border-l-orange-600',
     gradient: 'from-orange-500/20 to-red-400/20'
   },
@@ -100,7 +103,7 @@ const HOURS = Array.from({ length: 24 }, (_, i) => i) // 00:00 - 23:00 (24h - ca
 export default function AgendaPage() {
   const { user, token } = useAuthStore()
   const { academies: teacherAcademies, loading: loadingAcademies } = useTeacherAcademies()
-  
+
   const [viewMode, setViewMode] = useState<ViewMode>('week')
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedAcademy, setSelectedAcademy] = useState<string>('todas')
@@ -122,7 +125,7 @@ export default function AgendaPage() {
   // Buscar bookings
   const fetchBookings = useCallback(async () => {
     if (!user?.id || !token) return
-    
+
     setLoading(true)
     try {
       // Buscar todos os bookings do professor (API retorna todos)
@@ -130,15 +133,31 @@ export default function AgendaPage() {
       if (res.ok) {
         const data = await res.json()
         const allBookings = data.bookings || []
-        
+
+        // Log para debug
+        console.log(`[Agenda] Total de bookings recebidos: ${allBookings.length}`)
+        const seriesBookings = allBookings.filter((b: Booking) => b.series_id)
+        console.log(`[Agenda] Bookings de séries: ${seriesBookings.length}`)
+        if (seriesBookings.length > 0) {
+          console.log(`[Agenda] Detalhes dos bookings de séries:`, seriesBookings.map(b => ({
+            id: b.id,
+            series_id: b.series_id,
+            date: b.date,
+            studentId: b.studentId,
+            franchiseId: b.franchiseId
+          })))
+        }
+
         // Filtrar apenas aulas com alunos (não mostrar slots disponíveis)
         let filtered = allBookings.filter((b: Booking) => b.studentId)
-        
+        console.log(`[Agenda] Bookings com studentId: ${filtered.length}`)
+
         // Filtrar por academia se selecionada
         if (selectedAcademy !== 'todas') {
           filtered = filtered.filter((b: Booking) => b.franchiseId === selectedAcademy)
+          console.log(`[Agenda] Bookings após filtrar por academia ${selectedAcademy}: ${filtered.length}`)
         }
-        
+
         setBookings(filtered)
       }
     } catch {
@@ -151,6 +170,27 @@ export default function AgendaPage() {
   useEffect(() => {
     fetchBookings()
   }, [fetchBookings])
+
+  // DEBUG: Função temporária para regenerar bookings de uma série com problemas
+  const regenerateSeries = async (seriesId: string) => {
+    try {
+      console.log(`[Agenda] Regenerando série ${seriesId}...`)
+      const res = await authFetch(`/api/booking-series/${seriesId}/regenerate`, {
+        method: 'POST'
+      })
+      const data = await res.json()
+      console.log('[Agenda] Resultado da regeneração:', data)
+      if (res.ok) {
+        toast.success(`Regeneração: ${data.createdCount} bookings criados!`)
+        fetchBookings() // Recarregar a agenda
+      } else {
+        toast.error(data.error || 'Erro ao regenerar série')
+      }
+    } catch (error) {
+      console.error('[Agenda] Erro ao regenerar série:', error)
+      toast.error('Erro ao regenerar série')
+    }
+  }
 
   // Helpers de data
   function getWeekStart(date: Date): Date {
@@ -175,15 +215,15 @@ export default function AgendaPage() {
     const month = date.getMonth()
     const firstDay = new Date(year, month, 1)
     const lastDay = new Date(year, month + 1, 0)
-    
+
     // Começar do domingo da primeira semana
     const startDate = new Date(firstDay)
     startDate.setDate(startDate.getDate() - firstDay.getDay())
-    
+
     // Terminar no sábado da última semana
     const endDate = new Date(lastDay)
     endDate.setDate(endDate.getDate() + (6 - lastDay.getDay()))
-    
+
     const days: Date[] = []
     const current = new Date(startDate)
     while (current <= endDate) {
@@ -210,26 +250,34 @@ export default function AgendaPage() {
   }
 
   function getBookingsForDate(date: Date): Booking[] {
+    const targetDateStr = date.toISOString().split('T')[0] // YYYY-MM-DD
     return bookings.filter(b => {
-      const bookingDate = new Date(b.date)
-      return bookingDate.toDateString() === date.toDateString()
+      // Usar startAt se disponível (tem hora completa), senão usar date
+      const bookingDateStr = b.startAt
+        ? new Date(b.startAt).toISOString().split('T')[0]
+        : b.date?.split('T')[0] || b.date
+      return bookingDateStr === targetDateStr
     })
   }
 
   function getBookingsForHour(date: Date, hour: number): Booking[] {
+    const targetDateStr = date.toISOString().split('T')[0] // YYYY-MM-DD
     return bookings.filter(b => {
-      const bookingDate = new Date(b.date)
-      return bookingDate.toDateString() === date.toDateString() && 
-             bookingDate.getHours() === hour
+      // Usar startAt se disponível (tem hora completa)
+      const bookingDateTime = b.startAt ? new Date(b.startAt) : new Date(b.date)
+      const bookingDateStr = bookingDateTime.toISOString().split('T')[0]
+      return bookingDateStr === targetDateStr &&
+        bookingDateTime.getHours() === hour
     })
   }
 
   function formatTime(dateStr: string): string {
     return new Date(dateStr).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
   }
-  
+
   function formatEndTime(booking: Booking): string {
-    const start = new Date(booking.date)
+    // Usar startAt se disponível, senão usar date
+    const start = booking.startAt ? new Date(booking.startAt) : new Date(booking.date)
     const end = new Date(start.getTime() + (booking.duration || 60) * 60000)
     return end.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
   }
@@ -267,9 +315,9 @@ export default function AgendaPage() {
               </h1>
               <p className="text-white/80 mt-1">Visualize e gerencie seus agendamentos</p>
             </div>
-            
+
             <div className="flex flex-wrap items-center gap-3">
-              <Button 
+              <Button
                 variant="secondary"
                 size="sm"
                 onClick={() => window.location.href = '/professor/disponibilidade'}
@@ -278,7 +326,7 @@ export default function AgendaPage() {
                 <Settings className="h-4 w-4 mr-2" />
                 Disponibilidade
               </Button>
-              
+
               <div className="flex items-center gap-2 bg-white/20 rounded-lg px-3 py-1.5 backdrop-blur-sm">
                 <MapPin className="h-4 w-4 text-white/80" />
                 <select
@@ -302,52 +350,51 @@ export default function AgendaPage() {
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               {/* Navegação */}
               <div className="flex items-center gap-1">
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => navigate('prev')}
                   className="hover:bg-meu-primary/10 rounded-full h-9 w-9 p-0"
                 >
                   <ChevronLeft className="h-5 w-5" />
                 </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={goToToday}
                   className="px-4 font-medium"
                 >
                   Hoje
                 </Button>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => navigate('next')}
                   className="hover:bg-meu-primary/10 rounded-full h-9 w-9 p-0"
                 >
                   <ChevronRight className="h-5 w-5" />
                 </Button>
-                
+
                 {loading && <Loader2 className="h-4 w-4 animate-spin text-meu-primary" />}
               </div>
-              
+
               {/* Título do período */}
               <h2 className="text-lg font-semibold text-center">
                 {viewMode === 'day' && currentDate.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
                 {viewMode === 'week' && `${weekDays[0].toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })} - ${weekDays[6].toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}`}
                 {viewMode === 'month' && currentDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
               </h2>
-              
+
               {/* Seletor de visualização */}
               <div className="flex bg-gray-100 rounded-xl p-1">
                 {(['day', 'week', 'month'] as ViewMode[]).map(mode => (
                   <button
                     key={mode}
                     onClick={() => setViewMode(mode)}
-                    className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
-                      viewMode === mode 
-                        ? 'bg-white text-meu-primary shadow-sm' 
-                        : 'text-gray-500 hover:text-gray-700'
-                    }`}
+                    className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${viewMode === mode
+                      ? 'bg-white text-meu-primary shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                      }`}
                   >
                     {mode === 'day' ? '📅 Dia' : mode === 'week' ? '📆 Semana' : '🗓️ Mês'}
                   </button>
@@ -390,9 +437,9 @@ export default function AgendaPage() {
                     </div>
                     <div className="flex-1 p-1">
                       {hourBookings.map(booking => (
-                        <BookingCard 
-                          key={booking.id} 
-                          booking={booking} 
+                        <BookingCard
+                          key={booking.id}
+                          booking={booking}
                           onClick={() => setSelectedBooking(booking)}
                         />
                       ))}
@@ -413,13 +460,12 @@ export default function AgendaPage() {
                   const isToday = day.toDateString() === new Date().toDateString()
                   const dayBookings = getBookingsForDate(day)
                   return (
-                    <div 
-                      key={i} 
-                      className={`p-3 text-center border-r last:border-r-0 transition-colors ${
-                        isToday 
-                          ? 'bg-gradient-to-b from-meu-primary/20 to-meu-primary/5' 
-                          : 'bg-gradient-to-b from-gray-50 to-white'
-                      }`}
+                    <div
+                      key={i}
+                      className={`p-3 text-center border-r last:border-r-0 transition-colors ${isToday
+                        ? 'bg-gradient-to-b from-meu-primary/20 to-meu-primary/5'
+                        : 'bg-gradient-to-b from-gray-50 to-white'
+                        }`}
                     >
                       <div className="text-xs font-medium text-gray-400 uppercase tracking-wider">
                         {day.toLocaleDateString('pt-BR', { weekday: 'short' })}
@@ -436,7 +482,7 @@ export default function AgendaPage() {
                   )
                 })}
               </div>
-              
+
               {/* Grade de horários */}
               <div className="max-h-[600px] overflow-y-auto">
                 {HOURS.map(hour => (
@@ -448,14 +494,14 @@ export default function AgendaPage() {
                       const hourBookings = getBookingsForHour(day, hour)
                       const isToday = day.toDateString() === new Date().toDateString()
                       return (
-                        <div 
-                          key={i} 
+                        <div
+                          key={i}
                           className={`min-h-[55px] p-1 border-r last:border-r-0 ${isToday ? 'bg-meu-primary/5' : ''}`}
                         >
                           {hourBookings.map(booking => (
-                            <BookingCard 
-                              key={booking.id} 
-                              booking={booking} 
+                            <BookingCard
+                              key={booking.id}
+                              booking={booking}
                               compact
                               onClick={() => setSelectedBooking(booking)}
                             />
@@ -475,15 +521,14 @@ export default function AgendaPage() {
               {/* Header dos dias da semana */}
               <div className="grid grid-cols-7 border-b bg-gradient-to-b from-gray-50 to-white">
                 {['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'].map((day, i) => (
-                  <div key={day} className={`p-3 text-center text-xs font-semibold uppercase tracking-wider ${
-                    i === 0 || i === 6 ? 'text-gray-400' : 'text-gray-600'
-                  }`}>
+                  <div key={day} className={`p-3 text-center text-xs font-semibold uppercase tracking-wider ${i === 0 || i === 6 ? 'text-gray-400' : 'text-gray-600'
+                    }`}>
                     <span className="hidden sm:inline">{day}</span>
                     <span className="sm:hidden">{day.slice(0, 3)}</span>
                   </div>
                 ))}
               </div>
-              
+
               {/* Grade do mês */}
               <div className="grid grid-cols-7">
                 {monthDays.map((day, i) => {
@@ -491,20 +536,18 @@ export default function AgendaPage() {
                   const isToday = day.toDateString() === new Date().toDateString()
                   const isWeekend = day.getDay() === 0 || day.getDay() === 6
                   const dayBookings = getBookingsForDate(day)
-                  
+
                   return (
-                    <div 
-                      key={i} 
-                      className={`min-h-[110px] p-2 border-b border-r transition-colors hover:bg-gray-50 ${
-                        !isCurrentMonth ? 'bg-gray-50/50' : isWeekend ? 'bg-gray-50/30' : 'bg-white'
-                      } ${isToday ? 'ring-2 ring-inset ring-meu-primary/30 bg-meu-primary/5' : ''}`}
+                    <div
+                      key={i}
+                      className={`min-h-[110px] p-2 border-b border-r transition-colors hover:bg-gray-50 ${!isCurrentMonth ? 'bg-gray-50/50' : isWeekend ? 'bg-gray-50/30' : 'bg-white'
+                        } ${isToday ? 'ring-2 ring-inset ring-meu-primary/30 bg-meu-primary/5' : ''}`}
                     >
                       <div className={`flex items-center justify-between mb-1.5`}>
-                        <span className={`text-sm font-bold ${
-                          !isCurrentMonth ? 'text-gray-300' 
-                          : isToday ? 'bg-meu-primary text-white w-7 h-7 rounded-full flex items-center justify-center' 
-                          : 'text-gray-700'
-                        }`}>
+                        <span className={`text-sm font-bold ${!isCurrentMonth ? 'text-gray-300'
+                          : isToday ? 'bg-meu-primary text-white w-7 h-7 rounded-full flex items-center justify-center'
+                            : 'text-gray-700'
+                          }`}>
                           {day.getDate()}
                         </span>
                         {dayBookings.length > 0 && isCurrentMonth && (
@@ -515,9 +558,9 @@ export default function AgendaPage() {
                       </div>
                       <div className="space-y-1">
                         {dayBookings.slice(0, 3).map(booking => (
-                          <BookingCard 
-                            key={booking.id} 
-                            booking={booking} 
+                          <BookingCard
+                            key={booking.id}
+                            booking={booking}
                             minimal
                             onClick={() => setSelectedBooking(booking)}
                           />
@@ -539,6 +582,9 @@ export default function AgendaPage() {
         {/* Modal de Detalhes */}
         <Dialog open={!!selectedBooking} onOpenChange={() => setSelectedBooking(null)}>
           <DialogContent className="sm:max-w-md">
+            <VisuallyHidden>
+              <DialogTitle>Detalhes do Agendamento</DialogTitle>
+            </VisuallyHidden>
             {selectedBooking && (
               <>
                 {/* Header colorido */}
@@ -564,7 +610,7 @@ export default function AgendaPage() {
                     )}
                   </div>
                 </div>
-                
+
                 {/* Detalhes */}
                 <div className="space-y-4">
                   <div className="grid gap-4">
@@ -577,7 +623,7 @@ export default function AgendaPage() {
                         <p className="font-semibold">{formatTime(selectedBooking.date)} - {formatEndTime(selectedBooking)}</p>
                       </div>
                     </div>
-                    
+
                     <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
                       <div className="p-2 bg-purple-100 rounded-lg">
                         <Calendar className="h-5 w-5 text-purple-600" />
@@ -587,7 +633,7 @@ export default function AgendaPage() {
                         <p className="font-semibold capitalize">{new Date(selectedBooking.date).toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
                       </div>
                     </div>
-                    
+
                     {selectedBooking.studentName && (
                       <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
                         <div className="p-2 bg-green-100 rounded-lg">
@@ -599,7 +645,7 @@ export default function AgendaPage() {
                         </div>
                       </div>
                     )}
-                    
+
                     {selectedBooking.franchiseName && (
                       <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
                         <div className="p-2 bg-orange-100 rounded-lg">
@@ -612,7 +658,7 @@ export default function AgendaPage() {
                       </div>
                     )}
                   </div>
-                  
+
                   {selectedBooking.is_reserved && (
                     <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-4">
                       <div className="flex items-start gap-3">
@@ -626,6 +672,19 @@ export default function AgendaPage() {
                       </div>
                     </div>
                   )}
+
+                  {/* DEBUG: Botão para regenerar bookings da série (temporário) */}
+                  {selectedBooking.series_id && (
+                    <Button
+                      onClick={() => {
+                        regenerateSeries(selectedBooking.series_id!)
+                        setSelectedBooking(null)
+                      }}
+                      className="w-full bg-purple-600 hover:bg-purple-700"
+                    >
+                      🔄 Regenerar Bookings da Série
+                    </Button>
+                  )}
                 </div>
               </>
             )}
@@ -637,23 +696,23 @@ export default function AgendaPage() {
 }
 
 // Componente de Card de Booking
-function BookingCard({ 
-  booking, 
-  compact = false, 
+function BookingCard({
+  booking,
+  compact = false,
   minimal = false,
-  onClick 
-}: { 
+  onClick
+}: {
   booking: Booking
   compact?: boolean
   minimal?: boolean
   onClick?: () => void
 }) {
-  const style = booking.is_reserved 
-    ? STATUS_COLORS.RESERVED 
+  const style = booking.is_reserved
+    ? STATUS_COLORS.RESERVED
     : STATUS_COLORS[booking.status] || STATUS_COLORS.AVAILABLE
-  
+
   const time = new Date(booking.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-  
+
   // Minimal - usado na visualização de mês
   if (minimal) {
     return (
@@ -667,7 +726,7 @@ function BookingCard({
       </button>
     )
   }
-  
+
   // Compact - usado na visualização de semana
   if (compact) {
     return (
@@ -687,7 +746,7 @@ function BookingCard({
       </button>
     )
   }
-  
+
   // Full - usado na visualização de dia
   return (
     <button

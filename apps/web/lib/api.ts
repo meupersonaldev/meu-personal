@@ -17,12 +17,12 @@ async function apiRequest(endpoint: string, options: RequestInit = {}) {
   const headers: Record<string, string> = {
     ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
     ...(options.headers as Record<string, string> | undefined),
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {})
   }
 
   const config: RequestInit = {
     ...options,
-    headers,
+    headers
   }
 
   try {
@@ -36,11 +36,9 @@ async function apiRequest(endpoint: string, options: RequestInit = {}) {
         return new Promise<never>(() => { })
       }
 
-      const error = await response
-        .json()
-        .catch(() => ({
-          message: `Erro na requisição: ${response.status} ${response.statusText}`,
-        }))
+      const error = await response.json().catch(() => ({
+        message: `Erro na requisição: ${response.status} ${response.statusText}`
+      }))
 
       throw new Error(error.message || `Erro na requisição: ${response.status}`)
     }
@@ -49,7 +47,7 @@ async function apiRequest(endpoint: string, options: RequestInit = {}) {
   } catch (error) {
     if (error instanceof Error && error.message.includes('fetch')) {
       throw new Error(
-        'Não foi possível conectar ao servidor. Verifique se o backend está rodando.',
+        'Não foi possível conectar ao servidor. Verifique se o backend está rodando.'
       )
     }
     throw error
@@ -61,7 +59,7 @@ export const authAPI = {
   async login(email: string, password: string) {
     return apiRequest('/api/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password })
     })
   },
 
@@ -76,7 +74,7 @@ export const authAPI = {
   }) {
     return apiRequest('/api/auth/register', {
       method: 'POST',
-      body: JSON.stringify(userData),
+      body: JSON.stringify(userData)
     })
   },
 
@@ -91,18 +89,22 @@ export const authAPI = {
   async resetPassword(token: string, password: string) {
     return apiRequest('/api/auth/reset-password', {
       method: 'POST',
-      body: JSON.stringify({ token, password }),
+      body: JSON.stringify({ token, password })
     })
-  },
+  }
 }
 
 // Teachers API
 export const teachersAPI = {
   async getAll(params?: { academy_id?: string }) {
-    const query = new URLSearchParams()
-    if (params?.academy_id) query.append('academy_id', params.academy_id)
-    const path = `/api/teachers${query.toString() ? `?${query.toString()}` : ''}`
-    return apiRequest(path)
+    // Se academy_id for fornecido, usar a rota específica que filtra corretamente
+    if (params?.academy_id) {
+      const query = new URLSearchParams()
+      query.append('academy_id', params.academy_id)
+      return apiRequest(`/api/teachers/by-academy-id?${query.toString()}`)
+    }
+    // Caso contrário, usar a rota geral
+    return apiRequest('/api/teachers')
   },
 
   async getById(id: string) {
@@ -116,7 +118,7 @@ export const teachersAPI = {
   async update(id: string, data: any) {
     return apiRequest(`/api/teachers/${id}`, {
       method: 'PUT',
-      body: JSON.stringify(data),
+      body: JSON.stringify(data)
     })
   },
 
@@ -127,13 +129,15 @@ export const teachersAPI = {
   async updatePreferences(id: string, data: { academy_ids: string[] }) {
     return apiRequest(`/api/teachers/${id}/preferences`, {
       method: 'PUT',
-      body: JSON.stringify(data),
+      body: JSON.stringify(data)
     })
   },
 
   async getBookingsByDate(teacherId: string, date: string) {
-    return apiRequest(`/api/teachers/${teacherId}/bookings-by-date?date=${date}`)
-  },
+    return apiRequest(
+      `/api/teachers/${teacherId}/bookings-by-date?date=${date}`
+    )
+  }
 }
 
 // Academies API
@@ -142,17 +146,13 @@ export const academiesAPI = {
     return apiRequest('/api/academies')
   },
 
-  async getAvailableSlots(
-    academyId: string,
-    date: string,
-    teacherId?: string,
-  ) {
+  async getAvailableSlots(academyId: string, date: string, teacherId?: string) {
     const query = new URLSearchParams({ date })
     if (teacherId) query.append('teacher_id', teacherId)
     return apiRequest(
-      `/api/academies/${academyId}/available-slots?${query.toString()}`,
+      `/api/academies/${academyId}/available-slots?${query.toString()}`
     )
-  },
+  }
 }
 
 // Bookings API
@@ -163,10 +163,8 @@ export const bookingsAPI = {
     status?: string
   }) {
     const queryParams = new URLSearchParams()
-    if (params?.student_id)
-      queryParams.append('student_id', params.student_id)
-    if (params?.teacher_id)
-      queryParams.append('teacher_id', params.teacher_id)
+    if (params?.student_id) queryParams.append('student_id', params.student_id)
+    if (params?.teacher_id) queryParams.append('teacher_id', params.teacher_id)
     if (params?.status) queryParams.append('status', params.status)
     const endpoint = `/api/bookings${queryParams.toString() ? '?' + queryParams.toString() : ''
       }`
@@ -187,7 +185,7 @@ export const bookingsAPI = {
   }) {
     return apiRequest('/api/bookings', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify(data)
     })
   },
 
@@ -196,17 +194,17 @@ export const bookingsAPI = {
     data: {
       status?: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED'
       notes?: string
-    },
+    }
   ) {
     return apiRequest(`/api/bookings/${id}`, {
       method: 'PUT',
-      body: JSON.stringify(data),
+      body: JSON.stringify(data)
     })
   },
 
   async cancel(id: string) {
     return apiRequest(`/api/bookings/${id}`, {
-      method: 'DELETE',
+      method: 'DELETE'
     })
   },
 
@@ -221,16 +219,16 @@ export const bookingsAPI = {
   }) {
     return apiRequest('/api/bookings/student', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify(data)
     })
   },
 
   // Cancelamento com política (>= 4h reembolsa aluno se student_credits)
   async cancelWithPolicy(id: string) {
     return apiRequest(`/api/bookings/${id}/cancel`, {
-      method: 'POST',
+      method: 'POST'
     })
-  },
+  }
 }
 
 // Users API
@@ -238,30 +236,37 @@ export const usersAPI = {
   async update(id: string, data: any) {
     return apiRequest(`/api/users/${id}`, {
       method: 'PUT',
-      body: JSON.stringify(data),
+      body: JSON.stringify(data)
     })
   },
 
   async updatePassword(id: string, data: any) {
     return apiRequest(`/api/users/${id}/password`, {
       method: 'PUT',
-      body: JSON.stringify(data),
+      body: JSON.stringify(data)
     })
   },
 
   async uploadAvatar(id: string, formData: FormData) {
     return apiRequest(`/api/users/${id}/avatar`, {
       method: 'POST',
-      body: formData,
+      body: formData
     })
-  },
+  }
 }
 
 // Packages API
 export const packagesAPI = {
   async getStudentBalance() {
-    return apiRequest('/api/packages/student/balance')
+    return apiRequest(`/api/packages/student/balance?_ts=${Date.now()}`)
   },
+
+  async getTransactions(params?: { limit?: number; offset?: number }) {
+    const query = new URLSearchParams()
+    if (params?.limit) query.append('limit', params.limit.toString())
+    if (params?.offset) query.append('offset', params.offset.toString())
+    return apiRequest(`/api/packages/student/transactions?${query.toString()}`)
+  }
 }
 
 // Notifications API
@@ -275,9 +280,9 @@ export const notificationsAPI = {
 
   async markAsRead(notificationId: string) {
     return apiRequest(`/api/notifications/${notificationId}/read`, {
-      method: 'PUT',
+      method: 'PUT'
     })
-  },
+  }
 }
 
 // Student Units API
@@ -296,16 +301,16 @@ export const studentUnitsAPI = {
 
   async activateUnit(unitId: string) {
     return apiRequest(`/api/student-units/${unitId}/activate`, {
-      method: 'POST',
+      method: 'POST'
     })
   },
 
   async joinUnit(unitId: string) {
     return apiRequest('/api/student-units/join', {
       method: 'POST',
-      body: JSON.stringify({ unitId }),
+      body: JSON.stringify({ unitId })
     })
-  },
+  }
 }
 
 // Check-ins API
@@ -317,7 +322,7 @@ export const checkinsAPI = {
     const path = `/api/checkins${query.toString() ? `?${query.toString()}` : ''
       }`
     return apiRequest(path)
-  },
+  }
 }
 
 const api = {
@@ -329,8 +334,7 @@ const api = {
   users: usersAPI,
   packages: packagesAPI,
   notifications: notificationsAPI,
-  studentUnits: studentUnitsAPI,
+  studentUnits: studentUnitsAPI
 }
 
 export default api
-

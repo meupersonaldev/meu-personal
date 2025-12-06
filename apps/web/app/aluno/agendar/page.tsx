@@ -233,6 +233,11 @@ export default function AgendarPage() {
       setModalError(null)
       setSuccess(`Série criada! ${json.confirmedCount} aulas confirmadas${json.reservedCount > 0 ? ` e ${json.reservedCount} reservadas` : ''}.`)
 
+      // Atualizar créditos no header
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('student-credits-updated'))
+      }
+
       setTimeout(() => router.push('/aluno/dashboard'), 1500)
     } catch (e: any) {
       setModalError(e?.message || 'Erro ao criar série de agendamentos')
@@ -291,6 +296,12 @@ export default function AgendarPage() {
       }
 
       setSuccess('Agendamento criado com sucesso!')
+
+      // Atualizar créditos no header
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('student-credits-updated'))
+      }
+
       setTimeout(() => router.push('/aluno/inicio'), 900)
       setTimeout(() => {
         setIsBooking(false)

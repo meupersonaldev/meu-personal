@@ -42,8 +42,9 @@ export function useStudentHeaderData(): StudentHeaderData {
         api.notifications.getAll({ user_id: user.id, unread: true }),
       ])
 
-      const available = balanceData?.balance?.available_classes ?? balanceData?.available_classes
-      setAvailableCredits(typeof available === 'number' ? available : 0)
+      // A API retorna { balance: { available_classes: number, ... } }
+      const available = balanceData?.balance?.available_classes
+      setAvailableCredits(typeof available === 'number' && !isNaN(available) ? Math.max(0, available) : 0)
 
       setNotifications(notificationsData.notifications || [])
     } catch (error) {
@@ -57,6 +58,18 @@ export function useStudentHeaderData(): StudentHeaderData {
 
   useEffect(() => {
     fetchData()
+  }, [fetchData])
+
+  useEffect(() => {
+    const handleUpdate = () => fetchData()
+    if (typeof window !== 'undefined') {
+      window.addEventListener('student-credits-updated', handleUpdate)
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('student-credits-updated', handleUpdate)
+      }
+    }
   }, [fetchData])
 
   const markNotificationAsRead = useCallback(

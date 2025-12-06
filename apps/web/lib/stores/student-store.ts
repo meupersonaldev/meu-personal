@@ -278,6 +278,12 @@ export const useStudentStore = create<StudentState>((set, get) => ({
       } as Booking
       // Recarregar bookings
       await get().loadBookings(bookingData.student_id)
+
+      // Atualizar créditos no header e outros listeners
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('student-credits-updated'))
+      }
+
       set({ loading: false })
       return mapped
     } catch (error) {
@@ -299,6 +305,12 @@ export const useStudentStore = create<StudentState>((set, get) => ({
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
       if (!resp.ok) throw new Error('Erro ao cancelar agendamento')
+
+      // Atualizar créditos no header
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('student-credits-updated'))
+      }
+
       // Atualizar lista local
       set(state => ({
         bookings: state.bookings.map(booking =>
