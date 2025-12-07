@@ -1,57 +1,74 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { Button } from '@/components/ui/button'
 import ProfessorLayout from '@/components/layout/professor-layout'
 import { useTeacherApproval } from '@/hooks/use-teacher-approval'
 import { ApprovalBanner } from '@/components/teacher/approval-banner'
 import { ApprovalBlock } from '@/components/teacher/approval-block'
-import { 
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
   CreditCard,
   DollarSign,
   TrendingUp,
+  TrendingDown,
   Loader2,
   AlertCircle,
   Calendar,
   Clock,
-  User,
-  ArrowUpCircle,
-  ArrowDownCircle
+  Wallet,
+  ArrowUpRight,
+  ArrowDownRight,
+  Filter,
+  Download,
+  PieChart,
+  History
 } from 'lucide-react'
-
-interface Stats {
-  total_revenue: number
-  monthly_earnings: {
-    current_month: number
-  }
-  completed_bookings: number
-  hourly_rate: number
-  hours_earned: number
-}
+import { cn } from '@/lib/utils'
 
 interface Transaction {
   id: string
-  type: 'PURCHASE' | 'CONSUME' | 'REFUND' | 'BONUS_LOCK' | 'BONUS_UNLOCK' | 'REVOKE' | 'CREDIT_USED' | 'CREDIT_EARNED'
+  type: 'PURCHASE' | 'CONSUME' | 'REFUND' | 'BONUS_LOCK' | 'BONUS_UNLOCK' | 'REVOKE' | 'CREDIT_USED' | 'CREDIT_EARNED' | 'PRIVATE_CLASS'
   hours: number
   amount: number
   created_at: string
   description?: string
   studentName?: string
+  status?: 'COMPLETED' | 'PENDING' | 'CANCELED'
+}
+
+interface FinancialSummary {
+  totalRevenue: number
+  totalExpenses: number
+  netIncome: number
+  projectedRevenue: number
+  totalHoursGiven: number
+  totalHoursBought: number
+  averageTicket: number
 }
 
 export default function ProfessorCarteira() {
   const { user, token } = useAuthStore()
   const { isNotApproved, approvalStatus } = useTeacherApproval()
-  const [stats, setStats] = useState<Stats | null>(null)
   const [transactions, setTransactions] = useState<Transaction[]>([])
-  const [completedLessonsCount, setCompletedLessonsCount] = useState(0)
-  const [averagePerLesson, setAveragePerLesson] = useState(0)
+  const [summary, setSummary] = useState<FinancialSummary>({
+    totalRevenue: 0,
+    totalExpenses: 0,
+    netIncome: 0,
+    projectedRevenue: 0,
+    totalHoursGiven: 0,
+    totalHoursBought: 0,
+    averageTicket: 0
+  })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [filterTab, setFilterTab] = useState<'all' | 'income' | 'expense'>('all')
 
   useEffect(() => {
-    const fetchStats = async () => {
+    const fetchData = async () => {
       if (!user?.id || !token) return
 
       try {
@@ -59,314 +76,445 @@ export default function ProfessorCarteira() {
         const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
         const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
 
-        // Buscar stats
-        const statsResponse = await fetch(`${API_URL}/api/teachers/${user.id}/stats`, {
-          headers,
-          credentials: 'include'
-        })
-        
-        let hourlyRate = 0
-        if (statsResponse.ok) {
-          const data = await statsResponse.json()
-          setStats(data)
-          hourlyRate = data.hourly_rate || 0
-        }
+        // 1. Buscar Stats basicos
+        const statsResponse = await fetch(`${API_URL}/api/teachers/${user.id}/stats`, { headers })
+        const statsData = await statsResponse.json()
+        const hourlyRate = statsData.hourly_rate || 0
 
-        // Buscar aulas concluídas para calcular média e criar transações de crédito
-        const timestamp = Date.now()
-        const bookingsResponse = await fetch(`${API_URL}/api/bookings?teacher_id=${user.id}&_t=${timestamp}`, {
-          headers: {
-            ...headers,
-            'Cache-Control': 'no-cache'
-          },
-          credentials: 'include'
-        })
-        
-        let creditTransactions: Transaction[] = []
-        
-        if (bookingsResponse.ok) {
-          const bookingsData = await bookingsResponse.json()
-          const completed = (bookingsData.bookings || [])
-            .filter((b: any) => b.status === 'COMPLETED' || b.status === 'DONE')
-          
-          setCompletedLessonsCount(completed.length)
-          
-          if (completed.length > 0) {
-            const totalValue = completed.reduce((sum: number, b: any) => sum + (b.hourlyRate || 0), 0)
-            setAveragePerLesson(totalValue / completed.length)
-          }
-          
-          // Criar transações de crédito a partir das aulas concluídas
-          // Todas as aulas concluídas são GANHOS para o professor
-          creditTransactions = completed.map((b: any) => ({
-            id: `credit-${b.id}`,
-            type: 'CREDIT_EARNED',
-            hours: 0,
-            amount: b.hourlyRate || 0,
-            created_at: b.date,
-            description: b.source === 'PROFESSOR' 
-              ? `Aula Particular - ${b.studentName}` 
-              : `Aula Academia - ${b.studentName}`,
-            studentName: b.studentName
-          }))
-        }
+        // 2. Buscar Transações de Horas (Compras e Consumo Academia)
+        const txResponse = await fetch(`${API_URL}/api/teachers/${user.id}/transactions`, { headers })
+        const txData = await txResponse.json()
 
-        // Buscar transações de horas do professor
-        const transactionsResponse = await fetch(`${API_URL}/api/teachers/${user.id}/transactions`, {
-          headers,
-          credentials: 'include'
-        })
-        
-        if (transactionsResponse.ok) {
-          const txData = await transactionsResponse.json()
-          const hourTransactions = (txData.transactions || [])
-            .map((tx: any) => {
-              // Para PURCHASE, o valor deve ser negativo (gasto)
-              // Verificar se tem o valor no meta_json
-              const purchaseAmount = tx.meta_json?.amount || tx.meta_json?.price
-              const amount = tx.type === 'PURCHASE' 
-                ? -(purchaseAmount || ((tx.hours || 0) * hourlyRate))
-                : ((tx.hours || 0) * hourlyRate)
-              
-              return {
+        // 3. Buscar Agendamentos (Aulas Particulares e Projeções)
+        const bookingsResponse = await fetch(`${API_URL}/api/bookings?teacher_id=${user.id}`, { headers })
+        const bookingsData = await bookingsResponse.json()
+        const allBookings = bookingsData.bookings || []
+
+        // --- Processamento dos Dados ---
+
+        let totalRevenue = 0
+        let totalExpenses = 0
+        let totalHoursGiven = 0
+        let totalHoursBought = 0
+        let projectedRevenue = 0
+        let completedClassesCount = 0
+
+        const processedTransactions: Transaction[] = []
+
+          // Processar Transações de Horas
+          ; (txData.transactions || []).forEach((tx: any) => {
+            const purchaseAmount = tx.meta_json?.amount || tx.meta_json?.price
+
+            if (tx.type === 'PURCHASE') {
+              // Despesa
+              const amount = purchaseAmount || ((tx.hours || 0) * hourlyRate) // Fallback
+              totalExpenses += Number(amount)
+              totalHoursBought += Number(tx.hours || 0)
+
+              processedTransactions.push({
                 id: tx.id,
-                type: tx.type,
-                hours: tx.hours || 0,
-                amount,
+                type: 'PURCHASE',
+                hours: tx.hours,
+                amount: -Number(amount), // Negativo para extrato
                 created_at: tx.created_at,
-                description: tx.meta_json?.description || ''
-              }
+                description: 'Compra de Pacote de Horas',
+                status: 'COMPLETED'
+              })
+            } else if (tx.type === 'CONSUME') {
+              // Receita da Academia (Aula dada pelo sistema)
+              const amount = (tx.hours || 0) * hourlyRate
+              totalRevenue += Number(amount)
+              totalHoursGiven += Number(tx.hours || 0)
+              completedClassesCount++
+
+              processedTransactions.push({
+                id: tx.id,
+                type: 'CONSUME',
+                hours: tx.hours,
+                amount: Number(amount),
+                created_at: tx.created_at,
+                description: 'Aula via Academia (Banco de Horas)',
+                status: 'COMPLETED'
+              })
+            }
+          })
+
+        // Processar Agendamentos (Aulas Particulares & Projeções)
+        const now = new Date()
+        const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+        const nextMonthEnd = new Date(now.getFullYear(), now.getMonth() + 2, 0)
+
+        allBookings.forEach((b: any) => {
+          const isCompleted = b.status === 'COMPLETED' || b.status === 'DONE'
+          const isPrivate = !!b.student_id // Tem aluno vinculado
+          const bookingDate = new Date(b.date)
+
+          // Se for aula particular completa, é receita extra (não vem do banco de horas da academia)
+          if (isCompleted && isPrivate) {
+            const amount = b.hourlyRate || 0
+            const finalAmount = amount > 0 ? amount : hourlyRate
+
+            // Evitar duplicar se o sistema ja criou transaction de CONSUME para essa aula
+            // Geralmente para student_id != null é aula particular, então add.
+            processedTransactions.push({
+              id: `booking-${b.id}`,
+              type: 'PRIVATE_CLASS',
+              hours: b.duration / 60,
+              amount: finalAmount,
+              created_at: b.date,
+              description: `Aula Particular - ${b.studentName || 'Aluno'}`,
+              studentName: b.studentName,
+              status: 'COMPLETED'
             })
-          
-          // Combinar transações de horas e créditos, ordenar por data
-          const allTransactions = [...hourTransactions, ...creditTransactions]
-            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-          
-          setTransactions(allTransactions)
-        } else {
-          // Se falhar ao buscar hour_transactions, usar apenas creditTransactions
-          setTransactions(creditTransactions.sort((a, b) => 
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-          ))
-        }
+            totalRevenue += finalAmount
+            completedClassesCount++
+            totalHoursGiven += (b.duration / 60)
+          }
+
+          // Projeção (Aulas futuras confirmadas)
+          if ((b.status === 'PENDING' || b.status === 'RESERVED' || b.status === 'CONFIRMED') && bookingDate > now) {
+            const estimatedValue = b.hourlyRate || hourlyRate
+            if (bookingDate <= nextMonthEnd) {
+              projectedRevenue += estimatedValue
+            }
+          }
+        })
+
+        // Ordenar
+        processedTransactions.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+
+        setTransactions(processedTransactions)
+        setSummary({
+          totalRevenue,
+          totalExpenses,
+          netIncome: totalRevenue - totalExpenses,
+          projectedRevenue,
+          totalHoursGiven,
+          totalHoursBought,
+          averageTicket: completedClassesCount > 0 ? totalRevenue / completedClassesCount : 0
+        })
+
       } catch (err) {
-        setError('Erro ao carregar dados')
+        console.error(err)
+        setError('Falha ao carregar dados financeiros')
       } finally {
         setLoading(false)
       }
     }
 
-    fetchStats()
+    fetchData()
   }, [user?.id, token])
 
-  if (loading) {
-    return (
-      <ProfessorLayout>
-        <div className="flex items-center justify-center h-96">
-          <Loader2 className="h-8 w-8 animate-spin text-meu-primary" />
-        </div>
-      </ProfessorLayout>
-    )
-  }
+  const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val)
+  const formatHours = (val: number) => `${val.toFixed(1)}h`
 
-  if (error) {
-    return (
-      <ProfessorLayout>
-        <div className="flex flex-col items-center justify-center h-96 space-y-4">
-          <AlertCircle className="h-12 w-12 text-red-500" />
-          <p className="text-gray-600">{error}</p>
-        </div>
-      </ProfessorLayout>
-    )
-  }
+  // Chart Data Preparation (Simple Last 6 Months)
+  const chartData = useMemo(() => {
+    const months: Record<string, { revenue: number, expenses: number }> = {}
+    const now = new Date()
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL'
-    }).format(value)
-  }
+    // Init last 6 months
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      const key = d.toLocaleString('pt-BR', { month: 'short', year: '2-digit' })
+      months[key] = { revenue: 0, expenses: 0 }
+    }
+
+    transactions.forEach(tx => {
+      const d = new Date(tx.created_at)
+      const key = d.toLocaleString('pt-BR', { month: 'short', year: '2-digit' })
+      if (months[key]) {
+        if (tx.amount > 0) months[key].revenue += tx.amount
+        else months[key].expenses += Math.abs(tx.amount)
+      }
+    })
+
+    return Object.entries(months).map(([name, data]) => ({ name, ...data }))
+  }, [transactions])
+
+  if (loading) return <ProfessorLayout><div className="h-96 flex items-center justify-center"><Loader2 className="animate-spin h-8 w-8 text-blue-600" /></div></ProfessorLayout>
+
+  if (isNotApproved) return <ProfessorLayout><div className="p-6"><ApprovalBanner approvalStatus={approvalStatus} userName={user?.name} /><ApprovalBlock approvalStatus={approvalStatus} title="Financeiro Bloqueado" message="Aguarde aprovação." fullPage /></div></ProfessorLayout>
+
+  // Derived state for display
+  const hoursBalance = summary.totalHoursBought - summary.totalHoursGiven
 
   return (
     <ProfessorLayout>
-      <div className="p-6 space-y-8">
-        <ApprovalBanner approvalStatus={approvalStatus} userName={user?.name} />
-        
-        {isNotApproved ? (
-          <ApprovalBlock 
-            title={approvalStatus === 'rejected' ? 'Acesso Negado' : 'Carteira Bloqueada'}
-            message={approvalStatus === 'rejected'
-              ? 'Seu cadastro foi reprovado. Entre em contato com a administração para mais informações.'
-              : 'Você poderá visualizar seu saldo e transações após a aprovação do seu cadastro pela administração.'}
-            fullPage
-            approvalStatus={approvalStatus}
-          />
-        ) : (
-          <>
-        {/* Header */}
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Carteira</h1>
-          <p className="text-gray-600">Gerencie seus ganhos e faturamento</p>
-        </div>
-
-        {/* Cards de Resumo */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Faturamento Total */}
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-green-100 rounded-lg">
-                <DollarSign className="h-6 w-6 text-green-600" />
-              </div>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Faturamento Total</p>
-              <p className="text-3xl font-bold text-gray-900">
-                {formatCurrency(stats?.total_revenue || 0)}
-              </p>
-            </div>
+      <div className="min-h-screen bg-gray-50/50 pb-20">
+        <div className="bg-white border-b px-6 py-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 md:gap-0 shadow-sm">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Gestão Financeira</h1>
+            <p className="text-sm text-gray-500">Acompanhe seus saldos e faturamentos</p>
           </div>
-
-          {/* Faturamento Mensal */}
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-blue-100 rounded-lg">
-                <TrendingUp className="h-6 w-6 text-blue-600" />
-              </div>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Faturamento Mensal</p>
-              <p className="text-3xl font-bold text-gray-900">
-                {formatCurrency(stats?.monthly_earnings?.current_month || 0)}
-              </p>
-            </div>
-          </div>
-
-          {/* Horas Ganhas */}
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-purple-100 rounded-lg">
-                <Clock className="h-6 w-6 text-purple-600" />
-              </div>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Horas Ganhas</p>
-              <p className="text-3xl font-bold text-gray-900">
-                {stats?.hours_earned || 0}
-              </p>
-              <p className="text-xs text-gray-500 mt-1">Agendamentos com você</p>
-            </div>
+          <div className="flex gap-2 w-full md:w-auto">
+            <Button variant="outline" size="sm" className="gap-2 flex-1 md:flex-none">
+              <Download className="h-4 w-4" /> Exportar
+            </Button>
+            <Button size="sm" className="bg-blue-600 hover:bg-blue-700 gap-2 flex-1 md:flex-none">
+              <Filter className="h-4 w-4" /> Filtrar
+            </Button>
           </div>
         </div>
 
-        {/* Resumo de Aulas */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-            <Calendar className="h-5 w-5 mr-2 text-meu-primary" />
-            Resumo de Aulas
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <p className="text-sm text-gray-600">Aulas Concluídas</p>
-              <p className="text-2xl font-bold text-gray-900">{completedLessonsCount}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600">Média por Aula</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {formatCurrency(averagePerLesson)}
-              </p>
-            </div>
-          </div>
-        </div>
+        <div className="max-w-7xl mx-auto p-6 space-y-8">
 
-        {/* Histórico de Ganhos/Perdas */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-            <TrendingUp className="h-5 w-5 mr-2 text-meu-primary" />
-            Histórico de Ganhos/Perdas
-          </h3>
-          
-          {transactions.length === 0 ? (
-            <div className="text-center py-8">
-              <DollarSign className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-              <p className="text-gray-500">Nenhuma transação registrada</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Tipo de Transação
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Valor
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Data
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {transactions.map((tx) => {
-                    const txDate = new Date(tx.created_at)
-                    const isGain = tx.type === 'BONUS_UNLOCK' || tx.type === 'REFUND' || tx.type === 'CREDIT_EARNED' || tx.amount > 0
-                    const isLoss = tx.type === 'CONSUME' || tx.type === 'REVOKE' || tx.type === 'CREDIT_USED' || tx.type === 'PURCHASE' || tx.amount < 0
-                    
-                    const typeLabels: Record<string, string> = {
-                      PURCHASE: 'Compra de Crédito',
-                      CONSUME: 'Aula Realizada',
-                      REFUND: 'Reembolso',
-                      BONUS_LOCK: 'Bônus Bloqueado',
-                      BONUS_UNLOCK: 'Bônus Liberado',
-                      REVOKE: 'Revogação',
-                      CREDIT_USED: tx.studentName ? `Crédito Usado - ${tx.studentName}` : 'Crédito Usado',
-                      CREDIT_EARNED: tx.description || (tx.studentName ? `Aula - ${tx.studentName}` : 'Aula Concluída')
-                    }
-                    
-                    return (
-                      <tr key={tx.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-4 whitespace-nowrap">
-                          <div className="flex items-center gap-2">
-                            {isGain && <ArrowUpCircle className="h-4 w-4 text-green-600" />}
-                            {isLoss && <ArrowDownCircle className="h-4 w-4 text-red-600" />}
-                            {!isGain && !isLoss && <Clock className="h-4 w-4 text-gray-400" />}
-                            <span className="text-sm font-medium text-gray-900">
-                              {typeLabels[tx.type] || tx.type}
-                            </span>
+          {/* Summary Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <Card className="border-0 shadow-lg bg-gradient-to-br from-blue-600 to-blue-700 text-white relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-4 opacity-10">
+                <DollarSign className="h-24 w-24" />
+              </div>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-blue-100 uppercase tracking-wider">Saldo Financeiro</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">{formatCurrency(summary.netIncome)}</div>
+                <p className="text-blue-200 text-sm mt-1 flex items-center gap-1">
+                  {summary.netIncome >= 0 ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+                  {summary.netIncome >= 0 ? 'Lucro acumulado' : 'Déficit acumulado'}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-0 shadow-lg bg-gradient-to-br from-indigo-600 to-indigo-700 text-white relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-4 opacity-10">
+                <Clock className="h-24 w-24" />
+              </div>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-indigo-100 uppercase tracking-wider">Saldo de Horas</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">{formatHours(hoursBalance)}</div>
+                <p className="text-indigo-200 text-sm mt-1 flex items-center gap-1">
+                  <Wallet className="h-3 w-3" />
+                  Disponíveis para uso
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-0 shadow-md">
+              <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
+                <CardTitle className="text-sm font-medium text-gray-500 uppercase">Faturamento Total</CardTitle>
+                <div className="p-2 bg-green-100 rounded-full">
+                  <TrendingUp className="h-4 w-4 text-green-600" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-gray-900">{formatCurrency(summary.totalRevenue)}</div>
+                <p className="text-xs text-gray-400 mt-1">Total de receitas geradas</p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-0 shadow-md">
+              <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
+                <CardTitle className="text-sm font-medium text-gray-500 uppercase">Faturamento em Horas</CardTitle>
+                <div className="p-2 bg-blue-100 rounded-full">
+                  <History className="h-4 w-4 text-blue-600" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-gray-900">{formatHours(summary.totalHoursGiven)}</div>
+                <p className="text-xs text-gray-400 mt-1">Total de aulas ministradas</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Charts & Details Section */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Chart Area */}
+            <div className="lg:col-span-2">
+              <Card className="h-full border-0 shadow-md">
+                <CardHeader>
+                  <CardTitle>Fluxo de Caixa (Últimos 6 meses)</CardTitle>
+                  <CardDescription>Comparativo de Receitas vs Despesas</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-[300px] w-full mt-4 flex items-end justify-between gap-2 px-2">
+                    {chartData.map((item, idx) => {
+                      const maxVal = Math.max(...chartData.map(d => Math.max(d.revenue, d.expenses))) || 1
+                      const revHeight = (item.revenue / maxVal) * 100
+                      const expHeight = (item.expenses / maxVal) * 100
+
+                      return (
+                        <div key={idx} className="flex-1 flex flex-col items-center gap-2 group cursor-pointer">
+                          <div className="w-full flex items-end justify-center gap-1 h-[250px] relative">
+                            {/* Tooltip mockup */}
+                            <div className="absolute bottom-full mb-2 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-900 text-white text-xs p-2 rounded pointer-events-none z-10 w-max">
+                              <p className="font-bold">{item.name}</p>
+                              <p className="text-green-300">Entrada: {formatCurrency(item.revenue)}</p>
+                              <p className="text-red-300">Saída: {formatCurrency(item.expenses)}</p>
+                            </div>
+
+                            <div style={{ height: `${Math.max(revHeight, 1)}%` }} className="w-full bg-blue-500 rounded-t-sm opacity-80 hover:opacity-100 transition-all relative group-hover:bg-blue-600"></div>
+                            <div style={{ height: `${Math.max(expHeight, 1)}%` }} className="w-full bg-red-400 rounded-t-sm opacity-80 hover:opacity-100 transition-all relative group-hover:bg-red-500"></div>
                           </div>
-                        </td>
-                        <td className="px-4 py-4 whitespace-nowrap text-right">
-                          <span className={`text-sm font-semibold ${
-                            isGain ? 'text-green-600' : isLoss ? 'text-red-600' : 'text-gray-600'
-                          }`}>
-                            {isGain && '+'}{isLoss && '-'}{formatCurrency(Math.abs(tx.amount))}
-                          </span>
-                        </td>
-                        <td className="px-4 py-4 whitespace-nowrap text-right text-sm text-gray-500">
-                          {txDate.toLocaleDateString('pt-BR', {
-                            day: '2-digit',
-                            month: 'short',
-                            year: 'numeric'
-                          })}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+                          <span className="text-xs text-gray-500 font-medium">{item.name}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
             </div>
-          )}
-        </div>
 
-        {/* Aviso */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <p className="text-sm text-blue-800">
-            💡 <strong>Dica:</strong> Os valores são calculados automaticamente com base nas aulas concluídas. 
-            Continue realizando aulas para aumentar seus ganhos!
-          </p>
+            {/* KPIs Side Cards */}
+            <div className="space-y-6">
+              <Card className="border-0 shadow-md">
+                <CardHeader>
+                  <CardTitle className="text-base">Métricas de Performance</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
+                        <Clock className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">Horas Ministradas</p>
+                        <p className="text-xs text-gray-500">Total de aulas dadas</p>
+                      </div>
+                    </div>
+                    <span className="font-bold text-lg">{summary.totalHoursGiven.toFixed(1)}h</span>
+                  </div>
+                  <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+                    {/* Progress bar mock: Hours given vs bought */}
+                    <div
+                      className="bg-indigo-600 h-full rounded-full"
+                      style={{ width: `${Math.min((summary.totalHoursGiven / (summary.totalHoursBought || 1)) * 100, 100)}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-right text-gray-500">
+                    {summary.totalHoursBought > 0 ? `${((summary.totalHoursGiven / summary.totalHoursBought) * 100).toFixed(0)}% das horas compradas utilizadas` : 'Sem horas compradas'}
+                  </p>
+
+                  <div className="flex justify-between items-center pt-4 border-t">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-emerald-100 text-emerald-600 rounded-lg">
+                        <DollarSign className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">Ticket Médio</p>
+                        <p className="text-xs text-gray-500">Por aula realizada</p>
+                      </div>
+                    </div>
+                    <span className="font-bold text-lg">{formatCurrency(summary.averageTicket)}</span>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-gradient-to-br from-gray-900 to-gray-800 border-0 text-white shadow-xl">
+                <CardContent className="p-6">
+                  <h3 className="font-bold text-lg mb-2">Maximize seus ganhos</h3>
+                  <p className="text-gray-400 text-sm mb-4">Compre pacotes maiores de horas para reduzir seu custo operacional e aumentar sua margem de lucro.</p>
+                  <Button onClick={() => window.location.href = '/professor/comprar-horas'} className="w-full bg-white text-gray-900 hover:bg-gray-100 font-bold">
+                    Comprar Horas
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+
+          {/* Transactions List */}
+          <Card className="border-0 shadow-md">
+            <CardHeader className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 md:gap-0">
+              <div>
+                <CardTitle>Histórico de Transações</CardTitle>
+                <CardDescription>Todas as entradas e saídas da sua carteira</CardDescription>
+              </div>
+              <Tabs defaultValue="all" className="w-full md:w-[400px]" onValueChange={(val) => setFilterTab(val as any)}>
+                <TabsList className="w-full">
+                  <TabsTrigger value="all" className="flex-1">Todas</TabsTrigger>
+                  <TabsTrigger value="income" className="flex-1">Entradas</TabsTrigger>
+                  <TabsTrigger value="expense" className="flex-1">Saídas</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </CardHeader>
+            <CardContent>
+              {transactions.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Wallet className="h-8 w-8 text-gray-400" />
+                  </div>
+                  <h3 className="text-lg font-medium text-gray-900">Nenhuma transação registrada</h3>
+                  <p className="text-gray-500">Seu histórico financeiro aparecerá aqui.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50/50">
+                      <tr>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider rounded-l-lg">Transação</th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Data</th>
+                        <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Horas</th>
+                        <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider rounded-r-lg">Valor (R$)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {transactions
+                        .filter(tx => {
+                          if (filterTab === 'income') return tx.amount > 0
+                          if (filterTab === 'expense') return tx.amount < 0
+                          return true
+                        })
+                        .map((tx) => {
+                          const isIncome = tx.amount > 0 // Money In
+                          const isPurchase = tx.type === 'PURCHASE'
+
+                          // Logic for visual signs:
+                          // Money: Income = Green (+), Expense = Red (-) or Black
+                          // Hours: Purchase = Green (+), Consumed/Class = Red (-)
+
+                          const hoursSign = isPurchase ? '+' : '-'
+                          const hoursColor = isPurchase ? 'text-green-600' : 'text-red-500' // Bought is "gain" in hour balance, Given is "loss"
+
+                          const moneySign = isIncome ? '+' : ''
+                          const moneyColor = isIncome ? 'text-green-600' : 'text-gray-900'
+
+                          return (
+                            <tr key={tx.id} className="hover:bg-gray-50/50 transition-colors">
+                              <td className="px-6 py-4">
+                                <div className="flex items-center gap-3">
+                                  <div className={cn("p-2 rounded-lg", isIncome ? "bg-green-100 text-green-600" : "bg-red-100 text-red-600")}>
+                                    {isIncome ? <ArrowUpRight className="h-5 w-5" /> : <ArrowDownRight className="h-5 w-5" />}
+                                  </div>
+                                  <div>
+                                    <p className="font-medium text-gray-900">{tx.description}</p>
+                                    <p className="text-xs text-gray-500">{tx.type === 'PRIVATE_CLASS' ? 'Aula Particular' : tx.type === 'PURCHASE' ? 'Recarga' : 'Aula Academia'}</p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className="text-sm text-gray-600">
+                                  {new Date(tx.created_at).toLocaleDateString('pt-BR')}
+                                  <br />
+                                  <span className="text-xs text-gray-400">{new Date(tx.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 text-right">
+                                {tx.hours > 0 ? (
+                                  <span className={cn("font-medium", hoursColor)}>
+                                    {hoursSign}{tx.hours.toFixed(1)}h
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400">-</span>
+                                )}
+                              </td>
+                              <td className="px-6 py-4 text-right">
+                                <span className={cn("font-bold", moneyColor)}>
+                                  {moneySign}{formatCurrency(tx.amount)}
+                                </span>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
-          </>
-        )}
       </div>
     </ProfessorLayout>
   )

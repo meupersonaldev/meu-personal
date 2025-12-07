@@ -13,6 +13,13 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import {
   Users,
   Plus,
   Search,
@@ -27,7 +34,9 @@ import {
   User,
   FileText,
   CreditCard,
-  Gift
+  Gift,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { toast } from 'sonner'
@@ -86,6 +95,10 @@ export default function AlunosPage() {
     studentId: null,
     studentName: ''
   })
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 8
 
   useEffect(() => {
     if (user?.id) {
@@ -164,7 +177,8 @@ export default function AlunosPage() {
         hourly_rate: '',
         cpf: '',
         gender: '',
-        birth_date: ''
+        birth_date: '',
+        hide_free_class: false
       })
     }
     setShowModal(true)
@@ -313,6 +327,17 @@ export default function AlunosPage() {
     student.email.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
+  // Pagination logic
+  const indexOfLastItem = currentPage * itemsPerPage
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage
+  const paginatedStudents = filteredStudents.slice(indexOfFirstItem, indexOfLastItem)
+  const totalPages = Math.ceil(filteredStudents.length / itemsPerPage)
+
+  // Reset page when search changes
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm])
+
   if (!user) {
     return null
   }
@@ -405,388 +430,388 @@ export default function AlunosPage() {
               </div>
             </div>
 
-            {/* Lista de Alunos em Cards */}
-            {filteredStudents.length === 0 ? (
-              <Card className="border-dashed bg-gray-50/50 border-gray-200">
-                <CardContent className="py-20 text-center">
-                  <div className="bg-white p-4 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-6 shadow-sm border border-gray-100">
-                    <Users className="h-10 w-10 text-gray-300" />
-                  </div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">
-                    {searchTerm ? 'Nenhum aluno encontrado' : 'Vamos começar?'}
-                  </h3>
-                  <p className="text-gray-500 mb-8 max-w-md mx-auto leading-relaxed">
-                    {searchTerm
-                      ? `Não encontramos alunos com o termo "${searchTerm}". Verifique a grafia ou tente outro termo.`
-                      : 'Você ainda não tem alunos cadastrados. Adicione seu primeiro aluno para começar a gerenciar seus treinos e aulas.'}
-                  </p>
-                  {!searchTerm && (
-                    <Button
-                      onClick={() => handleOpenModal()}
-                      className="bg-[#002C4E] hover:bg-[#003f70] text-white rounded-lg px-8 h-12 font-medium"
-                    >
-                      <Plus className="h-5 w-5 mr-2" />
-                      Cadastrar Primeiro Aluno
-                    </Button>
-                  )}
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                {filteredStudents.map((student) => (
-                  <Card
-                    key={student.id}
-                    className="group border border-gray-100 shadow-sm hover:shadow-meu-lg transition-all duration-300 hover:-translate-y-1 cursor-pointer bg-white overflow-hidden"
-                    onClick={() => {
-                      setSelectedStudent(student)
-                      setShowDetailModal(true)
-                    }}
-                  >
-                    <CardContent className="p-0">
-                      <div className="p-6">
-                        <div className="flex items-start justify-between mb-6">
-                          <div className="flex items-center gap-4">
-                            <div className="h-14 w-14 rounded-full bg-[#002C4E]/5 text-[#002C4E] flex items-center justify-center text-xl font-bold border border-[#002C4E]/10 group-hover:bg-[#002C4E] group-hover:text-white transition-colors duration-300">
-                              {student.name.charAt(0).toUpperCase()}
-                            </div>
-                            <div>
-                              <h3 className="font-bold text-lg text-[#002C4E] group-hover:text-[#27DFFF] transition-colors line-clamp-1">
-                                {student.name}
-                              </h3>
-                              <div className="flex items-center gap-2 mt-1">
-                                {student.connection_status === 'PENDING' ? (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-50 text-yellow-700 border border-yellow-100">
-                                    Pendente
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700 border border-green-100">
-                                    Ativo
-                                  </span>
-                                )}
-                                {student.hourly_rate ? (
-                                  <span className="text-xs font-semibold text-gray-500 bg-gray-50 px-2 py-0.5 rounded border border-gray-100">
-                                    R$ {student.hourly_rate.toFixed(2)}/h
-                                  </span>
-                                ) : (
-                                  <span className="text-xs text-gray-400 italic">
-                                    Valor n/d
+            {/* Tabela de Alunos */}
+            <Card className="border-none shadow-meu bg-white overflow-hidden">
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 border-b border-gray-100">
+                      <tr>
+                        <th className="text-left py-4 px-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Aluno</th>
+                        <th className="text-left py-4 px-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Contato</th>
+                        <th className="text-left py-4 px-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
+                        <th className="text-left py-4 px-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Valor Hora</th>
+                        <th className="text-right py-4 px-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {filteredStudents.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="py-12 text-center text-gray-500">
+                            {searchTerm ? 'Nenhum aluno encontrado.' : 'Nenhum aluno cadastrado.'}
+                          </td>
+                        </tr>
+                      ) : (
+                        paginatedStudents.map((student) => (
+                          <tr
+                            key={student.id}
+                            className="group hover:bg-gray-50/50 transition-colors cursor-pointer"
+                            onClick={() => {
+                              setSelectedStudent(student)
+                              setShowDetailModal(true)
+                            }}
+                          >
+                            <td className="py-4 px-6">
+                              <div className="flex items-center gap-3">
+                                <div className="h-10 w-10 rounded-full bg-[#002C4E]/5 text-[#002C4E] flex items-center justify-center text-sm font-bold border border-[#002C4E]/10 group-hover:bg-[#002C4E] group-hover:text-white transition-colors duration-300">
+                                  {student.name.charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                  <div className="font-bold text-[#002C4E] group-hover:text-blue-700 transition-colors">{student.name}</div>
+                                  <div className="text-xs text-gray-400">Desde {new Date(student.created_at).toLocaleDateString('pt-BR')}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-4 px-6">
+                              <div className="flex flex-col gap-1">
+                                <span className="text-sm text-gray-600 flex items-center gap-2">
+                                  <Mail className="h-3 w-3 text-gray-400" />
+                                  {student.email}
+                                </span>
+                                {student.phone && (
+                                  <span className="text-sm text-gray-600 flex items-center gap-2">
+                                    <Phone className="h-3 w-3 text-gray-400" />
+                                    {student.phone}
                                   </span>
                                 )}
                               </div>
-                            </div>
-                          </div>
+                            </td>
+                            <td className="py-4 px-6">
+                              {student.connection_status === 'PENDING' ? (
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-50 text-yellow-700 border border-yellow-100">
+                                  Pendente
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-100">
+                                  Ativo
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-4 px-6">
+                              {student.hourly_rate ? (
+                                <span className="text-sm font-medium text-gray-700">
+                                  R$ {student.hourly_rate.toFixed(2)}
+                                </span>
+                              ) : (
+                                <span className="text-sm text-gray-400 italic">
+                                  Não definido
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-4 px-6 text-right" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex items-center justify-end gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-gray-400 hover:text-[#002C4E] hover:bg-white border border-transparent hover:border-gray-200"
+                                  onClick={() => handleOpenModal(student)}
+                                  title="Editar"
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-gray-400 hover:text-red-600 hover:bg-white border border-transparent hover:border-red-100"
+                                  onClick={() => handleDelete(student.id, student.name)}
+                                  title="Remover"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
 
-                          <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-gray-400 hover:text-[#002C4E] hover:bg-gray-100"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleOpenModal(student)
-                              }}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-
-                        <div className="space-y-3">
-                          <div className="flex items-center gap-3 text-sm text-gray-500 group-hover:text-gray-700 transition-colors">
-                            <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center shrink-0">
-                              <Mail className="h-4 w-4 text-gray-400" />
-                            </div>
-                            <span className="truncate">{student.email}</span>
-                          </div>
-                          <div className="flex items-center gap-3 text-sm text-gray-500 group-hover:text-gray-700 transition-colors">
-                            <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center shrink-0">
-                              <Phone className="h-4 w-4 text-gray-400" />
-                            </div>
-                            <span className="truncate">{student.phone || 'Sem telefone'}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="bg-gray-50/50 px-6 py-4 border-t border-gray-100 group-hover:bg-[#002C4E]/5 transition-colors flex justify-between items-center">
-                        <span className="text-xs font-medium text-gray-400 group-hover:text-[#002C4E] uppercase tracking-wider">
-                          Ver Detalhes
-                        </span>
-                        <div className="w-8 h-8 rounded-full bg-white border border-gray-100 flex items-center justify-center shadow-sm group-hover:translate-x-1 transition-transform">
-                          <Plus className="h-4 w-4 text-[#002C4E]" />
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-
-            {/* Modal de Cadastro/Edição - Premium Design */}
-            {showModal && (
-              <div className="fixed inset-0 !m-0 !top-0 !left-0 !right-0 !bottom-0 bg-[#002C4E]/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-                <Card className="max-w-xl w-full shadow-2xl border-none rounded-2xl overflow-hidden max-h-[90vh] flex flex-col">
-                  {/* Header Premium */}
-                  <div className="bg-[#002C4E] text-white p-6 relative overflow-hidden shrink-0">
-                    <div className="absolute top-0 right-0 p-24 bg-[#27DFFF]/10 rounded-full -mr-12 -mt-12 blur-2xl"></div>
-                    <div className="relative z-10 flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center backdrop-blur-sm">
-                          <User className="h-6 w-6 text-[#27DFFF]" />
-                        </div>
-                        <div>
-                          <h2 className="text-xl font-bold">{editingStudent ? 'Editar Aluno' : 'Novo Aluno'}</h2>
-                          <p className="text-white/70 text-sm">
-                            {editingStudent ? 'Atualize as informações do aluno' : 'Cadastre um novo aluno na sua carteira'}
-                          </p>
-                        </div>
-                      </div>
+                {/* Pagination */}
+                {filteredStudents.length > 0 && (
+                  <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 bg-gray-50/30">
+                    <span className="text-sm text-gray-500">
+                      Mostrando {indexOfFirstItem + 1} a {Math.min(indexOfLastItem, filteredStudents.length)} de {filteredStudents.length} alunos
+                    </span>
+                    <div className="flex gap-2">
                       <Button
-                        variant="ghost"
-                        size="icon"
-                        className="rounded-full h-10 w-10 hover:bg-white/10 text-white/70 hover:text-white transition-colors"
-                        onClick={handleCloseModal}
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                        disabled={currentPage === 1}
+                        className="h-8 border-gray-200"
                       >
-                        <X className="h-5 w-5" />
+                        Anterior
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                        disabled={currentPage === totalPages}
+                        className="h-8 border-gray-200"
+                      >
+                        Próxima
                       </Button>
                     </div>
                   </div>
+                )}
+              </CardContent>
+            </Card>
 
-                  {/* Form Content - Scrollable */}
-                  <div className="flex-1 overflow-y-auto">
-                    <CardContent className="p-6">
-                      <form onSubmit={handleSubmit} className="space-y-6" id="student-form">
+            {/* Modal de Cadastro/Edição - Premium Design */}
+            <Dialog open={showModal} onOpenChange={setShowModal}>
+              <DialogContent className="w-[95vw] max-w-lg p-0 overflow-hidden border-none shadow-2xl bg-white rounded-xl max-h-[90vh] flex flex-col">
+                <DialogHeader className="p-5 bg-[#002C4E] text-white relative overflow-hidden shrink-0">
+                  <div className="absolute top-0 right-0 p-24 bg-[#27DFFF]/10 rounded-full -mr-12 -mt-12 blur-2xl"></div>
+                  <div className="relative z-10 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center backdrop-blur-sm">
+                      <User className="h-5 w-5 text-[#27DFFF]" />
+                    </div>
+                    <div>
+                      <DialogTitle className="text-lg font-bold text-white">
+                        {editingStudent ? 'Editar Aluno' : 'Novo Aluno'}
+                      </DialogTitle>
+                      <p className="text-white/70 text-xs mt-0.5">
+                        {editingStudent ? 'Atualize as informações' : 'Cadastre um novo aluno'}
+                      </p>
+                    </div>
+                  </div>
+                </DialogHeader>
 
-                        {/* Seção: Dados Pessoais */}
-                        <div className="space-y-4">
-                          <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
-                            <div className="p-1.5 bg-blue-50 rounded-md">
-                              <User className="h-4 w-4 text-blue-600" />
+                {/* Form Content - Scrollable */}
+                <div className="flex-1 overflow-y-auto">
+                  <div className="p-5">
+                    <form onSubmit={handleSubmit} className="space-y-5" id="student-form">
+
+                      {/* Seção: Dados Pessoais */}
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 pb-1.5 border-b border-gray-100">
+                          <div className="p-1 bg-blue-50 rounded-md">
+                            <User className="h-3.5 w-3.5 text-blue-600" />
+                          </div>
+                          <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wide">Dados Pessoais</h3>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-500 mb-1 uppercase tracking-wider">
+                            Nome Completo *
+                          </label>
+                          <input
+                            type="text"
+                            value={formData.name}
+                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                            className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#002C4E]/20 focus:border-[#002C4E] focus:bg-white transition-all outline-none text-sm font-medium"
+                            placeholder="Ex: João Silva"
+                            required
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[10px] font-bold text-gray-500 mb-1 uppercase tracking-wider">
+                              CPF
+                            </label>
+                            <div className="relative">
+                              <CreditCard className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                              <input
+                                type="text"
+                                value={formatCpfCnpj(formData.cpf)}
+                                onChange={(e) => {
+                                  const raw = unformatCpfCnpj(e.target.value).slice(0, 11)
+                                  setFormData({ ...formData, cpf: raw })
+                                }}
+                                className="w-full pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#002C4E]/20 focus:border-[#002C4E] focus:bg-white transition-all outline-none text-sm font-medium"
+                                placeholder="000.000.000-00"
+                                maxLength={14}
+                              />
                             </div>
-                            <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Dados Pessoais</h3>
                           </div>
 
                           <div>
-                            <label className="block text-[11px] font-bold text-gray-500 mb-1.5 uppercase tracking-wider">
-                              Nome Completo *
+                            <label className="block text-[10px] font-bold text-gray-500 mb-1 uppercase tracking-wider">
+                              Data de Nascimento
                             </label>
-                            <input
-                              type="text"
-                              value={formData.name}
-                              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#002C4E]/20 focus:border-[#002C4E] focus:bg-white transition-all outline-none text-sm font-medium"
-                              placeholder="Ex: João Silva"
-                              required
-                            />
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <label className="block text-[11px] font-bold text-gray-500 mb-1.5 uppercase tracking-wider">
-                                CPF
-                              </label>
-                              <div className="relative">
-                                <CreditCard className="absolute left-3 top-3.5 h-4 w-4 text-gray-400" />
-                                <input
-                                  type="text"
-                                  value={formatCpfCnpj(formData.cpf)}
-                                  onChange={(e) => {
-                                    const raw = unformatCpfCnpj(e.target.value).slice(0, 11)
-                                    setFormData({ ...formData, cpf: raw })
-                                  }}
-                                  className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#002C4E]/20 focus:border-[#002C4E] focus:bg-white transition-all outline-none text-sm font-medium"
-                                  placeholder="000.000.000-00"
-                                  maxLength={14}
-                                />
-                              </div>
+                            <div className="relative">
+                              <Calendar className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                              <input
+                                type="date"
+                                value={formData.birth_date}
+                                onChange={(e) => setFormData({ ...formData, birth_date: e.target.value })}
+                                className="w-full pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#002C4E]/20 focus:border-[#002C4E] focus:bg-white transition-all outline-none text-sm font-medium"
+                              />
                             </div>
-
-                            <div>
-                              <label className="block text-[11px] font-bold text-gray-500 mb-1.5 uppercase tracking-wider">
-                                Data de Nascimento
-                              </label>
-                              <div className="relative">
-                                <Calendar className="absolute left-3 top-3.5 h-4 w-4 text-gray-400" />
-                                <input
-                                  type="date"
-                                  value={formData.birth_date}
-                                  onChange={(e) => setFormData({ ...formData, birth_date: e.target.value })}
-                                  className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#002C4E]/20 focus:border-[#002C4E] focus:bg-white transition-all outline-none text-sm font-medium"
-                                />
-                              </div>
-                            </div>
-                          </div>
-
-                          <div>
-                            <label className="block text-[11px] font-bold text-gray-500 mb-1.5 uppercase tracking-wider">
-                              Gênero
-                            </label>
-                            <Select
-                              value={formData.gender}
-                              onValueChange={(value: GenderType) => setFormData({ ...formData, gender: value })}
-                            >
-                              <SelectTrigger className="w-full h-12 bg-gray-50 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#002C4E]/20 focus:border-[#002C4E]">
-                                <SelectValue placeholder="Selecione o gênero" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="MALE">Masculino</SelectItem>
-                                <SelectItem value="FEMALE">Feminino</SelectItem>
-                                <SelectItem value="NON_BINARY">Não-Binário</SelectItem>
-                                <SelectItem value="OTHER">Outro</SelectItem>
-                                <SelectItem value="PREFER_NOT_TO_SAY">Prefiro não dizer</SelectItem>
-                              </SelectContent>
-                            </Select>
                           </div>
                         </div>
 
-                        {/* Seção: Contato */}
-                        <div className="space-y-4">
-                          <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
-                            <div className="p-1.5 bg-green-50 rounded-md">
-                              <Mail className="h-4 w-4 text-green-600" />
-                            </div>
-                            <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Contato</h3>
-                          </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-500 mb-1 uppercase tracking-wider">
+                            Gênero
+                          </label>
+                          <Select
+                            value={formData.gender}
+                            onValueChange={(value: GenderType) => setFormData({ ...formData, gender: value })}
+                          >
+                            <SelectTrigger className="w-full h-10 bg-gray-50 border-gray-200 rounded-lg focus:ring-2 focus:ring-[#002C4E]/20 focus:border-[#002C4E] text-sm">
+                              <SelectValue placeholder="Selecione o gênero" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="MALE">Masculino</SelectItem>
+                              <SelectItem value="FEMALE">Feminino</SelectItem>
+                              <SelectItem value="NON_BINARY">Não-Binário</SelectItem>
+                              <SelectItem value="OTHER">Outro</SelectItem>
+                              <SelectItem value="PREFER_NOT_TO_SAY">Prefiro não dizer</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
 
+                      {/* Seção: Contato */}
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 pb-1.5 border-b border-gray-100">
+                          <div className="p-1 bg-green-50 rounded-md">
+                            <Mail className="h-3.5 w-3.5 text-green-600" />
+                          </div>
+                          <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wide">Contato</h3>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <div>
-                            <label className="block text-[11px] font-bold text-gray-500 mb-1.5 uppercase tracking-wider">
+                            <label className="block text-[10px] font-bold text-gray-500 mb-1 uppercase tracking-wider">
                               Email *
                             </label>
                             <div className="relative">
-                              <Mail className="absolute left-3 top-3.5 h-4 w-4 text-gray-400" />
+                              <Mail className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
                               <input
                                 type="email"
                                 value={formData.email}
                                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#002C4E]/20 focus:border-[#002C4E] focus:bg-white transition-all outline-none text-sm font-medium"
-                                placeholder="aluno@email.com"
+                                className="w-full pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#002C4E]/20 focus:border-[#002C4E] focus:bg-white transition-all outline-none text-sm font-medium"
+                                placeholder="email@exemplo.com"
                                 required
                               />
                             </div>
                           </div>
 
                           <div>
-                            <label className="block text-[11px] font-bold text-gray-500 mb-1.5 uppercase tracking-wider">
-                              Telefone / WhatsApp
+                            <label className="block text-[10px] font-bold text-gray-500 mb-1 uppercase tracking-wider">
+                              Telefone/WhatsApp
                             </label>
                             <div className="relative">
-                              <Phone className="absolute left-3 top-3.5 h-4 w-4 text-gray-400" />
+                              <Phone className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
                               <input
                                 type="tel"
                                 value={formData.phone}
                                 onChange={(e) => {
-                                  let value = e.target.value.replace(/\D/g, '') // Remove não-números
+                                  let value = e.target.value.replace(/\D/g, '')
                                   if (value.length <= 11) {
-                                    if (value.length <= 2) {
-                                      value = value
-                                    } else if (value.length <= 6) {
-                                      // (11) 1234
-                                      value = value.replace(/(\d{2})(\d+)/, '($1) $2')
-                                    } else if (value.length <= 10) {
-                                      // (11) 1234-5678 (fixo)
-                                      value = value.replace(/(\d{2})(\d{4})(\d+)/, '($1) $2-$3')
-                                    } else {
-                                      // (11) 91234-5678 (celular com 9º dígito)
-                                      value = value.replace(/(\d{2})(\d{5})(\d+)/, '($1) $2-$3')
-                                    }
+                                    if (value.length <= 2) value = value
+                                    else if (value.length <= 6) value = value.replace(/(\d{2})(\d+)/, '($1) $2')
+                                    else if (value.length <= 10) value = value.replace(/(\d{2})(\d{4})(\d+)/, '($1) $2-$3')
+                                    else value = value.replace(/(\d{2})(\d{5})(\d+)/, '($1) $2-$3')
                                   }
                                   setFormData({ ...formData, phone: value })
                                 }}
-                                className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#002C4E]/20 focus:border-[#002C4E] focus:bg-white transition-all outline-none text-sm font-medium"
+                                className="w-full pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#002C4E]/20 focus:border-[#002C4E] focus:bg-white transition-all outline-none text-sm font-medium"
                                 maxLength={15}
                                 placeholder="(99) 99999-9999"
                               />
                             </div>
                           </div>
                         </div>
+                      </div>
 
-                        {/* Seção: Dados Profissionais */}
-                        <div className="space-y-4">
-                          <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
-                            <div className="p-1.5 bg-amber-50 rounded-md">
-                              <DollarSign className="h-4 w-4 text-amber-600" />
-                            </div>
-                            <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Valor & Observações</h3>
+                      {/* Seção: Dados Profissionais */}
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 pb-1.5 border-b border-gray-100">
+                          <div className="p-1 bg-amber-50 rounded-md">
+                            <DollarSign className="h-3.5 w-3.5 text-amber-600" />
                           </div>
+                          <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wide">Detalhes Profissionais</h3>
+                        </div>
 
-                          <div>
-                            <label className="block text-[11px] font-bold text-gray-500 mb-1.5 uppercase tracking-wider">
-                              Valor Hora/Aula (R$)
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
+                          <div className="col-span-1">
+                            <label className="block text-[10px] font-bold text-gray-500 mb-1 uppercase tracking-wider">
+                              Valor Hora (R$)
                             </label>
                             <div className="relative">
-                              <DollarSign className="absolute left-3 top-3.5 h-4 w-4 text-gray-400" />
+                              <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
                               <input
                                 type="number"
                                 step="0.01"
                                 min="0"
                                 value={formData.hourly_rate}
                                 onChange={(e) => setFormData({ ...formData, hourly_rate: e.target.value })}
-                                className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#002C4E]/20 focus:border-[#002C4E] focus:bg-white transition-all outline-none text-sm font-medium text-[#002C4E]"
+                                className="w-full pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#002C4E]/20 focus:border-[#002C4E] focus:bg-white transition-all outline-none text-sm font-medium text-[#002C4E]"
                                 placeholder="0,00"
                               />
                             </div>
-                            <p className="text-xs text-gray-400 mt-1">Valor cobrado por hora de aula particular</p>
                           </div>
 
-                          <div>
-                            <label className="block text-[11px] font-bold text-gray-500 mb-1.5 uppercase tracking-wider">
-                              Observações
+                          <div className="col-span-1">
+                            <label className="block text-[10px] font-bold text-gray-500 mb-1 uppercase tracking-wider">
+                              Primeira Aula
                             </label>
-                            <div className="relative">
-                              <FileText className="absolute left-3 top-3.5 h-4 w-4 text-gray-400" />
-                              <textarea
-                                value={formData.notes}
-                                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                                className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#002C4E]/20 focus:border-[#002C4E] focus:bg-white transition-all outline-none resize-none text-sm"
-                                rows={3}
-                                placeholder="Objetivos, limitações físicas, preferências de treino..."
+                            <div className="flex items-center justify-between px-3 py-2 bg-green-50/50 border border-green-100 rounded-lg h-[42px]">
+                              <span className="text-xs font-medium text-gray-700">Ocultar Grátis</span>
+                              <Switch
+                                checked={formData.hide_free_class}
+                                onCheckedChange={(checked) => setFormData({ ...formData, hide_free_class: checked })}
+                                className="scale-75 origin-right"
                               />
                             </div>
                           </div>
-
-                          {/* Toggle Primeira Aula Gratuita */}
-                          <div className="flex items-center justify-between p-4 bg-green-50 border border-green-100 rounded-xl">
-                            <div className="flex items-center gap-3">
-                              <div className="p-2 bg-green-100 rounded-lg">
-                                <Gift className="h-4 w-4 text-green-600" />
-                              </div>
-                              <div>
-                                <p className="text-sm font-semibold text-gray-800">Ocultar "Primeira Aula Gratuita"</p>
-                                <p className="text-xs text-gray-500">O aluno não verá o badge de aula grátis disponível</p>
-                              </div>
-                            </div>
-                            <Switch
-                              checked={formData.hide_free_class}
-                              onCheckedChange={(checked) => setFormData({ ...formData, hide_free_class: checked })}
-                            />
-                          </div>
                         </div>
-                      </form>
-                    </CardContent>
-                  </div>
 
-                  {/* Footer com botões - Fixo */}
-                  <div className="p-6 bg-gray-50 border-t border-gray-100 shrink-0">
-                    <div className="flex gap-3">
-                      <Button
-                        type="button"
-                        onClick={handleCloseModal}
-                        variant="ghost"
-                        className="flex-1 rounded-xl h-12 hover:bg-gray-100 text-gray-600 font-medium"
-                      >
-                        Cancelar
-                      </Button>
-                      <Button
-                        type="submit"
-                        form="student-form"
-                        className="flex-1 bg-[#002C4E] hover:bg-[#003f70] text-white rounded-xl h-12 font-bold shadow-lg shadow-blue-900/10 transition-all active:scale-[0.98]"
-                      >
-                        {editingStudent ? 'Salvar Alterações' : 'Cadastrar Aluno'}
-                      </Button>
-                    </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-500 mb-1 uppercase tracking-wider">
+                            Observações
+                          </label>
+                          <textarea
+                            value={formData.notes}
+                            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#002C4E]/20 focus:border-[#002C4E] focus:bg-white transition-all outline-none resize-none text-sm"
+                            rows={2}
+                            placeholder="Anotações gerais do aluno..."
+                          />
+                        </div>
+                      </div>
+                    </form>
                   </div>
-                </Card>
-              </div>
-            )}
+                </div>
+
+                {/* Footer com botões - Fixo */}
+                <div className="p-4 bg-gray-50 border-t border-gray-100 shrink-0">
+                  <div className="flex gap-3">
+                    <Button
+                      type="button"
+                      onClick={handleCloseModal}
+                      variant="ghost"
+                      className="flex-1 rounded-lg h-10 hover:bg-gray-100 text-gray-600 font-medium text-sm"
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      type="submit"
+                      form="student-form"
+                      className="flex-1 bg-[#002C4E] hover:bg-[#003f70] text-white rounded-lg h-10 font-bold shadow-lg shadow-blue-900/10 transition-all active:scale-[0.98] text-sm"
+                    >
+                      {editingStudent ? 'Salvar' : 'Cadastrar'}
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
 
             {/* Modal de Detalhes do Aluno */}
             {showDetailModal && selectedStudent && (

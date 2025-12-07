@@ -1,11 +1,7 @@
-// Logo URL - using direct URL instead of base64
-const LOGO_URL = `${
-  process.env.FRONTEND_URL ||
-  process.env.WEB_URL ||
-  'https://meupersonalfranquia.com.br'
-}/images/logo.png`
+// Client-side version of email template for preview
+// Use local path for development preview
+const LOGO_URL = '/images/logo.png'
 const PRIMARY_COLOR = '#002C4E'
-const ACCENT_COLOR = '#FFF373'
 
 export const getHtmlEmailTemplate = (
   title: string,

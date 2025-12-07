@@ -67,12 +67,7 @@ export const PROFESSOR_NAV_ITEMS: ProfessorNavItem[] = [
       }
     ]
   },
-  {
-    id: 'aulas',
-    label: 'Aulas',
-    icon: BookOpen,
-    href: '/professor/aulas'
-  },
+
   {
     id: 'financeiro',
     label: 'Financeiro',

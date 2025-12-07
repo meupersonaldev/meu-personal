@@ -54,7 +54,7 @@ export default function DisponibilidadePage() {
   const router = useRouter()
   const { user, token } = useAuthStore()
   const { academies: teacherAcademies, loading: loadingAcademies } = useTeacherAcademies()
-  
+
   const [selectedAcademy, setSelectedAcademy] = useState<string>('')
   const [academyTimeSlots, setAcademyTimeSlots] = useState<AcademyTimeSlot[]>([])
   const [weeklySchedule, setWeeklySchedule] = useState<WeeklySchedule>({})
@@ -72,12 +72,12 @@ export default function DisponibilidadePage() {
   const [loading, setLoading] = useState(false)
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [saving, setSaving] = useState(false)
-  
+
   // Bloqueios
   const [newBlockStart, setNewBlockStart] = useState('')
   const [newBlockEnd, setNewBlockEnd] = useState('')
   const [newBlockReason, setNewBlockReason] = useState('')
-  
+
   // Modal de confirmação para limpar um dia (por data)
   const [clearDayModal, setClearDayModal] = useState<{ open: boolean; dateKey: string | null }>({
     open: false,
@@ -131,7 +131,7 @@ export default function DisponibilidadePage() {
   // Função para buscar dados
   const fetchData = useCallback(async () => {
     if (!selectedAcademy || !user?.id) return
-    
+
     setLoadingSlots(true)
     try {
       // Buscar slots da academia
@@ -163,9 +163,9 @@ export default function DisponibilidadePage() {
           const status = b.status || b.status_canonical
           const dateField = (b.date || b.start_at) as string
           const bookingDate = dateField ? new Date(dateField) : null
-          
+
           // Exibir também disponibilidade no passado dentro da janela exibida
-          return !studentId && 
+          return !studentId &&
             franchiseId === selectedAcademy &&
             status === 'AVAILABLE' &&
             !!bookingDate
@@ -204,7 +204,7 @@ export default function DisponibilidadePage() {
             status !== 'BLOCKED' &&
             !!bookingDate
         })
-        
+
         // Agrupar por DATA (yyyy-MM-dd) e horário local
         const saved: WeeklySchedule = {}
         const blocked: WeeklySchedule = {}
@@ -411,7 +411,7 @@ export default function DisponibilidadePage() {
   // Toggle horário para uma data específica
   const toggleHorario = (dateKey: string, dayOfWeek: number, horario: string) => {
     if (!isSlotAvailable(dayOfWeek, horario)) return
-    
+
     // Verificar se está ocupado (não permitir adicionar)
     const normalizedHorario = normalizeTime(horario)
     const isOccupied = (occupiedSchedule[dateKey] || []).map(normalizeTime).includes(normalizedHorario)
@@ -419,7 +419,7 @@ export default function DisponibilidadePage() {
       toast.warning('Este horário já está ocupado por uma aula agendada')
       return
     }
-    
+
     setWeeklySchedule(prev => {
       const daySchedule = prev[dateKey] || []
       const normalizedSchedule = daySchedule.map(normalizeTime)
@@ -440,7 +440,7 @@ export default function DisponibilidadePage() {
   // Selecionar todos os horários disponíveis de uma DATA específica
   const selectAllDate = (dateKey: string, dayOfWeek: number) => {
     const availableSlots = slotsByDay[dayOfWeek] || []
-    
+
     // Filtrar horários ocupados (normalizando para comparação)
     const occupiedTimes = (occupiedSchedule[dateKey] || []).map(normalizeTime)
     const availableAndNotOccupied = availableSlots.filter(time => !occupiedTimes.includes(normalizeTime(time)))
@@ -712,7 +712,7 @@ export default function DisponibilidadePage() {
       const currentDate = new Date(start)
       while (currentDate <= end) {
         const dateStr = currentDate.toISOString().split('T')[0]
-        
+
         // Bloquear todos os horários do dia (usando os horários da academia)
         const res = await authFetch(`/api/teachers/${user.id}/blocks/custom`, {
           method: 'POST',
@@ -758,377 +758,418 @@ export default function DisponibilidadePage() {
 
   return (
     <ProfessorLayout>
-      <div className="px-4 py-6 space-y-6 md:px-6 max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={() => router.push('/professor/agenda')}>
-            <ChevronLeft className="h-4 w-4 mr-1" />
-            Voltar
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold">Gerenciar Disponibilidade</h1>
-            <p className="text-sm text-gray-500">Configure seus horários disponíveis por data</p>
+      <div className="space-y-6">
+        {/* Premium Header */}
+        <div className="relative overflow-hidden bg-gradient-to-br from-[#002C4E] via-[#003d6b] to-[#004d7a] rounded-b-[2.5rem] md:rounded-b-[3rem] px-4 py-8 md:px-8 md:py-10">
+          {/* Decorative shapes */}
+          <div className="absolute top-0 right-0 w-64 h-64 bg-[#27DFFF]/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4"></div>
+          <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full blur-2xl translate-y-1/2 -translate-x-1/4"></div>
+
+          <div className="relative z-10 max-w-6xl mx-auto">
+            {/* Back button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push('/professor/agenda')}
+              className="text-white/80 hover:text-white hover:bg-white/10 mb-4 -ml-2"
+            >
+              <ChevronLeft className="h-4 w-4 mr-1" />
+              Voltar à Agenda
+            </Button>
+
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div>
+                <h1 className="text-2xl md:text-3xl font-bold text-white flex items-center gap-3">
+                  <div className="p-2.5 bg-white/10 backdrop-blur-sm rounded-xl">
+                    <Clock className="h-6 w-6 text-[#27DFFF]" />
+                  </div>
+                  Gerenciar Disponibilidade
+                </h1>
+                <p className="text-white/70 mt-2 text-sm md:text-base">
+                  Configure seus horários disponíveis por data
+                </p>
+              </div>
+
+              {/* Academy Selector */}
+              <div className="flex items-center gap-3 bg-white/10 backdrop-blur-sm px-4 py-3 rounded-xl border border-white/10 relative group hover:bg-white/15 transition-all">
+                <MapPin className="h-5 w-5 text-[#27DFFF]" />
+                <select
+                  value={selectedAcademy}
+                  onChange={(e) => setSelectedAcademy(e.target.value)}
+                  className="bg-transparent text-white font-medium border-none focus:outline-none focus:ring-0 cursor-pointer min-w-[200px] appearance-none pr-8"
+                >
+                  {teacherAcademies.map(academy => (
+                    <option key={academy.id} value={academy.id} className="text-gray-900">
+                      {academy.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronLeft className="h-4 w-4 text-white/70 absolute right-4 rotate-90 pointer-events-none group-hover:text-white transition-colors" />
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Seletor de Unidade */}
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <MapPin className="h-5 w-5 text-meu-primary" />
-              <Label className="font-medium">Unidade:</Label>
-              <select
-                value={selectedAcademy}
-                onChange={(e) => setSelectedAcademy(e.target.value)}
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2 focus:ring-2 focus:ring-meu-primary"
-              >
-                {teacherAcademies.map(academy => (
-                  <option key={academy.id} value={academy.id}>
-                    {academy.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="px-4 md:px-6 max-w-6xl mx-auto space-y-6">
 
-        {/* Grade de 7 dias (agenda por data) */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="h-5 w-5 text-meu-primary" />
-              Horários de Funcionamento da Unidade
-            </CardTitle>
-            <p className="text-sm text-gray-500 mt-1">
-              Selecione os horários em que você está disponível para atender
-            </p>
-          </CardHeader>
-          <CardContent>
-            {loadingSlots ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-meu-primary" />
-                <span className="ml-2 text-gray-500">Carregando horários...</span>
-              </div>
-            ) : allTimes.length === 0 ? (
-              <div className="text-center py-12 bg-gray-50 rounded-lg">
-                <AlertCircle className="h-12 w-12 text-amber-500 mx-auto mb-3" />
-                <h3 className="font-semibold text-gray-900 mb-1">Nenhum horário configurado</h3>
-                <p className="text-sm text-gray-500 max-w-md mx-auto">
-                  Esta unidade ainda não possui horários de funcionamento configurados. 
-                  Entre em contato com a administração da academia.
-                </p>
-              </div>
-            ) : (
-              <div>
-                {/* Legenda */}
-                <div className="flex flex-wrap gap-4 mb-4 text-sm">
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded bg-gradient-to-r from-green-500 to-emerald-500"></div>
-                    <span className="text-gray-600">Disponibilizado</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded bg-gradient-to-r from-blue-500 to-indigo-500"></div>
-                    <span className="text-gray-600">Nova seleção</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded bg-gradient-to-r from-amber-500 to-orange-400 border-2 border-amber-500 flex items-center justify-center text-[10px]">🔒</div>
-                    <span className="text-gray-600">Ocupado (aula agendada)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded bg-gradient-to-r from-red-500 to-rose-500"></div>
-                    <span className="text-gray-600">Bloqueado</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded bg-white border-2 border-gray-200"></div>
-                    <span className="text-gray-600">Disponível</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded bg-gray-100 border-2 border-gray-100"></div>
-                    <span className="text-gray-600">Unidade fechada</span>
-                  </div>
+          {/* Grade de 7 dias (agenda por data) */}
+          <Card className="rounded-2xl shadow-lg border-0 overflow-hidden">
+            <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b border-gray-100">
+              <CardTitle className="flex items-center gap-3 text-lg">
+                <div className="p-2 bg-[#002C4E]/10 rounded-lg">
+                  <Calendar className="h-5 w-5 text-[#002C4E]" />
                 </div>
-                
-                <div className="flex justify-between items-center mb-4 text-sm">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      const prev = new Date(startDate)
-                      prev.setDate(prev.getDate() - 7)
-                      setStartDate(prev)
-                    }}
-                  >
-                    <ChevronLeft className="h-4 w-4 mr-1" />
-                    Semana anterior
-                  </Button>
-                  <span className="text-gray-600 font-medium">
-                    {formatDateShort(visibleDays[0].date)} 
-                    {' '}até{' '} 
-                    {formatDateShort(visibleDays[visibleDays.length - 1].date)}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      const next = new Date(startDate)
-                      next.setDate(next.getDate() + 7)
-                      setStartDate(next)
-                    }}
-                  >
-                    Próxima semana
-                    <ChevronRight className="h-4 w-4 ml-1" />
-                  </Button>
+                Horários de Funcionamento da Unidade
+              </CardTitle>
+              <p className="text-sm text-gray-500 mt-2 ml-11">
+                Selecione os horários em que você está disponível para atender
+              </p>
+            </CardHeader>
+            <CardContent className="p-6">
+              {loadingSlots ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-[#002C4E]" />
+                  <span className="ml-3 text-gray-500">Carregando horários...</span>
                 </div>
+              ) : allTimes.length === 0 ? (
+                <div className="text-center py-12 bg-amber-50/50 rounded-xl border border-amber-100">
+                  <AlertCircle className="h-12 w-12 text-amber-500 mx-auto mb-3" />
+                  <h3 className="font-semibold text-gray-900 mb-1">Nenhum horário configurado</h3>
+                  <p className="text-sm text-gray-500 max-w-md mx-auto">
+                    Esta unidade ainda não possui horários de funcionamento configurados.
+                    Entre em contato com a administração da academia.
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  {/* Legend with Cards & Tooltips */}
+                  <div className="flex flex-wrap items-center gap-3 mb-6">
+                    {[
+                      { color: 'bg-emerald-500', label: 'Disponibilizado', desc: 'Horário já aberto para agendamentos', border: 'border-emerald-100', bg: 'bg-emerald-50/50' },
+                      { color: 'bg-blue-500', label: 'Nova seleção', desc: 'Horário selecionado para abrir', border: 'border-blue-100', bg: 'bg-blue-50/50' },
+                      { color: 'bg-amber-500', label: 'Ocupado', desc: 'Aula já agendada com aluno', border: 'border-amber-100', bg: 'bg-amber-50/50' },
+                      { color: 'bg-red-500', label: 'Bloqueado', desc: 'Horário bloqueado por você', border: 'border-red-100', bg: 'bg-red-50/50' },
+                      { color: 'bg-white border border-gray-200', label: 'Disponível', desc: 'Horário livre para selecionar', border: 'border-gray-100', bg: 'bg-gray-50/50' },
+                      { color: 'bg-gray-200', label: 'Fechado', desc: 'Unidade não funciona neste horário', border: 'border-gray-100', bg: 'bg-gray-50/30' }
+                    ].map((item, i) => (
+                      <div key={i} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${item.border} ${item.bg} transition-all hover:shadow-sm`}>
+                        <div className={`w-3 h-3 rounded-sm ${item.color}`}></div>
+                        <span className="text-xs font-semibold text-gray-700">{item.label}</span>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse">
-                  <thead>
-                    <tr>
-                      <th className="p-2 text-left text-sm font-medium text-gray-500 w-20">
-                        <Clock className="h-4 w-4" />
-                      </th>
-                      {visibleDays.map(dia => {
-                        const daySlots = slotsByDay[dia.dayOfWeek] || []
-                        const hasSlots = daySlots.length > 0
-                        return (
-                          <th key={dia.dateKey} className={`p-2 text-center ${!hasSlots ? 'opacity-40' : ''}`}>
-                            <div className="text-sm font-medium">{formatDateShort(dia.date)}</div>
-                            {hasSlots ? (
-                              <div className="flex gap-1 justify-center mt-1">
-                                <button
-                                  onClick={() => selectAllDate(dia.dateKey, dia.dayOfWeek)}
-                                  className="text-[10px] text-green-600 hover:underline"
-                                >
-                                  Todos
-                                </button>
-                                <span className="text-gray-300">|</span>
-                                <button
-                                  onClick={() => openClearDayModal(dia.dateKey)}
-                                  className="text-[10px] text-red-600 hover:underline"
-                                >
-                                  Limpar
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="text-[10px] text-gray-400 mt-1">Fechado</div>
-                            )}
-                          </th>
-                        )
-                      })}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {allTimes.map((horario: string) => (
-                      <tr key={horario} className="border-t">
-                        <td className="p-2">
-                          <button
-                            onClick={() => selectHorarioAllDays(horario)}
-                            className="text-sm font-medium text-gray-700 hover:text-meu-primary"
-                          >
-                            {formatTimeLabel(horario)}
-                          </button>
-                        </td>
-                        {visibleDays.map(dia => {
-                          const isAvailable = isSlotAvailable(dia.dayOfWeek, horario)
-                          const normalizedHorario = normalizeTime(horario)
-                          const isSelected = (weeklySchedule[dia.dateKey] || []).map(normalizeTime).includes(normalizedHorario)
-                          const isSaved = (savedSchedule[dia.dateKey] || []).map(normalizeTime).includes(normalizedHorario)
-                          const isBlocked = (blockedSchedule[dia.dateKey] || []).map(normalizeTime).includes(normalizedHorario)
-                          const isOccupied = (occupiedSchedule[dia.dateKey] || []).map(normalizeTime).includes(normalizedHorario)
-
-                          if (!isAvailable) {
-                            return (
-                              <td key={dia.dateKey} className="p-1 text-center">
-                                <div className="flex justify-center">
-                                  <div className="w-10 h-10 rounded-lg bg-gray-100 border-2 border-gray-100" />
-                                </div>
-                              </td>
-                            )
-                          }
-
-                          // Horários ocupados (com aluno, incluindo séries) - não podem ser selecionados
-                          if (isOccupied) {
-                            return (
-                              <td key={dia.dateKey} className="p-1 text-center">
-                                <button
-                                  type="button"
-                                  disabled
-                                  className="w-10 h-10 rounded-lg border-2 bg-gradient-to-r from-amber-500 to-orange-400 border-amber-500 text-white shadow-md transition-all cursor-not-allowed"
-                                  title="Horário ocupado (aula agendada)"
-                                >
-                                  <Lock className="h-4 w-4 mx-auto" />
-                                </button>
-                              </td>
-                            )
-                          }
-
-                          if (isBlocked) {
-                            return (
-                              <td key={dia.dateKey} className="p-1 text-center">
-                                <button
-                                  type="button"
-                                  onClick={() => openBlockedSlotRemovalModal(dia.dateKey, horario)}
-                                  className="w-10 h-10 rounded-lg border-2 bg-gradient-to-r from-red-500 to-rose-500 border-red-500 text-white opacity-80 flex items-center justify-center text-[10px] hover:opacity-100"
-                                >
-                                  B
-                                </button>
-                              </td>
-                            )
-                          }
-
-                          return (
-                            <td key={dia.dateKey} className="p-1 text-center">
-                              <button
-                                onClick={() => handleSlotClick(dia.dateKey, dia.dayOfWeek, horario, isSaved, isSelected)}
-                                className={`w-10 h-10 rounded-lg border-2 transition-all ${
-                                  isSelected
-                                    ? 'bg-gradient-to-r from-blue-500 to-indigo-500 border-blue-500 text-white shadow-md'
-                                    : isSaved
-                                    ? 'bg-gradient-to-r from-green-500 to-emerald-500 border-green-500 text-white shadow-md'
-                                    : 'bg-white border-gray-200 hover:border-green-400 hover:bg-green-50'
-                                }`}
-                              >
-                                {(isSelected || isSaved) && <Check className="h-4 w-4 mx-auto" />}
-                              </button>
-                            </td>
-                          )
-                        })}
-                      </tr>
+                        {/* Info Icon with Tooltip */}
+                        <div className="group relative ml-1 cursor-help">
+                          <div className="flex items-center justify-center w-4 h-4 rounded-full bg-white border border-gray-200 text-[10px] font-bold text-gray-400 hover:text-[#002C4E] hover:border-[#002C4E] transition-colors">
+                            !
+                          </div>
+                          {/* Tooltip */}
+                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-36 p-2 bg-[#002C4E] text-white text-[10px] font-medium text-center rounded-lg opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200 pointer-events-none z-50 shadow-lg whitespace-normal">
+                            {item.desc}
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-[#002C4E]"></div>
+                          </div>
+                        </div>
+                      </div>
                     ))}
-                  </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
+                  </div>
 
-            {/* Botão Salvar */}
-            <div className="mt-6 flex justify-end">
-              <Button
-                onClick={handleSave}
-                disabled={saving || Object.values(weeklySchedule).every(arr => arr.length === 0)}
-                className="bg-meu-primary hover:bg-meu-primary/90"
-              >
-                {saving ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    Salvando...
-                  </>
-                ) : (
-                  <>
-                    <Save className="h-4 w-4 mr-2" />
-                    Salvar Disponibilidade
-                  </>
-                )}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Bloqueios */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Trash2 className="h-5 w-5 text-red-500" />
-              Bloqueios (Férias, Compromissos)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {/* Formulário de novo bloqueio */}
-              <div className="p-4 border rounded-lg bg-gray-50">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div>
-                    <Label className="text-sm">Data início</Label>
-                    <input
-                      type="date"
-                      value={newBlockStart}
-                      onChange={(e) => setNewBlockStart(e.target.value)}
-                      min={new Date().toISOString().split('T')[0]}
-                      className="w-full mt-1 rounded-lg border border-gray-300 px-3 py-2"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-sm">Data fim</Label>
-                    <input
-                      type="date"
-                      value={newBlockEnd}
-                      onChange={(e) => setNewBlockEnd(e.target.value)}
-                      min={newBlockStart || new Date().toISOString().split('T')[0]}
-                      className="w-full mt-1 rounded-lg border border-gray-300 px-3 py-2"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-sm">Motivo (opcional)</Label>
-                    <input
-                      type="text"
-                      value={newBlockReason}
-                      onChange={(e) => setNewBlockReason(e.target.value)}
-                      placeholder="Ex: Férias"
-                      className="w-full mt-1 rounded-lg border border-gray-300 px-3 py-2"
-                    />
-                  </div>
-                  <div className="flex items-end">
+                  {/* Week Navigation Controls */}
+                  <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-gray-50 p-3 rounded-xl mb-6">
+                    <div className="flex items-center gap-2 bg-white rounded-xl p-1 shadow-sm">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          const prev = new Date(startDate)
+                          prev.setDate(prev.getDate() - 7)
+                          setStartDate(prev)
+                        }}
+                        className="h-9 w-9 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-[#002C4E]"
+                      >
+                        <ChevronLeft className="h-5 w-5" />
+                      </Button>
+                      <div className="px-4 py-1.5 min-w-[200px] text-center">
+                        <span className="text-sm font-bold text-gray-800">
+                          {formatDateShort(visibleDays[0].date)} até {formatDateShort(visibleDays[visibleDays.length - 1].date)}
+                        </span>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          const next = new Date(startDate)
+                          next.setDate(next.getDate() + 7)
+                          setStartDate(next)
+                        }}
+                        className="h-9 w-9 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-[#002C4E]"
+                      >
+                        <ChevronRight className="h-5 w-5" />
+                      </Button>
+                    </div>
                     <Button
-                      onClick={handleAddBlock}
-                      disabled={loading || !newBlockStart || !newBlockEnd}
-                      variant="destructive"
-                      className="w-full"
+                      variant="outline"
+                      onClick={() => {
+                        const today = new Date()
+                        today.setHours(0, 0, 0, 0)
+                        setStartDate(today)
+                      }}
+                      className="rounded-xl border-gray-200 text-gray-600 hover:text-[#002C4E] hover:border-[#002C4E] hover:bg-blue-50/50 font-medium"
                     >
-                      {loading ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <>
-                          <Plus className="h-4 w-4 mr-2" />
-                          Bloquear Período
-                        </>
-                      )}
+                      Hoje
                     </Button>
                   </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse">
+                      <thead>
+                        <tr>
+                          <th className="p-2 text-left text-sm font-medium text-gray-500 w-20">
+                            <Clock className="h-4 w-4" />
+                          </th>
+                          {visibleDays.map(dia => {
+                            const daySlots = slotsByDay[dia.dayOfWeek] || []
+                            const hasSlots = daySlots.length > 0
+                            return (
+                              <th key={dia.dateKey} className={`p-2 text-center ${!hasSlots ? 'opacity-40' : ''}`}>
+                                <div className="text-sm font-medium">{formatDateShort(dia.date)}</div>
+                                {hasSlots ? (
+                                  <div className="flex gap-1 justify-center mt-1">
+                                    <button
+                                      onClick={() => selectAllDate(dia.dateKey, dia.dayOfWeek)}
+                                      className="text-[10px] text-green-600 hover:underline"
+                                    >
+                                      Todos
+                                    </button>
+                                    <span className="text-gray-300">|</span>
+                                    <button
+                                      onClick={() => openClearDayModal(dia.dateKey)}
+                                      className="text-[10px] text-red-600 hover:underline"
+                                    >
+                                      Limpar
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="text-[10px] text-gray-400 mt-1">Fechado</div>
+                                )}
+                              </th>
+                            )
+                          })}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {allTimes.map((horario: string) => (
+                          <tr key={horario} className="border-t">
+                            <td className="p-2">
+                              <button
+                                onClick={() => selectHorarioAllDays(horario)}
+                                className="text-sm font-medium text-gray-700 hover:text-meu-primary"
+                              >
+                                {formatTimeLabel(horario)}
+                              </button>
+                            </td>
+                            {visibleDays.map(dia => {
+                              const isAvailable = isSlotAvailable(dia.dayOfWeek, horario)
+                              const normalizedHorario = normalizeTime(horario)
+                              const isSelected = (weeklySchedule[dia.dateKey] || []).map(normalizeTime).includes(normalizedHorario)
+                              const isSaved = (savedSchedule[dia.dateKey] || []).map(normalizeTime).includes(normalizedHorario)
+                              const isBlocked = (blockedSchedule[dia.dateKey] || []).map(normalizeTime).includes(normalizedHorario)
+                              const isOccupied = (occupiedSchedule[dia.dateKey] || []).map(normalizeTime).includes(normalizedHorario)
+
+                              if (!isAvailable) {
+                                return (
+                                  <td key={dia.dateKey} className="p-1 text-center">
+                                    <div className="flex justify-center">
+                                      <div className="w-10 h-10 rounded-lg bg-gray-100 border-2 border-gray-100" />
+                                    </div>
+                                  </td>
+                                )
+                              }
+
+                              // Horários ocupados (com aluno, incluindo séries) - não podem ser selecionados
+                              if (isOccupied) {
+                                return (
+                                  <td key={dia.dateKey} className="p-1 text-center">
+                                    <button
+                                      type="button"
+                                      disabled
+                                      className="w-10 h-10 rounded-lg border-2 bg-gradient-to-r from-amber-500 to-orange-400 border-amber-500 text-white shadow-md transition-all cursor-not-allowed"
+                                      title="Horário ocupado (aula agendada)"
+                                    >
+                                      <Lock className="h-4 w-4 mx-auto" />
+                                    </button>
+                                  </td>
+                                )
+                              }
+
+                              if (isBlocked) {
+                                return (
+                                  <td key={dia.dateKey} className="p-1 text-center">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setBlockedSlotRemovalModal({ open: true, dateKey: dia.dateKey, time: horario })
+                                      }}
+                                      className="w-10 h-10 rounded-lg border-2 bg-gradient-to-r from-red-500 to-rose-500 border-red-500 text-white opacity-80 flex items-center justify-center text-[10px] hover:opacity-100"
+                                    >
+                                      B
+                                    </button>
+                                  </td>
+                                )
+                              }
+
+                              return (
+                                <td key={dia.dateKey} className="p-1 text-center">
+                                  <button
+                                    onClick={() => handleSlotClick(dia.dateKey, dia.dayOfWeek, horario, isSaved, isSelected)}
+                                    className={`w-10 h-10 rounded-xl border-2 transition-all duration-200 transform hover:scale-105 ${isSelected
+                                      ? 'bg-gradient-to-r from-blue-500 to-indigo-500 border-blue-500 text-white shadow-md shadow-blue-200'
+                                      : isSaved
+                                        ? 'bg-gradient-to-r from-green-500 to-emerald-500 border-green-500 text-white shadow-md shadow-green-200'
+                                        : 'bg-white border-gray-100 hover:border-blue-300 hover:bg-blue-50 hover:shadow-sm'
+                                      }`}
+                                  >
+                                    {(isSelected || isSaved) && <Check className="h-5 w-5 mx-auto animate-in zoom-in duration-200" />}
+                                  </button>
+                                </td>
+                              )
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Floating Save Button */}
+              <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom duration-500">
+                <Button
+                  onClick={handleSave}
+                  disabled={saving || Object.values(weeklySchedule).every(arr => arr.length === 0)}
+                  className="bg-[#002C4E] hover:bg-[#003d6b] text-white rounded-full px-8 py-6 shadow-2xl transition-all hover:scale-105 disabled:opacity-50 disabled:hover:scale-100 disabled:shadow-none"
+                >
+                  {saving ? (
+                    <>
+                      <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                      Salvando...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-5 w-5 mr-2" />
+                      Salvar Alterações
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Bloqueios */}
+          <Card className="rounded-2xl shadow-lg border-0 overflow-hidden">
+            <CardHeader className="bg-gradient-to-r from-red-50 to-white border-b border-red-100">
+              <CardTitle className="flex items-center gap-3 text-lg">
+                <div className="p-2 bg-red-500/10 rounded-lg">
+                  <Lock className="h-5 w-5 text-red-500" />
+                </div>
+                Bloqueios (Férias, Compromissos)
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-6">
+              <div className="space-y-4">
+                {/* Formulário de novo bloqueio */}
+                <div className="p-4 border border-gray-100 rounded-xl bg-gray-50/50">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div>
+                      <Label className="text-sm font-medium text-gray-700">Data início</Label>
+                      <input
+                        type="date"
+                        value={newBlockStart}
+                        onChange={(e) => setNewBlockStart(e.target.value)}
+                        min={new Date().toISOString().split('T')[0]}
+                        className="w-full mt-1.5 rounded-xl border border-gray-200 px-3 py-2.5 focus:ring-2 focus:ring-[#002C4E] focus:border-transparent transition-all"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-gray-700">Data fim</Label>
+                      <input
+                        type="date"
+                        value={newBlockEnd}
+                        onChange={(e) => setNewBlockEnd(e.target.value)}
+                        min={newBlockStart || new Date().toISOString().split('T')[0]}
+                        className="w-full mt-1.5 rounded-xl border border-gray-200 px-3 py-2.5 focus:ring-2 focus:ring-[#002C4E] focus:border-transparent transition-all"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-gray-700">Motivo (opcional)</Label>
+                      <input
+                        type="text"
+                        value={newBlockReason}
+                        onChange={(e) => setNewBlockReason(e.target.value)}
+                        placeholder="Ex: Férias"
+                        className="w-full mt-1.5 rounded-xl border border-gray-200 px-3 py-2.5 focus:ring-2 focus:ring-[#002C4E] focus:border-transparent transition-all"
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <Button
+                        onClick={handleAddBlock}
+                        disabled={loading || !newBlockStart || !newBlockEnd}
+                        variant="destructive"
+                        className="w-full rounded-xl"
+                      >
+                        {loading ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <>
+                            <Plus className="h-4 w-4 mr-2" />
+                            Bloquear Período
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Info */}
+                <div className="flex items-start gap-3 text-sm text-amber-800 bg-amber-50 p-4 rounded-xl border border-amber-100">
+                  <AlertCircle className="h-5 w-5 mt-0.5 text-amber-500 shrink-0" />
+                  <span>
+                    Bloqueios impedem que alunos agendem aulas no período selecionado.
+                    Aulas já agendadas não são afetadas automaticamente.
+                  </span>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+        </div>
 
-              {/* Info */}
-              <div className="flex items-start gap-2 text-sm text-gray-500 bg-amber-50 p-3 rounded-lg">
-                <AlertCircle className="h-4 w-4 mt-0.5 text-amber-600" />
-                <span>
-                  Bloqueios impedem que alunos agendem aulas no período selecionado.
-                  Aulas já agendadas não são afetadas automaticamente.
-                </span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Modal de confirmação para limpar todos os horários de uma data */}
+        <ConfirmDialog
+          isOpen={clearDayModal.open}
+          onClose={() => setClearDayModal({ open: false, dateKey: null })}
+          onConfirm={executeClearDay}
+          title="Remover Disponibilidade"
+          description={clearDayModal.dateKey
+            ? `Deseja remover TODOS os horários disponíveis em ${formatDateLongFromKey(clearDayModal.dateKey)}? Atenção: Aulas já marcadas/reservadas não serão afetadas.`
+            : 'Deseja remover todos os horários disponíveis deste dia? Aulas já marcadas/reservadas não serão afetadas.'}
+          confirmText="Sim, Remover"
+          cancelText="Cancelar"
+          type="danger"
+          loading={loading}
+        />
+
+        {/* Modal de confirmação para um horário específico (data + horário) */}
+        <ConfirmDialog
+          isOpen={slotRemovalModal.open}
+          onClose={() => setSlotRemovalModal({ open: false, dateKey: null, time: null })}
+          onConfirm={executeSlotRemoval}
+          title="Remover horário"
+          description={slotRemovalModal.dateKey && slotRemovalModal.time
+            ? `Deseja remover sua disponibilidade em ${formatDateLongFromKey(slotRemovalModal.dateKey)} às ${formatTimeLabel(slotRemovalModal.time)}?`
+            : 'Deseja remover este horário de disponibilidade?'}
+          confirmText="Remover"
+          cancelText="Cancelar"
+          type="warning"
+          loading={loading}
+        />
       </div>
-
-      {/* Modal de confirmação para limpar todos os horários de uma data */}
-      <ConfirmDialog
-        isOpen={clearDayModal.open}
-        onClose={() => setClearDayModal({ open: false, dateKey: null })}
-        onConfirm={executeClearDay}
-        title="Remover Disponibilidade"
-        description={clearDayModal.dateKey
-          ? `Deseja remover TODOS os horários disponíveis em ${formatDateLongFromKey(clearDayModal.dateKey)}? Atenção: Aulas já marcadas/reservadas não serão afetadas.`
-          : 'Deseja remover todos os horários disponíveis deste dia? Aulas já marcadas/reservadas não serão afetadas.'}
-        confirmText="Sim, Remover"
-        cancelText="Cancelar"
-        type="danger"
-        loading={loading}
-      />
-
-      {/* Modal de confirmação para um horário específico (data + horário) */}
-      <ConfirmDialog
-        isOpen={slotRemovalModal.open}
-        onClose={() => setSlotRemovalModal({ open: false, dateKey: null, time: null })}
-        onConfirm={executeSlotRemoval}
-        title="Remover horário"
-        description={slotRemovalModal.dateKey && slotRemovalModal.time
-          ? `Deseja remover sua disponibilidade em ${formatDateLongFromKey(slotRemovalModal.dateKey)} às ${formatTimeLabel(slotRemovalModal.time)}?`
-          : 'Deseja remover este horário de disponibilidade?'}
-        confirmText="Remover"
-        cancelText="Cancelar"
-        type="warning"
-        loading={loading}
-      />
     </ProfessorLayout>
   )
 }

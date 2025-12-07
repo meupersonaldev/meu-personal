@@ -564,7 +564,7 @@ router.post('/forgot-password', async (req, res) => {
         { expiresIn: '1h' }
       )
 
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000'
+      const frontendUrl = process.env.FRONTEND_URL || 'https://meupersonalfranquia.com.br'
       const resetUrl = new URL('/redefinir-senha', frontendUrl)
       resetUrl.searchParams.set('token', resetToken)
       const resetLink = resetUrl.toString()

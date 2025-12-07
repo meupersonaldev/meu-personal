@@ -8,7 +8,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
-import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
+
 import {
   Calendar,
   MapPin,
@@ -17,7 +17,8 @@ import {
   ChevronRight,
   Clock,
   User,
-  Settings
+  Settings,
+  Ban
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -39,64 +40,7 @@ interface Booking {
 
 type ViewMode = 'day' | 'week' | 'month'
 
-const STATUS_COLORS: Record<string, { bg: string; text: string; label: string; icon: string; accent: string; gradient: string }> = {
-  AVAILABLE: {
-    bg: 'bg-gradient-to-r from-emerald-500 to-teal-400',
-    text: 'text-white',
-    label: 'Disponível',
-    icon: '✓',
-    accent: 'border-l-emerald-600',
-    gradient: 'from-emerald-500/20 to-teal-400/20'
-  },
-  PAID: {
-    bg: 'bg-gradient-to-r from-blue-500 to-indigo-500',
-    text: 'text-white',
-    label: 'Confirmada',
-    icon: '👤',
-    accent: 'border-l-blue-600',
-    gradient: 'from-blue-500/20 to-indigo-500/20'
-  },
-  CONFIRMED: {
-    bg: 'bg-gradient-to-r from-blue-500 to-indigo-500',
-    text: 'text-white',
-    label: 'Confirmada',
-    icon: '👤',
-    accent: 'border-l-blue-600',
-    gradient: 'from-blue-500/20 to-indigo-500/20'
-  },
-  RESERVED: {
-    bg: 'bg-gradient-to-r from-amber-500 to-orange-400',
-    text: 'text-white',
-    label: 'Reservada',
-    icon: '⏳',
-    accent: 'border-l-amber-600',
-    gradient: 'from-amber-500/20 to-orange-400/20'
-  },
-  COMPLETED: {
-    bg: 'bg-gradient-to-r from-slate-400 to-slate-500',
-    text: 'text-white',
-    label: 'Concluída',
-    icon: '✔',
-    accent: 'border-l-slate-500',
-    gradient: 'from-slate-400/20 to-slate-500/20'
-  },
-  CANCELED: {
-    bg: 'bg-gradient-to-r from-red-500 to-rose-500',
-    text: 'text-white',
-    label: 'Cancelada',
-    icon: '✕',
-    accent: 'border-l-red-600',
-    gradient: 'from-red-500/20 to-rose-500/20'
-  },
-  BLOCKED: {
-    bg: 'bg-gradient-to-r from-orange-500 to-red-400',
-    text: 'text-white',
-    label: 'Bloqueado',
-    icon: '🚫',
-    accent: 'border-l-orange-600',
-    gradient: 'from-orange-500/20 to-red-400/20'
-  },
-}
+
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i) // 00:00 - 23:00 (24h - cada academia define seu horário)
 
@@ -282,16 +226,74 @@ export default function AgendaPage() {
     return end.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
   }
 
+  // Novas cores de status (Premium)
   function getStatusStyle(booking: Booking) {
-    if (booking.is_reserved) return STATUS_COLORS.RESERVED
-    return STATUS_COLORS[booking.status] || STATUS_COLORS.AVAILABLE
+    // Solicitação: aluno da carteira agendou mas professor não tem crédito
+    if (booking.is_reserved) {
+      return {
+        bg: 'bg-violet-50',
+        text: 'text-violet-700',
+        label: 'Solicitação',
+        icon: '⏳',
+        accent: 'border-l-violet-500',
+        border: 'border-violet-200'
+      }
+    }
+
+    const styles: Record<string, any> = {
+      AVAILABLE: {
+        bg: 'bg-emerald-50',
+        text: 'text-emerald-700',
+        label: 'Disponível',
+        icon: '✓',
+        accent: 'border-l-emerald-500',
+        border: 'border-emerald-200'
+      },
+      CONFIRMED: {
+        bg: 'bg-emerald-50',
+        text: 'text-emerald-700',
+        label: 'Confirmado',
+        icon: 'user-check',
+        accent: 'border-l-emerald-500',
+        border: 'border-emerald-200'
+      },
+      RESERVED: {
+        bg: 'bg-yellow-50',
+        text: 'text-yellow-700',
+        label: 'Reservado',
+        icon: 'clock',
+        accent: 'border-l-yellow-500',
+        border: 'border-yellow-200'
+      },
+      COMPLETED: {
+        bg: 'bg-gray-100',
+        text: 'text-gray-600',
+        label: 'Concluída',
+        icon: 'check-circle',
+        accent: 'border-l-gray-400',
+        border: 'border-gray-200'
+      },
+      CANCELED: {
+        bg: 'bg-red-50',
+        text: 'text-red-700',
+        label: 'Cancelado',
+        icon: 'x-circle',
+        accent: 'border-l-red-500',
+        border: 'border-red-200'
+      }
+    }
+
+    return styles[booking.status] || styles.AVAILABLE
   }
 
   if (!user || loadingAcademies) {
     return (
       <ProfessorLayout>
-        <div className="flex items-center justify-center min-h-[400px]">
-          <Loader2 className="h-8 w-8 animate-spin text-meu-primary" />
+        <div className="flex items-center justify-center min-h-[calc(100vh-100px)]">
+          <div className="flex flex-col items-center gap-3">
+            <Loader2 className="h-10 w-10 animate-spin text-[#002C4E]" />
+            <p className="text-gray-500 font-medium animate-pulse">Carregando sua agenda...</p>
+          </div>
         </div>
       </ProfessorLayout>
     )
@@ -302,273 +304,374 @@ export default function AgendaPage() {
 
   return (
     <ProfessorLayout>
-      <div className="p-4 md:p-6 space-y-5 max-w-7xl mx-auto">
-        {/* Header com gradiente */}
-        <div className="bg-gradient-to-r from-meu-primary to-blue-600 rounded-2xl p-6 text-white shadow-lg">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-3">
-                <div className="p-2 bg-white/20 rounded-xl">
-                  <Calendar className="h-6 w-6" />
+      <div className="p-4 md:p-8 space-y-6 max-w-[1600px] mx-auto font-sans">
+        {/* Header Premium */}
+        <div className="relative overflow-hidden bg-[#002C4E] rounded-3xl p-8 text-white shadow-2xl shadow-blue-900/20">
+          <div className="absolute top-0 right-0 p-32 bg-[#27DFFF]/10 rounded-full -mr-16 -mt-16 blur-3xl opacity-50"></div>
+          <div className="absolute bottom-0 left-0 p-24 bg-blue-500/10 rounded-full -ml-12 -mb-12 blur-2xl"></div>
+
+          <div className="relative z-10 flex flex-col xl:flex-row xl:items-start xl:justify-between gap-6">
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-white/10 backdrop-blur-md rounded-xl border border-white/10 shadow-inner">
+                  <Calendar className="h-6 w-6 text-[#27DFFF]" />
                 </div>
-                Minha Agenda
-              </h1>
-              <p className="text-white/80 mt-1">Visualize e gerencie seus agendamentos</p>
+                <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-white">
+                  Minha Agenda
+                </h1>
+              </div>
+              <p className="text-blue-100/80 text-lg font-light max-w-xl leading-relaxed">
+                Gerencie seus horários e acompanhe seus alunos em um só lugar.
+              </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => window.location.href = '/professor/disponibilidade'}
-                className="bg-white/20 hover:bg-white/30 text-white border-0 backdrop-blur-sm"
-              >
-                <Settings className="h-4 w-4 mr-2" />
-                Disponibilidade
-              </Button>
-
-              <div className="flex items-center gap-2 bg-white/20 rounded-lg px-3 py-1.5 backdrop-blur-sm">
-                <MapPin className="h-4 w-4 text-white/80" />
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex items-center gap-2 bg-white/5 backdrop-blur-md rounded-xl p-1.5 border border-white/10">
+                <div className="px-3 py-2 flex items-center gap-2 text-blue-100 border-r border-white/10 pr-4">
+                  <MapPin className="h-4 w-4 text-[#27DFFF]" />
+                  <span className="text-sm font-medium">Unidade</span>
+                </div>
                 <select
                   value={selectedAcademy}
                   onChange={(e) => setSelectedAcademy(e.target.value)}
-                  className="bg-transparent text-white text-sm focus:outline-none cursor-pointer"
+                  className="bg-transparent text-white text-sm font-medium focus:outline-none cursor-pointer py-2 pl-2 pr-4 [&>option]:text-gray-900"
                 >
-                  <option value="todas" className="text-gray-900">Todas as Unidades</option>
+                  <option value="todas">Todas as Unidades</option>
                   {teacherAcademies.map(a => (
-                    <option key={a.id} value={a.id} className="text-gray-900">{a.name}</option>
+                    <option key={a.id} value={a.id}>{a.name}</option>
                   ))}
                 </select>
               </div>
+
+              <Button
+                onClick={() => window.location.href = '/professor/disponibilidade'}
+                className="bg-[#27DFFF] hover:bg-[#20b2cc] text-[#002C4E] font-bold rounded-xl h-auto py-3 px-5 shadow-[0_0_20px_rgba(39,223,255,0.3)] transition-all hover:scale-[1.02]"
+              >
+                <Settings className="h-4 w-4 mr-2" />
+                Configurar Disponibilidade
+              </Button>
+            </div>
+          </div>
+
+          {/* KPI Cards Mini */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8 pt-8 border-t border-white/10">
+            <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/5">
+              <p className="text-blue-200 text-xs font-semibold uppercase tracking-wider mb-1">Total Hoje</p>
+              <p className="text-2xl font-bold text-white">
+                {bookings.filter(b =>
+                  new Date(b.date).toDateString() === new Date().toDateString()
+                ).length}
+              </p>
+            </div>
+            <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/5">
+              <p className="text-blue-200 text-xs font-semibold uppercase tracking-wider mb-1">Confirmados (Semana)</p>
+              <p className="text-2xl font-bold text-[#27DFFF]">
+                {bookings.filter(b => b.status === 'CONFIRMED').length}
+              </p>
+            </div>
+            <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/5">
+              <p className="text-blue-200 text-xs font-semibold uppercase tracking-wider mb-1">Reservados (Semana)</p>
+              <p className="text-2xl font-bold text-yellow-300">
+                {bookings.filter(b => b.status === 'RESERVED').length}
+              </p>
+            </div>
+            <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/5">
+              <p className="text-blue-200 text-xs font-semibold uppercase tracking-wider mb-1">Solicitadas (Semana)</p>
+              <p className="text-2xl font-bold text-violet-300">
+                {bookings.filter(b => b.is_reserved === true).length}
+              </p>
             </div>
           </div>
         </div>
 
-        {/* Controles do Calendário */}
-        <Card className="shadow-sm border-0 bg-white/80 backdrop-blur-sm">
-          <CardContent className="p-4">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              {/* Navegação */}
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => navigate('prev')}
-                  className="hover:bg-meu-primary/10 rounded-full h-9 w-9 p-0"
-                >
-                  <ChevronLeft className="h-5 w-5" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={goToToday}
-                  className="px-4 font-medium"
-                >
-                  Hoje
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => navigate('next')}
-                  className="hover:bg-meu-primary/10 rounded-full h-9 w-9 p-0"
-                >
-                  <ChevronRight className="h-5 w-5" />
-                </Button>
-
-                {loading && <Loader2 className="h-4 w-4 animate-spin text-meu-primary" />}
-              </div>
-
-              {/* Título do período */}
-              <h2 className="text-lg font-semibold text-center">
-                {viewMode === 'day' && currentDate.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-                {viewMode === 'week' && `${weekDays[0].toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })} - ${weekDays[6].toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}`}
+        {/* Controls Toolbar */}
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-white p-2 rounded-2xl shadow-sm border border-gray-100">
+          <div className="flex items-center gap-2 bg-gray-50 rounded-xl p-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate('prev')}
+              className="h-9 w-9 rounded-lg hover:bg-white hover:shadow-sm text-gray-500 hover:text-[#002C4E]"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </Button>
+            <div className="px-4 py-1.5 min-w-[180px] text-center">
+              <span className="text-sm font-bold text-gray-800 block capitalize">
+                {viewMode === 'day' && currentDate.toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'long' })}
+                {viewMode === 'week' && `${weekDays[0].toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })} - ${weekDays[6].toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })}`}
                 {viewMode === 'month' && currentDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
-              </h2>
-
-              {/* Seletor de visualização */}
-              <div className="flex bg-gray-100 rounded-xl p-1">
-                {(['day', 'week', 'month'] as ViewMode[]).map(mode => (
-                  <button
-                    key={mode}
-                    onClick={() => setViewMode(mode)}
-                    className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${viewMode === mode
-                      ? 'bg-white text-meu-primary shadow-sm'
-                      : 'text-gray-500 hover:text-gray-700'
-                      }`}
-                  >
-                    {mode === 'day' ? '📅 Dia' : mode === 'week' ? '📆 Semana' : '🗓️ Mês'}
-                  </button>
-                ))}
-              </div>
+              </span>
+              {(viewMode === 'week' || viewMode === 'month') && (
+                <span className="text-[10px] text-gray-400 font-medium uppercase tracking-widest">
+                  {currentDate.getFullYear()}
+                </span>
+              )}
             </div>
-          </CardContent>
-        </Card>
-
-        {/* Legenda com contagem */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap gap-2 text-xs">
-            {/* Mostrar apenas status relevantes para aulas com alunos */}
-            {['CONFIRMED', 'RESERVED', 'COMPLETED', 'CANCELED'].map(key => {
-              const value = STATUS_COLORS[key]
-              return (
-                <div key={key} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${value.bg} ${value.text} shadow-sm hover:scale-105 transition-transform cursor-default`}>
-                  <span>{value.icon}</span>
-                  <span className="font-medium">{value.label}</span>
-                </div>
-              )
-            })}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate('next')}
+              className="h-9 w-9 rounded-lg hover:bg-white hover:shadow-sm text-gray-500 hover:text-[#002C4E]"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </Button>
           </div>
-          <div className="text-sm text-gray-500">
-            <span className="font-semibold text-meu-primary">{bookings.length}</span> aula{bookings.length !== 1 ? 's' : ''} agendada{bookings.length !== 1 ? 's' : ''}
+
+          {/* Legend with Tooltips */}
+          {/* Legend with Cards & Tooltips */}
+          <div className="flex flex-wrap items-center gap-3 mt-2 md:mt-0">
+            {[
+              { color: 'bg-emerald-500', label: 'Confirmado', desc: 'Aula confirmada', border: 'border-emerald-100', bg: 'bg-emerald-50/50' },
+              { color: 'bg-yellow-500', label: 'Reservado', desc: 'Recorrência sem crédito ainda', border: 'border-yellow-100', bg: 'bg-yellow-50/50' },
+              { color: 'bg-violet-500', label: 'Solicitação', desc: 'Aguardando compra de crédito', border: 'border-violet-100', bg: 'bg-violet-50/50' },
+              { color: 'bg-red-500', label: 'Cancelado', desc: 'Aula cancelada pelo aluno', border: 'border-red-100', bg: 'bg-red-50/50' }
+            ].map((item, i) => (
+              <div key={i} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${item.border} ${item.bg} transition-all hover:shadow-sm`}>
+                <div className={`w-2 h-2 rounded-full ${item.color}`}></div>
+                <span className="text-xs font-semibold text-gray-700">{item.label}</span>
+
+                {/* Info Icon with Tooltip */}
+                <div className="group relative ml-1 cursor-help">
+                  <div className="flex items-center justify-center w-4 h-4 rounded-full bg-white border border-gray-200 text-[10px] font-bold text-gray-400 hover:text-[#002C4E] hover:border-[#002C4E] transition-colors">
+                    !
+                  </div>
+                  {/* Tooltip */}
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-36 p-2 bg-[#002C4E] text-white text-[10px] font-medium text-center rounded-lg opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200 pointer-events-none z-50 shadow-lg whitespace-normal">
+                    {item.desc}
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-[#002C4E]"></div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={goToToday}
+              className="rounded-xl border-gray-200 text-gray-600 hover:text-[#002C4E] hover:border-[#002C4E] hover:bg-blue-50/50 font-medium"
+            >
+              Hoje
+            </Button>
+            <div className="bg-gray-100 p-1 rounded-xl flex gap-1">
+              {(['day', 'week', 'month'] as ViewMode[]).map(mode => (
+                <button
+                  key={mode}
+                  onClick={() => setViewMode(mode)}
+                  className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all duration-300 ${viewMode === mode
+                    ? 'bg-white text-[#002C4E] shadow-sm scale-105'
+                    : 'text-gray-400 hover:text-gray-600'
+                    }`}
+                >
+                  {mode === 'day' ? 'Dia' : mode === 'week' ? 'Semana' : 'Mês'}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* Calendário */}
-        <Card className="overflow-hidden shadow-lg border-0 rounded-2xl">
+        {/* Main Content Card */}
+        <div className="bg-white rounded-[2rem] shadow-xl shadow-gray-100/50 border border-gray-100 overflow-hidden min-h-[600px]">
+
           {/* Visualização por DIA */}
           {viewMode === 'day' && (
-            <div className="divide-y">
-              {HOURS.map(hour => {
-                const hourBookings = getBookingsForHour(currentDate, hour)
-                return (
-                  <div key={hour} className="flex min-h-[60px]">
-                    <div className="w-16 flex-shrink-0 p-2 text-xs text-gray-500 bg-gray-50 border-r">
-                      {hour.toString().padStart(2, '0')}:00
+            <div className="divide-y divide-gray-50">
+              <div className="grid grid-cols-[80px_1fr] bg-gray-50/50 border-b border-gray-100 p-4 sticky top-0 z-10 backdrop-blur-sm">
+                <div className="text-xs font-bold text-gray-400 uppercase tracking-widest text-center mt-2">Horário</div>
+                <div className="text-md font-bold text-[#002C4E] pl-4">
+                  Agendamentos
+                </div>
+              </div>
+              <div className="max-h-[700px] overflow-y-auto">
+                {HOURS.map(hour => {
+                  const hourBookings = getBookingsForHour(currentDate, hour)
+                  return (
+                    <div key={hour} className="group grid grid-cols-[80px_1fr] min-h-[100px] hover:bg-blue-50/30 transition-colors">
+                      <div className="p-4 text-sm font-medium text-gray-400 border-r border-gray-100 text-center group-hover:text-[#002C4E] transition-colors">
+                        {hour.toString().padStart(2, '0')}:00
+                      </div>
+                      <div className="p-3 relative">
+                        {/* Linhas de grade sutis */}
+                        <div className="absolute inset-x-0 top-1/2 border-t border-gray-50 border-dashed pointer-events-none"></div>
+
+                        <div className="space-y-2 relative z-10">
+                          {hourBookings.length === 0 && (
+                            <div className="h-full flex items-center">
+                              <span className="text-xs text-gray-300 italic px-2 opacity-0 group-hover:opacity-100 transition-opacity">Disponível</span>
+                            </div>
+                          )}
+                          {hourBookings.map(booking => (
+                            <div key={booking.id} onClick={() => setSelectedBooking(booking)} className="cursor-pointer">
+                              <div className={`p-4 rounded-xl border transition-all hover:scale-[1.01] hover:shadow-md ${getStatusStyle(booking).bg} ${getStatusStyle(booking).border} ${getStatusStyle(booking).accent} border-l-4`}>
+                                <div className="flex items-center justify-between mb-2">
+                                  <div className="flex items-center gap-3">
+                                    <div className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-bold bg-white/50 backdrop-blur-sm ${getStatusStyle(booking).text}`}>
+                                      {booking.studentName?.charAt(0) || <User className="h-4 w-4" />}
+                                    </div>
+                                    <div>
+                                      <h4 className={`font-bold text-sm ${getStatusStyle(booking).text}`}>
+                                        {booking.studentName || 'Disponível'}
+                                      </h4>
+                                      <p className="text-xs text-gray-500 font-medium">
+                                        {booking.franchiseName || 'Remoto'}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <span className={`text-xs font-bold px-2 py-1 rounded-full bg-white/50 ${getStatusStyle(booking).text}`}>
+                                      {formatTime(booking.date)} - {formatEndTime(booking)}
+                                    </span>
+                                  </div>
+                                </div>
+                                {booking.series_id && (
+                                  <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/40 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                                    <Clock className="h-3 w-3" /> Recorrente
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex-1 p-1">
-                      {hourBookings.map(booking => (
-                        <BookingCard
-                          key={booking.id}
-                          booking={booking}
-                          onClick={() => setSelectedBooking(booking)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )
-              })}
+                  )
+                })}
+              </div>
             </div>
           )}
 
           {/* Visualização por SEMANA */}
           {viewMode === 'week' && (
-            <div>
-              {/* Header dos dias - sticky */}
-              <div className="grid grid-cols-8 border-b sticky top-0 z-10 bg-white">
-                <div className="p-3 text-xs font-medium text-gray-400 bg-gradient-to-b from-gray-50 to-white border-r uppercase tracking-wider"></div>
+            <div className="flex flex-col h-full">
+              <div className="grid grid-cols-[60px_repeat(7,1fr)] bg-white border-b border-gray-100 sticky top-0 z-20 shadow-sm">
+                <div className="p-4 bg-gray-50/50 border-r border-gray-100"></div>
                 {weekDays.map((day, i) => {
                   const isToday = day.toDateString() === new Date().toDateString()
-                  const dayBookings = getBookingsForDate(day)
                   return (
                     <div
                       key={i}
-                      className={`p-3 text-center border-r last:border-r-0 transition-colors ${isToday
-                        ? 'bg-gradient-to-b from-meu-primary/20 to-meu-primary/5'
-                        : 'bg-gradient-to-b from-gray-50 to-white'
+                      className={`p-4 text-center border-r border-gray-50 transition-colors relative overflow-hidden ${isToday ? 'bg-blue-50/30' : ''
                         }`}
                     >
-                      <div className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+                      {isToday && <div className="absolute top-0 inset-x-0 h-1 bg-[#27DFFF]"></div>}
+                      <p className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${isToday ? 'text-[#27DFFF]' : 'text-gray-400'}`}>
                         {day.toLocaleDateString('pt-BR', { weekday: 'short' })}
-                      </div>
-                      <div className={`text-xl font-bold mt-0.5 ${isToday ? 'text-meu-primary' : 'text-gray-900'}`}>
+                      </p>
+                      <div className={`text-2xl font-black ${isToday ? 'text-[#002C4E]' : 'text-gray-700'}`}>
                         {day.getDate()}
                       </div>
-                      {dayBookings.length > 0 && (
-                        <div className="text-[10px] text-gray-400 mt-0.5">
-                          {dayBookings.length} aula{dayBookings.length > 1 ? 's' : ''}
-                        </div>
-                      )}
                     </div>
                   )
                 })}
               </div>
 
-              {/* Grade de horários */}
-              <div className="max-h-[600px] overflow-y-auto">
-                {HOURS.map(hour => (
-                  <div key={hour} className="grid grid-cols-8 border-b last:border-b-0 hover:bg-gray-50/50 transition-colors">
-                    <div className="p-2 text-xs font-medium text-gray-400 bg-gray-50/80 border-r flex items-start justify-center">
-                      {hour.toString().padStart(2, '0')}:00
-                    </div>
-                    {weekDays.map((day, i) => {
-                      const hourBookings = getBookingsForHour(day, hour)
-                      const isToday = day.toDateString() === new Date().toDateString()
-                      return (
-                        <div
-                          key={i}
-                          className={`min-h-[55px] p-1 border-r last:border-r-0 ${isToday ? 'bg-meu-primary/5' : ''}`}
-                        >
-                          {hourBookings.map(booking => (
-                            <BookingCard
-                              key={booking.id}
-                              booking={booking}
-                              compact
-                              onClick={() => setSelectedBooking(booking)}
-                            />
-                          ))}
-                        </div>
-                      )
-                    })}
+              <div className="max-h-[700px] overflow-y-auto">
+                <div className="grid grid-cols-[60px_repeat(7,1fr)]">
+                  {/* Coluna de Horas */}
+                  <div className="bg-gray-50/30 border-r border-gray-100 relative z-10">
+                    {HOURS.map(hour => (
+                      <div key={hour} className="h-[120px] border-b border-gray-100 p-2 text-right">
+                        <span className="text-xs font-medium text-gray-400 -mt-2.5 block bg-white/50 rounded px-1 sticky top-0">
+                          {hour}:00
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                ))}
+
+                  {/* Colunas dos Dias */}
+                  {weekDays.map((day, i) => (
+                    <div key={i} className="border-r border-gray-50 relative min-h-[100px]">
+                      {/* Grid Lines */}
+                      {HOURS.map(h => (
+                        <div key={h} className="h-[120px] border-b border-gray-50/50"></div>
+                      ))}
+
+                      {/* Cards Absolutos - Posicionados por Hora */}
+                      {getBookingsForDate(day).map(booking => {
+                        const startHour = new Date(booking.date).getHours()
+                        const topPosition = startHour * 120 // 120px height per hour block
+
+                        return (
+                          <div
+                            key={booking.id}
+                            onClick={() => setSelectedBooking(booking)}
+                            className="absolute left-1 right-1 z-10 m-0.5 cursor-pointer group"
+                            style={{ top: `${topPosition}px`, height: '110px' }} // Altura do card fixa ou dinâmica
+                          >
+                            <div className={`h-full p-2.5 rounded-lg border shadow-sm hover:shadow-md transition-all hover:-translate-y-1 ${getStatusStyle(booking).bg} ${getStatusStyle(booking).border} ${getStatusStyle(booking).accent} border-l-[3px]`}>
+                              <div className="flex justify-between items-start mb-1">
+                                <span className={`text-[10px] font-bold uppercase tracking-wide opacity-70 ${getStatusStyle(booking).text}`}>
+                                  {formatTime(booking.date)}
+                                </span>
+                                {booking.series_id && <span className="text-[8px]">🔄</span>}
+                              </div>
+                              <p className={`text-xs font-bold leading-tight line-clamp-2 ${getStatusStyle(booking).text}`}>
+                                {booking.studentName || 'Ocupado'}
+                              </p>
+                              {booking.franchiseName && (
+                                <p className="text-[9px] text-gray-500 mt-1 line-clamp-1 opacity-80">
+                                  📍 {booking.franchiseName}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}
 
           {/* Visualização por MÊS */}
           {viewMode === 'month' && (
-            <div>
-              {/* Header dos dias da semana */}
-              <div className="grid grid-cols-7 border-b bg-gradient-to-b from-gray-50 to-white">
-                {['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'].map((day, i) => (
-                  <div key={day} className={`p-3 text-center text-xs font-semibold uppercase tracking-wider ${i === 0 || i === 6 ? 'text-gray-400' : 'text-gray-600'
-                    }`}>
-                    <span className="hidden sm:inline">{day}</span>
-                    <span className="sm:hidden">{day.slice(0, 3)}</span>
+            <div className="p-4">
+              <div className="grid grid-cols-7 gap-px bg-gray-100 rounded-2xl overflow-hidden border border-gray-200">
+                {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(d => (
+                  <div key={d} className="bg-gray-50 p-3 text-center text-xs font-bold text-gray-400 uppercase tracking-widest">
+                    {d}
                   </div>
                 ))}
-              </div>
 
-              {/* Grade do mês */}
-              <div className="grid grid-cols-7">
                 {monthDays.map((day, i) => {
                   const isCurrentMonth = day.getMonth() === currentDate.getMonth()
                   const isToday = day.toDateString() === new Date().toDateString()
-                  const isWeekend = day.getDay() === 0 || day.getDay() === 6
                   const dayBookings = getBookingsForDate(day)
 
                   return (
                     <div
                       key={i}
-                      className={`min-h-[110px] p-2 border-b border-r transition-colors hover:bg-gray-50 ${!isCurrentMonth ? 'bg-gray-50/50' : isWeekend ? 'bg-gray-50/30' : 'bg-white'
-                        } ${isToday ? 'ring-2 ring-inset ring-meu-primary/30 bg-meu-primary/5' : ''}`}
+                      className={`min-h-[120px] bg-white p-2 transition-colors hover:bg-blue-50/20 ${!isCurrentMonth ? 'bg-gray-50/50 grayscale opacity-60' : ''
+                        }`}
                     >
-                      <div className={`flex items-center justify-between mb-1.5`}>
-                        <span className={`text-sm font-bold ${!isCurrentMonth ? 'text-gray-300'
-                          : isToday ? 'bg-meu-primary text-white w-7 h-7 rounded-full flex items-center justify-center'
-                            : 'text-gray-700'
+                      <div className="flex justify-between items-start mb-2">
+                        <span className={`text-sm font-bold w-7 h-7 flex items-center justify-center rounded-full ${isToday ? 'bg-[#27DFFF] text-[#002C4E] shadow-sm' : isCurrentMonth ? 'text-gray-700' : 'text-gray-400'
                           }`}>
                           {day.getDate()}
                         </span>
                         {dayBookings.length > 0 && isCurrentMonth && (
-                          <span className="text-[10px] bg-meu-primary/10 text-meu-primary px-1.5 py-0.5 rounded-full font-medium">
+                          <span className="text-[9px] font-bold bg-blue-50 text-[#002C4E] px-1.5 py-0.5 rounded-md">
                             {dayBookings.length}
                           </span>
                         )}
                       </div>
+
                       <div className="space-y-1">
                         {dayBookings.slice(0, 3).map(booking => (
-                          <BookingCard
+                          <div
                             key={booking.id}
-                            booking={booking}
-                            minimal
                             onClick={() => setSelectedBooking(booking)}
-                          />
+                            className={`flex items-center gap-1.5 px-1.5 py-1 rounded text-[10px] font-medium cursor-pointer truncate border-l-2 ${getStatusStyle(booking).bg} ${getStatusStyle(booking).accent} ${getStatusStyle(booking).text}`}
+                          >
+                            <span className="w-1 h-1 rounded-full bg-current opacity-50 shrink-0"></span>
+                            {booking.studentName?.split(' ')[0] || formatTime(booking.date)}
+                          </div>
                         ))}
                         {dayBookings.length > 3 && (
-                          <button className="text-[10px] text-meu-primary font-medium hover:underline pl-1">
-                            +{dayBookings.length - 3} mais
-                          </button>
+                          <div className="text-[9px] text-gray-400 font-medium pl-1 mt-1 hover:text-[#002C4E] cursor-pointer">
+                            + {dayBookings.length - 3} mais...
+                          </div>
                         )}
                       </div>
                     </div>
@@ -577,114 +680,103 @@ export default function AgendaPage() {
               </div>
             </div>
           )}
-        </Card>
+        </div>
 
-        {/* Modal de Detalhes */}
+        {/* Modal Premium */}
         <Dialog open={!!selectedBooking} onOpenChange={() => setSelectedBooking(null)}>
-          <DialogContent className="sm:max-w-md">
-            <VisuallyHidden>
-              <DialogTitle>Detalhes do Agendamento</DialogTitle>
-            </VisuallyHidden>
+          <DialogContent className="max-w-md p-0 overflow-hidden border-none shadow-2xl bg-white rounded-2xl">
+            <DialogTitle className="sr-only">Detalhes do Agendamento</DialogTitle>
             {selectedBooking && (
               <>
-                {/* Header colorido */}
-                <div className={`-m-6 mb-4 p-6 rounded-t-lg ${getStatusStyle(selectedBooking).bg}`}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-white/20 rounded-xl">
-                        <span className="text-2xl">{getStatusStyle(selectedBooking).icon}</span>
+                <div className={`p-6 relative overflow-hidden ${getStatusStyle(selectedBooking).bg}`}>
+                  <div className="absolute top-0 right-0 p-12 bg-white/10 rounded-full -mr-6 -mt-6 blur-xl"></div>
+                  <div className="relative z-10 flex items-start justify-between">
+                    <div>
+                      <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/40 backdrop-blur-sm text-xs font-bold uppercase tracking-wide mb-3 ${getStatusStyle(selectedBooking).text}`}>
+                        {getStatusStyle(selectedBooking).icon === 'user-check' ? (
+                          <User className="h-3 w-3" />
+                        ) : getStatusStyle(selectedBooking).icon === 'ban' ? (
+                          <Ban className="h-3 w-3" />
+                        ) : (
+                          <Clock className="h-3 w-3" />
+                        )}
+                        {getStatusStyle(selectedBooking).label}
                       </div>
-                      <div>
-                        <h3 className={`font-bold text-lg ${getStatusStyle(selectedBooking).text}`}>
-                          {selectedBooking.studentName || getStatusStyle(selectedBooking).label}
-                        </h3>
-                        <p className={`text-sm opacity-80 ${getStatusStyle(selectedBooking).text}`}>
-                          {getStatusStyle(selectedBooking).label}
-                        </p>
-                      </div>
+                      <h3 className={`text-xl font-bold ${getStatusStyle(selectedBooking).text}`}>
+                        {selectedBooking.studentName || 'Disponível'}
+                      </h3>
+                      <p className={`text-sm opacity-80 font-medium ${getStatusStyle(selectedBooking).text}`}>
+                        {selectedBooking.franchiseName || 'Nenhuma unidade vinculada'}
+                      </p>
                     </div>
-                    {selectedBooking.series_id && (
-                      <div className="bg-white/20 px-2 py-1 rounded-full text-white text-xs font-medium">
-                        🔄 Série
+                    {selectedBooking.studentId && (
+                      <div className="h-12 w-12 rounded-xl bg-white/30 backdrop-blur-md flex items-center justify-center border border-white/20 shadow-sm">
+                        <span className={`text-lg font-bold ${getStatusStyle(selectedBooking).text}`}>
+                          {selectedBooking.studentName?.charAt(0)}
+                        </span>
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Detalhes */}
-                <div className="space-y-4">
-                  <div className="grid gap-4">
-                    <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-                      <div className="p-2 bg-blue-100 rounded-lg">
-                        <Clock className="h-5 w-5 text-blue-600" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Horário</p>
-                        <p className="font-semibold">{formatTime(selectedBooking.date)} - {formatEndTime(selectedBooking)}</p>
+                <div className="p-6 bg-white space-y-6">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-3 bg-gray-50 rounded-xl space-y-1">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Data</p>
+                      <div className="flex items-center gap-2 text-gray-800 font-bold">
+                        <Calendar className="h-4 w-4 text-[#002C4E]" />
+                        {new Date(selectedBooking.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-                      <div className="p-2 bg-purple-100 rounded-lg">
-                        <Calendar className="h-5 w-5 text-purple-600" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Data</p>
-                        <p className="font-semibold capitalize">{new Date(selectedBooking.date).toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+                    <div className="p-3 bg-gray-50 rounded-xl space-y-1">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Horário</p>
+                      <div className="flex items-center gap-2 text-gray-800 font-bold">
+                        <Clock className="h-4 w-4 text-[#002C4E]" />
+                        {formatTime(selectedBooking.date)} - {formatEndTime(selectedBooking)}
                       </div>
                     </div>
-
-                    {selectedBooking.studentName && (
-                      <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-                        <div className="p-2 bg-green-100 rounded-lg">
-                          <User className="h-5 w-5 text-green-600" />
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500">Aluno</p>
-                          <p className="font-semibold">{selectedBooking.studentName}</p>
-                        </div>
-                      </div>
-                    )}
-
-                    {selectedBooking.franchiseName && (
-                      <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-                        <div className="p-2 bg-orange-100 rounded-lg">
-                          <MapPin className="h-5 w-5 text-orange-600" />
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500">Unidade</p>
-                          <p className="font-semibold">{selectedBooking.franchiseName}</p>
-                        </div>
-                      </div>
-                    )}
                   </div>
 
                   {selectedBooking.is_reserved && (
-                    <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-4">
-                      <div className="flex items-start gap-3">
-                        <span className="text-2xl">⏳</span>
-                        <div>
-                          <p className="font-semibold text-amber-800">Reserva pendente</p>
-                          <p className="text-sm text-amber-700 mt-1">
-                            Esta aula será confirmada automaticamente 7 dias antes, se o aluno tiver crédito.
-                          </p>
-                        </div>
+                    <div className="p-4 bg-amber-50 rounded-xl border border-amber-100 flex items-start gap-3">
+                      <div className="p-2 bg-amber-100 rounded-full mt-0.5">
+                        <Clock className="h-4 w-4 text-amber-600" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-amber-800">Reserva Pendente</h4>
+                        <p className="text-xs text-amber-700 leading-relaxed mt-1">
+                          Esta aula está reservada e aguardando confirmação automática 7 dias antes.
+                        </p>
                       </div>
                     </div>
                   )}
 
-                  {/* DEBUG: Botão para regenerar bookings da série (temporário) */}
                   {selectedBooking.series_id && (
-                    <Button
-                      onClick={() => {
-                        regenerateSeries(selectedBooking.series_id!)
-                        setSelectedBooking(null)
-                      }}
-                      className="w-full bg-purple-600 hover:bg-purple-700"
-                    >
-                      🔄 Regenerar Bookings da Série
-                    </Button>
+                    <div className="border-t border-gray-100 pt-6">
+                      <Button
+                        onClick={() => {
+                          regenerateSeries(selectedBooking.series_id!)
+                          setSelectedBooking(null)
+                        }}
+                        className="w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold border-0 h-12 rounded-xl"
+                      >
+                        🔄 Regenerar Série
+                      </Button>
+                      <p className="text-center text-[10px] text-gray-400 mt-2">
+                        Use isso apenas se houver problemas na recorrência.
+                      </p>
+                    </div>
                   )}
+
+                  <div className="pt-2">
+                    <Button
+                      variant="secondary"
+                      onClick={() => setSelectedBooking(null)}
+                      className="w-full font-bold h-12 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600"
+                    >
+                      Fechar
+                    </Button>
+                  </div>
                 </div>
               </>
             )}
@@ -695,86 +787,4 @@ export default function AgendaPage() {
   )
 }
 
-// Componente de Card de Booking
-function BookingCard({
-  booking,
-  compact = false,
-  minimal = false,
-  onClick
-}: {
-  booking: Booking
-  compact?: boolean
-  minimal?: boolean
-  onClick?: () => void
-}) {
-  const style = booking.is_reserved
-    ? STATUS_COLORS.RESERVED
-    : STATUS_COLORS[booking.status] || STATUS_COLORS.AVAILABLE
 
-  const time = new Date(booking.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-
-  // Minimal - usado na visualização de mês
-  if (minimal) {
-    return (
-      <button
-        onClick={onClick}
-        className={`w-full text-left px-1.5 py-0.5 rounded-md text-[10px] font-medium truncate shadow-sm 
-          ${style.bg} ${style.text} hover:brightness-110 hover:shadow transition-all border-l-2 ${style.accent}`}
-      >
-        <span className="mr-1">{style.icon}</span>
-        {booking.studentName || time}
-      </button>
-    )
-  }
-
-  // Compact - usado na visualização de semana
-  if (compact) {
-    return (
-      <button
-        onClick={onClick}
-        className={`w-full text-left p-1.5 rounded-md shadow-sm 
-          ${style.bg} ${style.text} hover:brightness-110 hover:shadow-md transition-all border-l-2 ${style.accent}`}
-      >
-        <div className="flex items-center gap-1">
-          <span className="text-[10px]">{style.icon}</span>
-          <span className="font-semibold text-[10px] truncate flex-1">
-            {booking.studentName || style.label}
-          </span>
-          {booking.series_id && <span className="text-[8px]">🔄</span>}
-        </div>
-        <div className="text-[9px] opacity-80 mt-0.5">{time}</div>
-      </button>
-    )
-  }
-
-  // Full - usado na visualização de dia
-  return (
-    <button
-      onClick={onClick}
-      className={`w-full text-left p-3 rounded-lg shadow-md 
-        ${style.bg} ${style.text} hover:brightness-110 hover:shadow-lg transition-all border-l-4 ${style.accent}`}
-    >
-      <div className="flex items-center gap-3">
-        {booking.studentName ? (
-          <Avatar className="h-8 w-8 border-2 border-white/30">
-            <AvatarFallback className="text-sm font-bold bg-white/20">{booking.studentName.charAt(0)}</AvatarFallback>
-          </Avatar>
-        ) : (
-          <div className="h-8 w-8 rounded-full bg-white/20 flex items-center justify-center text-lg">
-            {style.icon}
-          </div>
-        )}
-        <div className="flex-1 min-w-0">
-          <div className="font-bold text-sm truncate flex items-center gap-2">
-            {booking.studentName || style.label}
-            {booking.series_id && <span className="text-xs bg-white/20 px-1.5 py-0.5 rounded">🔄 Série</span>}
-          </div>
-          <div className="text-xs opacity-80 flex items-center gap-2 mt-0.5">
-            <span>🕐 {time}</span>
-            {booking.franchiseName && <span>📍 {booking.franchiseName}</span>}
-          </div>
-        </div>
-      </div>
-    </button>
-  )
-}

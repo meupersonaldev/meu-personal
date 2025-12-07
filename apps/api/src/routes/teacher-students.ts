@@ -10,18 +10,26 @@ import { createUserNotification } from './notifications'
 
 const router = Router()
 
-const ADMIN_ROLES = ['FRANQUEADORA', 'FRANQUIA', 'SUPER_ADMIN', 'ADMIN'] as const
+const ADMIN_ROLES = [
+  'FRANQUEADORA',
+  'FRANQUIA',
+  'SUPER_ADMIN',
+  'ADMIN'
+] as const
 const TEACHER_ROLES = ['TEACHER', 'PROFESSOR'] as const
 
 const hasAdminAccess = (user?: { role?: string }) =>
   Boolean(user && ADMIN_ROLES.includes(user.role as typeof ADMIN_ROLES[number]))
 
-const hasTeacherScope = (user: { userId?: string; role?: string } | undefined, teacherId?: string) =>
+const hasTeacherScope = (
+  user: { userId?: string; role?: string } | undefined,
+  teacherId?: string
+) =>
   Boolean(
     user &&
-    teacherId &&
-    TEACHER_ROLES.includes(user.role as typeof TEACHER_ROLES[number]) &&
-    user.userId === teacherId
+      teacherId &&
+      TEACHER_ROLES.includes(user.role as typeof TEACHER_ROLES[number]) &&
+      user.userId === teacherId
   )
 
 const ensureTeacherStudentAccess = (
@@ -56,7 +64,7 @@ router.get('/:teacherId/students', requireAuth, async (req, res) => {
 
     // Buscar user_id correspondente para cada aluno (pelo email)
     const studentsWithDetails = await Promise.all(
-      (teacherStudents || []).map(async (student) => {
+      (teacherStudents || []).map(async student => {
         const { data: user } = await supabase
           .from('users')
           .select('id, photo_url')
@@ -83,14 +91,27 @@ router.get('/:teacherId/students', requireAuth, async (req, res) => {
 router.post('/:teacherId/students', requireAuth, async (req, res) => {
   try {
     const { teacherId } = req.params
-    const { name, email, phone, notes, academy_id, hourly_rate, cpf, gender, birth_date, hide_free_class } = req.body
+    const {
+      name,
+      email,
+      phone,
+      notes,
+      academy_id,
+      hourly_rate,
+      cpf,
+      gender,
+      birth_date,
+      hide_free_class
+    } = req.body
 
     if (!ensureTeacherStudentAccess(req, res, teacherId)) {
       return
     }
 
     if (!name || !email || !cpf) {
-      return res.status(400).json({ error: 'Nome, email e CPF são obrigatórios' })
+      return res
+        .status(400)
+        .json({ error: 'Nome, email e CPF são obrigatórios' })
     }
 
     // Sanitizar CPF
@@ -99,7 +120,10 @@ router.post('/:teacherId/students', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'CPF inválido' })
     }
 
-    const normalizedAcademyId = typeof academy_id === 'string' && academy_id.trim() ? academy_id.trim() : null
+    const normalizedAcademyId =
+      typeof academy_id === 'string' && academy_id.trim()
+        ? academy_id.trim()
+        : null
 
     // 1. Verificar se usuário já existe na plataforma (por CPF)
     console.log('🔍 Verificando usuário na plataforma pelo CPF:', sanitizedCpf)
@@ -131,7 +155,10 @@ router.post('/:teacherId/students', requireAuth, async (req, res) => {
             code: 'CONNECTION_PENDING'
           })
         }
-        if (existingLink.connection_status === 'APPROVED' || !existingLink.connection_status) {
+        if (
+          existingLink.connection_status === 'APPROVED' ||
+          !existingLink.connection_status
+        ) {
           // Se status é nulo (legado) consideramos aprovado
           return res.status(409).json({
             error: 'Aluno já cadastrado na sua carteira.',
@@ -201,14 +228,16 @@ router.post('/:teacherId/students', requireAuth, async (req, res) => {
       try {
         const emailContent = `
           <p>Olá <strong>${existingUser.name}</strong>,</p>
-          <p>O professor <strong>${teacherName}</strong> adicionou você à carteira de alunos no Meu Personal.</p>
-          <p>Agora você pode ver seus agendamentos e histórico com este professor diretamente pela plataforma.</p>
+          <p><strong>${teacherName}</strong> adicionou você à carteira de alunos no Meu Personal.</p>
+          <p>Agora você pode ver seus agendamentos e histórico com este personal diretamente pela plataforma.</p>
         `
 
         const html = getHtmlEmailTemplate(
-          'Novo professor vinculado!',
+          'Novo personal vinculado!',
           emailContent,
-          `${process.env.WEB_URL || 'https://meupersonal.com.br'}/login`,
+          `${
+            process.env.WEB_URL || 'https://meupersonalfranquia.com.br'
+          }/aluno/login`,
           'Acessar Minha Conta'
         )
 
@@ -216,7 +245,7 @@ router.post('/:teacherId/students', requireAuth, async (req, res) => {
           to: existingUser.email,
           subject: 'Novo vínculo no Meu Personal',
           html,
-          text: `Olá ${existingUser.name}, o professor ${teacherName} adicionou você à carteira de alunos no Meu Personal.`
+          text: `Olá ${existingUser.name}, ${teacherName} adicionou você à carteira de alunos no Meu Personal.`
         })
       } catch (e) {
         console.warn('Erro ao enviar email de vínculo:', e)
@@ -228,7 +257,6 @@ router.post('/:teacherId/students', requireAuth, async (req, res) => {
         status: 'APPROVED',
         existingEmail: existingUser.email
       })
-
     } else {
       // CENÁRIO: Usuário NÃO existe (Fluxo antigo + user_id/status)
       console.log('➕ Criando novo usuário na tabela users...')
@@ -299,13 +327,24 @@ router.post('/:teacherId/students', requireAuth, async (req, res) => {
           role: 'STUDENT',
           origin: 'TEACHER_LEAD'
         })
-      } catch (e) { console.warn('Lead error', e) }
+      } catch (e) {
+        console.warn('Lead error', e)
+      }
 
       // Enviar email boa vinda
       try {
+        // Buscar nome do personal/professor
+        const { data: teacherUser } = await supabase
+          .from('users')
+          .select('name')
+          .eq('id', teacherId)
+          .single()
+
+        const teacherName = teacherUser?.name || 'Seu personal'
+
         const emailContent = `
           <p>Olá <strong>${name}</strong>,</p>
-          <p>Seu professor cadastrou você na plataforma <strong>Meu Personal</strong>.</p>
+          <p><strong>${teacherName}</strong> cadastrou você na plataforma <strong>Meu Personal</strong>.</p>
           <p>Abaixo estão suas credenciais de acesso:</p>
           <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 24px 0; border: 1px solid #e5e7eb;">
             <p style="margin: 0 0 8px 0;"><strong>Email:</strong> ${email}</p>
@@ -317,7 +356,9 @@ router.post('/:teacherId/students', requireAuth, async (req, res) => {
         const html = getHtmlEmailTemplate(
           'Bem-vindo ao Meu Personal! 🎉',
           emailContent,
-          `${process.env.WEB_URL || 'https://meupersonal.com.br'}/login`,
+          `${
+            process.env.WEB_URL || 'https://meupersonalfranquia.com.br'
+          }/aluno/login`,
           'Acessar Plataforma'
         )
 
@@ -327,7 +368,9 @@ router.post('/:teacherId/students', requireAuth, async (req, res) => {
           html,
           text: `Bem-vindo ao Meu Personal! Email: ${email} Senha: ${tempPassword}`
         })
-      } catch (e) { console.warn('Email error', e) }
+      } catch (e) {
+        console.warn('Email error', e)
+      }
 
       // Vincular academia se houver
       if (normalizedAcademyId) {
@@ -340,14 +383,12 @@ router.post('/:teacherId/students', requireAuth, async (req, res) => {
           .single()
 
         if (!existingAcademyStudent) {
-          await supabase
-            .from('academy_students')
-            .insert({
-              academy_id: normalizedAcademyId,
-              student_id: userId,
-              status: 'active',
-              created_at: new Date().toISOString()
-            })
+          await supabase.from('academy_students').insert({
+            academy_id: normalizedAcademyId,
+            student_id: userId,
+            status: 'active',
+            created_at: new Date().toISOString()
+          })
         }
       }
 
@@ -367,7 +408,17 @@ router.post('/:teacherId/students', requireAuth, async (req, res) => {
 router.put('/:teacherId/students/:studentId', requireAuth, async (req, res) => {
   try {
     const { teacherId, studentId } = req.params
-    const { name, email, phone, notes, hourly_rate, cpf, gender, birth_date, hide_free_class } = req.body
+    const {
+      name,
+      email,
+      phone,
+      notes,
+      hourly_rate,
+      cpf,
+      gender,
+      birth_date,
+      hide_free_class
+    } = req.body
 
     if (!ensureTeacherStudentAccess(req, res, teacherId)) {
       return
@@ -384,7 +435,8 @@ router.put('/:teacherId/students/:studentId', requireAuth, async (req, res) => {
         cpf: cpf || null,
         gender: gender || null,
         birth_date: birth_date || null,
-        hide_free_class: hide_free_class !== undefined ? hide_free_class : false,
+        hide_free_class:
+          hide_free_class !== undefined ? hide_free_class : false,
         updated_at: new Date().toISOString()
       })
       .eq('id', studentId)
@@ -406,7 +458,7 @@ router.put('/:teacherId/students/:studentId', requireAuth, async (req, res) => {
         .eq('id', teacherId.replace('teacher_', ''))
         .single()
 
-      const teacherName = teacherUser?.name || 'Seu professor'
+      const teacherName = teacherUser?.name || 'Seu personal'
 
       const { onStudentDataUpdated } = await import('../lib/events')
       await onStudentDataUpdated(data.user_id, teacherId, teacherName)
@@ -420,50 +472,54 @@ router.put('/:teacherId/students/:studentId', requireAuth, async (req, res) => {
 })
 
 // DELETE /api/teachers/:teacherId/students/:studentId - Excluir aluno
-router.delete('/:teacherId/students/:studentId', requireAuth, async (req, res) => {
-  try {
-    const { teacherId, studentId } = req.params
+router.delete(
+  '/:teacherId/students/:studentId',
+  requireAuth,
+  async (req, res) => {
+    try {
+      const { teacherId, studentId } = req.params
 
-    if (!ensureTeacherStudentAccess(req, res, teacherId)) {
-      return
-    }
+      if (!ensureTeacherStudentAccess(req, res, teacherId)) {
+        return
+      }
 
-    // Buscar aluno antes de excluir para notificar
-    const { data: student } = await supabase
-      .from('teacher_students')
-      .select('user_id, name')
-      .eq('id', studentId)
-      .eq('teacher_id', teacherId)
-      .single()
-
-    const { error } = await supabase
-      .from('teacher_students')
-      .delete()
-      .eq('id', studentId)
-      .eq('teacher_id', teacherId)
-
-    if (error) throw error
-
-    // Notificar se tiver user_id
-    if (student?.user_id) {
-      const { data: teacherUser } = await supabase
-        .from('users')
-        .select('name')
-        .eq('id', teacherId.replace('teacher_', ''))
+      // Buscar aluno antes de excluir para notificar
+      const { data: student } = await supabase
+        .from('teacher_students')
+        .select('user_id, name')
+        .eq('id', studentId)
+        .eq('teacher_id', teacherId)
         .single()
 
-      const teacherName = teacherUser?.name || 'Seu professor'
+      const { error } = await supabase
+        .from('teacher_students')
+        .delete()
+        .eq('id', studentId)
+        .eq('teacher_id', teacherId)
 
-      const { onStudentRemoved } = await import('../lib/events')
-      await onStudentRemoved(student.user_id, teacherId, teacherName)
+      if (error) throw error
+
+      // Notificar se tiver user_id
+      if (student?.user_id) {
+        const { data: teacherUser } = await supabase
+          .from('users')
+          .select('name')
+          .eq('id', teacherId.replace('teacher_', ''))
+          .single()
+
+        const teacherName = teacherUser?.name || 'Seu personal'
+
+        const { onStudentRemoved } = await import('../lib/events')
+        await onStudentRemoved(student.user_id, teacherId, teacherName)
+      }
+
+      res.json({ message: 'Aluno excluído com sucesso' })
+    } catch (error: any) {
+      console.error('Error deleting student:', error)
+      res.status(500).json({ error: error.message })
     }
-
-    res.json({ message: 'Aluno excluído com sucesso' })
-  } catch (error: any) {
-    console.error('Error deleting student:', error)
-    res.status(500).json({ error: error.message })
   }
-})
+)
 
 // PATCH /api/teachers/requests/:requestId/respond - Aceitar/Rejeitar vínculo (Pelo Aluno)
 router.patch('/requests/:requestId/respond', requireAuth, async (req, res) => {
@@ -507,10 +563,14 @@ router.patch('/requests/:requestId/respond', requireAuth, async (req, res) => {
 
     // Notificar o professor da decisão
     const { onConnectionRequestResponded } = await import('../lib/events')
-    await onConnectionRequestResponded(request.teacher_id, userId, request.name, status)
+    await onConnectionRequestResponded(
+      request.teacher_id,
+      userId,
+      request.name,
+      status
+    )
 
     res.json({ message: 'Solicitação atualizada com sucesso', data: updated })
-
   } catch (error: any) {
     console.error('Error responding to request:', error)
     res.status(500).json({ error: error.message })
@@ -524,7 +584,9 @@ router.get('/students/:studentId/teachers', requireAuth, async (req, res) => {
     const userId = req.user?.userId
 
     // Verificar se o usuário logado é o próprio aluno ou admin
-    const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'FRANQUEADORA'].includes(req.user?.role || '')
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'FRANQUEADORA'].includes(
+      req.user?.role || ''
+    )
     if (!isAdmin && userId !== studentId) {
       return res.status(403).json({ error: 'Acesso negado' })
     }
