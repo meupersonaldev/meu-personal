@@ -6,7 +6,7 @@ import { usePathname, useSearchParams } from 'next/navigation'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
-import { LogOut } from 'lucide-react'
+import { LogOut, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   STUDENT_NAV_ITEMS,
@@ -24,16 +24,37 @@ export default function StudentSidebar({
   className,
   onClose
 }: StudentSidebarProps) {
-  const { user, logout } = useAuthStore()
+  const { user, logout, token } = useAuthStore()
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const [expanded, setExpanded] = useState(false)
+  const [hasLinkedTeachers, setHasLinkedTeachers] = useState(false)
 
   useEffect(() => {
     if (variant === 'mobile') {
       setExpanded(true)
     }
   }, [variant])
+
+  // Verificar se aluno tem professores vinculados
+  useEffect(() => {
+    const checkLinkedTeachers = async () => {
+      if (!user?.id || !token) return
+      try {
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+        const response = await fetch(`${API_URL}/api/students/${user.id}/teachers`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        if (response.ok) {
+          const data = await response.json()
+          setHasLinkedTeachers((data.teachers || []).length > 0)
+        }
+      } catch (error) {
+        // Silently fail
+      }
+    }
+    checkLinkedTeachers()
+  }, [user?.id, token])
 
   const normalizedPath = pathname
   const activeSection = searchParams.get('section')
@@ -117,6 +138,23 @@ export default function StudentSidebar({
               </Link>
             )
           })}
+
+          {/* Meus Professores - só aparece se aluno tem professores vinculados */}
+          {hasLinkedTeachers && (
+            <Link
+              href="/aluno/meus-professores"
+              onClick={handleNavigate}
+              className={cn(
+                'flex items-center space-x-3 rounded-xl px-4 py-3 transition-all duration-200',
+                isItemActive('/aluno/meus-professores')
+                  ? 'bg-white text-meu-primary shadow-lg'
+                  : 'text-white/90 hover:bg-white/10 hover:text-white'
+              )}
+            >
+              <User className="h-5 w-5" />
+              <span className="font-medium">Meus Professores</span>
+            </Link>
+          )}
         </nav>
 
         <div className="mt-8 space-y-2 border-t border-white/20 pt-4">

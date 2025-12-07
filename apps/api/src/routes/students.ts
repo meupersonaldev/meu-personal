@@ -674,19 +674,27 @@ router.get('/:id/teachers', async (req, res) => {
 
     // Buscar dados dos professores
     const teacherIds = links.map(l => l.teacher_id)
-    const { data: teachers } = await supabase
+    console.log('🔍 [Meus Professores] Teacher IDs:', teacherIds)
+
+    const { data: teachers, error: teacherError } = await supabase
       .from('users')
-      .select('id, name, email, photo_url')
+      .select('id, name, email, avatar_url')
       .in('id', teacherIds)
+
+    console.log('🔍 [Meus Professores] Teachers found:', teachers?.length || 0, teachers)
+    if (teacherError) {
+      console.error('❌ [Meus Professores] Erro ao buscar teachers:', teacherError)
+    }
 
     // Combinar dados
     const result = links.map(link => {
       const teacher = teachers?.find(t => t.id === link.teacher_id)
+      console.log('🔍 [Meus Professores] Matching teacher_id:', link.teacher_id, '-> found:', teacher?.name)
       return {
         id: link.teacher_id,
         name: teacher?.name || 'Professor',
         email: teacher?.email,
-        photo_url: teacher?.photo_url,
+        photo_url: teacher?.avatar_url,
         hourly_rate: link.hourly_rate,
         hide_free_class: link.hide_free_class,
         linked_at: link.created_at

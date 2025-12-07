@@ -46,9 +46,9 @@ function getDayName(dayOfWeek: number): string {
 export default function AgendarPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const teacherId = searchParams.get('teacher_id') || ''
+  const teacherId = searchParams.get('teacher') || searchParams.get('teacher_id') || ''
   const academyId = searchParams.get('academy_id') || ''
-  const { token, isAuthenticated } = useAuthStore()
+  const { token, isAuthenticated, user } = useAuthStore()
 
   const today = useMemo(() => new Date().toISOString().slice(0, 10), [])
   // Limite máximo de agendamento: 6 meses à frente
@@ -68,6 +68,9 @@ export default function AgendarPage() {
   const [isBooking, setIsBooking] = useState<boolean>(false)
   const [bookingSlot, setBookingSlot] = useState<string | null>(null)
 
+  // Estado para professor vinculado (particular)
+  const [isLinkedTeacher, setIsLinkedTeacher] = useState<boolean>(false)
+
   // Estados de recorrência
   const [isRecurring, setIsRecurring] = useState<boolean>(false)
   const [recurrenceType, setRecurrenceType] = useState<string>('MONTH')
@@ -81,6 +84,29 @@ export default function AgendarPage() {
   } | null>(null)
   const [loadingPreview, setLoadingPreview] = useState<boolean>(false)
   const [modalError, setModalError] = useState<string | null>(null)
+
+  // Verificar se é professor vinculado (particular) - não precisa de créditos
+  useEffect(() => {
+    const checkLinkedTeacher = async () => {
+      if (!user?.id || !token || !teacherId) return
+      try {
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+        const response = await fetch(`${API_URL}/api/students/${user.id}/teachers`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        if (response.ok) {
+          const data = await response.json()
+          const linkedTeachers = data.teachers || []
+          const isLinked = linkedTeachers.some((t: any) => t.id === teacherId)
+          setIsLinkedTeacher(isLinked)
+        }
+      } catch (err) {
+        // Silently fail, assume not linked
+        setIsLinkedTeacher(false)
+      }
+    }
+    checkLinkedTeacher()
+  }, [user?.id, token, teacherId])
 
   useEffect(() => {
     const load = async () => {
@@ -284,6 +310,7 @@ export default function AgendarPage() {
         body: JSON.stringify({
           source: 'ALUNO',
           bookingId: slot.booking_id,
+          isLinkedTeacher, // Professor vinculado - não debita crédito
         }),
       })
 

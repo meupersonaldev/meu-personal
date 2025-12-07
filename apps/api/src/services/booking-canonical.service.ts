@@ -91,6 +91,7 @@ class BookingCanonicalService {
     source: 'ALUNO' | 'PROFESSOR';
     studentNotes?: string;
     professorNotes?: string;
+    skipBalance?: boolean; // Professor vinculado - não requer créditos
   }): Promise<BookingCanonical> {
     // Buscar o booking existente
     const { data: existingBooking, error: fetchError } = await supabase
@@ -112,13 +113,16 @@ class BookingCanonicalService {
       throw new Error('Este horário não está disponível para agendamento');
     }
 
-    // Verificar saldo do aluno
+    // Verificar saldo do aluno (pular se for professor vinculado)
     const franqueadoraId = await fetchFranqueadoraIdFromAcademy(existingBooking.franchise_id);
-    const studentBalance = await balanceService.getStudentBalance(params.studentId, franqueadoraId);
-    const availableClasses = getAvailableClasses(studentBalance);
 
-    if (availableClasses < 1) {
-      throw new Error('Saldo insuficiente de aulas');
+    if (!params.skipBalance) {
+      const studentBalance = await balanceService.getStudentBalance(params.studentId, franqueadoraId);
+      const availableClasses = getAvailableClasses(studentBalance);
+
+      if (availableClasses < 1) {
+        throw new Error('Saldo insuficiente de aulas');
+      }
     }
 
     // Calcular cancellable_until baseado no horário do booking existente
@@ -161,24 +165,26 @@ class BookingCanonicalService {
       throw updateError || new Error('Falha ao atualizar booking');
     }
 
-    // Consumir créditos do aluno
-    await balanceService.consumeStudentClasses(
-      params.studentId,
-      franqueadoraId,
-      1,
-      updatedBooking.id,
-      {
-        unitId: null,
-        source: params.source,
-        metaJson: {
-          booking_id: updatedBooking.id,
-          origin: 'student_booking_update'
+    // Consumir créditos do aluno (pular se for professor vinculado)
+    if (!params.skipBalance) {
+      await balanceService.consumeStudentClasses(
+        params.studentId,
+        franqueadoraId,
+        1,
+        updatedBooking.id,
+        {
+          unitId: null,
+          source: params.source,
+          metaJson: {
+            booking_id: updatedBooking.id,
+            origin: 'student_booking_update'
+          }
         }
-      }
-    );
+      );
 
-    // Sincronizar cache de créditos do usuário
-    await this.syncUserCredits(params.studentId, franqueadoraId);
+      // Sincronizar cache de créditos do usuário
+      await this.syncUserCredits(params.studentId, franqueadoraId);
+    }
 
     return updatedBooking;
   }

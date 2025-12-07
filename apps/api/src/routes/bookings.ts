@@ -19,7 +19,8 @@ const createBookingSchema = z.object({
   bookingId: z.string().uuid(), // ID do booking existente para atualizar (obrigatório)
   studentId: z.string().uuid().nullable().optional(),
   studentNotes: z.string().optional(),
-  professorNotes: z.string().optional()
+  professorNotes: z.string().optional(),
+  isLinkedTeacher: z.boolean().optional() // Professor vinculado - não requer créditos
 })
 
 // Schema de validação para atualização de status
@@ -69,8 +70,8 @@ router.get(
       const startIso = booking.start_at || booking.date
       const fallbackCutoff = startIso
         ? new Date(
-            new Date(startIso).getTime() - 4 * 60 * 60 * 1000
-          ).toISOString()
+          new Date(startIso).getTime() - 4 * 60 * 60 * 1000
+        ).toISOString()
         : undefined
 
       return {
@@ -166,15 +167,15 @@ router.get(
       const [teachersData, academiesData] = await Promise.all([
         teacherIds.length > 0
           ? supabase
-              .from('users')
-              .select('id, name, email')
-              .in('id', teacherIds)
+            .from('users')
+            .select('id, name, email')
+            .in('id', teacherIds)
           : Promise.resolve({ data: [], error: null }),
         franchiseIds.length > 0
           ? supabase
-              .from('academies')
-              .select('id, name, city, state, address')
-              .in('id', franchiseIds)
+            .from('academies')
+            .select('id, name, city, state, address')
+            .in('id', franchiseIds)
           : Promise.resolve({ data: [], error: null })
       ])
 
@@ -257,8 +258,8 @@ router.get(
         const startTime = booking.start_at || booking.date
         const fallbackCutoff = startTime
           ? new Date(
-              new Date(startTime).getTime() - 4 * 60 * 60 * 1000
-            ).toISOString()
+            new Date(startTime).getTime() - 4 * 60 * 60 * 1000
+          ).toISOString()
           : undefined
 
         const mapped = {
@@ -555,8 +556,8 @@ router.get(
             booking.cancellable_until ||
             (booking.date
               ? new Date(
-                  new Date(booking.date).getTime() - 4 * 60 * 60 * 1000
-                ).toISOString()
+                new Date(booking.date).getTime() - 4 * 60 * 60 * 1000
+              ).toISOString()
               : undefined),
           updatedAt: booking.updated_at || undefined,
           series_id: booking.series_id ?? null,
@@ -1000,7 +1001,8 @@ router.post(
         studentId: bookingData.studentId || user.userId,
         source: bookingData.source,
         studentNotes: bookingData.studentNotes,
-        professorNotes: bookingData.professorNotes
+        professorNotes: bookingData.professorNotes,
+        skipBalance: bookingData.isLinkedTeacher || false // Professor vinculado - não debita crédito
       })
     } catch (error) {
       console.error('[POST /api/bookings] Erro ao atualizar booking:', error)
@@ -1360,12 +1362,12 @@ router.get(
             !b.student_id && !b.teacher_id
               ? 'Sem aluno e sem professor'
               : !b.student_id
-              ? 'Sem aluno'
-              : !b.teacher_id
-              ? 'Sem professor'
-              : !validStudentIds.has(b.student_id)
-              ? 'Aluno não existe mais'
-              : 'Professor não existe mais'
+                ? 'Sem aluno'
+                : !b.teacher_id
+                  ? 'Sem professor'
+                  : !validStudentIds.has(b.student_id)
+                    ? 'Aluno não existe mais'
+                    : 'Professor não existe mais'
         })),
         message: `Encontrados ${orphans.length} bookings órfãos (cancelados foram mantidos)`
       })
@@ -1581,11 +1583,11 @@ router.post(
     const count = rows.length
     const avg = count
       ? Number(
-          (
-            rows.reduce((s: number, r: any) => s + (Number(r.rating) || 0), 0) /
-            count
-          ).toFixed(2)
-        )
+        (
+          rows.reduce((s: number, r: any) => s + (Number(r.rating) || 0), 0) /
+          count
+        ).toFixed(2)
+      )
       : 0
 
     // Atualizar cache em teacher_profiles
