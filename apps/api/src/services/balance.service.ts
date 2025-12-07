@@ -123,6 +123,18 @@ class BalanceService {
       console.warn(`[BalanceService] Franqueadora ${franqueadoraId} não encontrada. Usando franqueadora principal: ${validFranqueadoraId}`);
     }
 
+    // Validate student exists before attempting upsert to prevent FK violation
+    const { data: studentExists, error: studentError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('id', studentId)
+      .single();
+
+    if (studentError || !studentExists) {
+      console.error(`[BalanceService] Student ${studentId} not found in users table`);
+      throw new Error(`Usuário não encontrado: ${studentId}. O usuário pode ter sido removido.`);
+    }
+
     // Use upsert with onConflict to handle race conditions
     // This will insert if not exists, or do nothing if already exists
     const { error: upsertError } = await supabase
