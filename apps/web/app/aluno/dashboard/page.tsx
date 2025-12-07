@@ -41,6 +41,7 @@ import { useAuthStore } from '@/lib/stores/auth-store'
 import { usersAPI, packagesAPI } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import { MeusProfessoresCard } from '@/components/student/meus-professores-card'
 
 interface Booking {
   id: string
@@ -1556,6 +1557,9 @@ export default function AulasPage() {
                   </Card>
                 )
               })()}
+
+              {/* Meus Professores */}
+              <MeusProfessoresCard />
             </div>
           </div>
         </TabsContent>

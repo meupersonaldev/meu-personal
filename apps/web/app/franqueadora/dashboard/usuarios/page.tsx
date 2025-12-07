@@ -992,9 +992,16 @@ function UsuariosPageContent() {
                         {usuario.cref || '—'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <Badge className={getRoleColor(usuario.role)}>
-                          {getRoleLabel(usuario.role)}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge className={getRoleColor(usuario.role)}>
+                            {getRoleLabel(usuario.role)}
+                          </Badge>
+                          {usuario.origin === 'TEACHER_LEAD' && (
+                            <Badge className="bg-purple-100 text-purple-800 border-purple-200">
+                              Lead de Professor
+                            </Badge>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {getApprovalStatusBadge(usuario.approval_status, usuario.role)}
@@ -1009,8 +1016,8 @@ function UsuariosPageContent() {
                             }}
                             disabled={!usuario.cref_card_url}
                             className={`transition-colors ${usuario.cref_card_url
-                                ? 'text-blue-600 hover:text-blue-800 cursor-pointer'
-                                : 'text-gray-300 cursor-not-allowed'
+                              ? 'text-blue-600 hover:text-blue-800 cursor-pointer'
+                              : 'text-gray-300 cursor-not-allowed'
                               }`}
                             title={usuario.cref_card_url ? 'Ver carteirinha CREF' : 'Sem carteirinha CREF'}
                           >
@@ -1030,9 +1037,9 @@ function UsuariosPageContent() {
                               (usuario.approval_status !== 'pending' && usuario.approval_status !== 'rejected')
                             }
                             className={`transition-colors ${(usuario.role === 'TEACHER' || usuario.role === 'PROFESSOR') &&
-                                (usuario.approval_status === 'pending' || usuario.approval_status === 'rejected')
-                                ? 'text-green-600 hover:text-green-800 cursor-pointer'
-                                : 'text-gray-300 cursor-not-allowed'
+                              (usuario.approval_status === 'pending' || usuario.approval_status === 'rejected')
+                              ? 'text-green-600 hover:text-green-800 cursor-pointer'
+                              : 'text-gray-300 cursor-not-allowed'
                               }`}
                             title={
                               usuario.role === 'STUDENT' || usuario.role === 'ALUNO'
@@ -1060,9 +1067,9 @@ function UsuariosPageContent() {
                               usuario.approval_status !== 'pending'
                             }
                             className={`transition-colors ${(usuario.role === 'TEACHER' || usuario.role === 'PROFESSOR') &&
-                                usuario.approval_status === 'pending'
-                                ? 'text-red-600 hover:text-red-800 cursor-pointer'
-                                : 'text-gray-300 cursor-not-allowed'
+                              usuario.approval_status === 'pending'
+                              ? 'text-red-600 hover:text-red-800 cursor-pointer'
+                              : 'text-gray-300 cursor-not-allowed'
                               }`}
                             title={
                               usuario.role === 'STUDENT' || usuario.role === 'ALUNO'

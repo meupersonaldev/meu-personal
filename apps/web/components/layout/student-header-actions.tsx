@@ -1,11 +1,11 @@
-'use client'
-
 import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { CreditCard, Bell } from 'lucide-react'
 import { useStudentHeaderData } from '@/lib/hooks/useStudentHeaderData'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import api from '@/lib/api'
+import { toast } from 'sonner'
 
 interface StudentHeaderActionsProps {
   variant?: 'desktop' | 'mobile'
@@ -13,8 +13,23 @@ interface StudentHeaderActionsProps {
 
 export function StudentHeaderActions({ variant = 'desktop' }: StudentHeaderActionsProps) {
   const router = useRouter()
-  const { availableCredits, notifications, unreadCount, markNotificationAsRead } = useStudentHeaderData()
+  const { availableCredits, notifications, unreadCount, markNotificationAsRead, refetch } = useStudentHeaderData()
   const [showNotifications, setShowNotifications] = useState(false)
+  const [processingId, setProcessingId] = useState<string | null>(null)
+
+  const handleResponse = async (notificationId: string, requestId: string, status: 'APPROVED' | 'REJECTED') => {
+    try {
+      setProcessingId(notificationId)
+      await api.teachers.respondToRequest(requestId, status)
+      await markNotificationAsRead(notificationId)
+      toast.success(status === 'APPROVED' ? 'Solicitação aceita!' : 'Solicitação recusada')
+      refetch() // Atualiza dados se necessário
+    } catch (error) {
+      toast.error('Erro ao processar solicitação')
+    } finally {
+      setProcessingId(null)
+    }
+  }
 
   const creditsLabel = useMemo(() => {
     if (availableCredits >= 1) {
@@ -104,24 +119,58 @@ export function StudentHeaderActions({ variant = 'desktop' }: StudentHeaderActio
                   </div>
                 ) : (
                   notifications.map((notification) => (
-                    <button
+                    <div
                       key={notification.id}
-                      className="flex w-full flex-col items-start border-b p-4 text-left hover:bg-gray-50"
-                      onClick={() => {
-                        markNotificationAsRead(notification.id)
-                        setShowNotifications(false)
-                      }}
+                      className="flex w-full flex-col items-start border-b p-4 text-left hover:bg-gray-50 relative"
                     >
-                      <span className="text-sm font-medium text-gray-900">
-                        {notification.title}
-                      </span>
-                      <span className="mt-1 text-xs text-gray-600">
-                        {notification.message}
-                      </span>
-                      <span className="mt-1 text-xs text-gray-400">
-                        {new Date(notification.created_at).toLocaleDateString('pt-BR')}
-                      </span>
-                    </button>
+                      <button
+                        className="text-left w-full"
+                        onClick={() => {
+                          if (!notification.data?.action) {
+                            markNotificationAsRead(notification.id)
+                            setShowNotifications(false)
+                          }
+                        }}
+                      >
+                        <span className="text-sm font-medium text-gray-900">
+                          {notification.title}
+                        </span>
+                        <span className="mt-1 text-xs text-gray-600 block">
+                          {notification.message}
+                        </span>
+                        <span className="mt-1 text-xs text-gray-400 block">
+                          {new Date(notification.created_at).toLocaleDateString('pt-BR')}
+                        </span>
+                      </button>
+
+                      {notification.data?.action === 'approve_connection' && (
+                        <div className="mt-3 flex gap-2 w-full">
+                          <Button
+                            size="sm"
+                            className="h-7 text-xs bg-green-600 hover:bg-green-700 w-full"
+                            disabled={processingId === notification.id}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleResponse(notification.id, notification.data.request_id, 'APPROVED')
+                            }}
+                          >
+                            Aceitar
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs w-full"
+                            disabled={processingId === notification.id}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleResponse(notification.id, notification.data.request_id, 'REJECTED')
+                            }}
+                          >
+                            Recusar
+                          </Button>
+                        </div>
+                      )}
+                    </div>
                   ))
                 )}
               </div>

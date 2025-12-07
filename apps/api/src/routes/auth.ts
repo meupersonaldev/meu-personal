@@ -11,10 +11,11 @@ import { auditAuthEvent, auditSensitiveOperation } from '../middleware/audit'
 import { auditService } from '../services/audit.service'
 import { emailService } from '../services/email.service'
 import { validateCpfCnpj, validateCpfWithAPI } from '../utils/validation'
+import { getHtmlEmailTemplate } from '../services/email-templates'
 
 const router = express.Router()
 
-async function isPasswordPwned (password: string): Promise<boolean> {
+async function isPasswordPwned(password: string): Promise<boolean> {
   const sha1 = createHash('sha1').update(password).digest('hex').toUpperCase()
   const prefix = sha1.slice(0, 5)
   const suffix = sha1.slice(5)
@@ -45,7 +46,7 @@ async function isPasswordPwned (password: string): Promise<boolean> {
   }
 }
 
-function isStrongPassword (password: string): boolean {
+function isStrongPassword(password: string): boolean {
   if (!password || password.length < 6) return false
   const hasLower = /[a-z]/.test(password)
   const hasUpper = /[A-Z]/.test(password)
@@ -54,7 +55,7 @@ function isStrongPassword (password: string): boolean {
   return hasLower && hasUpper && hasDigit && hasSymbol
 }
 
-function normalizeCref (v?: string | null) {
+function normalizeCref(v?: string | null) {
   if (!v) return null
 
   // Remover "CREF" do início se presente
@@ -197,7 +198,7 @@ router.post('/login', auditAuthEvent('LOGIN'), async (req, res) => {
         maxAge: 7 * 24 * 60 * 60 * 1000,
         path: '/'
       })
-    } catch {}
+    } catch { }
 
     // Retornar dados do usuário
     res.json({
@@ -280,8 +281,8 @@ router.post(
         try {
           const apiValidation = await validateCpfWithAPI(sanitizedCpf)
           if (!apiValidation.valid) {
-            return res.status(400).json({ 
-              message: apiValidation.error || 'CPF não encontrado nos registros oficiais. Verifique o número e tente novamente.' 
+            return res.status(400).json({
+              message: apiValidation.error || 'CPF não encontrado nos registros oficiais. Verifique o número e tente novamente.'
             })
           }
         } catch (apiError: any) {
@@ -449,7 +450,7 @@ router.post(
           maxAge: 7 * 24 * 60 * 60 * 1000,
           path: '/'
         })
-      } catch {}
+      } catch { }
 
       // Retornar dados do usuário
       res.status(201).json({
@@ -569,16 +570,24 @@ router.post('/forgot-password', async (req, res) => {
       const resetLink = resetUrl.toString()
 
       try {
+        const emailContent = `
+          <p>Olá <strong>${user.name || ''}</strong>,</p>
+          <p>Recebemos uma solicitação para redefinir a sua senha na plataforma <strong>Meu Personal</strong>.</p>
+          <p>Clique no botão abaixo para criar uma nova senha:</p>
+          <p>Se você não solicitou essa alteração, ignore este e-mail.</p>
+        `
+
+        const html = getHtmlEmailTemplate(
+          'Redefinição de Senha',
+          emailContent,
+          resetLink,
+          'Redefinir Minha Senha'
+        )
+
         await emailService.sendEmail({
           to: email,
           subject: 'Redefinição de senha - Meu Personal',
-          html: `
-            <p>Olá ${user.name || ''},</p>
-            <p>Recebemos uma solicitação para redefinir a sua senha na plataforma Meu Personal.</p>
-            <p><a href="${resetLink}" target="_blank" rel="noopener noreferrer">Clique aqui para criar uma nova senha</a>.</p>
-            <p>Se você não solicitou essa alteração, ignore este e-mail.</p>
-            <p>Atenciosamente,<br>Equipe Meu Personal</p>
-          `,
+          html,
           text: [
             `Olá ${user.name || ''},`,
             '',

@@ -153,7 +153,7 @@ router.delete('/teachers/:id', async (req, res) => {
   try {
     const { id } = req.params
 
-    const { error} = await supabase
+    const { error } = await supabase
       .from('teacher_plans')
       .delete()
       .eq('id', id)
@@ -249,16 +249,17 @@ router.post('/teachers/subscriptions', async (req, res) => {
       .single()
 
     if (franchiseAdmin) {
-      await createNotification(
+      const { onPlanPurchased } = await import('../lib/events')
+      await onPlanPurchased(
         franchiseAdmin.user_id,
-        'plan_purchased',
-        'Nova Assinatura de Professor',
-        `${data.teacher?.name} adquiriu o plano ${data.plan?.name}`,
+        'teacher',
+        data.teacher?.name || 'Professor',
+        data.plan?.name || 'Plano',
         {
           teacher_id,
           plan_id,
           subscription_id: data.id,
-          amount: data.plan?.price
+          amount: data.plan?.price || 0
         }
       )
     }
@@ -335,15 +336,15 @@ router.post('/students', async (req, res) => {
     }
 
     console.log('Plano criado com sucesso:', data.id)
-    res.status(201).json({ 
+    res.status(201).json({
       ...data,
       message: 'Plano criado com sucesso! A cobrança será criada no Asaas quando um aluno comprar.'
     })
   } catch (error: any) {
     console.error('Error creating student plan:', error)
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Erro interno do servidor',
-      details: error.message 
+      details: error.message
     })
   }
 })
@@ -419,7 +420,7 @@ router.delete('/students/:id', async (req, res) => {
     // Se tem asaas_plan_id, deletar do Asaas também
     if (plan?.asaas_plan_id) {
       const asaasResult = await asaasService.deleteSubscriptionPlan(plan.asaas_plan_id)
-      
+
       if (!asaasResult.success) {
         console.error('Erro ao deletar plano no Asaas:', asaasResult.error)
         // Continua mesmo se falhar no Asaas
@@ -457,7 +458,7 @@ router.post('/students/:id/sync-asaas', async (req, res) => {
 
     // Se já tem asaas_plan_id, não precisa sincronizar
     if (plan.asaas_plan_id) {
-      return res.json({ 
+      return res.json({
         message: 'Plano já está sincronizado',
         asaas_plan_id: plan.asaas_plan_id
       })
@@ -473,7 +474,7 @@ router.post('/students/:id/sync-asaas', async (req, res) => {
     })
 
     if (!asaasResult.success) {
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'Erro ao criar plano no Asaas',
         details: asaasResult.error
       })
@@ -487,7 +488,7 @@ router.post('/students/:id/sync-asaas', async (req, res) => {
 
     if (updateError) throw updateError
 
-    res.json({ 
+    res.json({
       message: 'Plano sincronizado com sucesso',
       asaas_plan_id: asaasResult.data.id
     })
@@ -584,17 +585,19 @@ router.post('/students/subscriptions', async (req, res) => {
       .single()
 
     if (franchiseAdmin) {
-      await createNotification(
+      const { onPlanPurchased } = await import('../lib/events')
+      await onPlanPurchased(
         franchiseAdmin.user_id,
-        'plan_purchased',
-        'Nova Assinatura de Aluno',
-        `${data.student?.name} adquiriu o plano ${data.plan?.name} na academia ${data.academy?.name}`,
+        'student',
+        data.student?.name || 'Aluno',
+        data.plan?.name || 'Plano',
         {
           student_id,
           plan_id,
           academy_id,
           subscription_id: data.id,
-          amount: data.plan?.price
+          amount: data.plan?.price || 0,
+          academy_name: data.academy?.name
         }
       )
     }

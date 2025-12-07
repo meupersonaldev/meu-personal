@@ -72,24 +72,16 @@ router.post('/', async (req, res) => {
       .single()
 
     if (franchiseAdmin) {
-      const notificationTitle = type === 'teacher_registration'
-        ? 'Nova Solicitação de Professor'
-        : 'Nova Solicitação de Aluno'
-
-      const notificationMessage = type === 'teacher_registration'
-        ? `${data.user?.name} solicitou cadastro como professor`
-        : `${data.user?.name} solicitou cadastro como aluno${data.academy ? ` na academia ${data.academy?.name}` : ''}`
-
-      await createNotification(
+      const { onApprovalRequested } = await import('../lib/events')
+      await onApprovalRequested(
         franchiseAdmin.user_id,
-        type === 'teacher_registration' ? 'teacher_approval_needed' : 'student_approval_needed',
-        notificationTitle,
-        notificationMessage,
+        type as 'teacher_registration' | 'student_registration',
+        data.user?.name || 'Usuário',
         {
           approval_request_id: data.id,
           user_id,
-          type,
-          requested_data
+          requested_data,
+          academy_name: data.academy?.name
         }
       )
     }
@@ -189,11 +181,11 @@ router.put('/:id', async (req, res) => {
             .single()
 
           if (franchiseAdmin) {
-            await createNotification(
+            const { onRegistrationApproved } = await import('../lib/events')
+            await onRegistrationApproved(
               franchiseAdmin.user_id,
               'new_teacher',
-              'Novo Professor Aprovado',
-              `${request.user?.name} foi aprovado como professor`,
+              request.user?.name || 'Professor',
               {
                 teacher_id: request.user_id,
                 approval_request_id: id
@@ -219,11 +211,11 @@ router.put('/:id', async (req, res) => {
             .single()
 
           if (academyAdmin) {
-            await createNotification(
+            const { onRegistrationApproved } = await import('../lib/events')
+            await onRegistrationApproved(
               academyAdmin.user_id,
               'new_student',
-              'Novo Aluno Aprovado',
-              `${request.user?.name} foi aprovado como aluno`,
+              request.user?.name || 'Aluno',
               {
                 student_id: request.user_id,
                 academy_id: request.academy_id,

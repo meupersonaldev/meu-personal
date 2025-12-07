@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { CheckCircle2, XCircle, Loader2, ArrowLeft } from 'lucide-react'
+import { CheckCircle2, XCircle, Loader2, ArrowLeft, Calendar, Clock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 
@@ -14,6 +14,7 @@ type CheckinResult = {
     start: string
     duration: number
   }
+  alreadyCheckedIn?: boolean
 }
 
 export default function CheckinPage() {
@@ -23,7 +24,8 @@ export default function CheckinPage() {
 
   const [loading, setLoading] = useState(true)
   const [result, setResult] = useState<CheckinResult | null>(null)
-  const [teacherName, setTeacherName] = useState('')
+  const [userName, setUserName] = useState('')
+  const [userRole, setUserRole] = useState<string>('')
 
   useEffect(() => {
     validateCheckin()
@@ -41,22 +43,28 @@ export default function CheckinPage() {
 
       if (!authRes.ok) {
         // Redirecionar para login com redirect de volta
-        router.push(`/professor/login?redirect=/checkin/a/${academyId}`)
+        const currentPath = window.location.pathname
+        router.push(`/login?redirect=${encodeURIComponent(currentPath)}`)
         return
       }
 
       const { user } = await authRes.json()
 
-      if (user.role !== 'TEACHER') {
+      // Verificar se é aluno ou professor
+      const isStudent = ['STUDENT', 'ALUNO'].includes(user.role)
+      const isTeacher = ['TEACHER', 'PROFESSOR'].includes(user.role)
+
+      if (!isStudent && !isTeacher) {
         setResult({
           allowed: false,
-          message: 'Apenas professores podem fazer check-in.'
+          message: 'Apenas alunos e professores podem fazer check-in.'
         })
         setLoading(false)
         return
       }
 
-      setTeacherName(user.name)
+      setUserName(user.name || 'Usuário')
+      setUserRole(user.role)
 
       // Validar check-in
       const checkinRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/bookings/checkin/validate`, {
@@ -64,14 +72,23 @@ export default function CheckinPage() {
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
-          academy_id: academyId,
-          teacher_id: user.id
+          academy_id: academyId
         })
       })
+
+      if (!checkinRes.ok) {
+        const errorData = await checkinRes.json().catch(() => ({ message: 'Erro ao validar check-in' }))
+        setResult({
+          allowed: false,
+          message: errorData.message || 'Erro ao validar check-in. Tente novamente.'
+        })
+        return
+      }
 
       const data = await checkinRes.json()
       setResult(data)
     } catch (error) {
+      console.error('Erro ao validar check-in:', error)
       setResult({
         allowed: false,
         message: 'Erro ao validar check-in. Tente novamente.'
@@ -98,6 +115,8 @@ export default function CheckinPage() {
     return null
   }
 
+  const roleLabel = userRole === 'TEACHER' || userRole === 'PROFESSOR' ? 'Professor' : 'Aluno'
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4">
       <Card className={`w-full max-w-md p-8 ${result.allowed ? 'border-green-500 border-2' : 'border-red-500 border-2'}`}>
@@ -109,20 +128,39 @@ export default function CheckinPage() {
               </div>
               <div className="text-center space-y-2">
                 <h1 className="text-3xl font-bold text-green-700">Acesso Liberado</h1>
-                <p className="text-xl text-gray-700">{teacherName}</p>
-                <p className="text-sm text-gray-600">{result.message}</p>
+                <p className="text-xl text-gray-700">{userName}</p>
+                <p className="text-sm text-gray-500">{roleLabel}</p>
+                <p className="text-sm text-gray-600 mt-2">{result.message}</p>
               </div>
               {result.booking && (
-                <div className="w-full bg-green-50 rounded-lg p-4 space-y-2">
-                  <p className="text-sm text-gray-700">
-                    <span className="font-semibold">Horário:</span>{' '}
-                    {new Date(result.booking.start).toLocaleTimeString('pt-BR', {
+                <div className="w-full bg-green-50 rounded-lg p-4 space-y-3 border border-green-200">
+                  <div className="flex items-center gap-2 text-sm text-gray-700">
+                    <Calendar className="h-4 w-4 text-green-600" />
+                    <span className="font-semibold">Data:</span>
+                    <span>{new Date(result.booking.start).toLocaleDateString('pt-BR', {
+                      day: '2-digit',
+                      month: 'long',
+                      year: 'numeric'
+                    })}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-gray-700">
+                    <Clock className="h-4 w-4 text-green-600" />
+                    <span className="font-semibold">Horário:</span>
+                    <span>{new Date(result.booking.start).toLocaleTimeString('pt-BR', {
                       hour: '2-digit',
                       minute: '2-digit'
-                    })}
-                  </p>
-                  <p className="text-sm text-gray-700">
-                    <span className="font-semibold">Duração:</span> {result.booking.duration} minutos
+                    })}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-gray-700">
+                    <span className="font-semibold">Duração:</span>
+                    <span>{result.booking.duration} minutos</span>
+                  </div>
+                </div>
+              )}
+              {result.alreadyCheckedIn && (
+                <div className="w-full bg-blue-50 rounded-lg p-3 border border-blue-200">
+                  <p className="text-sm text-blue-800 text-center">
+                    Você já realizou check-in para este agendamento anteriormente.
                   </p>
                 </div>
               )}
@@ -134,8 +172,13 @@ export default function CheckinPage() {
               </div>
               <div className="text-center space-y-2">
                 <h1 className="text-3xl font-bold text-red-700">Acesso Negado</h1>
-                {teacherName && <p className="text-xl text-gray-700">{teacherName}</p>}
-                <p className="text-sm text-gray-600">{result.message}</p>
+                {userName && (
+                  <>
+                    <p className="text-xl text-gray-700">{userName}</p>
+                    <p className="text-sm text-gray-500">{roleLabel}</p>
+                  </>
+                )}
+                <p className="text-sm text-gray-600 mt-2">{result.message}</p>
               </div>
             </>
           )}
@@ -145,11 +188,25 @@ export default function CheckinPage() {
               onClick={() => validateCheckin()}
               variant="outline"
               className="w-full"
+              disabled={loading}
             >
-              Tentar Novamente
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Validando...
+                </>
+              ) : (
+                'Tentar Novamente'
+              )}
             </Button>
             <Button
-              onClick={() => router.push('/')}
+              onClick={() => {
+                if (userRole === 'TEACHER' || userRole === 'PROFESSOR') {
+                  router.push('/professor/dashboard')
+                } else {
+                  router.push('/aluno/inicio')
+                }
+              }}
               variant="ghost"
               className="w-full"
             >

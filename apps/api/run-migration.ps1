@@ -14,7 +14,7 @@ if (-not (Test-Path ".env")) {
 
 # Carregar DATABASE_URL do .env
 $envContent = Get-Content ".env" -Raw
-if ($envContent -match 'DATABASE_URL="([^"]+)"') {
+if ($envContent -match 'DATABASE_URL=["'']?([^"''\r\n]+)["'']?') {
     $databaseUrl = $matches[1]
     Write-Host "DATABASE_URL encontrada" -ForegroundColor Green
 } else {
@@ -25,7 +25,7 @@ if ($envContent -match 'DATABASE_URL="([^"]+)"') {
 # Executar migration SQL
 Write-Host "`nExecutando SQL migration..." -ForegroundColor Cyan
 
-$sqlFile = "prisma\migrations\add_gender_column.sql"
+$sqlFile = "migrations\20251206_add_notification_fields.sql"
 if (-not (Test-Path $sqlFile)) {
     Write-Host "ERRO: Arquivo de migration nao encontrado: $sqlFile" -ForegroundColor Red
     exit 1
@@ -36,17 +36,17 @@ $env:PGPASSWORD = ""
 if ($databaseUrl -match 'postgresql://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)') {
     $user = $matches[1]
     $password = $matches[2]
-    $host = $matches[3]
+    $dbHost = $matches[3]
     $port = $matches[4]
-    $database = $matches[5]
+    $database = $matches[5].Split('?')[0]
     
-    Write-Host "Conectando ao banco: $database@$host" -ForegroundColor Yellow
+    Write-Host "Conectando ao banco: $database@$dbHost" -ForegroundColor Yellow
     
     $env:PGPASSWORD = $password
     
     try {
         $sqlContent = Get-Content $sqlFile -Raw
-        $sqlContent | psql -h $host -p $port -U $user -d $database
+        $sqlContent | psql -h $dbHost -p $port -U $user -d $database
         Write-Host "`nMigration executada com sucesso!" -ForegroundColor Green
     } catch {
         Write-Host "`nERRO ao executar migration: $_" -ForegroundColor Red

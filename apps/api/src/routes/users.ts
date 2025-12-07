@@ -8,6 +8,7 @@ import path from 'path'
 import { requireAuth, requireRole } from '../middleware/auth'
 import { validateCpfCnpj } from '../utils/validation'
 import { emailService } from '../services/email.service'
+import { getHtmlEmailTemplate } from '../services/email-templates'
 
 // Cliente Supabase centralizado importado de ../lib/supabase
 
@@ -458,17 +459,25 @@ router.post('/:id/reset-password', requireAuth, requireRole(['FRANQUEADORA', 'SU
 
     // Enviar email
     try {
+      const emailContent = `
+        <p>Olá <strong>${targetUser.name || ''}</strong>,</p>
+        <p>Um administrador solicitou a redefinição da sua senha na plataforma <strong>Meu Personal</strong>.</p>
+        <p>Clique no botão abaixo para criar uma nova senha:</p>
+        <p>Este link expira em 1 hora.</p>
+        <p>Se você não solicitou essa alteração, entre em contato com o suporte imediatamente.</p>
+      `
+
+      const html = getHtmlEmailTemplate(
+        'Redefinição de Senha (Solicitado por Admin)',
+        emailContent,
+        resetLink,
+        'Redefinir Minha Senha'
+      )
+
       await emailService.sendEmail({
         to: targetUser.email,
         subject: 'Redefinição de senha - Meu Personal',
-        html: `
-          <p>Olá ${targetUser.name || ''},</p>
-          <p>Um administrador solicitou a redefinição da sua senha na plataforma Meu Personal.</p>
-          <p><a href="${resetLink}" target="_blank" rel="noopener noreferrer">Clique aqui para criar uma nova senha</a>.</p>
-          <p>Este link expira em 1 hora.</p>
-          <p>Se você não solicitou essa alteração, entre em contato com o suporte imediatamente.</p>
-          <p>Atenciosamente,<br>Equipe Meu Personal</p>
-        `,
+        html,
         text: [
           `Olá ${targetUser.name || ''},`,
           '',
@@ -487,9 +496,9 @@ router.post('/:id/reset-password', requireAuth, requireRole(['FRANQUEADORA', 'SU
       return res.status(500).json({ error: 'Erro ao enviar email de redefinição de senha' })
     }
 
-    res.json({ 
+    res.json({
       message: 'Email de redefinição de senha enviado com sucesso',
-      email: targetUser.email 
+      email: targetUser.email
     })
   } catch (error: any) {
     console.error('Error resetting password:', error)
@@ -604,7 +613,7 @@ router.put('/:id/approve', requireAuth, async (req, res) => {
     const { id } = req.params
     const user = (req as any).user
     const isAdmin = ['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN', 'FRANCHISE_ADMIN'].includes(user?.role)
-    
+
     if (!isAdmin) {
       return res.status(403).json({ error: 'Apenas administradores podem aprovar usuários' })
     }
@@ -634,7 +643,7 @@ router.put('/:id/reject', requireAuth, async (req, res) => {
     const { id } = req.params
     const user = (req as any).user
     const isAdmin = ['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN', 'FRANCHISE_ADMIN'].includes(user?.role)
-    
+
     if (!isAdmin) {
       return res.status(403).json({ error: 'Apenas administradores podem reprovar usuários' })
     }

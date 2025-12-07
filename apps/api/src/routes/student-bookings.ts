@@ -107,7 +107,7 @@ router.post('/student', async (req, res) => {
       .eq('is_active', true)
       .limit(1)
       .single();
-    
+
     if (unit?.capacity_per_slot) {
       unitCapacity = unit.capacity_per_slot;
     } else {
@@ -117,7 +117,7 @@ router.post('/student', async (req, res) => {
         .select('capacity_per_slot')
         .eq('id', franchise_id)
         .single();
-      
+
       if (academy?.capacity_per_slot) {
         unitCapacity = academy.capacity_per_slot;
       }
@@ -139,18 +139,18 @@ router.post('/student', async (req, res) => {
     // Verificar sobreposição de horários
     const overlappingBookings = (unitBookings || []).filter((b: any) => {
       const bookingStart = b.start_at ? new Date(b.start_at) : new Date(b.date);
-      const bookingEnd = b.end_at 
+      const bookingEnd = b.end_at
         ? new Date(b.end_at)
         : new Date(bookingStart.getTime() + (b.duration || 60) * 60000);
-      
+
       // Verificar se há sobreposição: o novo agendamento começa antes do existente terminar
       // e o novo agendamento termina depois do existente começar
       return (startDate < bookingEnd && endDate > bookingStart);
     });
 
     if (overlappingBookings.length >= unitCapacity) {
-      return res.status(409).json({ 
-        message: `Capacidade da unidade excedida. Máximo de ${unitCapacity} agendamento(s) simultâneo(s) permitido(s).` 
+      return res.status(409).json({
+        message: `Capacidade da unidade excedida. Máximo de ${unitCapacity} agendamento(s) simultâneo(s) permitido(s).`
       });
     }
 
@@ -173,17 +173,17 @@ router.post('/student', async (req, res) => {
     // Verificar sobreposição de horários do professor
     const teacherOverlapping = (teacherBookings || []).filter((b: any) => {
       const bookingStart = b.start_at ? new Date(b.start_at) : new Date(b.date);
-      const bookingEnd = b.end_at 
+      const bookingEnd = b.end_at
         ? new Date(b.end_at)
         : new Date(bookingStart.getTime() + (b.duration || 60) * 60000);
-      
+
       // Verificar se há sobreposição
       return (startDate < bookingEnd && endDate > bookingStart);
     });
 
     if (teacherOverlapping.length > 0) {
-      return res.status(409).json({ 
-        message: 'Professor indisponível neste horário. O professor já possui um agendamento com outro aluno no mesmo período.' 
+      return res.status(409).json({
+        message: 'Professor indisponível neste horário. O professor já possui um agendamento com outro aluno no mesmo período.'
       });
     }
 
@@ -241,30 +241,9 @@ router.post('/student', async (req, res) => {
       .eq('id', student_id);
 
     try {
-      await createNotification(
-        franchise_id,
-        'new_booking',
-        'Nova reserva',
-        'Um aluno confirmou uma nova reserva.',
-        { student_id, teacher_id, date: startDate.toISOString() }
-      );
-
-      await createUserNotification(
-        teacher_id,
-        'new_booking',
-        'Nova reserva confirmada',
-        'Voce tem uma nova aula confirmada.',
-        { student_id, date: startDate.toISOString() }
-      );
-
-      await createUserNotification(
-        student_id,
-        'new_booking',
-        'Reserva confirmada',
-        'Sua reserva foi confirmada com sucesso.',
-        { teacher_id, date: startDate.toISOString() }
-      );
-    } catch {}
+      const { onBookingCreated } = await import('../lib/events')
+      await onBookingCreated(franchise_id, teacher_id, student_id, startDate.toISOString(), booking.id)
+    } catch { }
 
     return res.status(201).json({
       message: 'Agendamento confirmado com sucesso',
@@ -286,7 +265,7 @@ router.post('/:id/cancel', async (req, res) => {
 
     const { data: booking, error: getError } = await supabase
       .from('bookings')
-      .select('id, status, date, credits_cost, payment_source, student_id, franchise_id')
+      .select('id, status, date, credits_cost, payment_source, student_id, franchise_id, teacher_id')
       .eq('id', id)
       .single();
 
@@ -364,25 +343,15 @@ router.post('/:id/cancel', async (req, res) => {
     }
 
     try {
-      if (booking?.franchise_id) {
-        await createNotification(
-          booking.franchise_id,
-          'booking_cancelled',
-          'Reserva cancelada',
-          'Uma reserva foi cancelada.',
-          { booking_id: id }
-        );
-      }
-      if (booking?.student_id) {
-        await createUserNotification(
-          booking.student_id,
-          'booking_cancelled',
-          'Reserva cancelada',
-          'Sua reserva foi cancelada.',
-          { booking_id: id }
-        );
-      }
-    } catch {}
+      const { onBookingCancelled } = await import('../lib/events')
+      await onBookingCancelled(
+        booking.franchise_id,
+        booking.teacher_id || null,
+        booking.student_id,
+        id,
+        'student'
+      )
+    } catch { }
 
     return res.json({ message: 'Agendamento cancelado com sucesso', refund });
   } catch (err) {

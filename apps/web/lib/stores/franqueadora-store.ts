@@ -200,6 +200,8 @@ export interface User {
       state: string
     }
   }>
+  // Origin field to track where user came from (e.g., TEACHER_LEAD)
+  origin?: string
 }
 
 export interface UsersResponse {
@@ -355,7 +357,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
 
         try {
           await get().fetchFranqueadora()
-        } catch {}
+        } catch { }
 
         franqueadoraId = get().franqueadora?.id || null
         return franqueadoraId
@@ -377,7 +379,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             set({ isLoading: false })
             return false
           }
-          
+
           // Validar se o usuário é SUPER_ADMIN
           if (data.user.role !== 'SUPER_ADMIN') {
             set({ isLoading: false })
@@ -419,7 +421,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
       },
 
       // Buscar contexto da franqueadora do admin logado via API
-       fetchFranqueadora: async () => {
+      fetchFranqueadora: async () => {
         try {
           const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           const token = get().token
@@ -440,7 +442,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             // Inicializar notificações da franqueadora
             useNotificationsStore.getState().connectFranqueadora(json.franqueadora.id)
           }
-        } catch {}
+        } catch { }
       },
 
       logout: () => {
@@ -489,7 +491,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
                 franqueadoraId = data?.franqueadora?.id || franqueadoraId
                 if (data?.franqueadora) set({ franqueadora: data.franqueadora })
               }
-            } catch {}
+            } catch { }
           }
           const url = franqueadoraId
             ? `${API_URL}/api/franchises?franqueadora_id=${encodeURIComponent(franqueadoraId)}`
@@ -525,12 +527,12 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
         try {
           const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           const token = get().token
-          
+
           // Sanitizar CPF/CNPJ (remover formatação) antes de enviar
-          const cpfCnpjSanitized = academyData.cpf_cnpj 
-            ? academyData.cpf_cnpj.replace(/\D/g, '') 
+          const cpfCnpjSanitized = academyData.cpf_cnpj
+            ? academyData.cpf_cnpj.replace(/\D/g, '')
             : null
-          
+
           const academyPayload = {
             franqueadora_id: academyData.franqueadora_id,
             name: academyData.name,
@@ -570,7 +572,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           })
           if (!response.ok) {
             if ((response.status === 401 || response.status === 403) && get().isAuthenticated) {
-              try { const { toast } = await import('sonner'); toast.error('Sem permissão para criar franquia. Faça login novamente.') } catch {}
+              try { const { toast } = await import('sonner'); toast.error('Sem permissão para criar franquia. Faça login novamente.') } catch { }
               return false
             }
             const error = await response.json()
@@ -599,27 +601,27 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           })
           if (!resp.ok) {
             if ((resp.status === 401 || resp.status === 403) && get().isAuthenticated) {
-              try { const { toast } = await import('sonner'); toast.error('Sem permissão para atualizar franquia.') } catch {}
+              try { const { toast } = await import('sonner'); toast.error('Sem permissão para atualizar franquia.') } catch { }
               return false
             }
             const errorData = await resp.json().catch(() => ({}))
             throw new Error(errorData.error || 'Failed to update academy')
           }
-          
+
           const updatedAcademy = await resp.json()
-          
+
           // Atualizar estado local imediatamente
           set(state => ({
-            academies: state.academies.map(academy => 
+            academies: state.academies.map(academy =>
               academy.id === id ? { ...academy, ...updatedAcademy } : academy
             )
           }))
-          
+
           // Recarregar dados do servidor para garantir sincronização
           await get().fetchAcademies()
           return true
         } catch {
-          try { const { toast } = await import('sonner'); toast.error('Erro ao atualizar franquia.') } catch {}
+          try { const { toast } = await import('sonner'); toast.error('Erro ao atualizar franquia.') } catch { }
           return false
         }
       },
@@ -635,7 +637,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           })
           if (!resp.ok && resp.status !== 204) {
             if ((resp.status === 401 || resp.status === 403) && get().isAuthenticated) {
-              try { const { toast } = await import('sonner'); toast.error('Sem permissão para deletar franquia.') } catch {}
+              try { const { toast } = await import('sonner'); toast.error('Sem permissão para deletar franquia.') } catch { }
               return false
             }
             throw new Error('Failed to delete academy')
@@ -661,7 +663,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           })
           if (!resp.ok) {
             if ((resp.status === 401 || resp.status === 403) && get().isAuthenticated) {
-              try { const { toast } = await import('sonner'); toast.error('Sem permissão para ver estatísticas da franquia.') } catch {}
+              try { const { toast } = await import('sonner'); toast.error('Sem permissão para ver estatísticas da franquia.') } catch { }
               return null
             }
             throw new Error('Failed to fetch academy stats')
@@ -688,14 +690,14 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           })
           if (!resp.ok) {
             if ((resp.status === 401 || resp.status === 403) && get().isAuthenticated) {
-              try { const { toast } = await import('sonner'); toast.error('Sem permissão para listar pacotes.') } catch {}
+              try { const { toast } = await import('sonner'); toast.error('Sem permissão para listar pacotes.') } catch { }
               return
             }
             throw new Error('Failed to fetch packages')
           }
           const json = await resp.json()
           set({ packages: Array.isArray(json.data) ? json.data : [] })
-        } catch {}
+        } catch { }
       },
 
       addPackage: async (packageData) => {
@@ -717,7 +719,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           })
           if (!resp.ok) {
             if ((resp.status === 401 || resp.status === 403) && get().isAuthenticated) {
-              try { const { toast } = await import('sonner'); toast.error('Sem permissão para criar pacote.') } catch {}
+              try { const { toast } = await import('sonner'); toast.error('Sem permissão para criar pacote.') } catch { }
               return false
             }
             throw new Error('Failed to add package')
@@ -748,7 +750,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           })
           if (!resp.ok) {
             if ((resp.status === 401 || resp.status === 403) && get().isAuthenticated) {
-              try { const { toast } = await import('sonner'); toast.error('Sem permissão para atualizar pacote.') } catch {}
+              try { const { toast } = await import('sonner'); toast.error('Sem permissão para atualizar pacote.') } catch { }
               return false
             }
             throw new Error('Failed to update package')
@@ -775,7 +777,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           })
           if (!resp.ok && resp.status !== 204) {
             if ((resp.status === 401 || resp.status === 403) && get().isAuthenticated) {
-              try { const { toast } = await import('sonner'); toast.error('Sem permissão para deletar pacote.') } catch {}
+              try { const { toast } = await import('sonner'); toast.error('Sem permissão para deletar pacote.') } catch { }
               return false
             }
             throw new Error('Failed to delete package')
@@ -810,14 +812,14 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
               try {
                 const { toast } = await import('sonner')
                 toast.error('Sem permissao para listar pacotes de aluno.')
-              } catch {}
+              } catch { }
             }
             return
           }
 
           const json = await resp.json()
           set({ studentPackages: json.packages || [] })
-        } catch {} finally {
+        } catch { } finally {
           set({ isPackagesLoading: false })
         }
       },
@@ -845,14 +847,14 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
               try {
                 const { toast } = await import('sonner')
                 toast.error('Sem permissao para listar pacotes de professor.')
-              } catch {}
+              } catch { }
             }
             return
           }
 
           const json = await resp.json()
           set({ hourPackages: json.packages || [] })
-        } catch {} finally {
+        } catch { } finally {
           set({ isPackagesLoading: false })
         }
       },
@@ -892,7 +894,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             try {
               const { toast } = await import('sonner')
               toast.error(errorBody?.error || 'Erro ao criar pacote de aluno.')
-            } catch {}
+            } catch { }
             return false
           }
 
@@ -900,13 +902,13 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           try {
             const { toast } = await import('sonner')
             toast.success('Pacote de aluno criado com sucesso.')
-          } catch {}
+          } catch { }
           return true
         } catch {
           try {
             const { toast } = await import('sonner')
             toast.error('Erro inesperado ao criar pacote de aluno.')
-          } catch {}
+          } catch { }
           return false
         }
       },
@@ -946,7 +948,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             try {
               const { toast } = await import('sonner')
               toast.error(errorBody?.error || 'Erro ao criar pacote de professor.')
-            } catch {}
+            } catch { }
             return false
           }
 
@@ -954,13 +956,13 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           try {
             const { toast } = await import('sonner')
             toast.success('Pacote de professor criado com sucesso.')
-          } catch {}
+          } catch { }
           return true
         } catch {
           try {
             const { toast } = await import('sonner')
             toast.error('Erro inesperado ao criar pacote de professor.')
-          } catch {}
+          } catch { }
           return false
         }
       },
@@ -1009,7 +1011,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
               try {
                 const { toast } = await import('sonner')
                 toast.error('Sem permissão para visualizar contatos.')
-              } catch {}
+              } catch { }
               return null
             }
             throw new Error('Failed to fetch contacts')
@@ -1052,6 +1054,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
               booking_stats: c.user?.booking_stats || undefined,
               balance_info: c.user?.balance_info || undefined,
               hours_info: c.user?.hours_info || undefined,
+              origin: c.origin || 'SELF_REGISTRATION',
             }))
 
           const result: UsersResponse = {
@@ -1070,7 +1073,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           try {
             const { toast } = await import('sonner')
             toast.error('Erro ao carregar contatos.')
-          } catch {}
+          } catch { }
           return null
         }
       },
@@ -1086,7 +1089,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           })
           if (!resp.ok) {
             if ((resp.status === 401 || resp.status === 403) && get().isAuthenticated) {
-              try { const { toast } = await import('sonner'); toast.error('Sem permissão para visualizar analytics.') } catch {}
+              try { const { toast } = await import('sonner'); toast.error('Sem permissão para visualizar analytics.') } catch { }
               return
             }
             throw new Error('Failed to fetch analytics')
@@ -1105,7 +1108,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           }
 
           set({ analytics: safeAnalytics })
-        } catch {}
+        } catch { }
       },
 
       // Novas funções de CRUD para pacotes de aluno
@@ -1119,7 +1122,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             try {
               const { toast } = await import('sonner')
               toast.error('Contexto da franqueadora não disponível.')
-            } catch {}
+            } catch { }
             return false
           }
 
@@ -1146,7 +1149,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             try {
               const { toast } = await import('sonner')
               toast.error(errorBody?.error || 'Erro ao atualizar pacote de aluno.')
-            } catch {}
+            } catch { }
             return false
           }
 
@@ -1154,13 +1157,13 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           try {
             const { toast } = await import('sonner')
             toast.success('Pacote de aluno atualizado com sucesso.')
-          } catch {}
+          } catch { }
           return true
         } catch {
           try {
             const { toast } = await import('sonner')
             toast.error('Erro inesperado ao atualizar pacote de aluno.')
-          } catch {}
+          } catch { }
           return false
         }
       },
@@ -1175,7 +1178,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             try {
               const { toast } = await import('sonner')
               toast.error('Contexto da franqueadora não disponível.')
-            } catch {}
+            } catch { }
             return false
           }
 
@@ -1190,7 +1193,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             try {
               const { toast } = await import('sonner')
               toast.error(errorBody?.error || 'Erro ao excluir pacote de aluno.')
-            } catch {}
+            } catch { }
             return false
           }
 
@@ -1204,13 +1207,13 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           try {
             const { toast } = await import('sonner')
             toast.success('Pacote de aluno excluído com sucesso.')
-          } catch {}
+          } catch { }
           return true
         } catch {
           try {
             const { toast } = await import('sonner')
             toast.error('Erro inesperado ao excluir pacote de aluno.')
-          } catch {}
+          } catch { }
           return false
         }
       },
@@ -1226,7 +1229,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             try {
               const { toast } = await import('sonner')
               toast.error('Contexto da franqueadora não disponível.')
-            } catch {}
+            } catch { }
             return false
           }
 
@@ -1253,7 +1256,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             try {
               const { toast } = await import('sonner')
               toast.error(errorBody?.error || 'Erro ao atualizar pacote de professor.')
-            } catch {}
+            } catch { }
             return false
           }
 
@@ -1261,13 +1264,13 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           try {
             const { toast } = await import('sonner')
             toast.success('Pacote de professor atualizado com sucesso.')
-          } catch {}
+          } catch { }
           return true
         } catch {
           try {
             const { toast } = await import('sonner')
             toast.error('Erro inesperado ao atualizar pacote de professor.')
-          } catch {}
+          } catch { }
           return false
         }
       },
@@ -1282,7 +1285,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             try {
               const { toast } = await import('sonner')
               toast.error('Contexto da franqueadora não disponível.')
-            } catch {}
+            } catch { }
             return false
           }
 
@@ -1297,7 +1300,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             try {
               const { toast } = await import('sonner')
               toast.error(errorBody?.error || 'Erro ao excluir pacote de professor.')
-            } catch {}
+            } catch { }
             return false
           }
 
@@ -1311,13 +1314,13 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           try {
             const { toast } = await import('sonner')
             toast.success('Pacote de professor excluído com sucesso.')
-          } catch {}
+          } catch { }
           return true
         } catch {
           try {
             const { toast } = await import('sonner')
             toast.error('Erro inesperado ao excluir pacote de professor.')
-          } catch {}
+          } catch { }
           return false
         }
       }

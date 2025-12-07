@@ -38,6 +38,10 @@ export const emailService = {
         user: smtpUser,
         pass: smtpPass,
       },
+      tls: {
+        // Aceitar certificados auto-assinados (comum em servidores SMTP locais ou de hospedagem)
+        rejectUnauthorized: false
+      }
     })
 
     try {

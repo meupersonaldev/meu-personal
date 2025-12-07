@@ -245,7 +245,8 @@ model AcademyPlan {
 model Checkin {
   id            String    @id @default(uuid())
   academyId     String    @map("academy_id")
-  teacherId     String    @map("teacher_id")
+  teacherId     String?   @map("teacher_id")
+  studentId     String?   @map("student_id")
   bookingId     String?   @map("booking_id")
   status        String
   reason        String?
@@ -257,12 +258,16 @@ model Checkin {
 
 model Notification {
   id            String    @id @default(uuid())
-  academyId     String    @map("academy_id")
+  academyId     String?   @map("academy_id")
+  userId        String?   @map("user_id")
   type          String
   title         String
   message       String
   data          Json?
-  isRead        Boolean   @default(false) @map("is_read")
+  link          String?
+  actorId       String?   @map("actor_id")
+  roleScope     String?   @map("role_scope")
+  read          Boolean   @default(false)
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 

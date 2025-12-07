@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useAuthStore } from '@/lib/stores/auth-store'
+import { useNotificationsStore } from '@/lib/stores/notifications-store'
 import api from '@/lib/api'
 
 export interface StudentNotification {
@@ -10,6 +11,7 @@ export interface StudentNotification {
   message: string
   created_at: string
   is_read: boolean
+  data?: any
 }
 
 export interface StudentHeaderData {
@@ -24,44 +26,45 @@ export interface StudentHeaderData {
 
 export function useStudentHeaderData(): StudentHeaderData {
   const { user, token } = useAuthStore()
+  const { notifications, unreadCount, markRead, hydrate, connectUser, disconnectAll } = useNotificationsStore()
   const [availableCredits, setAvailableCredits] = useState(0)
-  const [notifications, setNotifications] = useState<StudentNotification[]>([])
   const [isLoading, setIsLoading] = useState(false)
 
-  const fetchData = useCallback(async () => {
+  const fetchCredits = useCallback(async () => {
     if (!user?.id) {
       setAvailableCredits(0)
-      setNotifications([])
       return
     }
 
-    setIsLoading(true)
     try {
-      const [balanceData, notificationsData] = await Promise.all([
-        api.packages.getStudentBalance(),
-        api.notifications.getAll({ user_id: user.id, unread: true }),
-      ])
-
-      // A API retorna { balance: { available_classes: number, ... } }
+      const balanceData = await api.packages.getStudentBalance()
       const available = balanceData?.balance?.available_classes
       setAvailableCredits(typeof available === 'number' && !isNaN(available) ? Math.max(0, available) : 0)
-
-      setNotifications(notificationsData.notifications || [])
     } catch (error) {
-      console.error('Failed to fetch student header data:', error)
+      console.error('Failed to fetch student credits:', error)
       setAvailableCredits(0)
-      setNotifications([])
-    } finally {
-      setIsLoading(false)
     }
   }, [user?.id, token])
 
+  // Inicialização e conexão real-time
   useEffect(() => {
-    fetchData()
-  }, [fetchData])
+    if (user?.id) {
+      setIsLoading(true)
+      // Carrega notificações e créditos
+      Promise.all([
+        hydrate({ userId: user.id }),
+        fetchCredits()
+      ]).finally(() => setIsLoading(false))
+
+      // Conecta SSE
+      connectUser(user.id)
+    } else {
+      disconnectAll()
+    }
+  }, [user?.id, hydrate, connectUser, disconnectAll, fetchCredits])
 
   useEffect(() => {
-    const handleUpdate = () => fetchData()
+    const handleUpdate = () => fetchCredits()
     if (typeof window !== 'undefined') {
       window.addEventListener('student-credits-updated', handleUpdate)
     }
@@ -70,28 +73,24 @@ export function useStudentHeaderData(): StudentHeaderData {
         window.removeEventListener('student-credits-updated', handleUpdate)
       }
     }
-  }, [fetchData])
-
-  const markNotificationAsRead = useCallback(
-    async (notificationId: string) => {
-      try {
-        await api.notifications.markAsRead(notificationId)
-        setNotifications((prev) =>
-          prev.filter((notification) => notification.id !== notificationId)
-        )
-      } catch (error) {
-        console.error('Failed to mark notification as read:', error)
-      }
-    },
-    [user?.id, token]
-  )
+  }, [fetchCredits])
 
   return {
     availableCredits,
-    notifications,
-    unreadCount: notifications.length,
-    markNotificationAsRead,
-    refetch: fetchData,
+    notifications: notifications.map(n => ({
+      id: n.id,
+      title: n.title,
+      message: n.message,
+      created_at: n.created_at,
+      is_read: n.read,
+      data: n.data
+    })),
+    unreadCount,
+    markNotificationAsRead: markRead,
+    refetch: async () => {
+      await fetchCredits()
+      if (user?.id) await hydrate({ userId: user.id })
+    },
     isLoading
   }
 }

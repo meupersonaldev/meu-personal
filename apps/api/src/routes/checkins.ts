@@ -15,9 +15,9 @@ const hasAdminAccess = (user?: { role?: string }) =>
 const hasTeacherScope = (user: { userId?: string; role?: string } | undefined, teacherId?: string) =>
   Boolean(
     user &&
-      teacherId &&
-      TEACHER_ROLES.includes(user.role as typeof TEACHER_ROLES[number]) &&
-      user.userId === teacherId
+    teacherId &&
+    TEACHER_ROLES.includes(user.role as typeof TEACHER_ROLES[number]) &&
+    user.userId === teacherId
   )
 
 // GET /api/checkins?academy_id=xxx - Listar check-ins de uma academia
@@ -95,7 +95,7 @@ router.get('/stats', requireAuth, async (req, res) => {
 
     if (error) {
       if (error.code === '42P01') {
-        return res.json({ 
+        return res.json({
           total: 0,
           granted: 0,
           denied: 0,
@@ -156,8 +156,11 @@ router.post('/scan', async (req, res) => {
           method: 'RECEPTION',
           created_at: new Date().toISOString(),
         })
-      } catch {}
-      try { await createNotification(academy_id, 'checkin', 'Check-in negado', 'Tentativa de check-in sem agendamento.', { booking_id }) } catch {}
+      } catch { }
+      try {
+        const { onCheckinDenied } = await import('../lib/events')
+        await onCheckinDenied(academy_id, 'Tentativa de check-in sem agendamento.', { id: booking_id })
+      } catch { }
       return res.status(404).json({ allowed: false, message: 'Agendamento não encontrado' })
     }
 
@@ -173,30 +176,11 @@ router.post('/scan', async (req, res) => {
           method: 'RECEPTION',
           created_at: new Date().toISOString(),
         })
-      } catch {}
-      try { await createNotification(academy_id, 'checkin', 'Check-in negado', 'Agendamento nao pertence a esta unidade.', { booking_id: booking.id }) } catch {}
+      } catch { }
       try {
-        if (booking.student_id) {
-          await createUserNotification(
-            booking.student_id,
-            'checkin',
-            'Check-in negado',
-            'Tentativa de check-in em unidade incorreta.',
-            { booking_id: booking.id }
-          )
-        }
-      } catch {}
-      try {
-        if (booking.teacher_id) {
-          await createUserNotification(
-            booking.teacher_id,
-            'checkin',
-            'Check-in negado',
-            'Tentativa de check-in em unidade incorreta.',
-            { booking_id: booking.id }
-          )
-        }
-      } catch {}
+        const { onCheckinDenied } = await import('../lib/events')
+        await onCheckinDenied(academy_id, 'Agendamento nao pertence a esta unidade.', booking)
+      } catch { }
       return res.status(403).json({ allowed: false, message: 'Agendamento não pertence a esta unidade' })
     }
 
@@ -211,30 +195,11 @@ router.post('/scan', async (req, res) => {
           method: 'RECEPTION',
           created_at: new Date().toISOString(),
         })
-      } catch {}
-      try { await createNotification(academy_id, 'checkin', 'Check-in negado', 'Agendamento cancelado.', { booking_id: booking.id }) } catch {}
+      } catch { }
       try {
-        if (booking.student_id) {
-          await createUserNotification(
-            booking.student_id,
-            'checkin',
-            'Check-in negado',
-            'Agendamento cancelado.',
-            { booking_id: booking.id }
-          )
-        }
-      } catch {}
-      try {
-        if (booking.teacher_id) {
-          await createUserNotification(
-            booking.teacher_id,
-            'checkin',
-            'Check-in negado',
-            'Agendamento cancelado.',
-            { booking_id: booking.id }
-          )
-        }
-      } catch {}
+        const { onCheckinDenied } = await import('../lib/events')
+        await onCheckinDenied(academy_id, 'Agendamento cancelado.', booking)
+      } catch { }
       return res.status(409).json({ allowed: false, message: 'Agendamento cancelado' })
     }
 
@@ -257,30 +222,11 @@ router.post('/scan', async (req, res) => {
         method: 'RECEPTION',
         created_at: new Date().toISOString(),
       })
-    } catch {}
-    try { await createNotification(academy_id, 'checkin', 'Check-in realizado', 'Entrada registrada na recepcao.', { booking_id: booking.id }) } catch {}
+    } catch { }
     try {
-      if (booking.student_id) {
-        await createUserNotification(
-          booking.student_id,
-          'checkin',
-          'Check-in realizado',
-          'Seu check-in foi confirmado.',
-          { booking_id: booking.id }
-        )
-      }
-    } catch {}
-    try {
-      if (booking.teacher_id) {
-        await createUserNotification(
-          booking.teacher_id,
-          'checkin',
-          'Check-in realizado',
-          'Seu aluno realizou check-in.',
-          { booking_id: booking.id }
-        )
-      }
-    } catch {}
+      const { onCheckinGranted } = await import('../lib/events')
+      await onCheckinGranted(academy_id, booking)
+    } catch { }
 
     return res.status(200).json({
       allowed: true,

@@ -618,7 +618,7 @@ router.get('/:id/stats', async (req, res) => {
       }
       return false
     })
-    
+
     const cancelled = bookings.filter(b => {
       const canonical = (b.status_canonical || '').toUpperCase()
       return canonical === 'CANCELED' || canonical === 'CANCELLED'
@@ -643,6 +643,59 @@ router.get('/:id/stats', async (req, res) => {
     res.json(stats)
   } catch (error) {
     console.error('Erro ao processar requisição:', error)
+    res.status(500).json({ error: 'Erro interno do servidor' })
+  }
+})
+
+// GET /api/students/:id/teachers - Listar professores vinculados ao aluno (para Meus Professores)
+router.get('/:id/teachers', async (req, res) => {
+  try {
+    const { id } = req.params
+
+    console.log('🔍 [Meus Professores] Buscando professores para aluno:', id)
+
+    // Buscar vínculos aprovados
+    const { data: links, error } = await supabase
+      .from('teacher_students')
+      .select('teacher_id, hourly_rate, hide_free_class, created_at, user_id, connection_status')
+      .eq('user_id', id)
+      .eq('connection_status', 'APPROVED')
+
+    console.log('🔍 [Meus Professores] Links encontrados:', links?.length || 0, links)
+
+    if (error) {
+      console.error('❌ [Meus Professores] Erro na query:', error)
+      throw error
+    }
+
+    if (!links || links.length === 0) {
+      return res.json({ teachers: [] })
+    }
+
+    // Buscar dados dos professores
+    const teacherIds = links.map(l => l.teacher_id)
+    const { data: teachers } = await supabase
+      .from('users')
+      .select('id, name, email, photo_url')
+      .in('id', teacherIds)
+
+    // Combinar dados
+    const result = links.map(link => {
+      const teacher = teachers?.find(t => t.id === link.teacher_id)
+      return {
+        id: link.teacher_id,
+        name: teacher?.name || 'Professor',
+        email: teacher?.email,
+        photo_url: teacher?.photo_url,
+        hourly_rate: link.hourly_rate,
+        hide_free_class: link.hide_free_class,
+        linked_at: link.created_at
+      }
+    })
+
+    res.json({ teachers: result })
+  } catch (error) {
+    console.error('Erro ao buscar professores do aluno:', error)
     res.status(500).json({ error: 'Erro interno do servidor' })
   }
 })

@@ -42,3 +42,6 @@ BEGIN
   RAISE NOTICE 'Migração concluída: % bookings de séries recorrentes agora têm campo date no formato correto (YYYY-MM-DD)', corrected_count;
 END $$;
 
+
+
+

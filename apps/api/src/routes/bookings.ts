@@ -129,11 +129,13 @@ router.get(
 
       // Query ORM equivalente ao SQL fornecido
       // Primeiro buscar os bookings (incluindo series_id e is_reserved para séries recorrentes)
+      // Buscar todos os status exceto os que não devem aparecer (ex: DELETED, se existir)
       const { data: studentBookings, error } = await supabase
         .from('bookings')
         .select('*, series_id, is_reserved')
         .eq('student_id', studentId)
-        .in('status_canonical', ['PAID', 'RESERVED', 'CANCELED']) // Incluir cancelados também
+        // Não filtrar por status aqui - deixar o frontend filtrar se necessário
+        // O frontend já filtra por status e data
         .order('start_at', { ascending: true, nullsFirst: false })
         .order('date', { ascending: true })
 
@@ -359,10 +361,11 @@ router.get(
 
       // Log detalhado para debug de séries recorrentes
       const totalBookings = teacherBookings?.length || 0
-      const seriesBookings = teacherBookings?.filter((b: any) => b.series_id) || []
+      const seriesBookings =
+        teacherBookings?.filter((b: any) => b.series_id) || []
       const seriesCount = seriesBookings.length
       const uniqueSeries = new Set(seriesBookings.map((b: any) => b.series_id))
-      
+
       console.log(
         `📊 GET bookings para teacher ${teacherId}: ${totalBookings} bookings encontrados`
       )
@@ -371,7 +374,9 @@ router.get(
       )
       if (seriesCount > 0) {
         console.log(
-          `📋 [DEBUG] Series IDs encontrados: ${Array.from(uniqueSeries).join(', ')}`
+          `📋 [DEBUG] Series IDs encontrados: ${Array.from(uniqueSeries).join(
+            ', '
+          )}`
         )
         // Log das datas dos bookings de séries
         const seriesDates = seriesBookings.map((b: any) => ({
@@ -381,7 +386,10 @@ router.get(
           start_at: b.start_at,
           student_id: b.student_id
         }))
-        console.log(`📋 [DEBUG] Detalhes dos bookings de séries:`, JSON.stringify(seriesDates, null, 2))
+        console.log(
+          `📋 [DEBUG] Detalhes dos bookings de séries:`,
+          JSON.stringify(seriesDates, null, 2)
+        )
       }
 
       let results = teacherBookings || []
@@ -1597,6 +1605,240 @@ router.post(
     res.json({
       rating: upserted,
       teacher_summary: { avg, count }
+    })
+  })
+)
+
+// POST /api/bookings/checkin/validate - Validar check-in do usuário na academia
+router.post(
+  '/checkin/validate',
+  requireAuth,
+  asyncErrorHandler(async (req, res) => {
+    const user = req.user
+    if (!user || !user.userId) {
+      return res
+        .status(401)
+        .json({ allowed: false, message: 'Não autenticado' })
+    }
+
+    const schema = z.object({
+      academy_id: z.string().uuid()
+    })
+
+    const { academy_id } = schema.parse(req.body)
+
+    // Buscar configuração da academia (checkin_tolerance)
+    const { data: academy, error: academyError } = await supabase
+      .from('academies')
+      .select('id, name, checkin_tolerance')
+      .eq('id', academy_id)
+      .single()
+
+    if (academyError || !academy) {
+      return res
+        .status(404)
+        .json({ allowed: false, message: 'Academia não encontrada' })
+    }
+
+    const toleranceMinutes = academy.checkin_tolerance ?? 30
+    const now = new Date()
+    const toleranceMs = toleranceMinutes * 60 * 1000
+
+    // Determinar se é aluno ou professor
+    const isStudent = ['STUDENT', 'ALUNO'].includes(user.role)
+    const isTeacher = ['TEACHER', 'PROFESSOR'].includes(user.role)
+
+    if (!isStudent && !isTeacher) {
+      return res.status(403).json({
+        allowed: false,
+        message: 'Apenas alunos e professores podem fazer check-in'
+      })
+    }
+
+    // Buscar bookings válidos do usuário na academia
+    let bookingsQuery = supabase
+      .from('bookings')
+      .select(
+        'id, status, status_canonical, date, duration, teacher_id, student_id, franchise_id'
+      )
+      .eq('franchise_id', academy_id)
+      .in('status', ['CONFIRMED', 'PENDING'])
+      .neq('status', 'CANCELLED')
+
+    if (isStudent) {
+      bookingsQuery = bookingsQuery.eq('student_id', user.userId)
+    } else if (isTeacher) {
+      bookingsQuery = bookingsQuery.eq('teacher_id', user.userId)
+    }
+
+    const { data: bookings, error: bookingsError } = await bookingsQuery
+
+    if (bookingsError) {
+      console.error(
+        '[checkin/validate] Erro ao buscar bookings:',
+        bookingsError
+      )
+      return res
+        .status(500)
+        .json({ allowed: false, message: 'Erro ao buscar agendamentos' })
+    }
+
+    if (!bookings || bookings.length === 0) {
+      // Registrar check-in negado
+      try {
+        await supabase.from('checkins').insert({
+          academy_id,
+          teacher_id: isTeacher ? user.userId : null,
+          student_id: isStudent ? user.userId : null,
+          booking_id: null,
+          status: 'DENIED',
+          reason: 'NO_VALID_BOOKING',
+          method: 'QRCODE',
+          created_at: new Date().toISOString()
+        })
+      } catch (e) {
+        console.warn('[checkin/validate] Erro ao registrar check-in negado:', e)
+      }
+
+      try {
+        await createUserNotification(
+          user.userId,
+          'checkin',
+          'Check-in negado',
+          'Você não possui agendamentos válidos nesta unidade.',
+          { academy_id }
+        )
+      } catch (e) {
+        console.warn('[checkin/validate] Erro ao criar notificação:', e)
+      }
+
+      return res.status(404).json({
+        allowed: false,
+        message: 'Você não possui agendamentos válidos nesta unidade'
+      })
+    }
+
+    // Filtrar bookings dentro da janela de tempo
+    const validBookings = bookings.filter((booking: any) => {
+      const bookingDate = new Date(booking.date)
+      const bookingEnd = new Date(
+        bookingDate.getTime() + (booking.duration || 60) * 60 * 1000
+      )
+
+      // Janela: (bookingDate - tolerance) até (bookingEnd + tolerance)
+      const windowStart = new Date(bookingDate.getTime() - toleranceMs)
+      const windowEnd = new Date(bookingEnd.getTime() + toleranceMs)
+
+      return now >= windowStart && now <= windowEnd
+    })
+
+    if (validBookings.length === 0) {
+      // Registrar check-in negado - fora da janela de tempo
+      try {
+        await supabase.from('checkins').insert({
+          academy_id,
+          teacher_id: isTeacher ? user.userId : null,
+          student_id: isStudent ? user.userId : null,
+          booking_id: bookings[0]?.id || null,
+          status: 'DENIED',
+          reason: 'OUTSIDE_TIME_WINDOW',
+          method: 'QRCODE',
+          created_at: new Date().toISOString()
+        })
+      } catch (e) {
+        console.warn('[checkin/validate] Erro ao registrar check-in negado:', e)
+      }
+
+      try {
+        await createUserNotification(
+          user.userId,
+          'checkin',
+          'Check-in negado',
+          `Check-in fora da janela de tempo permitida (${toleranceMinutes} minutos antes/depois).`,
+          { academy_id, booking_id: bookings[0]?.id }
+        )
+      } catch (e) {
+        console.warn('[checkin/validate] Erro ao criar notificação:', e)
+      }
+
+      return res.status(400).json({
+        allowed: false,
+        message: `Check-in fora da janela de tempo permitida (${toleranceMinutes} minutos antes/depois do horário agendado)`
+      })
+    }
+
+    // Usar o primeiro booking válido (mais próximo do horário atual)
+    const selectedBooking = validBookings.sort((a: any, b: any) => {
+      const dateA = new Date(a.date).getTime()
+      const dateB = new Date(b.date).getTime()
+      const nowTime = now.getTime()
+      return Math.abs(dateA - nowTime) - Math.abs(dateB - nowTime)
+    })[0]
+
+    // Verificar se já não fez check-in para esse booking (evitar duplicatas)
+    const { data: existingCheckin } = await supabase
+      .from('checkins')
+      .select('id')
+      .eq('booking_id', selectedBooking.id)
+      .eq('status', 'GRANTED')
+      .limit(1)
+      .maybeSingle()
+
+    if (existingCheckin) {
+      return res.status(200).json({
+        allowed: true,
+        booking: {
+          id: selectedBooking.id,
+          start: new Date(selectedBooking.date).toISOString(),
+          duration: selectedBooking.duration || 60
+        },
+        message: 'Check-in já realizado anteriormente',
+        alreadyCheckedIn: true
+      })
+    }
+
+    // Atualizar booking PENDING → CONFIRMED se necessário
+    if (selectedBooking.status === 'PENDING') {
+      await supabase
+        .from('bookings')
+        .update({ status: 'CONFIRMED', updated_at: new Date().toISOString() })
+        .eq('id', selectedBooking.id)
+    }
+
+    // Registrar check-in concedido
+    try {
+      await supabase.from('checkins').insert({
+        academy_id,
+        teacher_id:
+          selectedBooking.teacher_id || (isTeacher ? user.userId : null),
+        student_id:
+          selectedBooking.student_id || (isStudent ? user.userId : null),
+        booking_id: selectedBooking.id,
+        status: 'GRANTED',
+        reason: null,
+        method: 'QRCODE',
+        created_at: new Date().toISOString()
+      })
+    } catch (e) {
+      console.warn('[checkin/validate] Erro ao registrar check-in:', e)
+    }
+
+    // Notificações via evento de domínio
+    try {
+      const { onCheckinGranted } = await import('../lib/events')
+      await onCheckinGranted(academy_id, selectedBooking)
+    } catch (e) {
+      console.warn('[checkin/validate] Erro ao disparar evento de check-in:', e)
+    }
+
+    return res.status(200).json({
+      allowed: true,
+      booking: {
+        id: selectedBooking.id,
+        start: new Date(selectedBooking.date).toISOString(),
+        duration: selectedBooking.duration || 60
+      },
+      message: 'Check-in registrado com sucesso'
     })
   })
 )

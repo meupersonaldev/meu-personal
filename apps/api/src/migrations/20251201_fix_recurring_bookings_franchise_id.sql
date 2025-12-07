@@ -45,3 +45,6 @@ BEGIN
   RAISE NOTICE 'Migração concluída: % bookings de séries recorrentes agora têm franchise_id correto', corrected_count;
 END $$;
 
+
+
+
