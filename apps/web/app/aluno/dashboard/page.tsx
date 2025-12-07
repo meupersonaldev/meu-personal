@@ -25,7 +25,8 @@ import {
   Wallet,
   ArrowUpRight,
   ArrowDownLeft,
-  CreditCard
+  CreditCard,
+  Gift
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -246,6 +247,11 @@ export default function AulasPage() {
   const [txItemsPerPage, setTxItemsPerPage] = useState<string>("5")
   const [txCurrentPage, setTxCurrentPage] = useState(1)
 
+  // Estados para primeira aula grátis
+  const [firstClassUsed, setFirstClassUsed] = useState(true) // Default true para não mostrar banner até carregar
+  const [linkedTeachers, setLinkedTeachers] = useState<{ id: string; hide_free_class?: boolean }[]>([])
+  const [firstClassLoading, setFirstClassLoading] = useState(true)
+
   const fetchBookings = useCallback(async () => {
     if (!token || !user?.id) return
 
@@ -458,6 +464,47 @@ export default function AulasPage() {
       fetchTransactions()
     }
   }, [isAuthenticated, token, fetchBookings, fetchHistory, fetchCreditsBalance, fetchTransactions])
+
+  // Buscar status da primeira aula grátis e professores vinculados
+  useEffect(() => {
+    const fetchFirstClassData = async () => {
+      if (!user?.id || !token) return
+
+      setFirstClassLoading(true)
+      try {
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+
+        // Buscar status do usuário (first_class_used)
+        const userResponse = await fetch(`${API_URL}/api/users/${user.id}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+
+        if (userResponse.ok) {
+          const userData = await userResponse.json()
+          // API retorna { user: {...} }, então acessar userData.user
+          setFirstClassUsed(userData.user?.first_class_used || false)
+        }
+
+        // Buscar professores vinculados
+        const teachersResponse = await fetch(`${API_URL}/api/students/${user.id}/teachers`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+
+        if (teachersResponse.ok) {
+          const data = await teachersResponse.json()
+          setLinkedTeachers(data.teachers || [])
+        }
+      } catch (error) {
+        console.error('Erro ao buscar dados de primeira aula:', error)
+      } finally {
+        setFirstClassLoading(false)
+      }
+    }
+
+    if (isAuthenticated && token) {
+      fetchFirstClassData()
+    }
+  }, [user?.id, token, isAuthenticated])
 
   // Ouvir atualizações de crédito em tempo real
   useEffect(() => {
@@ -1088,6 +1135,40 @@ export default function AulasPage() {
           Bem-vindo ao seu painel principal.
         </p>
       </div>
+
+      {/* Banner Primeira Aula Grátis */}
+      {!firstClassLoading && !firstClassUsed && (
+        // Mostrar se: não tem professores vinculados OU algum professor permite (hide_free_class !== true)
+        (linkedTeachers.length === 0 || linkedTeachers.some(t => !t.hide_free_class)) && (
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-500 via-green-500 to-teal-500 p-6 shadow-xl">
+            <div className="absolute inset-0 bg-white/5" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, rgba(255,255,255,0.15) 1px, transparent 0)', backgroundSize: '20px 20px' }} />
+            <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/10 blur-3xl" />
+            <div className="absolute -bottom-10 -left-10 h-32 w-32 rounded-full bg-white/10 blur-2xl" />
+
+            <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm">
+                  <Gift className="h-8 w-8 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-xl md:text-2xl font-bold text-white">
+                    Sua Primeira Aula é Grátis! 🎉
+                  </h3>
+                  <p className="text-white/90 text-sm md:text-base mt-1">
+                    Aproveite essa oportunidade para conhecer nossos professores e dar o primeiro passo na sua jornada fitness.
+                  </p>
+                </div>
+              </div>
+              <Button
+                onClick={() => router.push('/aluno/professores')}
+                className="bg-white text-emerald-600 hover:bg-white/90 font-bold px-6 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all whitespace-nowrap"
+              >
+                Agendar Agora
+              </Button>
+            </div>
+          </div>
+        )
+      )}
 
       <Tabs defaultValue="aulas" className="w-full space-y-6">
         <TabsList className="w-full md:w-auto grid grid-cols-2 md:inline-flex h-auto p-1 bg-gray-100/80 rounded-xl">

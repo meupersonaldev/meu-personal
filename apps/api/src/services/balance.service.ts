@@ -74,6 +74,7 @@ class BalanceService {
   // ---------------------------------------------------------------------------
   // Student helpers
   private async ensureStudentBalance(studentId: string, franqueadoraId: string): Promise<StudentClassBalance> {
+    // First try to get existing balance
     const { data, error } = await supabase
       .from('student_class_balance')
       .select('*')
@@ -89,7 +90,76 @@ class BalanceService {
       throw error;
     }
 
-    return this.createStudentBalance(studentId, franqueadoraId);
+    // Not found - use upsert to handle race conditions
+    // This prevents duplicate key violations when concurrent requests try to create the same record
+    return this.createStudentBalanceWithUpsert(studentId, franqueadoraId);
+  }
+
+  private async createStudentBalanceWithUpsert(studentId: string, franqueadoraId: string): Promise<StudentClassBalance> {
+    // Validate franqueadora exists first
+    const { data: franqueadora, error: franqueadoraError } = await supabase
+      .from('franqueadora')
+      .select('id')
+      .eq('id', franqueadoraId)
+      .eq('is_active', true)
+      .single();
+
+    let validFranqueadoraId = franqueadoraId;
+
+    if (franqueadoraError || !franqueadora) {
+      // Fallback to principal franqueadora
+      const { data: principalFranqueadora } = await supabase
+        .from('franqueadora')
+        .select('id')
+        .eq('email', 'meupersonalfranquia@gmail.com')
+        .eq('is_active', true)
+        .single();
+
+      if (!principalFranqueadora?.id) {
+        throw new Error(`Franqueadora inválida: ${franqueadoraId}. Não foi possível encontrar a franqueadora principal.`);
+      }
+
+      validFranqueadoraId = principalFranqueadora.id;
+      console.warn(`[BalanceService] Franqueadora ${franqueadoraId} não encontrada. Usando franqueadora principal: ${validFranqueadoraId}`);
+    }
+
+    // Use upsert with onConflict to handle race conditions
+    // This will insert if not exists, or do nothing if already exists
+    const { error: upsertError } = await supabase
+      .from('student_class_balance')
+      .upsert(
+        {
+          student_id: studentId,
+          franqueadora_id: validFranqueadoraId,
+          total_purchased: 0,
+          total_consumed: 0,
+          locked_qty: 0
+        },
+        {
+          onConflict: 'student_id,franqueadora_id',
+          ignoreDuplicates: true
+        }
+      );
+
+    if (upsertError) {
+      // If upsert fails for a reason other than conflict, throw
+      console.error('[BalanceService] Upsert error:', upsertError);
+      throw upsertError;
+    }
+
+    // Now fetch the record (either just created or already existed)
+    const { data: balance, error: fetchError } = await supabase
+      .from('student_class_balance')
+      .select('*')
+      .eq('student_id', studentId)
+      .eq('franqueadora_id', validFranqueadoraId)
+      .single();
+
+    if (fetchError || !balance) {
+      throw new Error(`Failed to retrieve student balance after upsert: ${fetchError?.message || 'Unknown error'}`);
+    }
+
+    return balance as StudentClassBalance;
   }
 
   async getStudentBalance(studentId: string, franqueadoraId: string): Promise<StudentClassBalance> {

@@ -932,7 +932,29 @@ class BookingCanonicalService {
     // Usar franchise_id (academyId) ao invés de unit_id
     const franqueadoraId = await fetchFranqueadoraIdFromAcademy(booking.franchise_id);
 
-    if (booking.student_id) {
+    // Verificar se o aluno e professor estão vinculados (carteira)
+    // Se estiverem, NÃO consumir créditos na conclusão (pois já foi "pago" externamente ou pulado no agendamento)
+    let isLinkedTeacher = false;
+    if (booking.student_id && booking.teacher_id) {
+      const { data: link } = await supabase
+        .from('teacher_students')
+        .select('id')
+        .eq('teacher_id', booking.teacher_id)
+        .eq('student_id', booking.student_id)
+        .single();
+
+      if (link) {
+        console.log(`[completeBooking] Professor ${booking.teacher_id} e Aluno ${booking.student_id} vinculados. Pulando consumo de crédito.`);
+        isLinkedTeacher = true;
+      }
+    }
+
+    if (booking.student_id && !isLinkedTeacher) {
+      // TODO: Verificar se isso não gera cobrança dupla para alunos da academia
+      // (pois o crédito geralmente é consumido no booking PAID).
+      // Por segurança, mantemos o comportamento atual para não-vinculados,
+      // mas seria ideal verificar se já foi consumido.
+
       await balanceService.consumeStudentClasses(
         booking.student_id,
         franqueadoraId,
@@ -966,6 +988,37 @@ class BookingCanonicalService {
 
     if (updateError || !updatedBooking) {
       throw updateError || new Error('Falha ao concluir booking');
+    }
+
+    // Marcar primeira aula utilizada (idempotente e não bloqueante)
+    if (updatedBooking.student_id) {
+      try {
+        const { data: flagData, error: flagError } = await supabase
+          .from('users')
+          .update({
+            first_class_used: true,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', updatedBooking.student_id)
+          .eq('first_class_used', false)
+          .select('id');
+
+        if (flagError) {
+          console.error(
+            `[completeBooking] Erro ao marcar primeira aula como utilizada para aluno ${updatedBooking.student_id}:`,
+            flagError
+          );
+        } else if (flagData?.length) {
+          console.log(
+            `[completeBooking] Primeira aula marcada como utilizada para aluno ${updatedBooking.student_id}`
+          );
+        }
+      } catch (error) {
+        console.error(
+          `[completeBooking] Erro inesperado ao atualizar first_class_used para aluno ${updatedBooking.student_id}:`,
+          error
+        );
+      }
     }
 
     return updatedBooking;
