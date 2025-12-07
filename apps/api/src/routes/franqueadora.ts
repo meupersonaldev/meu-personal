@@ -201,7 +201,7 @@ router.get('/contacts',
     // Como agora só há uma franqueadora, incluir todos os usuários
     let combinedData = (allUsers || []).map((user: any) => {
       const contact = contactsMap.get(user.id);
-      
+
       // Como agora só há uma franqueadora, incluir todos os usuários
       // Se houver contato, usar os dados do contato; caso contrário, criar estrutura padrão
       return {
@@ -219,6 +219,54 @@ router.get('/contacts',
       };
     });
 
+    // Buscar informações de professor fonte para alunos que vieram de lead de professor
+    // Fetch teacher source for students with TEACHER_LEAD origin
+    const studentUserIds = combinedData
+      .filter((item: any) => item.role === 'STUDENT' && item.origin === 'TEACHER_LEAD')
+      .map((item: any) => item.user_id);
+
+    let teacherSourceMap = new Map<string, { teacher_id: string; teacher_name: string }>();
+
+    if (studentUserIds.length > 0) {
+      // Buscar vínculos teacher_students para esses alunos
+      const { data: teacherStudentLinks } = await supabase
+        .from('teacher_students')
+        .select('user_id, teacher_id')
+        .in('user_id', studentUserIds);
+
+      if (teacherStudentLinks && teacherStudentLinks.length > 0) {
+        // Buscar nomes dos professores
+        const teacherIds = [...new Set(teacherStudentLinks.map((l: any) => l.teacher_id))];
+        const { data: teachers } = await supabase
+          .from('users')
+          .select('id, name')
+          .in('id', teacherIds);
+
+        const teacherNamesMap = new Map((teachers || []).map((t: any) => [t.id, t.name]));
+
+        // Mapear student -> primeiro professor que adicionou (o primeiro vínculo)
+        teacherStudentLinks.forEach((link: any) => {
+          if (!teacherSourceMap.has(link.user_id)) {
+            teacherSourceMap.set(link.user_id, {
+              teacher_id: link.teacher_id,
+              teacher_name: teacherNamesMap.get(link.teacher_id) || 'Professor'
+            });
+          }
+        });
+      }
+    }
+
+    // Adicionar teacher_lead_source aos dados combinados
+    combinedData = combinedData.map((item: any) => {
+      if (item.origin === 'TEACHER_LEAD' && teacherSourceMap.has(item.user_id)) {
+        return {
+          ...item,
+          teacher_lead_source: teacherSourceMap.get(item.user_id)
+        };
+      }
+      return item;
+    });
+
     // Aplicar filtros de contato
     if (statusFilter && ['UNASSIGNED', 'ASSIGNED', 'INACTIVE'].includes(statusFilter)) {
       if (isStudent) {
@@ -232,18 +280,18 @@ router.get('/contacts',
 
     // Filtros de atribuição só fazem sentido para TEACHER
     if (!isStudent && academyId) {
-      combinedData = combinedData.filter((item: any) => 
+      combinedData = combinedData.filter((item: any) =>
         (item.assigned_academy_ids || []).includes(academyId)
       );
     }
 
     if (!isStudent) {
       if (assignedFlag === 'true') {
-        combinedData = combinedData.filter((item: any) => 
+        combinedData = combinedData.filter((item: any) =>
           (item.assigned_academy_ids || []).length > 0
         );
       } else if (assignedFlag === 'false') {
-        combinedData = combinedData.filter((item: any) => 
+        combinedData = combinedData.filter((item: any) =>
           (item.assigned_academy_ids || []).length === 0
         );
       }
@@ -253,11 +301,11 @@ router.get('/contacts',
     const allowedSorts = ['created_at', 'updated_at', 'last_assignment_at'];
     const sortColumn = allowedSorts.indexOf(pagination.sortBy) !== -1 ? pagination.sortBy : 'created_at';
     const ascending = pagination.sortOrder === 'asc';
-    
+
     combinedData.sort((a: any, b: any) => {
       const aVal = a[sortColumn] || '';
       const bVal = b[sortColumn] || '';
-      return ascending 
+      return ascending
         ? (aVal > bVal ? 1 : -1)
         : (aVal < bVal ? 1 : -1);
     });

@@ -202,6 +202,11 @@ export interface User {
   }>
   // Origin field to track where user came from (e.g., TEACHER_LEAD)
   origin?: string
+  // Teacher source for students added via professor lead
+  teacher_lead_source?: {
+    teacher_id: string
+    teacher_name: string
+  }
 }
 
 export interface UsersResponse {
@@ -1055,6 +1060,7 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
               balance_info: c.user?.balance_info || undefined,
               hours_info: c.user?.hours_info || undefined,
               origin: c.origin || 'SELF_REGISTRATION',
+              teacher_lead_source: c.teacher_lead_source || undefined,
             }))
 
           const result: UsersResponse = {

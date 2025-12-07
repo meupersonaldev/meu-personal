@@ -630,6 +630,8 @@ function UsuariosPageContent() {
           booking_stats: c.user?.booking_stats || undefined,
           balance_info: c.user?.balance_info || undefined,
           hours_info: c.user?.hours_info || undefined,
+          origin: c.origin || undefined,
+          teacher_lead_source: c.teacher_lead_source || undefined,
         }))
 
         return {
@@ -670,6 +672,7 @@ function UsuariosPageContent() {
         'Status',
         'Email cadastrado',
         'Telefone cadastrado',
+        'Carteira Professor',
         'Último Acesso',
         'Criado em'
       ]
@@ -685,6 +688,7 @@ function UsuariosPageContent() {
           usuario.active ? 'Ativo' : 'Inativo',
           getEmailStatusValue(usuario),
           getPhoneStatusValue(usuario),
+          usuario.teacher_lead_source?.teacher_name || '',
           usuario.last_login_at ? formatarData(usuario.last_login_at) : 'Nunca',
           formatarData(usuario.created_at)
         ])
@@ -997,8 +1001,10 @@ function UsuariosPageContent() {
                             {getRoleLabel(usuario.role)}
                           </Badge>
                           {usuario.origin === 'TEACHER_LEAD' && (
-                            <Badge className="bg-purple-100 text-purple-800 border-purple-200">
-                              Lead de Professor
+                            <Badge className="bg-purple-100 text-purple-800 border-purple-200" title={usuario.teacher_lead_source?.teacher_name ? `Carteira de ${usuario.teacher_lead_source.teacher_name}` : 'Lead de Professor'}>
+                              {usuario.teacher_lead_source?.teacher_name
+                                ? `Lead: ${usuario.teacher_lead_source.teacher_name.split(' ')[0]}`
+                                : 'Lead de Professor'}
                             </Badge>
                           )}
                         </div>
@@ -1263,6 +1269,19 @@ function UsuariosPageContent() {
                     </div>
                   </div>
                 </div>
+
+                {/* Origem do Cadastro (Lead de Professor) */}
+                {selectedUser.origin === 'TEACHER_LEAD' && selectedUser.teacher_lead_source && (
+                  <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                    <h4 className="text-sm font-medium text-purple-900 mb-2 flex items-center gap-2">
+                      <Users className="h-4 w-4" />
+                      Origem do Cadastro
+                    </h4>
+                    <p className="text-sm text-purple-800">
+                      Este aluno foi cadastrado pela <strong>carteira do professor {selectedUser.teacher_lead_source.teacher_name}</strong>
+                    </p>
+                  </div>
+                )}
 
                 {/* Perfil do Professor */}
                 {(selectedUser.teacher_profiles && selectedUser.teacher_profiles.length > 0) || (selectedUser.role === 'TEACHER' || selectedUser.role === 'PROFESSOR') ? (
