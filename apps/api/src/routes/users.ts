@@ -711,6 +711,11 @@ router.delete('/:id', requireAuth, async (req, res) => {
     await supabase.from('professor_units').delete().eq('professor_id', id)
     await supabase.from('student_units').delete().eq('student_id', id)
 
+    // 2.5. Vínculos professor-aluno (teacher_students)
+    // Remover registros onde o usuário é o professor OU o aluno
+    await supabase.from('teacher_students').delete().eq('teacher_id', id)
+    await supabase.from('teacher_students').delete().eq('user_id', id)
+
     // 3. Avaliações e reviews
     await supabase.from('teacher_ratings').delete().or(`teacher_id.eq.${id},student_id.eq.${id}`)
     await supabase.from('reviews').delete().or(`teacher_id.eq.${id},student_id.eq.${id}`)
