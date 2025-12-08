@@ -161,7 +161,8 @@ export default function DisponibilidadePage() {
           const studentId = b.studentId || b.student_id
           const franchiseId = b.franchiseId || b.franchise_id
           const status = b.status || b.status_canonical
-          const dateField = (b.date || b.start_at) as string
+          // Priorizar startAt sobre date para obter o horário correto
+          const dateField = (b.startAt || b.start_at || b.date) as string
           const bookingDate = dateField ? new Date(dateField) : null
 
           // Exibir também disponibilidade no passado dentro da janela exibida
@@ -176,7 +177,8 @@ export default function DisponibilidadePage() {
           const studentId = b.studentId || b.student_id
           const franchiseId = b.franchiseId || b.franchise_id
           const status = b.status || b.status_canonical
-          const dateField = (b.date || b.start_at) as string
+          // Priorizar startAt sobre date para obter o horário correto
+          const dateField = (b.startAt || b.start_at || b.date) as string
           const bookingDate = dateField ? new Date(dateField) : null
 
           return !studentId &&
@@ -191,9 +193,9 @@ export default function DisponibilidadePage() {
           const studentId = b.studentId || b.student_id
           const franchiseId = b.franchiseId || b.franchise_id
           const status = b.status || b.status_canonical
-          const dateField = (b.date || b.start_at) as string
+          // Priorizar startAt sobre date para obter o horário correto
+          const dateField = (b.startAt || b.start_at || b.date) as string
           const bookingDate = dateField ? new Date(dateField) : null
-          const seriesId = b.seriesId || b.series_id
 
           // Incluir bookings com aluno (PAID, RESERVED, CONFIRMED) da academia selecionada
           // Excluir CANCELED
@@ -214,7 +216,8 @@ export default function DisponibilidadePage() {
         const occupiedBookingMap: Record<string, Record<string, string>> = {}
 
         availableBookings.forEach((b: Record<string, unknown>) => {
-          const dateField = (b.date || b.start_at) as string
+          // Priorizar startAt sobre date para obter o horário correto
+          const dateField = (b.startAt || b.start_at || b.date) as string
           if (!dateField) return
 
           const date = new Date(dateField)
@@ -245,7 +248,8 @@ export default function DisponibilidadePage() {
         })
 
         blockedBookings.forEach((b: Record<string, unknown>) => {
-          const dateField = (b.date || b.start_at) as string
+          // Priorizar startAt sobre date para obter o horário correto
+          const dateField = (b.startAt || b.start_at || b.date) as string
           if (!dateField) return
 
           const date = new Date(dateField)
@@ -276,7 +280,8 @@ export default function DisponibilidadePage() {
 
         // Processar bookings ocupados (com aluno, incluindo séries)
         occupiedBookings.forEach((b: Record<string, unknown>) => {
-          const dateField = (b.date || b.start_at) as string
+          // Priorizar startAt sobre date para obter o horário correto
+          const dateField = (b.startAt || b.start_at || b.date) as string
           if (!dateField) return
 
           const date = new Date(dateField)
