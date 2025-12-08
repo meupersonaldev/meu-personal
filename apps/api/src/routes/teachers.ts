@@ -1644,4 +1644,222 @@ router.get('/:id/hours', requireAuth, async (req, res) => {
   }
 })
 
+// POST /api/teachers/:id/blocks/custom - Criar bloqueios customizados
+// Usado para férias, compromissos, etc.
+router.post('/:id/blocks/custom', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params
+    const { academy_id, date, hours, notes } = req.body
+
+    console.log('📅 Criando bloqueios:', { teacher_id: id, academy_id, date, hours_count: hours?.length, notes })
+
+    // Verificar permissão
+    if (!ensureTeacherScope(req, res, id)) return
+
+    // Validar dados
+    if (!academy_id || !date || !hours || !Array.isArray(hours)) {
+      return res.status(400).json({
+        error: 'Dados inválidos. Necessário: academy_id, date, hours (array)'
+      })
+    }
+
+    // Verificar se o professor está vinculado à academia
+    const { data: academyTeacher } = await supabase
+      .from('academy_teachers')
+      .select('id')
+      .eq('teacher_id', id)
+      .eq('academy_id', academy_id)
+      .eq('status', 'active')
+      .single()
+
+    if (!academyTeacher) {
+      return res.status(403).json({
+        error: 'Professor não está vinculado a esta academia'
+      })
+    }
+
+    const created: string[] = []
+    const skipped: string[] = []
+
+    // Criar bloqueios para cada horário
+    for (const hour of hours) {
+      // Montar data/hora no formato correto
+      // hour vem como "HH:mm:ss" ou "HH:mm"
+      const timeParts = hour.split(':')
+      const hourNum = parseInt(timeParts[0], 10)
+      const minuteNum = parseInt(timeParts[1] || '0', 10)
+
+      // Criar data UTC diretamente a partir do horário de São Paulo
+      // São Paulo é UTC-3, então se o horário local é 06:00, UTC é 09:00
+      // Usamos Date.UTC para criar a data em UTC e depois adicionamos 3 horas
+      const [year, month, day] = date.split('-').map(Number)
+      // Criar data UTC: horário SP + 3 horas = horário UTC
+      const utcDate = new Date(Date.UTC(year, month - 1, day, hourNum + 3, minuteNum, 0))
+      const endUtcDate = new Date(utcDate.getTime() + 60 * 60 * 1000) // +1 hora
+      
+      console.log(`📅 Bloqueio: ${date} ${hour} SP -> ${utcDate.toISOString()} UTC`)
+
+      // Verificar se já existe um bloqueio para este horário
+      const { data: existing } = await supabase
+        .from('bookings')
+        .select('id')
+        .eq('teacher_id', id)
+        .eq('franchise_id', academy_id)
+        .eq('start_at', utcDate.toISOString())
+        .eq('status_canonical', 'BLOCKED')
+        .limit(1)
+
+      if (existing && existing.length > 0) {
+        skipped.push(hour)
+        continue
+      }
+
+      // Verificar se já existe uma aula agendada (com aluno) - não bloquear
+      const { data: occupiedBooking } = await supabase
+        .from('bookings')
+        .select('id')
+        .eq('teacher_id', id)
+        .eq('franchise_id', academy_id)
+        .eq('start_at', utcDate.toISOString())
+        .not('student_id', 'is', null)
+        .limit(1)
+
+      if (occupiedBooking && occupiedBooking.length > 0) {
+        // Horário já tem aula agendada, não pode bloquear
+        skipped.push(hour)
+        continue
+      }
+
+      // Verificar se já existe um booking disponível para este horário (converter para bloqueio)
+      const { data: availableBooking } = await supabase
+        .from('bookings')
+        .select('id')
+        .eq('teacher_id', id)
+        .eq('franchise_id', academy_id)
+        .eq('start_at', utcDate.toISOString())
+        .eq('status_canonical', 'AVAILABLE')
+        .is('student_id', null)
+        .limit(1)
+
+      if (availableBooking && availableBooking.length > 0) {
+        // Atualizar o booking existente para BLOCKED
+        const { error: updateError } = await supabase
+          .from('bookings')
+          .update({
+            status: 'BLOCKED',
+            status_canonical: 'BLOCKED',
+            notes: notes || 'Bloqueio',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', availableBooking[0].id)
+
+        if (!updateError) {
+          created.push(hour)
+        } else {
+          console.error('Erro ao atualizar booking para bloqueio:', updateError)
+          skipped.push(hour)
+        }
+        continue
+      }
+
+      // Criar novo bloqueio
+      // O campo date deve ser apenas a data (YYYY-MM-DD) sem horário
+      const { error: insertError } = await supabase.from('bookings').insert({
+        teacher_id: id,
+        franchise_id: academy_id,
+        student_id: null,
+        date: date, // Apenas YYYY-MM-DD, sem horário
+        start_at: utcDate.toISOString(),
+        end_at: endUtcDate.toISOString(),
+        duration: 60,
+        status: 'BLOCKED',
+        status_canonical: 'BLOCKED',
+        source: 'PROFESSOR',
+        notes: notes || 'Bloqueio',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+
+      if (!insertError) {
+        created.push(hour)
+      } else {
+        console.error('Erro ao criar bloqueio:', insertError)
+        skipped.push(hour)
+      }
+    }
+
+    res.json({
+      success: true,
+      created,
+      skipped,
+      message: `${created.length} bloqueio(s) criado(s), ${skipped.length} ignorado(s)`
+    })
+  } catch (error: any) {
+    console.error('Erro ao criar bloqueios:', error)
+    res.status(500).json({ error: error.message || 'Erro interno do servidor' })
+  }
+})
+
+// DELETE /api/teachers/:id/blocks - Remover bloqueios de um período
+router.delete('/:id/blocks', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params
+    const { academy_id, from, to } = req.query as {
+      academy_id?: string
+      from?: string
+      to?: string
+    }
+
+    // Verificar permissão
+    if (!ensureTeacherScope(req, res, id)) return
+
+    if (!academy_id || !from || !to) {
+      return res.status(400).json({
+        error: 'Parâmetros obrigatórios: academy_id, from, to'
+      })
+    }
+
+    // Buscar bloqueios no período
+    const { data: blocks, error: fetchError } = await supabase
+      .from('bookings')
+      .select('id')
+      .eq('teacher_id', id)
+      .eq('franchise_id', academy_id)
+      .eq('status_canonical', 'BLOCKED')
+      .gte('date', from)
+      .lte('date', to)
+
+    if (fetchError) {
+      console.error('Erro ao buscar bloqueios:', fetchError)
+      return res.status(500).json({ error: 'Erro ao buscar bloqueios' })
+    }
+
+    if (!blocks || blocks.length === 0) {
+      return res.json({ deleted: 0, message: 'Nenhum bloqueio encontrado' })
+    }
+
+    // Deletar bloqueios
+    const { error: deleteError } = await supabase
+      .from('bookings')
+      .delete()
+      .in(
+        'id',
+        blocks.map(b => b.id)
+      )
+
+    if (deleteError) {
+      console.error('Erro ao deletar bloqueios:', deleteError)
+      return res.status(500).json({ error: 'Erro ao deletar bloqueios' })
+    }
+
+    res.json({
+      deleted: blocks.length,
+      message: `${blocks.length} bloqueio(s) removido(s)`
+    })
+  } catch (error: any) {
+    console.error('Erro ao remover bloqueios:', error)
+    res.status(500).json({ error: error.message || 'Erro interno do servidor' })
+  }
+})
+
 export default router

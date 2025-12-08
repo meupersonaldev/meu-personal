@@ -570,6 +570,44 @@ export default function DisponibilidadePage() {
     }
   }
 
+  // Remover bloqueio individual
+  const executeBlockedSlotRemoval = async () => {
+    const { dateKey, time } = blockedSlotRemovalModal
+    if (!dateKey || !time) return
+
+    const normalizedTime = normalizeTime(time)
+    const bookingId = blockedBookingIdByDateTime[dateKey]?.[normalizedTime] || blockedBookingIdByDateTime[dateKey]?.[time]
+    
+    if (!bookingId) {
+      toast.error('Bloqueio não encontrado para remoção')
+      setBlockedSlotRemovalModal({ open: false, dateKey: null, time: null })
+      return
+    }
+
+    setBlockedSlotRemovalModal({ open: false, dateKey: null, time: null })
+    setLoading(true)
+
+    try {
+      const deleteRes = await authFetch(`/api/bookings/${bookingId}`, {
+        method: 'DELETE'
+      })
+
+      if (!deleteRes.ok) {
+        throw new Error('Falha ao remover bloqueio')
+      }
+
+      toast.success('Bloqueio removido!')
+
+      // Pequeno delay para garantir que o banco processou a deleção
+      await new Promise(resolve => setTimeout(resolve, 500))
+      await fetchData()
+    } catch {
+      toast.error('Erro ao remover bloqueio')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   // Selecionar horário em todos os dias (apenas onde disponível)
   const handleSlotClick = (dateKey: string, dayOfWeek: number, horario: string, isSaved: boolean, isSelected: boolean) => {
     // Verificar se está ocupado (não permitir seleção)
@@ -709,23 +747,44 @@ export default function DisponibilidadePage() {
 
     setLoading(true)
     try {
-      // Criar bloqueios para cada dia no período
-      const start = new Date(newBlockStart)
-      const end = new Date(newBlockEnd)
+      // Parsear datas manualmente para evitar problemas de timezone
+      // Input type="date" retorna YYYY-MM-DD, que new Date() interpreta como UTC
+      const [startYear, startMonth, startDay] = newBlockStart.split('-').map(Number)
+      const [endYear, endMonth, endDay] = newBlockEnd.split('-').map(Number)
+      
+      // Criar datas em horário local (não UTC)
+      const start = new Date(startYear, startMonth - 1, startDay)
+      const end = new Date(endYear, endMonth - 1, endDay)
       let created = 0
 
       const currentDate = new Date(start)
       while (currentDate <= end) {
-        const dateStr = currentDate.toISOString().split('T')[0]
+        // Formatar data como YYYY-MM-DD (local, não UTC)
+        const year = currentDate.getFullYear()
+        const month = String(currentDate.getMonth() + 1).padStart(2, '0')
+        const day = String(currentDate.getDate()).padStart(2, '0')
+        const dateStr = `${year}-${month}-${day}`
+        
+        // Obter dia da semana (0=domingo, 1=segunda, etc.)
+        const dayOfWeek = currentDate.getDay()
+        
+        // Obter horários válidos para este dia da semana específico
+        const hoursForDay = slotsByDay[dayOfWeek] || []
+        
+        if (hoursForDay.length === 0) {
+          // Academia fechada neste dia, pular
+          currentDate.setDate(currentDate.getDate() + 1)
+          continue
+        }
 
-        // Bloquear todos os horários do dia (usando os horários da academia)
+        // Bloquear apenas os horários válidos para este dia
         const res = await authFetch(`/api/teachers/${user.id}/blocks/custom`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             academy_id: selectedAcademy,
             date: dateStr,
-            hours: allTimes,
+            hours: hoursForDay,
             notes: newBlockReason || 'Bloqueio'
           })
         })
@@ -981,9 +1040,11 @@ export default function DisponibilidadePage() {
                               if (!isAvailable) {
                                 return (
                                   <td key={dia.dateKey} className="p-1 text-center">
-                                    <div className="flex justify-center">
-                                      <div className="w-10 h-10 rounded-lg bg-gray-100 border-2 border-gray-100" />
-                                    </div>
+                                    <button
+                                      type="button"
+                                      disabled
+                                      className="w-10 h-10 rounded-xl bg-gray-100 border-2 border-gray-100 cursor-not-allowed inline-block"
+                                    />
                                   </td>
                                 )
                               }
@@ -995,10 +1056,10 @@ export default function DisponibilidadePage() {
                                     <button
                                       type="button"
                                       disabled
-                                      className="w-10 h-10 rounded-lg border-2 bg-gradient-to-r from-amber-500 to-orange-400 border-amber-500 text-white shadow-md transition-all cursor-not-allowed"
+                                      className="w-10 h-10 rounded-xl border-2 bg-gradient-to-r from-amber-500 to-orange-400 border-amber-500 text-white shadow-md cursor-not-allowed inline-flex items-center justify-center"
                                       title="Horário ocupado (aula agendada)"
                                     >
-                                      <Lock className="h-4 w-4 mx-auto" />
+                                      <Lock className="h-5 w-5" />
                                     </button>
                                   </td>
                                 )
@@ -1012,7 +1073,7 @@ export default function DisponibilidadePage() {
                                       onClick={() => {
                                         setBlockedSlotRemovalModal({ open: true, dateKey: dia.dateKey, time: horario })
                                       }}
-                                      className="w-10 h-10 rounded-lg border-2 bg-gradient-to-r from-red-500 to-rose-500 border-red-500 text-white opacity-80 flex items-center justify-center text-[10px] hover:opacity-100"
+                                      className="w-10 h-10 rounded-xl border-2 bg-gradient-to-r from-red-500 to-rose-500 border-red-500 text-white inline-flex items-center justify-center font-bold text-sm hover:opacity-90 transition-all"
                                     >
                                       B
                                     </button>
@@ -1024,14 +1085,14 @@ export default function DisponibilidadePage() {
                                 <td key={dia.dateKey} className="p-1 text-center">
                                   <button
                                     onClick={() => handleSlotClick(dia.dateKey, dia.dayOfWeek, horario, isSaved, isSelected)}
-                                    className={`w-10 h-10 rounded-xl border-2 transition-all duration-200 transform hover:scale-105 ${isSelected
+                                    className={`w-10 h-10 rounded-xl border-2 inline-flex items-center justify-center transition-all ${isSelected
                                       ? 'bg-gradient-to-r from-blue-500 to-indigo-500 border-blue-500 text-white shadow-md shadow-blue-200'
                                       : isSaved
                                         ? 'bg-gradient-to-r from-green-500 to-emerald-500 border-green-500 text-white shadow-md shadow-green-200'
                                         : 'bg-white border-gray-100 hover:border-blue-300 hover:bg-blue-50 hover:shadow-sm'
                                       }`}
                                   >
-                                    {(isSelected || isSaved) && <Check className="h-5 w-5 mx-auto animate-in zoom-in duration-200" />}
+                                    {(isSelected || isSaved) && <Check className="h-5 w-5" />}
                                   </button>
                                 </td>
                               )
@@ -1170,6 +1231,21 @@ export default function DisponibilidadePage() {
             ? `Deseja remover sua disponibilidade em ${formatDateLongFromKey(slotRemovalModal.dateKey)} às ${formatTimeLabel(slotRemovalModal.time)}?`
             : 'Deseja remover este horário de disponibilidade?'}
           confirmText="Remover"
+          cancelText="Cancelar"
+          type="warning"
+          loading={loading}
+        />
+
+        {/* Modal de confirmação para remover bloqueio */}
+        <ConfirmDialog
+          isOpen={blockedSlotRemovalModal.open}
+          onClose={() => setBlockedSlotRemovalModal({ open: false, dateKey: null, time: null })}
+          onConfirm={executeBlockedSlotRemoval}
+          title="Remover bloqueio"
+          description={blockedSlotRemovalModal.dateKey && blockedSlotRemovalModal.time
+            ? `Deseja remover o bloqueio em ${formatDateLongFromKey(blockedSlotRemovalModal.dateKey)} às ${formatTimeLabel(blockedSlotRemovalModal.time)}?`
+            : 'Deseja remover este bloqueio?'}
+          confirmText="Remover Bloqueio"
           cancelText="Cancelar"
           type="warning"
           loading={loading}
