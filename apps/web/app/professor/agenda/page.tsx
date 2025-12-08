@@ -4,9 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { useTeacherAcademies } from '@/lib/hooks/useTeacherAcademies'
 import ProfessorLayout from '@/components/layout/professor-layout'
-import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 
 import {
@@ -78,33 +76,46 @@ export default function AgendaPage() {
         const data = await res.json()
         const allBookings = data.bookings || []
 
-        // Log para debug
-        console.log(`[Agenda] Total de bookings recebidos: ${allBookings.length}`)
+        // DEBUG: Log para verificar bookings recebidos
+        console.log('[Agenda DEBUG] Total bookings recebidos:', allBookings.length)
         const seriesBookings = allBookings.filter((b: Booking) => b.series_id)
-        console.log(`[Agenda] Bookings de séries: ${seriesBookings.length}`)
-        if (seriesBookings.length > 0) {
-          console.log(`[Agenda] Detalhes dos bookings de séries:`, seriesBookings.map((b: Booking) => ({
-            id: b.id,
-            series_id: b.series_id,
-            date: b.date,
-            studentId: b.studentId,
-            franchiseId: b.franchiseId
-          })))
-        }
+        console.log('[Agenda DEBUG] Bookings de séries:', seriesBookings.length, seriesBookings.map((b: Booking) => ({
+          id: b.id,
+          series_id: b.series_id,
+          date: b.date,
+          startAt: b.startAt,
+          studentId: b.studentId,
+          studentName: b.studentName,
+          status: b.status
+        })))
 
         // Filtrar apenas aulas com alunos (não mostrar slots disponíveis)
         let filtered = allBookings.filter((b: Booking) => b.studentId)
-        console.log(`[Agenda] Bookings com studentId: ${filtered.length}`)
+        console.log('[Agenda DEBUG] Após filtrar por studentId:', filtered.length)
+        
+        // DEBUG: Mostrar bookings de série que passaram o filtro
+        const seriesFiltered = filtered.filter((b: Booking) => b.series_id)
+        console.log('[Agenda DEBUG] Séries após filtro studentId:', seriesFiltered.length, seriesFiltered.map((b: Booking) => ({
+          id: b.id,
+          studentId: b.studentId,
+          studentName: b.studentName,
+          date: b.date,
+          startAt: b.startAt
+        })))
 
         // Filtrar por academia se selecionada
         if (selectedAcademy !== 'todas') {
           filtered = filtered.filter((b: Booking) => b.franchiseId === selectedAcademy)
-          console.log(`[Agenda] Bookings após filtrar por academia ${selectedAcademy}: ${filtered.length}`)
+          console.log('[Agenda DEBUG] Após filtrar por academia:', filtered.length)
         }
 
+        console.log('[Agenda DEBUG] Setando bookings:', filtered.length, 'bookings')
         setBookings(filtered)
+      } else {
+        console.error('[Agenda DEBUG] Erro na resposta:', res.status, res.statusText)
       }
-    } catch {
+    } catch (err) {
+      console.error('[Agenda DEBUG] Erro ao carregar agenda:', err)
       toast.error('Erro ao carregar agenda')
     } finally {
       setLoading(false)
@@ -203,16 +214,23 @@ export default function AgendaPage() {
 
   function getBookingsForDate(date: Date): Booking[] {
     const targetDateStr = getLocalDateStr(date) // YYYY-MM-DD local
-    return bookings.filter(b => {
+    const result = bookings.filter(b => {
       // Usar startAt se disponível (tem hora completa), senão usar date
       if (b.startAt) {
         const bookingDate = new Date(b.startAt)
-        return getLocalDateStr(bookingDate) === targetDateStr
+        const bookingDateStr = getLocalDateStr(bookingDate)
+        const match = bookingDateStr === targetDateStr
+        // DEBUG: Log para séries
+        if (b.series_id) {
+          console.log(`[getBookingsForDate] Série ${b.id}: startAt=${b.startAt}, bookingDateStr=${bookingDateStr}, targetDateStr=${targetDateStr}, match=${match}`)
+        }
+        return match
       }
       // Se não tem startAt, usar o campo date diretamente (já é YYYY-MM-DD)
       const bookingDateStr = b.date?.split('T')[0] || b.date
       return bookingDateStr === targetDateStr
     })
+    return result
   }
 
   function getBookingsForHour(date: Date, hour: number): Booking[] {
@@ -226,7 +244,9 @@ export default function AgendaPage() {
     })
   }
 
-  function formatTime(dateStr: string): string {
+  function formatTime(booking: Booking): string {
+    // Usar startAt se disponível (tem hora correta), senão usar date
+    const dateStr = booking.startAt || booking.date
     return new Date(dateStr).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
   }
 
@@ -238,9 +258,15 @@ export default function AgendaPage() {
   }
 
   // Novas cores de status (Premium)
+  // Lógica:
+  // - Confirmado (PAID): Aula confirmada com créditos debitados
+  // - Reservado (RESERVED): Série recorrente onde o ALUNO não tem crédito ainda
+  // - Solicitação (is_reserved=true + status não é RESERVED): Aluno da carteira solicitou aula mas PROFESSOR não tem crédito
   function getStatusStyle(booking: Booking) {
-    // Solicitação: aluno da carteira agendou mas professor não tem crédito
-    if (booking.is_reserved) {
+    // Solicitação: aluno da carteira solicitou aula mas PROFESSOR não tem crédito para agendar
+    // is_reserved=true indica que é uma solicitação pendente de crédito do professor
+    // MAS se o status for RESERVED, é uma série pendente de crédito do aluno (não solicitação)
+    if (booking.is_reserved && booking.status !== 'RESERVED') {
       return {
         bg: 'bg-violet-50',
         text: 'text-violet-700',
@@ -268,7 +294,16 @@ export default function AgendaPage() {
         accent: 'border-l-emerald-500',
         border: 'border-emerald-200'
       },
+      PAID: {
+        bg: 'bg-emerald-50',
+        text: 'text-emerald-700',
+        label: 'Confirmado',
+        icon: 'user-check',
+        accent: 'border-l-emerald-500',
+        border: 'border-emerald-200'
+      },
       RESERVED: {
+        // Série recorrente onde o ALUNO não tem crédito ainda (pendente de crédito do aluno)
         bg: 'bg-yellow-50',
         text: 'text-yellow-700',
         label: 'Reservado',
@@ -312,6 +347,24 @@ export default function AgendaPage() {
 
   const weekDays = getWeekDays(currentDate)
   const monthDays = getMonthDays(currentDate)
+
+  // DEBUG: Log do estado atual
+  console.log('[Agenda RENDER] bookings.length:', bookings.length, 'viewMode:', viewMode)
+  const seriesInState = bookings.filter(b => b.series_id)
+  if (seriesInState.length > 0) {
+    console.log('[Agenda RENDER] Séries no estado:', seriesInState.map(b => ({ id: b.id, studentName: b.studentName, date: b.date, startAt: b.startAt })))
+  }
+  
+  // DEBUG: Verificar dias da semana e bookings para cada dia
+  if (viewMode === 'week') {
+    console.log('[Agenda RENDER] Dias da semana:', weekDays.map(d => getLocalDateStr(d)))
+    weekDays.forEach((day, i) => {
+      const dayBookings = getBookingsForDate(day)
+      if (dayBookings.length > 0) {
+        console.log(`[Agenda RENDER] Dia ${i} (${getLocalDateStr(day)}): ${dayBookings.length} bookings`)
+      }
+    })
+  }
 
   return (
     <ProfessorLayout>
@@ -369,15 +422,16 @@ export default function AgendaPage() {
             <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/5">
               <p className="text-blue-200 text-xs font-semibold uppercase tracking-wider mb-1">Total Hoje</p>
               <p className="text-2xl font-bold text-white">
-                {bookings.filter(b =>
-                  new Date(b.date).toDateString() === new Date().toDateString()
-                ).length}
+                {bookings.filter(b => {
+                  const bookingDate = b.startAt ? new Date(b.startAt) : new Date(b.date)
+                  return getLocalDateStr(bookingDate) === getLocalDateStr(new Date())
+                }).length}
               </p>
             </div>
             <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/5">
               <p className="text-blue-200 text-xs font-semibold uppercase tracking-wider mb-1">Confirmados (Semana)</p>
               <p className="text-2xl font-bold text-[#27DFFF]">
-                {bookings.filter(b => b.status === 'CONFIRMED').length}
+                {bookings.filter(b => b.status === 'PAID' && !b.is_reserved).length}
               </p>
             </div>
             <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/5">
@@ -387,9 +441,9 @@ export default function AgendaPage() {
               </p>
             </div>
             <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/5">
-              <p className="text-blue-200 text-xs font-semibold uppercase tracking-wider mb-1">Solicitadas (Semana)</p>
+              <p className="text-blue-200 text-xs font-semibold uppercase tracking-wider mb-1">Solicitações (Semana)</p>
               <p className="text-2xl font-bold text-violet-300">
-                {bookings.filter(b => b.is_reserved === true).length}
+                {bookings.filter(b => b.is_reserved === true && b.status !== 'RESERVED').length}
               </p>
             </div>
           </div>
@@ -432,10 +486,10 @@ export default function AgendaPage() {
           {/* Legend with Cards & Tooltips */}
           <div className="flex flex-wrap items-center gap-3 mt-2 md:mt-0">
             {[
-              { color: 'bg-emerald-500', label: 'Confirmado', desc: 'Aula confirmada', border: 'border-emerald-100', bg: 'bg-emerald-50/50' },
-              { color: 'bg-yellow-500', label: 'Reservado', desc: 'Recorrência sem crédito ainda', border: 'border-yellow-100', bg: 'bg-yellow-50/50' },
-              { color: 'bg-violet-500', label: 'Solicitação', desc: 'Aguardando compra de crédito', border: 'border-violet-100', bg: 'bg-violet-50/50' },
-              { color: 'bg-red-500', label: 'Cancelado', desc: 'Aula cancelada pelo aluno', border: 'border-red-100', bg: 'bg-red-50/50' }
+              { color: 'bg-emerald-500', label: 'Confirmado', desc: 'Aula confirmada com créditos', border: 'border-emerald-100', bg: 'bg-emerald-50/50' },
+              { color: 'bg-yellow-500', label: 'Reservado', desc: 'Série pendente de crédito do aluno', border: 'border-yellow-100', bg: 'bg-yellow-50/50' },
+              { color: 'bg-violet-500', label: 'Solicitação', desc: 'Aluno solicitou, você precisa de crédito', border: 'border-violet-100', bg: 'bg-violet-50/50' },
+              { color: 'bg-red-500', label: 'Cancelado', desc: 'Aula cancelada', border: 'border-red-100', bg: 'bg-red-50/50' }
             ].map((item, i) => (
               <div key={i} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${item.border} ${item.bg} transition-all hover:shadow-sm`}>
                 <div className={`w-2 h-2 rounded-full ${item.color}`}></div>
@@ -530,7 +584,7 @@ export default function AgendaPage() {
                                   </div>
                                   <div className="text-right">
                                     <span className={`text-xs font-bold px-2 py-1 rounded-full bg-white/50 ${getStatusStyle(booking).text}`}>
-                                      {formatTime(booking.date)} - {formatEndTime(booking)}
+                                      {formatTime(booking)} - {formatEndTime(booking)}
                                     </span>
                                   </div>
                                 </div>
@@ -599,7 +653,9 @@ export default function AgendaPage() {
 
                       {/* Cards Absolutos - Posicionados por Hora */}
                       {getBookingsForDate(day).map(booking => {
-                        const startHour = new Date(booking.date).getHours()
+                        // Usar startAt se disponível (tem hora correta), senão usar date
+                        const bookingDateTime = booking.startAt ? new Date(booking.startAt) : new Date(booking.date)
+                        const startHour = bookingDateTime.getHours()
                         const topPosition = startHour * 120 // 120px height per hour block
 
                         return (
@@ -612,7 +668,7 @@ export default function AgendaPage() {
                             <div className={`h-full p-2.5 rounded-lg border shadow-sm hover:shadow-md transition-all hover:-translate-y-1 ${getStatusStyle(booking).bg} ${getStatusStyle(booking).border} ${getStatusStyle(booking).accent} border-l-[3px]`}>
                               <div className="flex justify-between items-start mb-1">
                                 <span className={`text-[10px] font-bold uppercase tracking-wide opacity-70 ${getStatusStyle(booking).text}`}>
-                                  {formatTime(booking.date)}
+                                  {formatTime(booking)}
                                 </span>
                                 {booking.series_id && <span className="text-[8px]">🔄</span>}
                               </div>
@@ -676,7 +732,7 @@ export default function AgendaPage() {
                             className={`flex items-center gap-1.5 px-1.5 py-1 rounded text-[10px] font-medium cursor-pointer truncate border-l-2 ${getStatusStyle(booking).bg} ${getStatusStyle(booking).accent} ${getStatusStyle(booking).text}`}
                           >
                             <span className="w-1 h-1 rounded-full bg-current opacity-50 shrink-0"></span>
-                            {booking.studentName?.split(' ')[0] || formatTime(booking.date)}
+                            {booking.studentName?.split(' ')[0] || formatTime(booking)}
                           </div>
                         ))}
                         {dayBookings.length > 3 && (
@@ -743,12 +799,12 @@ export default function AgendaPage() {
                       <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Horário</p>
                       <div className="flex items-center gap-2 text-gray-800 font-bold">
                         <Clock className="h-4 w-4 text-[#002C4E]" />
-                        {formatTime(selectedBooking.date)} - {formatEndTime(selectedBooking)}
+                        {formatTime(selectedBooking)} - {formatEndTime(selectedBooking)}
                       </div>
                     </div>
                   </div>
 
-                  {selectedBooking.is_reserved && (
+                  {selectedBooking.status === 'RESERVED' && (
                     <div className="p-4 bg-amber-50 rounded-xl border border-amber-100 flex items-start gap-3">
                       <div className="p-2 bg-amber-100 rounded-full mt-0.5">
                         <Clock className="h-4 w-4 text-amber-600" />
@@ -756,7 +812,21 @@ export default function AgendaPage() {
                       <div>
                         <h4 className="text-sm font-bold text-amber-800">Reserva Pendente</h4>
                         <p className="text-xs text-amber-700 leading-relaxed mt-1">
-                          Esta aula está reservada e aguardando confirmação automática 7 dias antes.
+                          Esta aula de série está aguardando crédito do aluno. Será confirmada automaticamente 7 dias antes.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedBooking.is_reserved && selectedBooking.status !== 'RESERVED' && (
+                    <div className="p-4 bg-violet-50 rounded-xl border border-violet-100 flex items-start gap-3">
+                      <div className="p-2 bg-violet-100 rounded-full mt-0.5">
+                        <Clock className="h-4 w-4 text-violet-600" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-violet-800">Solicitação de Aula</h4>
+                        <p className="text-xs text-violet-700 leading-relaxed mt-1">
+                          Um aluno da sua carteira solicitou esta aula. Você precisa ter créditos para confirmar.
                         </p>
                       </div>
                     </div>

@@ -356,9 +356,10 @@ router.get(
         teacherQuery = teacherQuery.gte('date', fromStr)
       } else {
         // Caso não tenha "from", usar apenas bookings futuros para evitar excesso de registros
-        // Extrair apenas a data de hoje no formato YYYY-MM-DD
+        // Extrair a data de hoje no fuso de São Paulo (UTC-3)
         const now = new Date()
-        const todayStr = now.toISOString().split('T')[0] // YYYY-MM-DD
+        const saoPauloNow = new Date(now.getTime() - (3 * 60 * 60 * 1000))
+        const todayStr = saoPauloNow.toISOString().split('T')[0] // YYYY-MM-DD em São Paulo
         teacherQuery = teacherQuery.gte('date', todayStr)
       }
 

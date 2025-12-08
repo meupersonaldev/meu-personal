@@ -14,7 +14,8 @@ export function normalizeBookingStatus(
   status?: string | null,
   canonical?: string | null
 ): NormalizedBookingStatus {
-  const raw = String(status || canonical || '').toUpperCase()
+  // Priorizar status_canonical sobre status legado
+  const raw = String(canonical || status || '').toUpperCase()
   if (raw === 'DONE' || raw === 'COMPLETED') return 'COMPLETED'
   if (raw === 'CANCELED' || raw === 'CANCELLED') return 'CANCELED'
   if (raw === 'PAID' || raw === 'CONFIRMED') return 'PAID'
