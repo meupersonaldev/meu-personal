@@ -14,8 +14,9 @@ import { parse, format } from 'date-fns'
 const router = express.Router()
 
 // Schema de validação para criação de booking canônico
-const createBookingSchema = z.object({
-  source: z.enum(['ALUNO', 'PROFESSOR']),
+// Schema para aluno reservando slot existente
+const createBookingSchemaAluno = z.object({
+  source: z.literal('ALUNO'),
   bookingId: z.string().uuid(), // ID do booking existente para atualizar (obrigatório)
   studentId: z.string().uuid().nullable().optional(),
   studentNotes: z.string().optional(),
@@ -23,6 +24,21 @@ const createBookingSchema = z.object({
   isLinkedTeacher: z.boolean().optional(), // Professor vinculado - não requer créditos
   isFirstClass: z.boolean().optional() // Primeira aula grátis - não requer créditos
 })
+
+// Schema para professor criando agendamento para aluno
+const createBookingSchemaProfessor = z.object({
+  source: z.literal('PROFESSOR'),
+  professorId: z.string().uuid(),
+  studentId: z.string().uuid(),
+  academyId: z.string().uuid(),
+  startAt: z.string(), // ISO date string
+  endAt: z.string(), // ISO date string
+  studentNotes: z.string().optional(),
+  professorNotes: z.string().optional()
+})
+
+// Schema combinado que aceita ambos os fluxos
+const createBookingSchema = z.union([createBookingSchemaAluno, createBookingSchemaProfessor])
 
 // Schema de validação para atualização de status
 const updateBookingSchema = z.object({
@@ -940,7 +956,7 @@ router.post(
   })
 )
 
-// POST /api/bookings - Atualizar agendamento existente (aluno reservando slot)
+// POST /api/bookings - Criar/atualizar agendamento
 router.post(
   '/',
   requireAuth,
@@ -960,212 +976,268 @@ router.post(
     )
 
     const bookingData = createBookingSchema.parse(req.body)
-    if (bookingData.studentId === null) {
-      bookingData.studentId = undefined
-    }
     const user = req.user
 
-    // Validar permissões baseado no source
-    if (
-      bookingData.source === 'ALUNO' &&
-      !['STUDENT', 'ALUNO', 'FRANQUIA', 'FRANQUEADORA'].includes(user.role)
-    ) {
-      return res
-        .status(403)
-        .json({ error: 'Apenas alunos podem criar agendamentos aluno-led' })
-    }
-
-    if (
-      bookingData.source === 'PROFESSOR' &&
-      !['TEACHER', 'PROFESSOR', 'FRANQUIA', 'FRANQUEADORA'].includes(user.role)
-    ) {
-      return res.status(403).json({
-        error: 'Apenas professores podem criar agendamentos professor-led'
-      })
-    }
-
-    // Se for ALUNO-led, precisa de student_id
-    if (bookingData.source === 'ALUNO' && !bookingData.studentId) {
-      bookingData.studentId = user.userId // Aluno está criando para si mesmo
-    }
-
-    // Validar primeira aula grátis por CPF
-    let skipBalance = bookingData.isLinkedTeacher || false
-    
-    console.log('[POST /api/bookings] Dados recebidos:', {
-      isFirstClass: bookingData.isFirstClass,
-      isLinkedTeacher: bookingData.isLinkedTeacher,
-      source: bookingData.source,
-      studentId: bookingData.studentId || user.userId
-    })
-    
-    if (bookingData.isFirstClass && bookingData.source === 'ALUNO') {
-      const studentId = bookingData.studentId || user.userId
-      
-      // Buscar dados do aluno (CPF e first_class_used)
-      const { data: student, error: studentError } = await supabase
-        .from('users')
-        .select('id, cpf, first_class_used')
-        .eq('id', studentId)
-        .single()
-      
-      console.log('[POST /api/bookings] Dados do aluno:', {
-        studentId,
-        cpf: student?.cpf,
-        first_class_used: student?.first_class_used,
-        error: studentError
-      })
-      
-      if (studentError || !student) {
-        return res.status(400).json({ error: 'Aluno não encontrado' })
-      }
-      
-      // Verificar se o aluno já usou a primeira aula
-      if (student.first_class_used) {
-        console.log('[POST /api/bookings] ❌ Bloqueado: first_class_used = true')
-        return res.status(400).json({ 
-          error: 'Você já utilizou sua primeira aula gratuita',
-          code: 'FIRST_CLASS_ALREADY_USED'
+    // ========== FLUXO DO PROFESSOR ==========
+    // Professor criando agendamento para aluno (usa startAt/endAt)
+    if (bookingData.source === 'PROFESSOR' && 'startAt' in bookingData) {
+      if (!['TEACHER', 'PROFESSOR', 'FRANQUIA', 'FRANQUEADORA'].includes(user.role)) {
+        return res.status(403).json({
+          error: 'Apenas professores podem criar agendamentos professor-led'
         })
       }
+
+      console.log('[POST /api/bookings] Fluxo PROFESSOR - criando novo booking')
       
-      // Verificar se já existe outro usuário com o mesmo CPF que já usou a primeira aula
-      if (student.cpf) {
-        const { data: existingUsers, error: cpfError } = await supabase
-          .from('users')
-          .select('id, first_class_used')
-          .eq('cpf', student.cpf)
-          .eq('first_class_used', true)
-          .neq('id', studentId)
-          .limit(1)
+      // Validar e resolver studentId para garantir que seja um user_id válido
+      let resolvedStudentId = bookingData.studentId
+      
+      // Verificar se o studentId existe na tabela users
+      const { data: studentUser, error: studentError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('id', bookingData.studentId)
+        .single()
+      
+      if (studentError || !studentUser) {
+        // studentId não é um user_id válido, tentar buscar na teacher_students
+        console.log(`[POST /api/bookings] studentId ${bookingData.studentId} não encontrado em users, buscando em teacher_students...`)
         
-        if (!cpfError && existingUsers && existingUsers.length > 0) {
-          return res.status(400).json({ 
-            error: 'Já existe uma conta com este CPF que utilizou a primeira aula gratuita',
-            code: 'CPF_FIRST_CLASS_ALREADY_USED'
-          })
+        const { data: teacherStudent } = await supabase
+          .from('teacher_students')
+          .select('user_id, email')
+          .eq('id', bookingData.studentId)
+          .single()
+        
+        if (teacherStudent?.user_id) {
+          resolvedStudentId = teacherStudent.user_id
+          console.log(`[POST /api/bookings] Resolvido studentId para user_id: ${resolvedStudentId}`)
+        } else if (teacherStudent?.email) {
+          // Tentar buscar user_id pelo email
+          const { data: userByEmail } = await supabase
+            .from('users')
+            .select('id')
+            .eq('email', teacherStudent.email)
+            .single()
+          
+          if (userByEmail) {
+            resolvedStudentId = userByEmail.id
+            console.log(`[POST /api/bookings] Resolvido studentId pelo email para user_id: ${resolvedStudentId}`)
+          } else {
+            return res.status(400).json({ error: 'Aluno não encontrado. Verifique se o aluno está cadastrado corretamente.' })
+          }
+        } else {
+          return res.status(400).json({ error: 'Aluno não encontrado. Verifique se o aluno está cadastrado corretamente.' })
         }
       }
       
-      // Verificar se o aluno já tem algum booking PAID ou DONE (já agendou primeira aula)
-      const { data: existingBookings, error: bookingsError } = await supabase
-        .from('bookings')
-        .select('id, status_canonical')
-        .eq('student_id', studentId)
-        .in('status_canonical', ['PAID', 'DONE'])
-        .limit(1)
-      
-      console.log('[POST /api/bookings] Bookings existentes:', {
-        count: existingBookings?.length || 0,
-        bookings: existingBookings,
-        error: bookingsError
-      })
-      
-      if (!bookingsError && existingBookings && existingBookings.length > 0) {
-        console.log('[POST /api/bookings] ❌ Bloqueado: já tem booking PAID/DONE')
-        return res.status(400).json({ 
-          error: 'Você já possui uma aula agendada. A primeira aula gratuita só pode ser usada no primeiro agendamento.',
-          code: 'FIRST_CLASS_BOOKING_EXISTS'
+      try {
+        const booking = await bookingCanonicalService.createBooking({
+          source: 'PROFESSOR',
+          professorId: bookingData.professorId,
+          studentId: resolvedStudentId,
+          franchiseId: bookingData.academyId,
+          startAt: new Date(bookingData.startAt),
+          endAt: new Date(bookingData.endAt),
+          studentNotes: bookingData.studentNotes,
+          professorNotes: bookingData.professorNotes
         })
+
+        console.log('[POST /api/bookings] Booking professor criado:', booking?.id)
+
+        // Marcar first_class_used = true no primeiro agendamento do aluno
+        if (booking && resolvedStudentId) {
+          const { data: currentUser } = await supabase
+            .from('users')
+            .select('first_class_used')
+            .eq('id', resolvedStudentId)
+            .single()
+          
+          if (currentUser && currentUser.first_class_used === false) {
+            console.log(`[POST /api/bookings] Marcando first_class_used = true para aluno ${resolvedStudentId}`)
+            
+            await supabase
+              .from('users')
+              .update({ 
+                first_class_used: true,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', resolvedStudentId)
+          }
+        }
+
+        // Sincronizar contatos
+        try {
+          const franchiseId = (booking as any).franchise_id || bookingData.academyId
+          await Promise.all([
+            addAcademyToContact(booking.teacher_id, franchiseId),
+            booking.student_id ? addAcademyToContact(booking.student_id, franchiseId) : Promise.resolve()
+          ])
+        } catch (syncError) {
+          console.warn('Erro ao sincronizar contatos:', syncError)
+        }
+
+        return res.status(201).json({ booking })
+      } catch (error) {
+        console.error('[POST /api/bookings] Erro ao criar booking professor:', error)
+        const errorMessage = error instanceof Error ? error.message : 'Erro ao criar agendamento'
+        return res.status(400).json({ error: errorMessage })
       }
-      
-      // Tudo ok, permitir agendar sem crédito
-      skipBalance = true
-      console.log(`[POST /api/bookings] Primeira aula grátis aprovada para aluno ${studentId}`)
     }
 
-    // Flag para saber se é primeira aula grátis (para marcar após sucesso)
-    // Marcar first_class_used mesmo se for professor vinculado, desde que isFirstClass seja true
-    const isFirstClassBooking = bookingData.isFirstClass === true
-    
-    console.log('[POST /api/bookings] Flags de primeira aula:', {
-      isFirstClass: bookingData.isFirstClass,
-      skipBalance,
-      isLinkedTeacher: bookingData.isLinkedTeacher,
-      isFirstClassBooking
-    })
+    // ========== FLUXO DO ALUNO ==========
+    // Aluno reservando slot existente (usa bookingId)
+    if (bookingData.source === 'ALUNO' && 'bookingId' in bookingData) {
+      if (!['STUDENT', 'ALUNO', 'FRANQUIA', 'FRANQUEADORA'].includes(user.role)) {
+        return res.status(403).json({ error: 'Apenas alunos podem criar agendamentos aluno-led' })
+      }
 
-    // Atualizar booking existente usando bookingId
-    console.log(
-      '[POST /api/bookings] Atualizando booking existente:',
-      bookingData.bookingId
-    )
+      // Se não tiver studentId, usar o userId do aluno logado
+      const studentId = bookingData.studentId || user.userId
 
-    let booking
-    try {
-      booking = await bookingCanonicalService.updateBookingToStudent({
-        bookingId: bookingData.bookingId,
-        studentId: bookingData.studentId || user.userId,
+      // Validar primeira aula grátis por CPF
+      let skipBalance = bookingData.isLinkedTeacher || false
+      
+      console.log('[POST /api/bookings] Fluxo ALUNO - dados recebidos:', {
+        isFirstClass: bookingData.isFirstClass,
+        isLinkedTeacher: bookingData.isLinkedTeacher,
         source: bookingData.source,
-        studentNotes: bookingData.studentNotes,
-        professorNotes: bookingData.professorNotes,
-        skipBalance // Professor vinculado ou primeira aula grátis - não debita crédito
+        studentId
       })
-      
-      console.log('[POST /api/bookings] Booking criado com sucesso:', booking?.id)
-      
-      // Marcar first_class_used = true no primeiro agendamento (independente do tipo)
-      // Isso faz o banner de "primeira aula grátis" sumir do dashboard
-      if (booking) {
-        const studentId = bookingData.studentId || user.userId
-        
-        // Verificar se first_class_used ainda é false antes de atualizar
-        const { data: currentUser } = await supabase
+    
+      if (bookingData.isFirstClass) {
+        // Buscar dados do aluno (CPF e first_class_used)
+        const { data: student, error: studentError } = await supabase
           .from('users')
-          .select('first_class_used')
+          .select('id, cpf, first_class_used')
           .eq('id', studentId)
           .single()
         
-        if (currentUser && currentUser.first_class_used === false) {
-          console.log(`[POST /api/bookings] Marcando first_class_used = true para aluno ${studentId} (primeiro agendamento)`)
-          
-          const { data: updateData, error: updateError } = await supabase
-            .from('users')
-            .update({ 
-              first_class_used: true,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', studentId)
-            .select('id, first_class_used')
-          
-          if (updateError) {
-            console.error(`[POST /api/bookings] ❌ Erro ao marcar first_class_used:`, updateError)
-          } else {
-            console.log(`[POST /api/bookings] ✅ first_class_used atualizado:`, updateData)
-          }
-        } else {
-          console.log(`[POST /api/bookings] first_class_used já é true para aluno ${studentId}, não precisa atualizar`)
+        console.log('[POST /api/bookings] Dados do aluno:', {
+          studentId,
+          cpf: student?.cpf,
+          first_class_used: student?.first_class_used,
+          error: studentError
+        })
+        
+        if (studentError || !student) {
+          return res.status(400).json({ error: 'Aluno não encontrado' })
         }
+        
+        // Verificar se o aluno já usou a primeira aula
+        if (student.first_class_used) {
+          console.log('[POST /api/bookings] ❌ Bloqueado: first_class_used = true')
+          return res.status(400).json({ 
+            error: 'Você já utilizou sua primeira aula gratuita',
+            code: 'FIRST_CLASS_ALREADY_USED'
+          })
+        }
+        
+        // Verificar se já existe outro usuário com o mesmo CPF que já usou a primeira aula
+        if (student.cpf) {
+          const { data: existingUsers, error: cpfError } = await supabase
+            .from('users')
+            .select('id, first_class_used')
+            .eq('cpf', student.cpf)
+            .eq('first_class_used', true)
+            .neq('id', studentId)
+            .limit(1)
+          
+          if (!cpfError && existingUsers && existingUsers.length > 0) {
+            return res.status(400).json({ 
+              error: 'Já existe uma conta com este CPF que utilizou a primeira aula gratuita',
+              code: 'CPF_FIRST_CLASS_ALREADY_USED'
+            })
+          }
+        }
+        
+        // Verificar se o aluno já tem algum booking PAID ou DONE (já agendou primeira aula)
+        const { data: existingBookings, error: bookingsError } = await supabase
+          .from('bookings')
+          .select('id, status_canonical')
+          .eq('student_id', studentId)
+          .in('status_canonical', ['PAID', 'DONE'])
+          .limit(1)
+        
+        console.log('[POST /api/bookings] Bookings existentes:', {
+          count: existingBookings?.length || 0,
+          bookings: existingBookings,
+          error: bookingsError
+        })
+        
+        if (!bookingsError && existingBookings && existingBookings.length > 0) {
+          console.log('[POST /api/bookings] ❌ Bloqueado: já tem booking PAID/DONE')
+          return res.status(400).json({ 
+            error: 'Você já possui uma aula agendada. A primeira aula gratuita só pode ser usada no primeiro agendamento.',
+            code: 'FIRST_CLASS_BOOKING_EXISTS'
+          })
+        }
+        
+        // Tudo ok, permitir agendar sem crédito
+        skipBalance = true
+        console.log(`[POST /api/bookings] Primeira aula grátis aprovada para aluno ${studentId}`)
       }
-    } catch (error) {
-      console.error('[POST /api/bookings] Erro ao atualizar booking:', error)
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : 'Erro desconhecido ao atualizar agendamento'
-      return res.status(400).json({
-        error: errorMessage
-      })
+
+      // Atualizar booking existente usando bookingId
+      console.log('[POST /api/bookings] Atualizando booking existente:', bookingData.bookingId)
+
+      let booking
+      try {
+        booking = await bookingCanonicalService.updateBookingToStudent({
+          bookingId: bookingData.bookingId,
+          studentId: studentId,
+          source: bookingData.source,
+          studentNotes: bookingData.studentNotes,
+          professorNotes: bookingData.professorNotes,
+          skipBalance // Professor vinculado ou primeira aula grátis - não debita crédito
+        })
+        
+        console.log('[POST /api/bookings] Booking criado com sucesso:', booking?.id)
+        
+        // Marcar first_class_used = true no primeiro agendamento (independente do tipo)
+        if (booking) {
+          const { data: currentUser } = await supabase
+            .from('users')
+            .select('first_class_used')
+            .eq('id', studentId)
+            .single()
+          
+          if (currentUser && currentUser.first_class_used === false) {
+            console.log(`[POST /api/bookings] Marcando first_class_used = true para aluno ${studentId}`)
+            
+            await supabase
+              .from('users')
+              .update({ 
+                first_class_used: true,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', studentId)
+          }
+        }
+      } catch (error) {
+        console.error('[POST /api/bookings] Erro ao atualizar booking:', error)
+        const errorMessage = error instanceof Error ? error.message : 'Erro ao atualizar agendamento'
+        return res.status(400).json({ error: errorMessage })
+      }
+
+      // Sincronizar contatos
+      try {
+        const franchiseId = (booking as any).franchise_id
+        if (franchiseId) {
+          await Promise.all([
+            addAcademyToContact(booking.teacher_id, franchiseId),
+            booking.student_id ? addAcademyToContact(booking.student_id, franchiseId) : Promise.resolve()
+          ])
+        }
+      } catch (syncError) {
+        console.warn('Erro ao sincronizar contatos:', syncError)
+      }
+
+      return res.status(200).json({ booking })
     }
 
-    try {
-      const syncTasks = [
-        addAcademyToContact(booking.teacher_id, booking.franchise_id)
-      ]
-      if (booking.student_id) {
-        syncTasks.push(
-          addAcademyToContact(booking.student_id, booking.franchise_id)
-        )
-      }
-      await Promise.all(syncTasks)
-    } catch (syncError) {
-      console.warn(
-        'Erro ao sincronizar contato da franqueadora após agendamento:',
-        syncError
-      )
-    }
-
-    return res.status(200).json({ booking })
+    // Se chegou aqui, o payload não é válido para nenhum fluxo
+    return res.status(400).json({ error: 'Payload inválido. Use source ALUNO com bookingId ou source PROFESSOR com startAt/endAt.' })
   })
 )
 

@@ -110,6 +110,10 @@ export default function ReservarHorarioPage() {
   })
   const [selectedHorario, setSelectedHorario] = useState<string>('')
   const [expandedStep, setExpandedStep] = useState<number>(1) // Controla qual step está expandido
+  
+  // Estado para saldo de horas do professor
+  const [professorHours, setProfessorHours] = useState<number | null>(null)
+  const [loadingHours, setLoadingHours] = useState(true)
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
@@ -211,6 +215,21 @@ export default function ReservarHorarioPage() {
 
         // Buscar alunos do professor
         await fetchStudents()
+        
+        // Buscar saldo de horas do professor
+        try {
+          const hoursRes = await authFetch(`${API_URL}/api/teachers/${user.id}/hours`)
+          if (hoursRes.ok) {
+            const hoursData = await hoursRes.json()
+            setProfessorHours(hoursData?.available_hours ?? 0)
+          } else {
+            setProfessorHours(0)
+          }
+        } catch {
+          setProfessorHours(0)
+        } finally {
+          setLoadingHours(false)
+        }
       } catch (error) {
         toast.error('Erro ao carregar dados')
       } finally {
@@ -358,7 +377,14 @@ export default function ReservarHorarioPage() {
     setSubmitting(true)
 
     try {
-      const bookingDate = new Date(`${selectedData}T${horario}:00Z`)
+      // Criar data no fuso horário de São Paulo (não UTC)
+      // selectedData é YYYY-MM-DD, horario é HH:MM
+      // Criar como horário local de São Paulo
+      const [year, month, day] = selectedData.split('-').map(Number)
+      const [hours, minutes] = horario.split(':').map(Number)
+      
+      // Criar data local (o navegador vai usar o fuso local)
+      const bookingDate = new Date(year, month - 1, day, hours, minutes, 0)
 
       if (isNaN(bookingDate.getTime())) {
         toast.error('Data ou horário inválido')
@@ -378,6 +404,15 @@ export default function ReservarHorarioPage() {
         setSubmitting(false)
         return
       }
+
+      // Debug: mostrar o que está sendo enviado
+      console.log('[DEBUG] Dados do agendamento:', {
+        selectedData,
+        horario,
+        bookingDateLocal: bookingDate.toString(),
+        bookingDateISO: bookingDate.toISOString(),
+        endTimeISO: endTime.toISOString()
+      })
 
       const response = await authFetch(`${API_URL}/api/bookings`, {
         method: 'POST',
@@ -531,6 +566,43 @@ export default function ReservarHorarioPage() {
         </div>
 
         <div className="px-4 md:px-6 max-w-7xl mx-auto pb-20">
+          {/* Aviso de saldo insuficiente */}
+          {!loadingHours && professorHours !== null && professorHours <= 0 && (
+            <Card className="mb-6 border-0 shadow-lg bg-gradient-to-r from-red-50 to-orange-50 border-l-4 border-l-red-500">
+              <CardContent className="p-6">
+                <div className="flex items-start gap-4">
+                  <div className="p-3 bg-red-100 rounded-xl">
+                    <AlertCircle className="h-6 w-6 text-red-600" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-lg font-bold text-red-900 mb-1">Saldo de Horas Insuficiente</h3>
+                    <p className="text-red-700 mb-4">
+                      Você não possui horas disponíveis para agendar aulas para seus alunos. 
+                      Compre um pacote de horas para continuar.
+                    </p>
+                    <Button
+                      onClick={() => router.push('/professor/carteira')}
+                      className="bg-red-600 hover:bg-red-700 text-white"
+                    >
+                      <CreditCard className="h-4 w-4 mr-2" />
+                      Comprar Horas
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Saldo de horas disponível */}
+          {!loadingHours && professorHours !== null && professorHours > 0 && (
+            <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-xl flex items-center gap-3">
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              <span className="text-green-800 font-medium">
+                Você tem <strong>{professorHours}</strong> hora(s) disponível(is) para agendar
+              </span>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Conteúdo Principal */}
             <div className="lg:col-span-2 space-y-6">
@@ -828,11 +900,24 @@ export default function ReservarHorarioPage() {
                       </div>
 
                       <div className="pt-2">
+                        {/* Aviso de saldo insuficiente no resumo */}
+                        {professorHours !== null && professorHours <= 0 && (
+                          <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
+                            <div className="flex items-start gap-3">
+                              <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+                              <div className="text-sm">
+                                <p className="font-semibold text-red-900">Saldo insuficiente</p>
+                                <p className="text-red-700">Compre horas para agendar.</p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        
                         {selectedHorario && selectedStudent && selectedData ? (
                           <Button
                             onClick={() => handleReservarHorario(selectedHorario)}
-                            disabled={submitting}
-                            className="w-full bg-[#002C4E] hover:bg-[#003d6b] text-white rounded-xl h-12 shadow-lg hover:shadow-xl transition-all text-base font-semibold"
+                            disabled={submitting || (professorHours !== null && professorHours <= 0)}
+                            className="w-full bg-[#002C4E] hover:bg-[#003d6b] text-white rounded-xl h-12 shadow-lg hover:shadow-xl transition-all text-base font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             {submitting ? (
                               <>

@@ -193,23 +193,34 @@ export default function AgendaPage() {
     setCurrentDate(new Date())
   }
 
+  // Helper para extrair data local (YYYY-MM-DD) sem conversão UTC
+  function getLocalDateStr(date: Date): string {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+
   function getBookingsForDate(date: Date): Booking[] {
-    const targetDateStr = date.toISOString().split('T')[0] // YYYY-MM-DD
+    const targetDateStr = getLocalDateStr(date) // YYYY-MM-DD local
     return bookings.filter(b => {
       // Usar startAt se disponível (tem hora completa), senão usar date
-      const bookingDateStr = b.startAt
-        ? new Date(b.startAt).toISOString().split('T')[0]
-        : b.date?.split('T')[0] || b.date
+      if (b.startAt) {
+        const bookingDate = new Date(b.startAt)
+        return getLocalDateStr(bookingDate) === targetDateStr
+      }
+      // Se não tem startAt, usar o campo date diretamente (já é YYYY-MM-DD)
+      const bookingDateStr = b.date?.split('T')[0] || b.date
       return bookingDateStr === targetDateStr
     })
   }
 
   function getBookingsForHour(date: Date, hour: number): Booking[] {
-    const targetDateStr = date.toISOString().split('T')[0] // YYYY-MM-DD
+    const targetDateStr = getLocalDateStr(date) // YYYY-MM-DD local
     return bookings.filter(b => {
       // Usar startAt se disponível (tem hora completa)
       const bookingDateTime = b.startAt ? new Date(b.startAt) : new Date(b.date)
-      const bookingDateStr = bookingDateTime.toISOString().split('T')[0]
+      const bookingDateStr = getLocalDateStr(bookingDateTime)
       return bookingDateStr === targetDateStr &&
         bookingDateTime.getHours() === hour
     })

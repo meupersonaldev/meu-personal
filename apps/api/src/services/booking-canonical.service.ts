@@ -33,6 +33,26 @@ function getAvailableHours(balance: ProfHourBalance): number {
   return balance.available_hours - balance.locked_hours;
 }
 
+/**
+ * Extrai a data (YYYY-MM-DD) no fuso horário de São Paulo (UTC-3)
+ * Isso é necessário porque o campo 'date' deve refletir a data local, não UTC
+ */
+function getDateInSaoPaulo(utcDate: Date): string {
+  // São Paulo é UTC-3 (sem horário de verão desde 2019)
+  // Se UTC é 00:00 do dia 9, São Paulo é 21:00 do dia 8
+  // Então subtraímos 3 horas para obter o horário de São Paulo
+  const saoPauloTime = new Date(utcDate.getTime() - (3 * 60 * 60 * 1000));
+  const dateOnly = saoPauloTime.toISOString().split('T')[0];
+  
+  console.log('[DEBUG getDateInSaoPaulo]', {
+    utcDateISO: utcDate.toISOString(),
+    saoPauloTimeISO: saoPauloTime.toISOString(),
+    dateOnly
+  });
+  
+  return dateOnly;
+}
+
 export interface CreateBookingParams {
   source: 'ALUNO' | 'PROFESSOR';
   studentId?: string;
@@ -400,7 +420,7 @@ class BookingCanonicalService {
           teacher_id: params.professorId,
           franchise_id: params.franchiseId, // Usar franchise_id diretamente
           unit_id: null, // NÃO usar unit_id
-          date: params.startAt.toISOString(),
+          date: getDateInSaoPaulo(params.startAt), // Data no fuso de São Paulo
           start_at: params.startAt.toISOString(),
           end_at: params.endAt.toISOString(),
           status: 'CONFIRMED', // Campo antigo (enum só aceita CONFIRMED)
@@ -480,7 +500,7 @@ class BookingCanonicalService {
           teacher_id: params.professorId,
           franchise_id: params.franchiseId, // Usar franchise_id diretamente
           unit_id: params.unitId || null, // Opcional
-          date: params.startAt.toISOString(),
+          date: getDateInSaoPaulo(params.startAt), // Data no fuso de São Paulo
           start_at: params.startAt.toISOString(),
           end_at: params.endAt.toISOString(),
           status: statusToUse === 'AVAILABLE' ? 'AVAILABLE' : 'CONFIRMED',
@@ -613,7 +633,7 @@ class BookingCanonicalService {
         teacher_id: params.professorId,
         franchise_id: params.franchiseId, // Usar franchise_id diretamente
         unit_id: null, // NÃO usar unit_id
-        date: params.startAt.toISOString(),
+        date: getDateInSaoPaulo(params.startAt), // Data no fuso de São Paulo
         start_at: params.startAt.toISOString(),
         end_at: params.endAt.toISOString(),
         status: 'CONFIRMED', // Campo antigo (enum só aceita CONFIRMED)

@@ -1602,4 +1602,46 @@ router.put('/:id', requireAuth, async (req, res) => {
   }
 })
 
+// GET /api/teachers/:id/hours - Buscar saldo de horas do professor
+router.get('/:id/hours', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params
+    const user = req.user
+
+    // Verificar permissão
+    if (user.userId !== id && !['FRANQUIA', 'FRANQUEADORA', 'ADMIN'].includes(user.role)) {
+      return res.status(403).json({ error: 'Acesso não autorizado' })
+    }
+
+    // Buscar saldo de horas do professor em todas as franqueadoras
+    const { data: hourBalances, error: balanceError } = await supabase
+      .from('prof_hour_balance')
+      .select('available_hours, locked_hours, franqueadora_id')
+      .eq('professor_id', id)
+
+    if (balanceError) {
+      console.error('Erro ao buscar saldo de horas:', balanceError)
+      return res.status(500).json({ error: 'Erro ao buscar saldo de horas' })
+    }
+
+    // Somar todas as horas disponíveis (available_hours - locked_hours)
+    const totalAvailable = (hourBalances || []).reduce((sum: number, b: any) => {
+      const available = (b.available_hours || 0) - (b.locked_hours || 0)
+      return sum + Math.max(0, available)
+    }, 0)
+
+    const totalLocked = (hourBalances || []).reduce((sum: number, b: any) => sum + (b.locked_hours || 0), 0)
+
+    res.json({
+      available_hours: totalAvailable,
+      locked_hours: totalLocked,
+      total_available: totalAvailable,
+      balances: hourBalances || []
+    })
+  } catch (error: any) {
+    console.error('Erro ao buscar horas do professor:', error)
+    res.status(500).json({ error: error.message || 'Erro interno do servidor' })
+  }
+})
+
 export default router
