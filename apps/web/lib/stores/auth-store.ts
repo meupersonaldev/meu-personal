@@ -16,6 +16,7 @@ export interface User {
   role: UserRole
   avatar_url?: string
   approval_status?: 'pending' | 'approved' | 'rejected'
+  gender?: 'MALE' | 'FEMALE' | 'NON_BINARY' | 'OTHER' | 'PREFER_NOT_TO_SAY'
 }
 
 interface AuthState {

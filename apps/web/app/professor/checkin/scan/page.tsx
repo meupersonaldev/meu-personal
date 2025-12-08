@@ -216,10 +216,61 @@ export default function ProfessorCheckinScanPage() {
     }
   }
 
+  // State for check-in processing
+  const [isProcessingCheckin, setIsProcessingCheckin] = useState(false)
+
+  async function performBookingCheckin(bookingId: string) {
+    setIsProcessingCheckin(true)
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const response = await fetch(`${API_URL}/api/bookings/${bookingId}/checkin`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ method: 'QRCODE' })
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        const errorMessage = data.error || 'Erro ao realizar check-in'
+        toast.error(errorMessage)
+        // Allow retry
+        setIsProcessingCheckin(false)
+        loadAndStart()
+        return
+      }
+
+      // Success - show credited hours
+      const hoursMsg = data.credits?.hours_credited 
+        ? ` ${data.credits.hours_credited} hora(s) creditada(s).`
+        : ''
+      toast.success((data.message || 'Check-in realizado com sucesso!') + hoursMsg)
+      router.replace('/professor/dashboard')
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao realizar check-in'
+      toast.error(errorMessage)
+      setIsProcessingCheckin(false)
+      loadAndStart()
+    }
+  }
+
   function handleDecoded(text: string) {
     try {
-      // 1) Tentar JSON com academyId
+      // 1) Tentar JSON - pode ser booking check-in ou academy check-in
       const data = JSON.parse(text)
+      
+      // Check for booking check-in QR code (Requirements 1.1, 6.2)
+      const bookingId = data.booking_id || data.bookingId
+      if (bookingId && data.type === 'checkin') {
+        toast.info('QR de check-in detectado! Processando...')
+        performBookingCheckin(bookingId)
+        return
+      }
+      
+      // Check for academy check-in QR code
       const acad = data.academyId || data.academy_id
       if (acad) {
         toast.success('QR lido! Redirecionando...')

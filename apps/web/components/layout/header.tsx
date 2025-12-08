@@ -50,7 +50,7 @@ export default function Header({ className }: HeaderProps) {
               <>
                 <div className="flex items-center space-x-3">
                   <Avatar className="h-8 w-8">
-                    <AvatarImage src={user?.avatar} />
+                    <AvatarImage src={user?.avatar_url} />
                     <AvatarFallback className="bg-meu-accent text-meu-primary text-sm font-semibold">
                       {user?.name ? getInitials(user.name) : 'U'}
                     </AvatarFallback>
@@ -70,7 +70,7 @@ export default function Header({ className }: HeaderProps) {
                 <Button
                   variant="default"
                   size="sm"
-                  onClick={logout}
+                  onClick={() => logout()}
                   className="bg-red-500 text-white border-red-600 hover:bg-red-600 hover:border-red-700 transition-all duration-200 font-semibold shadow-md"
                 >
                   <LogOut className="h-4 w-4 mr-2" />
@@ -94,7 +94,7 @@ export default function Header({ className }: HeaderProps) {
           <div className="md:hidden">
             {isAuthenticated && (
               <Avatar className="h-8 w-8">
-                <AvatarImage src={user?.avatar} />
+                <AvatarImage src={user?.avatar_url} />
                 <AvatarFallback className="bg-meu-accent text-meu-primary text-sm font-semibold">
                   {user?.name ? getInitials(user.name) : 'U'}
                 </AvatarFallback>

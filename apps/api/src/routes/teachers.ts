@@ -66,8 +66,8 @@ router.get('/', requireAuth, async (req, res) => {
       const profilesArray = Array.isArray(teacher.teacher_profiles)
         ? teacher.teacher_profiles
         : teacher.teacher_profiles
-        ? [teacher.teacher_profiles]
-        : []
+          ? [teacher.teacher_profiles]
+          : []
 
       const normalizedProfiles = profilesArray.map((profile: any) => ({
         ...profile,
@@ -88,7 +88,7 @@ router.get('/', requireAuth, async (req, res) => {
 })
 
 // Função compartilhada para buscar professores por academy_id
-async function fetchTeachersByAcademy (academyId: string, user: any) {
+async function fetchTeachersByAcademy(academyId: string, user: any) {
   console.log(
     `[fetchTeachersByAcademy] Buscando professores para academia ${academyId}`
   )
@@ -192,10 +192,8 @@ async function fetchTeachersByAcademy (academyId: string, user: any) {
   ]
 
   console.log(
-    `[fetchTeachersByAcademy] Total: ${
-      linkedTeachers?.length || 0
-    } vinculados + ${teachersWithBookings.length} com bookings = ${
-      allTeachers.length
+    `[fetchTeachersByAcademy] Total: ${linkedTeachers?.length || 0
+    } vinculados + ${teachersWithBookings.length} com bookings = ${allTeachers.length
     } únicos`
   )
 
@@ -204,8 +202,8 @@ async function fetchTeachersByAcademy (academyId: string, user: any) {
     const profilesArray = Array.isArray(teacher.teacher_profiles)
       ? teacher.teacher_profiles
       : teacher.teacher_profiles
-      ? [teacher.teacher_profiles]
-      : []
+        ? [teacher.teacher_profiles]
+        : []
 
     const normalizedProfiles = profilesArray.map((profile: any) => ({
       ...profile,
@@ -216,8 +214,8 @@ async function fetchTeachersByAcademy (academyId: string, user: any) {
     const academyTeachers = Array.isArray(teacher.academy_teachers)
       ? teacher.academy_teachers
       : teacher.academy_teachers
-      ? [teacher.academy_teachers]
-      : []
+        ? [teacher.academy_teachers]
+        : []
 
     const academy = academyTeachers[0]?.academies || null
 
@@ -375,13 +373,13 @@ router.get('/:id/bookings-by-date', requireAuth, async (req, res) => {
         const startTime = booking.start_at
           ? new Date(booking.start_at)
           : booking.date
-          ? new Date(booking.date)
-          : null
+            ? new Date(booking.date)
+            : null
         const endTime = booking.end_at
           ? new Date(booking.end_at)
           : startTime && booking.duration
-          ? new Date(startTime.getTime() + booking.duration * 60 * 1000)
-          : null
+            ? new Date(startTime.getTime() + booking.duration * 60 * 1000)
+            : null
 
         return {
           id: booking.id,
@@ -435,7 +433,8 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
       subscriptionData,
       profileData,
       hourTransactionsData,
-      studentsData
+      studentsData,
+      hourBalanceData
     ] = await Promise.all([
       // Total de aulas
       supabase
@@ -478,7 +477,7 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
 
       // Transações de horas (para calcular horas ganhas da academia)
       supabase
-        .from('hour_transactions')
+        .from('hour_tx')
         .select('id, type, hours, created_at, meta_json')
         .eq('professor_id', id)
         .in('type', ['CONSUME']),
@@ -488,7 +487,13 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
       supabase
         .from('teacher_students')
         .select('id, email, hourly_rate')
-        .eq('teacher_id', id)
+        .eq('teacher_id', id),
+
+      // Saldo de horas do professor (para locked_hours = horas pendentes)
+      supabase
+        .from('prof_hour_balance')
+        .select('available_hours, locked_hours, franqueadora_id')
+        .eq('professor_id', id)
     ])
 
     const bookings = bookingsData.data || []
@@ -497,6 +502,7 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
     const profile = profileData.data
     const hourTransactions = hourTransactionsData.data || []
     const students = studentsData.data || []
+    const hourBalances = hourBalanceData.data || []
 
     // Criar mapa de hourly_rate por user_id (buscar user_id pelo email)
     const studentRateMap = new Map<string, number>()
@@ -579,9 +585,9 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
       last_booking_date:
         normalizedBookings.length > 0
           ? normalizedBookings.sort(
-              (a: any, b: any) =>
-                new Date(b.date).getTime() - new Date(a.date).getTime()
-            )[0].date
+            (a: any, b: any) =>
+              new Date(b.date).getTime() - new Date(a.date).getTime()
+          )[0].date
           : null,
       join_date: teacher.created_at,
       monthly_earnings: {
@@ -619,6 +625,14 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
 
           return academyEarnings + privateEarnings
         })()
+      },
+      // Saldo de horas do professor (BONUS_LOCK = horas pendentes de aulas agendadas)
+      hour_balance: {
+        total_available: hourBalances.reduce((sum: number, b: any) => sum + (b.available_hours || 0), 0),
+        total_locked: hourBalances.reduce((sum: number, b: any) => sum + (b.locked_hours || 0), 0),
+        // Alias para frontend
+        available_hours: hourBalances.reduce((sum: number, b: any) => sum + (b.available_hours || 0), 0),
+        pending_hours: hourBalances.reduce((sum: number, b: any) => sum + (b.locked_hours || 0), 0)
       }
     }
 
@@ -638,10 +652,19 @@ router.get('/:id/transactions', requireAuth, async (req, res) => {
       return
     }
 
-    // Buscar transações de horas
+    // Buscar transações de horas da tabela hour_tx (inclui BONUS_LOCK, BONUS_UNLOCK, REVOKE, etc.)
     const { data: hourTransactions, error } = await supabase
-      .from('hour_transactions')
-      .select('id, type, hours, created_at, meta_json')
+      .from('hour_tx')
+      .select(`
+        id, 
+        type, 
+        hours, 
+        created_at, 
+        meta_json,
+        booking_id,
+        unlock_at,
+        source
+      `)
       .eq('professor_id', id)
       .order('created_at', { ascending: false })
 
@@ -650,7 +673,48 @@ router.get('/:id/transactions', requireAuth, async (req, res) => {
       return res.status(500).json({ error: 'Erro ao buscar transações' })
     }
 
-    res.json({ transactions: hourTransactions || [] })
+    // Enriquecer transações com informações de booking se disponível
+    const bookingIds = (hourTransactions || [])
+      .map((t: any) => t.booking_id)
+      .filter(Boolean)
+
+    let bookingsMap: Record<string, any> = {}
+    if (bookingIds.length > 0) {
+      const { data: bookings } = await supabase
+        .from('bookings')
+        .select('id, start_at, student_id, status_canonical')
+        .in('id', bookingIds)
+
+      if (bookings) {
+        // Buscar nomes dos alunos
+        const studentIds = bookings.map((b: any) => b.student_id).filter(Boolean)
+        let studentsMap: Record<string, string> = {}
+        if (studentIds.length > 0) {
+          const { data: students } = await supabase
+            .from('users')
+            .select('id, name')
+            .in('id', studentIds)
+          if (students) {
+            students.forEach((s: any) => { studentsMap[s.id] = s.name })
+          }
+        }
+
+        bookings.forEach((b: any) => {
+          bookingsMap[b.id] = {
+            ...b,
+            student_name: studentsMap[b.student_id] || null
+          }
+        })
+      }
+    }
+
+    // Mapear transações com informações adicionais
+    const enrichedTransactions = (hourTransactions || []).map((t: any) => ({
+      ...t,
+      booking: bookingsMap[t.booking_id] || null
+    }))
+
+    res.json({ transactions: enrichedTransactions })
   } catch (error) {
     console.error('Erro ao processar requisição:', error)
     res.status(500).json({ error: 'Erro interno do servidor' })
@@ -771,9 +835,9 @@ router.get('/:id/history', requireAuth, async (req, res) => {
     const [studentsData, academiesData] = await Promise.all([
       studentIds.length > 0
         ? supabase
-            .from('users')
-            .select('id, name, email, phone, avatar_url')
-            .in('id', studentIds)
+          .from('users')
+          .select('id, name, email, phone, avatar_url')
+          .in('id', studentIds)
         : Promise.resolve({ data: [] }),
       academyIds.length > 0
         ? supabase.from('academies').select('id, name').in('id', academyIds)
@@ -802,7 +866,7 @@ router.get('/:id/history', requireAuth, async (req, res) => {
 
     // Buscar transações de horas (academia)
     let hourTransactionsQuery = supabase
-      .from('hour_transactions')
+      .from('hour_tx')
       .select('id, type, hours, created_at, meta_json')
       .eq('professor_id', id)
       .in('type', ['CONSUME'])
@@ -853,8 +917,8 @@ router.get('/:id/history', requireAuth, async (req, res) => {
         const bookingTime = b.start_at
           ? new Date(b.start_at)
           : b.date
-          ? new Date(b.date)
-          : null
+            ? new Date(b.date)
+            : null
         return bookingTime && bookingTime <= now
       }
       return false
@@ -915,16 +979,16 @@ router.get('/:id/history', requireAuth, async (req, res) => {
       type === 'private'
         ? 0
         : (hourTransactions || []).reduce((sum: number, t: any) => {
-            const rate = profile?.hourly_rate || 0
-            return sum + t.hours * rate
-          }, 0)
+          const rate = profile?.hourly_rate || 0
+          return sum + t.hours * rate
+        }, 0)
 
     const academyHoursFromTransactions =
       type === 'private'
         ? 0
         : (hourTransactions || []).reduce((sum: number, t: any) => {
-            return sum + (t.hours || 0)
-          }, 0)
+          return sum + (t.hours || 0)
+        }, 0)
 
     // Calcular ganhos de aulas particulares
     const privateEarnings = Array.from(earningsByStudent.values()).reduce(
@@ -982,8 +1046,8 @@ router.get('/:id/history', requireAuth, async (req, res) => {
         const bookingTime = b.start_at
           ? new Date(b.start_at)
           : b.date
-          ? new Date(b.date)
-          : null
+            ? new Date(b.date)
+            : null
 
         if (!bookingTime) return false
 

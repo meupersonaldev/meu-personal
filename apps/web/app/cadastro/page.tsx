@@ -11,22 +11,22 @@ const defaultFeatures = [
   {
     title: "100% gratuito",
     description: "Cadastro sem custos",
-    icon: "shield",
+    icon: "shield" as const,
     accentClass: "bg-green-500/20 text-green-400",
   },
   {
     title: "Ativacao instantanea",
     description: "Comece a usar agora mesmo",
-    icon: "clock",
+    icon: "clock" as const,
     accentClass: "bg-meu-cyan/20 text-meu-cyan",
   },
   {
     title: "Professores premium",
     description: "Acesso aos melhores profissionais",
-    icon: "trophy",
+    icon: "trophy" as const,
     accentClass: "bg-yellow-400/20 text-yellow-400",
   },
-] as const
+]
 
 function CadastroPageContent() {
   const searchParams = useSearchParams()

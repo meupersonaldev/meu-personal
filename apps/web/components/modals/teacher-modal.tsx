@@ -22,7 +22,7 @@ export default function TeacherModal({ isOpen, onClose, teacher, mode }: Teacher
     name: '',
     email: '',
     phone: '',
-    specialty: '',
+    specialties: [] as string[],
     status: 'active' as 'active' | 'inactive' | 'pending'
   })
 
@@ -31,8 +31,8 @@ export default function TeacherModal({ isOpen, onClose, teacher, mode }: Teacher
       setFormData({
         name: teacher.name,
         email: teacher.email,
-        phone: teacher.phone,
-        specialty: teacher.specialty,
+        phone: teacher.phone || '',
+        specialties: teacher.specialties || [],
         status: teacher.status
       })
     } else {
@@ -40,7 +40,7 @@ export default function TeacherModal({ isOpen, onClose, teacher, mode }: Teacher
         name: '',
         email: '',
         phone: '',
-        specialty: '',
+        specialties: [],
         status: 'active'
       })
     }
@@ -56,12 +56,9 @@ export default function TeacherModal({ isOpen, onClose, teacher, mode }: Teacher
 
       if (mode === 'add') {
         const newTeacher = {
-          ...formData,
-          studentsCount: 0,
-          totalClasses: 0,
-          earnings: 0
+          ...formData
         }
-        addTeacher(newTeacher)
+        await addTeacher(newTeacher)
         toast.success('Professor adicionado com sucesso!')
       } else if (mode === 'edit' && teacher) {
         updateTeacher(teacher.id, formData)
@@ -155,8 +152,8 @@ export default function TeacherModal({ isOpen, onClose, teacher, mode }: Teacher
               Especialidade
             </label>
             <select
-              value={formData.specialty}
-              onChange={(e) => setFormData({ ...formData, specialty: e.target.value })}
+              value={formData.specialties[0] || ''}
+              onChange={(e) => setFormData({ ...formData, specialties: e.target.value ? [e.target.value] : [] })}
               disabled={mode === 'view'}
               required
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -197,16 +194,12 @@ export default function TeacherModal({ isOpen, onClose, teacher, mode }: Teacher
               <h3 className="text-sm font-medium text-gray-700">Estatísticas</h3>
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <p className="text-gray-600">Alunos</p>
-                  <p className="font-semibold">{teacher.studentsCount}</p>
+                  <p className="text-gray-600">Especialidades</p>
+                  <p className="font-semibold">{teacher.specialties?.join(', ') || '-'}</p>
                 </div>
                 <div>
-                  <p className="text-gray-600">Aulas</p>
-                  <p className="font-semibold">{teacher.totalClasses}</p>
-                </div>
-                <div>
-                  <p className="text-gray-600">Ganhos</p>
-                  <p className="font-semibold">R$ {teacher.earnings}</p>
+                  <p className="text-gray-600">Comissão</p>
+                  <p className="font-semibold">{teacher.commission_rate ? `${teacher.commission_rate}%` : '-'}</p>
                 </div>
                 <div>
                   <p className="text-gray-600">Status</p>

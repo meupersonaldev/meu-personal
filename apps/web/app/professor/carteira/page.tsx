@@ -136,6 +136,54 @@ export default function ProfessorCarteira() {
                 description: 'Aula via Academia (Banco de Horas)',
                 status: 'COMPLETED'
               })
+            } else if (tx.type === 'BONUS_LOCK') {
+              // Hora pendente de aula agendada por aluno
+              processedTransactions.push({
+                id: tx.id,
+                type: 'BONUS_LOCK',
+                hours: tx.hours,
+                amount: 0, // Ainda não é receita
+                created_at: tx.created_at,
+                description: tx.booking?.student_name
+                  ? `Aula agendada - ${tx.booking.student_name}`
+                  : 'Aula agendada por aluno (pendente)',
+                studentName: tx.booking?.student_name,
+                status: 'PENDING'
+              })
+            } else if (tx.type === 'BONUS_UNLOCK') {
+              // Hora liberada após aula concluída
+              const amount = (tx.hours || 0) * hourlyRate
+              totalRevenue += Number(amount)
+              totalHoursGiven += Number(tx.hours || 0)
+
+              processedTransactions.push({
+                id: tx.id,
+                type: 'BONUS_UNLOCK',
+                hours: tx.hours,
+                amount: Number(amount),
+                created_at: tx.created_at,
+                description: tx.meta_json?.reason === 'late_cancellation_compensation'
+                  ? 'Compensação (aluno cancelou após prazo)'
+                  : tx.booking?.student_name
+                    ? `Aula concluída - ${tx.booking.student_name}`
+                    : 'Hora liberada (aula concluída)',
+                studentName: tx.booking?.student_name,
+                status: 'COMPLETED'
+              })
+            } else if (tx.type === 'REVOKE') {
+              // Hora revogada (aluno cancelou antes do prazo)
+              processedTransactions.push({
+                id: tx.id,
+                type: 'REVOKE',
+                hours: tx.hours,
+                amount: 0,
+                created_at: tx.created_at,
+                description: tx.booking?.student_name
+                  ? `Cancelado - ${tx.booking.student_name}`
+                  : 'Aula cancelada pelo aluno',
+                studentName: tx.booking?.student_name,
+                status: 'CANCELED'
+              })
             }
           })
 
@@ -460,27 +508,43 @@ export default function ProfessorCarteira() {
                         .map((tx) => {
                           const isIncome = tx.amount > 0 // Money In
                           const isPurchase = tx.type === 'PURCHASE'
+                          const isPending = tx.type === 'BONUS_LOCK'
+                          const isCanceled = tx.type === 'REVOKE'
 
                           // Logic for visual signs:
                           // Money: Income = Green (+), Expense = Red (-) or Black
                           // Hours: Purchase = Green (+), Consumed/Class = Red (-)
+                          // Pending: Amber (waiting)
 
-                          const hoursSign = isPurchase ? '+' : '-'
-                          const hoursColor = isPurchase ? 'text-green-600' : 'text-red-500' // Bought is "gain" in hour balance, Given is "loss"
+                          const hoursSign = isPurchase || tx.type === 'BONUS_LOCK' || tx.type === 'BONUS_UNLOCK' ? '+' : '-'
+                          const hoursColor = isPending ? 'text-amber-500' : isCanceled ? 'text-gray-400 line-through' : isPurchase || tx.type === 'BONUS_UNLOCK' ? 'text-green-600' : 'text-red-500'
 
                           const moneySign = isIncome ? '+' : ''
-                          const moneyColor = isIncome ? 'text-green-600' : 'text-gray-900'
+                          const moneyColor = isPending ? 'text-amber-500' : isIncome ? 'text-green-600' : 'text-gray-900'
 
                           return (
                             <tr key={tx.id} className="hover:bg-gray-50/50 transition-colors">
                               <td className="px-6 py-4">
                                 <div className="flex items-center gap-3">
-                                  <div className={cn("p-2 rounded-lg", isIncome ? "bg-green-100 text-green-600" : "bg-red-100 text-red-600")}>
-                                    {isIncome ? <ArrowUpRight className="h-5 w-5" /> : <ArrowDownRight className="h-5 w-5" />}
+                                  <div className={cn("p-2 rounded-lg",
+                                    isPending ? "bg-amber-100 text-amber-600" :
+                                      isCanceled ? "bg-gray-100 text-gray-400" :
+                                        isIncome ? "bg-green-100 text-green-600" : "bg-red-100 text-red-600"
+                                  )}>
+                                    {isPending ? <Clock className="h-5 w-5" /> :
+                                      isCanceled ? <ArrowDownRight className="h-5 w-5" /> :
+                                        isIncome ? <ArrowUpRight className="h-5 w-5" /> : <ArrowDownRight className="h-5 w-5" />}
                                   </div>
                                   <div>
                                     <p className="font-medium text-gray-900">{tx.description}</p>
-                                    <p className="text-xs text-gray-500">{tx.type === 'PRIVATE_CLASS' ? 'Aula Particular' : tx.type === 'PURCHASE' ? 'Recarga' : 'Aula Academia'}</p>
+                                    <p className="text-xs text-gray-500">
+                                      {tx.type === 'PRIVATE_CLASS' ? 'Aula Particular' :
+                                        tx.type === 'PURCHASE' ? 'Recarga' :
+                                          tx.type === 'BONUS_LOCK' ? 'Pendente' :
+                                            tx.type === 'BONUS_UNLOCK' ? 'Aula Plataforma' :
+                                              tx.type === 'REVOKE' ? 'Cancelado' :
+                                                'Aula Academia'}
+                                    </p>
                                   </div>
                                 </div>
                               </td>

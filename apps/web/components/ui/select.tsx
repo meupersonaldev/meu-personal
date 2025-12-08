@@ -6,7 +6,14 @@ import { Check, ChevronDown, ChevronUp } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
-const Select = SelectPrimitive.Root
+interface SelectProps extends React.ComponentPropsWithoutRef<typeof SelectPrimitive.Root> {
+  modal?: boolean
+}
+
+const Select = ({ modal = true, ...props }: SelectProps) => (
+  <SelectPrimitive.Root {...props} />
+)
+Select.displayName = "Select"
 
 const SelectGroup = SelectPrimitive.Group
 

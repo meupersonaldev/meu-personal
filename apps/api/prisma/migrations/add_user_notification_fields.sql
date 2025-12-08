@@ -36,3 +36,4 @@ COMMENT ON COLUMN notifications.user_id IS 'ID do usuário destinatário (null p
 COMMENT ON COLUMN notifications.link IS 'Link opcional para ação relacionada à notificação';
 COMMENT ON COLUMN notifications.actor_id IS 'ID do usuário que causou a notificação';
 COMMENT ON COLUMN notifications.role_scope IS 'Contexto do papel do usuário (aluno, professor, etc)';
+

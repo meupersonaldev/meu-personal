@@ -89,7 +89,6 @@ interface ClassHistory {
   teacher_name: string
   teacher_avatar?: string
   unit_name: string
-  unit_name: string
   status: 'completed' | 'cancelled' | 'no_show'
 }
 

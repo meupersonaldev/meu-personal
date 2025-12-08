@@ -47,6 +47,9 @@ export default function StudentProfessoresPage() {
   const [balanceLoading, setBalanceLoading] = useState<boolean>(false)
   const [balanceAvailable, setBalanceAvailable] = useState<number | null>(null)
   const [teacherBookings, setTeacherBookings] = useState<Record<string, any[]>>({})
+  
+  // Estado para primeira aula grátis
+  const [isFirstClassEligible, setIsFirstClassEligible] = useState<boolean>(false)
 
   useEffect(() => {
     if (user?.id) {
@@ -56,32 +59,43 @@ export default function StudentProfessoresPage() {
   }, [user?.id, fetchUnits, fetchAvailableUnits])
 
   useEffect(() => {
-    const loadBalance = async () => {
-      if (!token) return
+    const loadBalanceAndFirstClass = async () => {
+      if (!token || !user?.id) return
       try {
         setBalanceLoading(true)
+        
+        // Carregar saldo
         const res = await fetch(`/api/packages/student/balance`, {
           headers: { Authorization: `Bearer ${token}` }
         })
-        if (!res.ok) return
-        const data = await res.json().catch(() => ({}))
-        // Usar available_classes da API (fonte única de verdade)
-        // Se não estiver disponível, calcular como fallback
-        const balance = data?.balance
-        const available = Number(
-          balance?.available_classes ?? (
-            balance
-              ? (balance.total_purchased - balance.total_consumed - balance.locked_qty)
-              : 0
+        if (res.ok) {
+          const data = await res.json().catch(() => ({}))
+          const balance = data?.balance
+          const available = Number(
+            balance?.available_classes ?? (
+              balance
+                ? (balance.total_purchased - balance.total_consumed - balance.locked_qty)
+                : 0
+            )
           )
-        )
-        setBalanceAvailable(Number.isFinite(available) ? available : 0)
+          setBalanceAvailable(Number.isFinite(available) ? available : 0)
+        }
+        
+        // Verificar elegibilidade para primeira aula grátis
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+        const userResponse = await fetch(`${API_URL}/api/users/${user.id}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        if (userResponse.ok) {
+          const userData = await userResponse.json()
+          setIsFirstClassEligible(userData.user?.first_class_used === false)
+        }
       } finally {
         setBalanceLoading(false)
       }
     }
-    loadBalance()
-  }, [token])
+    loadBalanceAndFirstClass()
+  }, [token, user?.id])
 
   const allLocations = useMemo(() => {
     const map = new Map<string, { id: string; label: string; city?: string | null; state?: string | null }>()
@@ -328,7 +342,7 @@ export default function StudentProfessoresPage() {
                   <div className={cn(
                     "p-5 rounded-2xl border transition-all",
                     balanceLoading ? "bg-gray-50 border-gray-100" :
-                      (balanceAvailable !== null && balanceAvailable > 0)
+                      (balanceAvailable !== null && balanceAvailable > 0) || isFirstClassEligible
                         ? "bg-gradient-to-br from-green-50 to-emerald-50 border-green-100 shadow-inner"
                         : "bg-gradient-to-br from-red-50 to-orange-50 border-red-100 shadow-inner"
                   )}>
@@ -336,6 +350,18 @@ export default function StudentProfessoresPage() {
                       <div className="flex items-center gap-3">
                         <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
                         <span className="text-sm text-gray-500">Verificando créditos...</span>
+                      </div>
+                    ) : isFirstClassEligible ? (
+                      <div className="flex flex-col gap-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold uppercase tracking-wider text-green-700">
+                            🎉 Primeira Aula Grátis
+                          </span>
+                          <CheckCircle2 className="h-5 w-5 text-green-600" />
+                        </div>
+                        <p className="text-sm text-green-700">
+                          Você tem direito a uma aula experimental gratuita!
+                        </p>
                       </div>
                     ) : (
                       <div className="flex flex-col gap-3">
@@ -496,13 +522,13 @@ export default function StudentProfessoresPage() {
 
                           <Button
                             className="w-full h-12 rounded-xl bg-gray-900 text-white font-bold hover:bg-gray-800 shadow-xl shadow-gray-200 transition-all active:scale-95"
-                            disabled={balanceAvailable !== null && balanceAvailable <= 0}
+                            disabled={!isFirstClassEligible && balanceAvailable !== null && balanceAvailable <= 0}
                             onClick={() => router.push(`/aluno/agendar?teacher_id=${teacher.id}&academy_id=${selectedAcademyId}${selectedDate ? `&date=${selectedDate}` : ''}`)}
                           >
-                            Agendar Aula
+                            {isFirstClassEligible ? 'Agendar Aula Grátis' : 'Agendar Aula'}
                           </Button>
 
-                          {balanceAvailable !== null && balanceAvailable <= 0 && (
+                          {!isFirstClassEligible && balanceAvailable !== null && balanceAvailable <= 0 && (
                             <p className="text-xs text-red-500 font-semibold mt-2 animate-pulse">
                               Saldo insuficiente
                             </p>

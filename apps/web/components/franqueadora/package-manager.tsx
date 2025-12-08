@@ -274,12 +274,14 @@ export function FranqueadoraPackageManager({ variant = DEFAULT_VARIANT }: Franqu
       return
     }
 
-    const payload = {
+    const payload: CreateStudentPackageInput = {
       title: studentForm.title.trim(),
       classesQty: qty,
       priceCents,
       description: studentForm.description.trim() || undefined,
-      status: editingStudentPackage?.status || 'active'
+      status: (editingStudentPackage?.status === 'active' || editingStudentPackage?.status === 'inactive') 
+        ? editingStudentPackage.status 
+        : 'active'
     }
 
     setIsEditingStudent(true)

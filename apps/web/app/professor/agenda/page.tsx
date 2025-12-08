@@ -83,7 +83,7 @@ export default function AgendaPage() {
         const seriesBookings = allBookings.filter((b: Booking) => b.series_id)
         console.log(`[Agenda] Bookings de séries: ${seriesBookings.length}`)
         if (seriesBookings.length > 0) {
-          console.log(`[Agenda] Detalhes dos bookings de séries:`, seriesBookings.map(b => ({
+          console.log(`[Agenda] Detalhes dos bookings de séries:`, seriesBookings.map((b: Booking) => ({
             id: b.id,
             series_id: b.series_id,
             date: b.date,

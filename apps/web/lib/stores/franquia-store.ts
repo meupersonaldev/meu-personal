@@ -31,9 +31,24 @@ export interface Teacher {
   name: string
   email: string
   phone?: string
+  avatar_url?: string
+  is_active?: boolean
   specialties: string[]
-  status: 'active' | 'inactive'
+  status: 'active' | 'inactive' | 'pending'
+  commission_rate?: number
   created_at: string
+  // Dados do perfil de professor (array do Supabase)
+  teacher_profiles?: Array<{
+    id: string
+    bio?: string
+    specialization?: string[]
+    specialties?: string[]
+    hourly_rate: number
+    rating_avg?: number
+    rating_count?: number
+    availability?: object
+    is_available?: boolean
+  }>
 }
 
 export interface Student {
@@ -41,12 +56,21 @@ export interface Student {
   name: string
   email: string
   phone?: string
+  avatar_url?: string
   credits: number
+  is_active?: boolean
   status: 'active' | 'inactive'
   join_date: string
   last_activity: string
   planId?: string
   plan_id?: string
+  // Dados de assinatura
+  student_subscriptions?: {
+    id: string
+    plan_id: string
+    status: string
+    credits_remaining?: number
+  }[]
 }
 
 export interface Plan {

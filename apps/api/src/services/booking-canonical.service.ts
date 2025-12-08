@@ -439,19 +439,21 @@ class BookingCanonicalService {
     // Sincronizar cache de créditos
     await this.syncUserCredits(params.studentId, franqueadoraId);
 
-    // Professor recebe as horas direto (já confirmado)
-    // NÃO passar unitId - sempre null
-    await balanceService.purchaseProfessorHours(
+    // Professor recebe as horas TRAVADAS (visíveis mas não utilizáveis)
+    // Serão liberadas quando a aula for marcada como COMPLETED
+    await balanceService.lockProfessorBonusHours(
       params.professorId,
       franqueadoraId,
       1,
+      booking.id,
+      null, // unlock_at = null, liberado via completeBooking
       {
-        unitId: null, // NÃO usar unit_id
+        unitId: null,
         source: 'SYSTEM',
-        bookingId: booking.id,
         metaJson: {
           booking_id: booking.id,
-          origin: 'student_booking_reward'
+          origin: 'student_booking_reward',
+          student_id: params.studentId
         }
       }
     );
@@ -806,27 +808,44 @@ class BookingCanonicalService {
           // Não lançar o erro para não impedir o cancelamento, mas logar para debug
         }
 
-        // Reverter a hora do professor (ele não recebe)
-        await balanceService.revokeProfessorHours(
+        // Reverter a hora TRAVADA do professor (ele não recebe pois a aula foi cancelada)
+        await balanceService.revokeBonusLock(
           booking.teacher_id,
           franqueadoraId,
           1,
           bookingId,
           {
-            unitId: null, // NÃO usar unit_id
             source: 'SYSTEM',
             metaJson: {
               booking_id: bookingId,
               actor: userId,
-              reason: 'booking_cancelled_before_4h'
+              reason: 'student_cancelled_before_4h'
             }
           }
         );
       } else {
-        console.log('[CANCEL BOOKING] ⚠️ Cancelamento após o prazo - crédito NÃO será estornado');
-        // Cancelamento após 4h: não estornar crédito (mas não descontar adicional)
-        // Professor mantém a hora que recebeu no agendamento
-        // Aluno não recebe estorno, mas também não é descontado adicional
+        console.log('[CANCEL BOOKING] ⚠️ Cancelamento após o prazo - professor recebe a hora como compensação');
+        // Cancelamento após 4h: aluno não recebe estorno
+        // Professor recebe a hora como compensação (liberar de locked para available)
+        try {
+          await balanceService.unlockProfessorBonusHours(
+            booking.teacher_id,
+            franqueadoraId,
+            1,
+            bookingId,
+            {
+              source: 'SYSTEM',
+              metaJson: {
+                booking_id: bookingId,
+                actor: userId,
+                reason: 'late_cancellation_compensation'
+              }
+            }
+          );
+          console.log(`[CANCEL BOOKING] ✅ Hora bônus liberada para professor ${booking.teacher_id} (compensação)`);
+        } catch (error) {
+          console.error(`[CANCEL BOOKING] ❌ Erro ao liberar hora bônus:`, error);
+        }
       }
     } else if (hasStudent && booking.source === 'PROFESSOR') {
       // PROFESSOR agendou para aluno: devolver horas ao PROFESSOR
@@ -876,6 +895,41 @@ class BookingCanonicalService {
 
     if (updateError || !updatedBooking) {
       throw updateError || new Error('Falha ao cancelar booking');
+    }
+
+    // Verificar se era a primeira aula grátis do aluno e devolver o direito
+    // Só devolver se o aluno não tem outros bookings PAID ou DONE
+    if (hasStudent && booking.student_id) {
+      try {
+        // Verificar se o aluno tem outros bookings ativos (PAID ou DONE)
+        const { data: otherBookings, error: otherError } = await supabase
+          .from('bookings')
+          .select('id')
+          .eq('student_id', booking.student_id)
+          .in('status_canonical', ['PAID', 'DONE'])
+          .neq('id', bookingId)
+          .limit(1);
+        
+        // Se não tem outros bookings ativos, devolver o direito à primeira aula
+        if (!otherError && (!otherBookings || otherBookings.length === 0)) {
+          const { error: resetError } = await supabase
+            .from('users')
+            .update({ 
+              first_class_used: false,
+              updated_at: now.toISOString()
+            })
+            .eq('id', booking.student_id)
+            .eq('first_class_used', true); // Só atualiza se estava true
+          
+          if (resetError) {
+            console.error(`[cancelBooking] Erro ao resetar first_class_used para aluno ${booking.student_id}:`, resetError);
+          } else {
+            console.log(`[cancelBooking] first_class_used resetado para false para aluno ${booking.student_id} (cancelamento)`);
+          }
+        }
+      } catch (error) {
+        console.error(`[cancelBooking] Erro ao verificar/resetar first_class_used:`, error);
+      }
     }
 
     return updatedBooking;
@@ -971,9 +1025,32 @@ class BookingCanonicalService {
       );
     }
 
-    // Observação: para agendamentos aluno-led, o professor já recebeu 1h (pagamento) no ato do agendamento.
+    // Observação: para agendamentos aluno-led, o professor recebeu horas TRAVADAS no agendamento.
+    // Agora que a aula foi concluída, liberamos as horas para uso.
+    if (booking.source === 'ALUNO' && booking.teacher_id) {
+      try {
+        console.log(`[completeBooking] Liberando hora bônus do professor ${booking.teacher_id}`);
+        await balanceService.unlockProfessorBonusHours(
+          booking.teacher_id,
+          franqueadoraId,
+          1,
+          bookingId,
+          {
+            source: 'SYSTEM',
+            metaJson: {
+              booking_id: bookingId,
+              reason: 'class_completed',
+              student_id: booking.student_id
+            }
+          }
+        );
+        console.log(`[completeBooking] ✅ Hora bônus liberada para professor ${booking.teacher_id}`);
+      } catch (error) {
+        console.error(`[completeBooking] ❌ Erro ao liberar hora bônus do professor:`, error);
+        // Não impedir a conclusão do booking
+      }
+    }
     // Para agendamentos professor-led, a hora foi consumida na criação do booking.
-    // Portanto, não há consumo adicional de horas do professor na conclusão.
 
     const now = new Date();
     const { data: updatedBooking, error: updateError } = await supabase

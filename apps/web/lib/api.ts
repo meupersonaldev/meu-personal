@@ -352,6 +352,16 @@ export const checkinsAPI = {
       method: 'POST',
       body: JSON.stringify({ academy_id: academyId })
     })
+  },
+  /**
+   * Perform check-in for a booking
+   * Requirements: 1.1, 2.1, 2.3
+   */
+  async checkin (bookingId: string, method: 'QRCODE' | 'MANUAL' = 'MANUAL') {
+    return apiRequest(`/api/bookings/${bookingId}/checkin`, {
+      method: 'POST',
+      body: JSON.stringify({ method })
+    })
   }
 }
 

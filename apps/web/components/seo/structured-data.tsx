@@ -1,15 +1,16 @@
-import { Organization, WebSite, WebPage, Service, LocalBusiness } from 'schema-dts'
+// Schema.org structured data types
+type SchemaType = 'organization' | 'website' | 'webpage' | 'service' | 'localBusiness'
 
 interface StructuredDataProps {
-  type?: 'organization' | 'website' | 'webpage' | 'service' | 'localBusiness'
-  data?: any
-  customJsonLd?: Record<string, any>
+  type?: SchemaType
+  data?: Record<string, unknown>
+  customJsonLd?: Record<string, unknown>
 }
 
 export function StructuredData({ type, data, customJsonLd }: StructuredDataProps) {
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://meupersonal.com.br'
 
-  const getStructuredData = (): Record<string, any> => {
+  const getStructuredData = (): Record<string, unknown> => {
     switch (type) {
       case 'organization':
         return {
@@ -39,7 +40,7 @@ export function StructuredData({ type, data, customJsonLd }: StructuredDataProps
           },
           areaServed: ['BR'],
           knowsAbout: ['Personal Training', 'Fitness', 'Educação Física', 'Saúde e Bem-estar']
-        } as Organization
+        }
 
       case 'website':
         return {
@@ -62,7 +63,7 @@ export function StructuredData({ type, data, customJsonLd }: StructuredDataProps
             name: 'Meu Personal',
             url: baseUrl
           }
-        } as WebSite
+        }
 
       case 'webpage':
         return {
@@ -85,7 +86,7 @@ export function StructuredData({ type, data, customJsonLd }: StructuredDataProps
             audienceType: ['Professores de Educação Física', 'Alunos de Academia', 'Entusiastas de Fitness']
           },
           mainEntity: data?.mainEntity
-        } as WebPage
+        }
 
       case 'service':
         return {
@@ -130,7 +131,7 @@ export function StructuredData({ type, data, customJsonLd }: StructuredDataProps
               }
             ]
           }
-        } as Service
+        }
 
       case 'localBusiness':
         return {
@@ -154,7 +155,7 @@ export function StructuredData({ type, data, customJsonLd }: StructuredDataProps
           priceRange: '$$',
           paymentAccepted: ['Cash', 'Credit Card', 'Debit Card', 'PIX'],
           currenciesAccepted: 'BRL'
-        } as LocalBusiness
+        }
 
       default:
         return customJsonLd || {}

@@ -23,6 +23,8 @@ import {
 import ProfessorLayout from '@/components/layout/professor-layout'
 import { ApprovalBanner } from '@/components/teacher/approval-banner'
 import { ApprovalBlock } from '@/components/teacher/approval-block'
+import { CheckinButton, CheckinResult } from '@/components/teacher/checkin-button'
+import { QRCodeGenerator } from '@/components/teacher/qr-code-generator'
 import ConfirmDialog from '@/components/ui/confirm-dialog'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
@@ -62,6 +64,7 @@ interface Booking {
   date: string
   duration: number
   status: string
+  status_canonical?: string
   credits_cost: number
   student_name: string | null
   student_id: string | null
@@ -129,6 +132,7 @@ export default function ProfessorDashboardPage() {
   const [selectedPeriod, setSelectedPeriod] = useState<string>('all') // 'all' | 'today' | 'week' | 'month'
   const [studentList, setStudentList] = useState<{ id: string; name: string }[]>([])
   const [academyList, setAcademyList] = useState<{ id: string; name: string }[]>([])
+  const [hourBalance, setHourBalance] = useState<{ available_hours: number; pending_hours: number }>({ available_hours: 0, pending_hours: 0 })
 
   // Paginação (apenas para histórico)
 
@@ -212,6 +216,31 @@ export default function ProfessorDashboardPage() {
 
       const historyData = await response.json()
       setData(historyData)
+
+      // Buscar stats para obter saldo de horas (available + pending)
+      try {
+        const statsResponse = await fetch(
+          `${API_URL}/api/teachers/${user.id}/stats`,
+          {
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`
+            }
+          }
+        )
+        if (statsResponse.ok) {
+          const statsData = await statsResponse.json()
+          if (statsData.hour_balance) {
+            setHourBalance({
+              available_hours: statsData.hour_balance.available_hours || 0,
+              pending_hours: statsData.hour_balance.pending_hours || 0
+            })
+          }
+        }
+      } catch (statsErr) {
+        console.error('Erro ao buscar stats:', statsErr)
+      }
 
       // Extrair lista única de alunos para o dropdown (apenas na primeira carga)
       if (studentList.length === 0 && historyData?.bookings) {
@@ -396,15 +425,23 @@ export default function ProfessorDashboardPage() {
                         </h2>
                       </div>
 
-                      {/* Créditos */}
+                      {/* Créditos (disponíveis + pendentes) */}
                       <div className="pt-4 border-t border-white/10">
                         <div className="flex items-center gap-2 mb-2 opacity-80">
                           <Clock className="w-4 h-4 text-[#27DFFF]" />
                           <span className="text-xs font-bold uppercase tracking-wider">Créditos</span>
                         </div>
-                        <h3 className="text-2xl font-bold text-white">
-                          {data.summary.academy_hours || 0} <span className="text-sm font-normal text-white/60">horas</span>
-                        </h3>
+                        <div className="flex items-baseline gap-2">
+                          <h3 className="text-2xl font-bold text-white">
+                            {hourBalance.available_hours} <span className="text-sm font-normal text-white/60">disponíveis</span>
+                          </h3>
+                        </div>
+                        {hourBalance.pending_hours > 0 && (
+                          <p className="text-xs text-amber-300 mt-1 flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            +{hourBalance.pending_hours} pendentes (aulas agendadas)
+                          </p>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
@@ -538,20 +575,20 @@ export default function ProfessorDashboardPage() {
                                   <div className={`h-14 w-full bg-gradient-to-r ${booking.type === 'private'
                                     ? 'from-amber-400 to-orange-400'
                                     : 'from-[#002C4E] to-[#005F8C]' // Brand Blue gradient
-                                    } px-4 py-2.5 flex justify-between items-start relative`}>
+                                    } px-4 py-2.5 flex justify-center items-center relative`}>
                                     {/* Decorative Pattern/Overlay */}
                                     <div className="absolute inset-0 bg-white/5 opacity-50" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '16px 16px' }}></div>
 
-                                    <div className="relative z-10 flex flex-col items-start bg-black/10 backdrop-blur-sm rounded px-1.5 py-0.5 text-white border border-white/10">
-                                      <span className="text-xs font-bold leading-none mb-0.5">
+                                    <div className="relative z-10 flex flex-col items-center bg-black/10 backdrop-blur-sm rounded px-3 py-1 text-white border border-white/10 shadow-sm">
+                                      <span className="text-sm font-bold leading-none mb-0.5">
                                         {new Date(booking.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                                       </span>
-                                      <span className="text-[9px] uppercase font-medium opacity-90 leading-none">
+                                      <span className="text-[10px] uppercase font-medium opacity-90 leading-none">
                                         {new Date(booking.date).toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')}, {new Date(booking.date).getDate()}
                                       </span>
                                     </div>
 
-                                    <Badge className="relative z-10 bg-white/20 hover:bg-white/30 text-white border-0 backdrop-blur-md shadow-sm h-5 px-2 text-[10px]">
+                                    <Badge className="absolute right-3 top-1/2 -translate-y-1/2 z-10 bg-white/20 hover:bg-white/30 text-white border-0 backdrop-blur-md shadow-sm h-6 px-2.5 text-[10px]">
                                       {booking.type === 'private' ? 'Particular' : 'Plataforma'}
                                     </Badge>
                                   </div>
@@ -600,17 +637,33 @@ export default function ProfessorDashboardPage() {
 
                                     {/* Actions - Compact & Explicit Cancel */}
                                     <div className="flex items-center gap-2">
-                                      <Link href="/professor/checkin/scan" className="flex-1">
-                                        <Button
-                                          className={`w-full h-8 rounded-lg font-bold shadow-sm transition-all active:scale-[0.98] text-xs ${booking.type === 'private'
-                                            ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-amber-200'
-                                            : 'bg-meu-primary hover:bg-[#003f70] text-white shadow-blue-200'
-                                            }`}
-                                        >
-                                          <CheckCircle className="w-3 h-3 mr-1.5" />
-                                          Check-in
-                                        </Button>
-                                      </Link>
+                                      <div className="flex-1">
+                                        <CheckinButton
+                                          bookingId={booking.id}
+                                          bookingDate={new Date(booking.date)}
+                                          status={booking.status_canonical || booking.status}
+                                          variant={booking.type === 'private' ? 'private' : 'platform'}
+                                          onSuccess={(result: CheckinResult) => {
+                                            // Update balance immediately after successful check-in
+                                            setHourBalance(prev => ({
+                                              ...prev,
+                                              available_hours: result.credits.new_balance
+                                            }))
+                                            // Reload data to refresh booking list
+                                            loadData()
+                                          }}
+                                        />
+                                      </div>
+
+                                      {/* QR Code button for PAID bookings - Requirements 5.1 */}
+                                      {(booking.status_canonical === 'PAID' || booking.status === 'PAID') && booking.academy_id && (
+                                        <QRCodeGenerator
+                                          bookingId={booking.id}
+                                          academyId={booking.academy_id}
+                                          studentName={booking.student_name || undefined}
+                                          bookingDate={booking.date}
+                                        />
+                                      )}
 
                                       <Button
                                         variant="ghost"

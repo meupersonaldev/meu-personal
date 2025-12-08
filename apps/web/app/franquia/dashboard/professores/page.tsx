@@ -28,16 +28,16 @@ interface Teacher {
   email: string
   phone?: string
   avatar_url?: string
-  is_active: boolean
+  is_active?: boolean
   created_at: string
   status?: string
   teacher_profiles?: Array<{
     id: string
-    bio: string
-    specialties: string[]
+    bio?: string
+    specialties?: string[]
     hourly_rate: number
-    availability: object
-    is_available: boolean
+    availability?: object
+    is_available?: boolean
   }>
   academy_teachers?: Array<{
     id: string

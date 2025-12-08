@@ -77,7 +77,7 @@ export default function FranqueadoraNotificationsDropdown() {
             <h3 className="font-semibold text-gray-700">Notificações</h3>
             <div className="flex gap-2">
               {unreadCount > 0 && (
-                <Button variant="ghost" size="xs" className="h-6 text-xs text-meu-primary hover:text-meu-primary/80" onClick={handleMarkAllRead}>
+                <Button variant="ghost" size="sm" className="h-6 text-xs text-meu-primary hover:text-meu-primary/80" onClick={handleMarkAllRead}>
                   Ler todas
                 </Button>
               )}

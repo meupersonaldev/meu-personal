@@ -71,6 +71,9 @@ export default function AgendarPage() {
   // Estado para professor vinculado (particular)
   const [isLinkedTeacher, setIsLinkedTeacher] = useState<boolean>(false)
 
+  // Estado para primeira aula grátis
+  const [isFirstClassEligible, setIsFirstClassEligible] = useState<boolean>(false)
+
   // Estados de recorrência
   const [isRecurring, setIsRecurring] = useState<boolean>(false)
   const [recurrenceType, setRecurrenceType] = useState<string>('MONTH')
@@ -85,27 +88,42 @@ export default function AgendarPage() {
   const [loadingPreview, setLoadingPreview] = useState<boolean>(false)
   const [modalError, setModalError] = useState<string | null>(null)
 
-  // Verificar se é professor vinculado (particular) - não precisa de créditos
+  // Verificar se é professor vinculado (particular) e se é elegível para primeira aula grátis
   useEffect(() => {
-    const checkLinkedTeacher = async () => {
-      if (!user?.id || !token || !teacherId) return
+    const checkEligibility = async () => {
+      if (!user?.id || !token) return
       try {
         const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-        const response = await fetch(`${API_URL}/api/students/${user.id}/teachers`, {
+        
+        // Verificar professor vinculado
+        if (teacherId) {
+          const response = await fetch(`${API_URL}/api/students/${user.id}/teachers`, {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+          if (response.ok) {
+            const data = await response.json()
+            const linkedTeachers = data.teachers || []
+            const isLinked = linkedTeachers.some((t: any) => t.id === teacherId)
+            setIsLinkedTeacher(isLinked)
+          }
+        }
+        
+        // Verificar elegibilidade para primeira aula grátis
+        const userResponse = await fetch(`${API_URL}/api/users/${user.id}`, {
           headers: { Authorization: `Bearer ${token}` }
         })
-        if (response.ok) {
-          const data = await response.json()
-          const linkedTeachers = data.teachers || []
-          const isLinked = linkedTeachers.some((t: any) => t.id === teacherId)
-          setIsLinkedTeacher(isLinked)
+        if (userResponse.ok) {
+          const userData = await userResponse.json()
+          // Elegível se first_class_used é false
+          setIsFirstClassEligible(userData.user?.first_class_used === false)
         }
       } catch (err) {
-        // Silently fail, assume not linked
+        // Silently fail
         setIsLinkedTeacher(false)
+        setIsFirstClassEligible(false)
       }
     }
-    checkLinkedTeacher()
+    checkEligibility()
   }, [user?.id, token, teacherId])
 
   useEffect(() => {
@@ -311,6 +329,7 @@ export default function AgendarPage() {
           source: 'ALUNO',
           bookingId: slot.booking_id,
           isLinkedTeacher, // Professor vinculado - não debita crédito
+          isFirstClass: isFirstClassEligible, // Primeira aula grátis - independente de professor vinculado
         }),
       })
 
@@ -352,6 +371,19 @@ export default function AgendarPage() {
         <CalendarIcon className="h-5 w-5 text-meu-primary" />
         <h1 className="text-xl md:text-2xl font-bold">Agendar Aula</h1>
       </div>
+
+      {/* Banner Primeira Aula Grátis */}
+      {isFirstClassEligible && (
+        <div className="rounded-lg border border-green-200 bg-gradient-to-r from-green-50 to-emerald-50 p-4 text-sm text-green-800">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">🎉</span>
+            <div>
+              <strong className="block text-green-900">Sua primeira aula é grátis!</strong>
+              <span className="text-green-700">Agende agora sem precisar de créditos.</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Aviso regra de cancelamento (4h) */}
       <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">

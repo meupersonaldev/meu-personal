@@ -30,7 +30,7 @@ export default function StudentModal({ isOpen, onClose, student, mode }: Student
       setFormData({
         name: student.name,
         email: student.email,
-        phone: student.phone,
+        phone: student.phone || '',
         credits: student.credits,
         status: student.status
       })
@@ -56,10 +56,10 @@ export default function StudentModal({ isOpen, onClose, student, mode }: Student
       if (mode === 'add') {
         const newStudent = {
           ...formData,
-          joinDate: new Date().toISOString().split('T')[0],
-          lastActivity: new Date().toISOString().split('T')[0]
+          join_date: new Date().toISOString().split('T')[0],
+          last_activity: new Date().toISOString().split('T')[0]
         }
-        addStudent(newStudent)
+        await addStudent(newStudent)
         toast.success('Aluno adicionado com sucesso!')
       } else if (mode === 'edit' && student) {
         updateStudent(student.id, formData)
@@ -192,11 +192,11 @@ export default function StudentModal({ isOpen, onClose, student, mode }: Student
               <div className="grid grid-cols-1 gap-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Membro desde:</span>
-                  <span className="font-semibold">{new Date(student.joinDate).toLocaleDateString('pt-BR')}</span>
+                  <span className="font-semibold">{new Date(student.join_date).toLocaleDateString('pt-BR')}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Última atividade:</span>
-                  <span className="font-semibold">{new Date(student.lastActivity).toLocaleDateString('pt-BR')}</span>
+                  <span className="font-semibold">{new Date(student.last_activity).toLocaleDateString('pt-BR')}</span>
                 </div>
               </div>
             </div>

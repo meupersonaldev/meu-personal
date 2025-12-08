@@ -6,22 +6,22 @@ const features = [
   {
     title: "Encontre os melhores espaços",
     description: "Descubra academias e estúdios com a estrutura ideal para seus treinos.",
-    icon: "activity",
+    icon: "activity" as const,
     accentClass: "bg-meu-accent/20 text-white",
   },
   {
     title: "Conecte-se com profissionais",
     description: "Acesse uma rede de professores qualificados para atingir seus objetivos.",
-    icon: "users",
+    icon: "users" as const,
     accentClass: "bg-meu-cyan/20 text-white",
   },
   {
     title: "Acompanhe seu progresso",
     description: "Monitore suas aulas, check-ins e evolução em tempo real.",
-    icon: "heart",
+    icon: "heart" as const,
     accentClass: "bg-white/20 text-white",
   },
-] as const
+]
 
 export default function AlunoCadastroPage() {
   return (

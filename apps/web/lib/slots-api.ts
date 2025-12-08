@@ -346,7 +346,7 @@ export async function unblockSlot(
     slotId,
     {
       is_available: true,
-      blocked_reason: null,
+      blocked_reason: undefined,
     },
     token
   )

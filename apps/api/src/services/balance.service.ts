@@ -582,6 +582,165 @@ class BalanceService {
     return { balance: updatedBalance, transaction };
   }
 
+  /**
+   * Trava horas BÔNUS para o professor (recompensa por agendamento de aluno)
+   * Diferente de lockProfessorHours, este método NÃO requer saldo disponível
+   * As horas são "novas" e ficam travadas até a aula ser concluída
+   */
+  async lockProfessorBonusHours(
+    professorId: string,
+    franqueadoraId: string,
+    hours: number,
+    bookingId: string,
+    unlockAt: string | null,
+    options: ProfessorTransactionOptions = {}
+  ): Promise<{ balance: ProfHourBalance; transaction: HourTransaction }> {
+    const balance = await this.ensureProfessorBalance(professorId, franqueadoraId);
+
+    const transaction = await this.createHourTransaction(
+      professorId,
+      franqueadoraId,
+      'BONUS_LOCK',
+      hours,
+      {
+        ...options,
+        source: options.source ?? 'SYSTEM',
+        bookingId,
+        unlockAt: unlockAt ?? undefined,
+        metaJson: {
+          ...options.metaJson,
+          booking_id: bookingId
+        }
+      }
+    );
+
+    // Incrementar locked_hours (horas visíveis mas não utilizáveis)
+    const updatedBalance = await this.updateProfessorBalance(professorId, franqueadoraId, {
+      locked_hours: balance.locked_hours + hours
+    });
+
+    return { balance: updatedBalance, transaction };
+  }
+
+  /**
+   * Libera horas BÔNUS travadas do professor (após aula concluída)
+   * Converte locked_hours em available_hours
+   */
+  async unlockProfessorBonusHours(
+    professorId: string,
+    franqueadoraId: string,
+    hours: number,
+    bookingId: string,
+    options: ProfessorTransactionOptions = {}
+  ): Promise<{ balance: ProfHourBalance; transaction: HourTransaction }> {
+    const balance = await this.ensureProfessorBalance(professorId, franqueadoraId);
+
+    // Verificar se tem horas travadas suficientes
+    const hoursToUnlock = Math.min(hours, balance.locked_hours);
+
+    if (hoursToUnlock <= 0) {
+      console.warn(`[unlockProfessorBonusHours] Nenhuma hora travada para professor ${professorId}`);
+      // Retornar sem fazer nada se não tem horas travadas
+      return {
+        balance,
+        transaction: {
+          id: '',
+          professor_id: professorId,
+          franqueadora_id: franqueadoraId,
+          type: 'BONUS_UNLOCK',
+          source: 'SYSTEM',
+          hours: 0,
+          booking_id: bookingId,
+          meta_json: { skipped: true, reason: 'no_locked_hours' },
+          created_at: new Date().toISOString()
+        } as HourTransaction
+      };
+    }
+
+    const transaction = await this.createHourTransaction(
+      professorId,
+      franqueadoraId,
+      'BONUS_UNLOCK',
+      hoursToUnlock,
+      {
+        ...options,
+        source: options.source ?? 'SYSTEM',
+        bookingId,
+        metaJson: {
+          ...options.metaJson,
+          booking_id: bookingId
+        }
+      }
+    );
+
+    // Mover de locked_hours para available_hours
+    const updatedBalance = await this.updateProfessorBalance(professorId, franqueadoraId, {
+      locked_hours: balance.locked_hours - hoursToUnlock,
+      available_hours: balance.available_hours + hoursToUnlock
+    });
+
+    return { balance: updatedBalance, transaction };
+  }
+
+  /**
+   * Revoga horas BÔNUS travadas do professor (quando aluno cancela)
+   * Remove as horas de locked_hours sem adicionar a available_hours
+   */
+  async revokeBonusLock(
+    professorId: string,
+    franqueadoraId: string,
+    hours: number,
+    bookingId: string,
+    options: ProfessorTransactionOptions = {}
+  ): Promise<{ balance: ProfHourBalance; transaction: HourTransaction }> {
+    const balance = await this.ensureProfessorBalance(professorId, franqueadoraId);
+
+    // Verificar se tem horas travadas suficientes
+    const hoursToRevoke = Math.min(hours, balance.locked_hours);
+
+    if (hoursToRevoke <= 0) {
+      console.warn(`[revokeBonusLock] Nenhuma hora travada para revogar do professor ${professorId}`);
+      return {
+        balance,
+        transaction: {
+          id: '',
+          professor_id: professorId,
+          franqueadora_id: franqueadoraId,
+          type: 'REVOKE',
+          source: 'SYSTEM',
+          hours: 0,
+          booking_id: bookingId,
+          meta_json: { skipped: true, reason: 'no_locked_hours' },
+          created_at: new Date().toISOString()
+        } as HourTransaction
+      };
+    }
+
+    const transaction = await this.createHourTransaction(
+      professorId,
+      franqueadoraId,
+      'REVOKE',
+      hoursToRevoke,
+      {
+        ...options,
+        source: options.source ?? 'SYSTEM',
+        bookingId,
+        metaJson: {
+          ...options.metaJson,
+          booking_id: bookingId,
+          revoked_from: 'bonus_lock'
+        }
+      }
+    );
+
+    // Remover de locked_hours (não vai para available_hours)
+    const updatedBalance = await this.updateProfessorBalance(professorId, franqueadoraId, {
+      locked_hours: Math.max(0, balance.locked_hours - hoursToRevoke)
+    });
+
+    return { balance: updatedBalance, transaction };
+  }
+
   async consumeProfessorHours(
     professorId: string,
     franqueadoraId: string,

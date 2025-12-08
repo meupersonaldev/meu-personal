@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 
 export function useSEO(options?: {
   title?: string
@@ -8,7 +8,7 @@ export function useSEO(options?: {
   ogImage?: string
   noIndex?: boolean
 }) {
-  const router = useRouter()
+  const pathname = usePathname()
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://meupersonal.com.br'
 
   useEffect(() => {
@@ -79,7 +79,7 @@ export function useSEO(options?: {
     }
 
     // Update canonical URL
-    const currentUrl = `${baseUrl}${router.pathname}`
+    const currentUrl = `${baseUrl}${pathname}`
     let canonical = document.querySelector('link[rel="canonical"]') as HTMLLinkElement
     if (!canonical) {
       canonical = document.createElement('link')
@@ -105,7 +105,7 @@ export function useSEO(options?: {
     updateMetaProperty('og:site_name', 'Meu Personal')
     updateMetaProperty('og:locale', 'pt_BR')
 
-  }, [options, router, baseUrl])
+  }, [options, pathname, baseUrl])
 
   // Function to generate structured data for specific pages
   const generateStructuredData = (type: string, data: any) => {

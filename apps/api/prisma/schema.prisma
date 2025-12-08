@@ -7,26 +7,27 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Role {
+// ============================================
+// ENUMS - Sincronizados com Supabase
+// ============================================
+
+enum UserRole {
   STUDENT
   TEACHER
-  ADMIN
-  FRANCHISOR
   FRANCHISE_ADMIN
+  SUPER_ADMIN
+
+  @@map("user_role")
 }
 
-enum ApprovalStatus {
-  PENDING
-  APPROVED
-  REJECTED
-}
-
-enum Gender {
+enum GenderEnum {
   MALE
   FEMALE
   NON_BINARY
   OTHER
   PREFER_NOT_TO_SAY
+
+  @@map("gender_enum")
 }
 
 enum BookingStatus {
@@ -34,277 +35,782 @@ enum BookingStatus {
   CONFIRMED
   COMPLETED
   CANCELLED
+  AVAILABLE
+  BLOCKED
+
+  @@map("booking_status")
+}
+
+enum BookingStatusEnum {
+  RESERVED
+  PAID
+  CANCELED
+  DONE
+  AVAILABLE
+
+  @@map("booking_status_enum")
+}
+
+enum BookingSourceEnum {
+  ALUNO
+  PROFESSOR
+
+  @@map("booking_source_enum")
+}
+
+enum ApprovalStatus {
+  pending
+  approved
+  rejected
+
+  @@map("approval_status")
+}
+
+enum ApprovalType {
+  teacher_registration
+  student_registration
+
+  @@map("approval_type")
+}
+
+enum AcademyStudentStatus {
+  active
+  inactive
+
+  @@map("academy_student_status")
+}
+
+enum AcademyTeacherStatus {
+  active
+  inactive
+
+  @@map("academy_teacher_status")
 }
 
 enum TransactionType {
   CREDIT_PURCHASE
   BOOKING_PAYMENT
   BOOKING_REFUND
+  PLAN_PURCHASE
+
+  @@map("transaction_type")
 }
 
-model User {
-  id              String          @id @default(cuid())
-  email           String          @unique
-  passwordHash    String?         @map("password_hash")
-  password        String?         @deprecated("Use password_hash instead")
-  name            String
-  phone           String?
-  cpf             String?
-  cref            String?
-  crefCardUrl     String?         @map("cref_card_url")
-  gender          Gender?
-  role            Role            @default(STUDENT)
-  credits         Int             @default(0)
-  isActive        Boolean         @default(true) @map("is_active")
-  avatarUrl       String?         @map("avatar_url")
-  approvalStatus  ApprovalStatus  @default(PENDING) @map("approval_status")
-  approvedAt      DateTime?       @map("approved_at")
-  approvedBy      String?         @map("approved_by")
-  createdAt       DateTime        @default(now()) @map("created_at")
-  updatedAt       DateTime        @updatedAt @map("updated_at")
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  PROPOSAL_SENT
+  NEGOTIATING
+  CLOSED_WON
+  CLOSED_LOST
 
-  teacherProfile  TeacherProfile?
-  studentBookings Booking[]       @relation("StudentBookings")
-  teacherBookings Booking[]       @relation("TeacherBookings")
-  transactions    Transaction[]
-  reviews         Review[]
-  approver        User?           @relation("UserApprovals", fields: [approvedBy], references: [id])
-  approvedUsers   User[]          @relation("UserApprovals")
-  
+  @@map("lead_status")
+}
+
+enum FranchiseAdminRole {
+  SUPER_ADMIN
+  ADMIN
+  ANALYST
+
+  @@map("franchise_admin_role")
+}
+
+enum NotificationType {
+  new_teacher
+  new_student
+  payment_received
+  plan_purchased
+  teacher_approval_needed
+  student_approval_needed
+  booking_created
+  booking_cancelled
+
+  @@map("notification_type")
+}
+
+enum PaymentIntentStatusEnum {
+  PENDING
+  PAID
+  FAILED
+  CANCELED
+
+  @@map("payment_intent_status_enum")
+}
+
+enum PaymentIntentTypeEnum {
+  STUDENT_PACKAGE
+  PROF_HOURS
+
+  @@map("payment_intent_type_enum")
+}
+
+enum StudentClassTxType {
+  PURCHASE
+  CONSUME
+  LOCK
+  UNLOCK
+  REFUND
+  REVOKE
+
+  @@map("student_class_tx_type")
+}
+
+enum HourTxType {
+  PURCHASE
+  CONSUME
+  BONUS_LOCK
+  BONUS_UNLOCK
+  REFUND
+  REVOKE
+
+  @@map("hour_tx_type")
+}
+
+enum TxSourceEnum {
+  ALUNO
+  PROFESSOR
+  SYSTEM
+
+  @@map("tx_source_enum")
+}
+
+enum InvoiceStatusEnum {
+  PENDING
+  ISSUED
+  CANCELED
+  ERROR
+
+  @@map("invoice_status_enum")
+}
+
+enum InvoiceTypeEnum {
+  NFE
+  NFC_E
+
+  @@map("invoice_type_enum")
+}
+
+
+// ============================================
+// MODELS - Sincronizados com Supabase
+// ============================================
+
+model User {
+  id                String          @id @default(uuid())
+  email             String          @unique
+  name              String
+  phone             String?
+  cpf               String?
+  cref              String?
+  crefCardUrl       String?         @map("cref_card_url")
+  gender            GenderEnum?
+  role              UserRole?       @default(STUDENT)
+  credits           Int?            @default(0)
+  avatarUrl         String?         @map("avatar_url")
+  isActive          Boolean?        @default(true) @map("is_active")
+  active            Boolean?        @default(true)
+  password          String?
+  passwordHash      String?         @map("password_hash")
+  approvalStatus    String?         @default("pending") @map("approval_status")
+  approvedAt        DateTime?       @map("approved_at")
+  approvedBy        String?         @map("approved_by")
+  franchisorId      String?         @map("franchisor_id")
+  franchiseId       String?         @map("franchise_id")
+  asaasCustomerId   String?         @map("asaas_customer_id")
+  birthDate         DateTime?       @map("birth_date") @db.Date
+  firstClassUsed    Boolean?        @default(false) @map("first_class_used")
+  emailVerified     Boolean?        @default(false) @map("email_verified")
+  phoneVerified     Boolean?        @default(false) @map("phone_verified")
+  lastLoginAt       DateTime?       @map("last_login_at")
+  createdAt         DateTime?       @default(now()) @map("created_at")
+  updatedAt         DateTime?       @default(now()) @map("updated_at")
+
+  // Relations
+  approver          User?           @relation("UserApprovals", fields: [approvedBy], references: [id])
+  approvedUsers     User[]          @relation("UserApprovals")
+  franqueadora      Franqueadora?   @relation(fields: [franchisorId], references: [id])
+  teacherProfile    TeacherProfile?
+  studentBookings   Booking[]       @relation("StudentBookings")
+  teacherBookings   Booking[]       @relation("TeacherBookings")
+  transactions      Transaction[]
+
   @@map("users")
 }
 
-model TeacherProfile {
-  id            String    @id @default(cuid())
-  userId        String    @unique @map("user_id")
-  bio           String?
-  specialties   String[]
-  hourlyRate    Decimal   @db.Decimal(10, 2) @map("hourly_rate")
-  rating        Decimal?  @db.Decimal(3, 2)
-  totalReviews  Int       @default(0) @map("total_reviews")
-  availability  Json      // Armazenar disponibilidade como JSON
-  isAvailable   Boolean   @default(true) @map("is_available")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
 
-  user          User      @relation(fields: [userId], references: [id])
-  students      TeacherStudent[]
-  
+model TeacherProfile {
+  id                String    @id @default(uuid())
+  userId            String?   @unique @map("user_id")
+  bio               String?
+  specialization    String[]  @default([])
+  hourlyRate        Decimal   @default(0) @map("hourly_rate") @db.Decimal
+  rating            Decimal?  @db.Decimal
+  ratingAvg         Decimal   @default(0) @map("rating_avg") @db.Decimal
+  ratingCount       Int       @default(0) @map("rating_count")
+  totalReviews      Int?      @default(0) @map("total_reviews")
+  totalSessions     Int?      @default(0) @map("total_sessions")
+  availability      Json?     @default("{}")
+  isAvailable       Boolean?  @default(true) @map("is_available")
+  availableOnline   Boolean?  @default(true) @map("available_online")
+  availableInPerson Boolean?  @default(true) @map("available_in_person")
+  graduation        String?
+  cref              String?
+  createdAt         DateTime? @default(now()) @map("created_at")
+  updatedAt         DateTime? @default(now()) @map("updated_at")
+
+  user              User?     @relation(fields: [userId], references: [id])
+
   @@map("teacher_profiles")
 }
 
-model TeacherStudent {
-  id            String    @id @default(cuid())
-  teacherId     String
-  name          String
-  email         String
-  phone         String?
-  notes         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  teacher       TeacherProfile @relation(fields: [teacherId], references: [id])
-
-  @@index([teacherId])
-  @@index([email])
-}
-
 model Booking {
-  id            String        @id @default(cuid())
-  studentId     String
-  teacherId     String
-  date          DateTime
-  duration      Int           @default(60) // em minutos
-  status        BookingStatus @default(PENDING)
-  checkInCode   String?       @unique
-  checkedInAt   DateTime?
-  notes         String?
-  creditsCost   Int
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  id                String              @id @default(uuid())
+  studentId         String?             @map("student_id")
+  teacherId         String?             @map("teacher_id")
+  academyId         String?             @map("academy_id")
+  franchiseId       String?             @map("franchise_id")
+  unitId            String?             @map("unit_id")
+  date              DateTime
+  startAt           DateTime?           @map("start_at")
+  endAt             DateTime?           @map("end_at")
+  duration          Int?                @default(60)
+  status            BookingStatus?      @default(PENDING)
+  statusCanonical   BookingStatusEnum?  @default(RESERVED) @map("status_canonical")
+  source            BookingSourceEnum?  @default(ALUNO)
+  notes             String?
+  studentNotes      String?             @map("student_notes")
+  professorNotes    String?             @map("professor_notes")
+  creditsCost       Int                 @default(1)
+  isReserved        Boolean?            @default(false) @map("is_reserved")
+  cancellableUntil  DateTime?           @map("cancellable_until")
+  timeSlotId        String?             @map("time_slot_id")
+  seriesId          String?             @map("series_id")
+  paymentIntentId   String?             @map("payment_intent_id")
+  asaasPaymentId    String?             @map("asaas_payment_id")
+  createdAt         DateTime?           @default(now()) @map("created_at")
+  updatedAt         DateTime?           @default(now()) @map("updated_at")
 
-  student       User          @relation("StudentBookings", fields: [studentId], references: [id])
-  teacher       User          @relation("TeacherBookings", fields: [teacherId], references: [id])
-  review        Review?
+  student           User?               @relation("StudentBookings", fields: [studentId], references: [id])
+  teacher           User?               @relation("TeacherBookings", fields: [teacherId], references: [id])
+  academy           Academy?            @relation("BookingAcademy", fields: [academyId], references: [id])
+  franchise         Academy?            @relation("BookingFranchise", fields: [franchiseId], references: [id])
+  series            BookingSeries?      @relation(fields: [seriesId], references: [id])
+  paymentIntent     PaymentIntent?      @relation(fields: [paymentIntentId], references: [id])
+  timeSlot          AcademyTimeSlot?    @relation(fields: [timeSlotId], references: [id])
 
   @@index([date, status])
   @@index([studentId])
   @@index([teacherId])
+  @@map("bookings")
 }
 
-model Review {
-  id            String    @id @default(cuid())
-  bookingId     String    @unique
-  studentId     String
-  rating        Int       // 1-5
-  comment       String?
-  isVisible     Boolean   @default(false) // Fica visível após 7 dias
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  booking       Booking   @relation(fields: [bookingId], references: [id])
-  student       User      @relation(fields: [studentId], references: [id])
-}
-
-model Transaction {
-  id            String          @id @default(cuid())
-  userId        String
-  type          TransactionType
-  amount        Int             // em créditos
-  description   String
-  referenceId   String?         // ID do pagamento Asaas
-  createdAt     DateTime        @default(now())
-
-  user          User            @relation(fields: [userId], references: [id])
-
-  @@index([userId, createdAt])
-}
-
-model CreditPackage {
-  id            String    @id @default(cuid())
-  name          String
-  credits       Int
-  price         Decimal   @db.Decimal(10, 2)
-  isActive      Boolean   @default(true)
-  forRole       Role
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-}
-
-model Setting {
-  id            String    @id @default(cuid())
-  key           String    @unique
-  value         Json
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-}
-
-// Tabelas existentes no Supabase
 
 model Academy {
-  id            String    @id @default(uuid())
-  name          String
-  email         String
-  phone         String?
-  address       String?
-  city          String?
-  state         String?
-  zipCode       String?   @map("zip_code")
-  isActive      Boolean   @default(true) @map("is_active")
-  openingTime   String?   @default("06:00:00") @map("opening_time")
-  closingTime   String?   @default("22:00:00") @map("closing_time")
-  checkinTolerance Int?   @default(30) @map("checkin_tolerance")
-  schedule      Json?     @default("[]")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  id                    String    @id @default(uuid())
+  franqueadoraId        String?   @map("franqueadora_id")
+  name                  String
+  email                 String
+  phone                 String?
+  address               String?
+  addressNumber         String    @map("address_number")
+  province              String
+  city                  String?
+  state                 String?
+  zipCode               String?   @map("zip_code")
+  cpfCnpj               String    @map("cpf_cnpj")
+  companyType           String?   @map("company_type")
+  birthDate             DateTime? @map("birth_date") @db.Date
+  openingTime           DateTime? @map("opening_time") @db.Time()
+  closingTime           DateTime? @map("closing_time") @db.Time()
+  checkinTolerance      Int?      @default(30) @map("checkin_tolerance")
+  schedule              Json?     @default("[]")
+  settings              Json?     @default("{\"requireApproval\": true, \"allowSameTimeBookings\": false}")
+  creditsPerClass       Int       @default(1) @map("credits_per_class")
+  classDurationMinutes  Int       @default(60) @map("class_duration_minutes")
+  defaultClassDuration  Int?      @default(60) @map("default_class_duration")
+  bookingAdvanceDays    Int?      @default(7) @map("booking_advance_days")
+  franchiseFee          Decimal?  @default(0) @map("franchise_fee") @db.Decimal
+  royaltyPercentage     Decimal?  @default(0) @map("royalty_percentage") @db.Decimal
+  monthlyRevenue        Decimal?  @default(0) @map("monthly_revenue") @db.Decimal
+  contractStartDate     DateTime? @map("contract_start_date") @db.Date
+  contractEndDate       DateTime? @map("contract_end_date") @db.Date
+  asaasAccountId        String?   @map("asaas_account_id")
+  asaasWalletId         String?   @map("asaas_wallet_id")
+  isActive              Boolean?  @default(true) @map("is_active")
+  createdAt             DateTime? @default(now()) @map("created_at")
+  updatedAt             DateTime? @default(now()) @map("updated_at")
+
+  franqueadora          Franqueadora? @relation(fields: [franqueadoraId], references: [id])
+  bookingsAcademy       Booking[]     @relation("BookingAcademy")
+  bookingsFranchise     Booking[]     @relation("BookingFranchise")
+  academyTeachers       AcademyTeacher[]
+  academyStudents       AcademyStudent[]
+  academyTimeSlots      AcademyTimeSlot[]
+  notifications         Notification[]
+  bookingSeries         BookingSeries[]
 
   @@map("academies")
 }
 
+
+model Franqueadora {
+  id              String    @id @default(uuid())
+  name            String
+  email           String
+  phone           String?
+  cnpj            String?   @unique
+  address         String?
+  city            String?
+  state           String?
+  zipCode         String?   @map("zip_code")
+  asaasWalletId   String?   @map("asaas_wallet_id")
+  isActive        Boolean?  @default(true) @map("is_active")
+  createdAt       DateTime? @default(now()) @map("created_at")
+  updatedAt       DateTime? @default(now()) @map("updated_at")
+
+  users           User[]
+  academies       Academy[]
+  franqueadoraAdmins FranqueadoraAdmin[]
+  franchisorPolicies FranchisorPolicy[]
+  franqueadoraContacts FranqueadoraContact[]
+  studentPackages StudentPackage[]
+  hourPackages    HourPackage[]
+  paymentIntents  PaymentIntent[]
+  studentClassBalances StudentClassBalance[]
+  profHourBalances ProfHourBalance[]
+
+  @@map("franqueadora")
+}
+
+model Unit {
+  id                String    @id @default(uuid())
+  franchiseId       String?   @map("franchise_id")
+  academyLegacyId   String?   @map("academy_legacy_id")
+  name              String
+  slug              String?   @unique
+  email             String?
+  phone             String?
+  address           String?
+  city              String?
+  state             String?
+  zipCode           String?   @map("zip_code")
+  capacityPerSlot   Int       @default(1) @map("capacity_per_slot")
+  openingHoursJson  Json      @default("{}") @map("opening_hours_json")
+  metadata          Json      @default("{}")
+  isActive          Boolean   @default(true) @map("is_active")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @default(now()) @map("updated_at")
+
+  franchise         Franchise? @relation(fields: [franchiseId], references: [id])
+  professorUnits    ProfessorUnit[]
+  studentUnits      StudentUnit[]
+  studentPackages   StudentPackage[]
+  hourPackages      HourPackage[]
+  paymentIntents    PaymentIntent[]
+  studentClassBalances StudentClassBalance[]
+  profHourBalances  ProfHourBalance[]
+
+  @@map("units")
+}
+
+
+model Franchise {
+  id        String    @id @default(uuid())
+  name      String
+  slug      String?   @unique
+  email     String?
+  phone     String?
+  cnpj      String?
+  metadata  Json      @default("{}")
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @default(now()) @map("updated_at")
+
+  units     Unit[]
+
+  @@map("franchises")
+}
+
+model StudentPackage {
+  id              String    @id @default(uuid())
+  unitId          String?   @map("unit_id")
+  franqueadoraId  String    @map("franqueadora_id")
+  title           String
+  classesQty      Int       @map("classes_qty")
+  priceCents      Int       @map("price_cents")
+  status          String    @default("active")
+  metadataJson    Json      @default("{}") @map("metadata_json")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @default(now()) @map("updated_at")
+
+  unit            Unit?         @relation(fields: [unitId], references: [id])
+  franqueadora    Franqueadora  @relation(fields: [franqueadoraId], references: [id])
+
+  @@map("student_packages")
+}
+
+model HourPackage {
+  id              String    @id @default(uuid())
+  unitId          String?   @map("unit_id")
+  franqueadoraId  String    @map("franqueadora_id")
+  title           String
+  hoursQty        Int       @map("hours_qty")
+  priceCents      Int       @map("price_cents")
+  status          String    @default("active")
+  metadataJson    Json      @default("{}") @map("metadata_json")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @default(now()) @map("updated_at")
+
+  unit            Unit?         @relation(fields: [unitId], references: [id])
+  franqueadora    Franqueadora  @relation(fields: [franqueadoraId], references: [id])
+
+  @@map("hour_packages")
+}
+
+
+model StudentClassBalance {
+  id              String    @id @default(uuid())
+  studentId       String    @map("student_id")
+  unitId          String?   @map("unit_id")
+  franqueadoraId  String    @map("franqueadora_id")
+  totalPurchased  Int       @default(0) @map("total_purchased")
+  totalConsumed   Int       @default(0) @map("total_consumed")
+  lockedQty       Int       @default(0) @map("locked_qty")
+  updatedAt       DateTime  @default(now()) @map("updated_at")
+
+  unit            Unit?         @relation(fields: [unitId], references: [id])
+  franqueadora    Franqueadora  @relation(fields: [franqueadoraId], references: [id])
+
+  @@map("student_class_balance")
+}
+
+model ProfHourBalance {
+  id              String    @id @default(uuid())
+  professorId     String    @map("professor_id")
+  unitId          String?   @map("unit_id")
+  franqueadoraId  String    @map("franqueadora_id")
+  availableHours  Int       @default(0) @map("available_hours")
+  lockedHours     Int       @default(0) @map("locked_hours")
+  updatedAt       DateTime  @default(now()) @map("updated_at")
+
+  unit            Unit?         @relation(fields: [unitId], references: [id])
+  franqueadora    Franqueadora  @relation(fields: [franqueadoraId], references: [id])
+
+  @@map("prof_hour_balance")
+}
+
+model PaymentIntent {
+  id              String                    @id @default(uuid())
+  type            PaymentIntentTypeEnum
+  provider        String                    @default("ASAAS")
+  providerId      String                    @map("provider_id")
+  amountCents     Int                       @map("amount_cents")
+  status          PaymentIntentStatusEnum   @default(PENDING)
+  checkoutUrl     String?                   @map("checkout_url")
+  payloadJson     Json                      @default("{}") @map("payload_json")
+  actorUserId     String?                   @map("actor_user_id")
+  unitId          String?                   @map("unit_id")
+  franqueadoraId  String                    @map("franqueadora_id")
+  createdAt       DateTime                  @default(now()) @map("created_at")
+  updatedAt       DateTime                  @default(now()) @map("updated_at")
+
+  unit            Unit?         @relation(fields: [unitId], references: [id])
+  franqueadora    Franqueadora  @relation(fields: [franqueadoraId], references: [id])
+  bookings        Booking[]
+
+  @@map("payment_intents")
+}
+
+
+model BookingSeries {
+  id              String    @id @default(uuid())
+  studentId       String?   @map("student_id")
+  teacherId       String?   @map("teacher_id")
+  academyId       String?   @map("academy_id")
+  dayOfWeek       Int       @map("day_of_week")
+  startTime       DateTime  @map("start_time") @db.Time()
+  endTime         DateTime  @map("end_time") @db.Time()
+  recurrenceType  String    @map("recurrence_type")
+  startDate       DateTime  @map("start_date") @db.Date
+  endDate         DateTime  @map("end_date") @db.Date
+  createdBy       String?   @map("created_by")
+  createdByRole   String?   @map("created_by_role")
+  status          String?   @default("ACTIVE")
+  createdAt       DateTime? @default(now()) @map("created_at")
+  updatedAt       DateTime? @default(now()) @map("updated_at")
+
+  academy         Academy?  @relation(fields: [academyId], references: [id])
+  bookings        Booking[]
+
+  @@map("booking_series")
+}
+
 model AcademyTeacher {
-  id            String    @id @default(cuid())
-  academyId     String    @map("academy_id")
-  teacherId     String    @map("teacher_id")
-  status        String    @default("active")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  id                          String                @id @default(uuid())
+  academyId                   String?               @map("academy_id")
+  teacherId                   String?               @map("teacher_id")
+  status                      AcademyTeacherStatus? @default(active)
+  commissionRate              Decimal?              @default(70.00) @map("commission_rate") @db.Decimal
+  defaultAvailabilitySeededAt DateTime?             @map("default_availability_seeded_at")
+  createdAt                   DateTime?             @default(now()) @map("created_at")
+  updatedAt                   DateTime?             @default(now()) @map("updated_at")
+
+  academy                     Academy?              @relation(fields: [academyId], references: [id])
 
   @@map("academy_teachers")
 }
 
 model AcademyStudent {
-  id            String    @id @default(cuid())
-  academyId     String    @map("academy_id")
-  studentId     String    @map("student_id")
-  status        String    @default("active")
-  joinDate      DateTime  @default(now()) @map("join_date")
-  lastActivity  DateTime  @default(now()) @map("last_activity")
-  planId        String?   @map("plan_id")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  id            String                @id @default(uuid())
+  academyId     String?               @map("academy_id")
+  studentId     String?               @map("student_id")
+  status        AcademyStudentStatus? @default(active)
+  planId        String?               @map("plan_id")
+  joinDate      DateTime?             @default(now()) @map("join_date")
+  lastActivity  DateTime?             @default(now()) @map("last_activity")
+  createdAt     DateTime?             @default(now()) @map("created_at")
+  updatedAt     DateTime?             @default(now()) @map("updated_at")
+
+  academy       Academy?              @relation(fields: [academyId], references: [id])
 
   @@map("academy_students")
 }
 
-model AcademyPlan {
-  id              String    @id @default(cuid())
-  academyId       String    @map("academy_id")
-  name            String
-  description     String?
-  price           Decimal   @db.Decimal(10, 2)
-  creditsIncluded Int       @map("credits_included")
-  durationDays    Int       @map("duration_days")
-  features        Json?
-  isActive        Boolean   @default(true) @map("is_active")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
 
-  @@map("academy_plans")
+model AcademyTimeSlot {
+  id              String    @id @default(uuid())
+  academyId       String?   @map("academy_id")
+  dayOfWeek       Int?      @map("day_of_week")
+  time            DateTime  @db.Time()
+  isAvailable     Boolean?  @default(true) @map("is_available")
+  maxCapacity     Int?      @default(1) @map("max_capacity")
+  currentBookings Int?      @default(0) @map("current_bookings")
+  blockedReason   String?   @map("blocked_reason")
+  createdAt       DateTime? @default(now()) @map("created_at")
+  updatedAt       DateTime? @default(now()) @map("updated_at")
+
+  academy         Academy?  @relation(fields: [academyId], references: [id])
+  bookings        Booking[]
+
+  @@map("academy_time_slots")
 }
 
-model Checkin {
-  id            String    @id @default(uuid())
-  academyId     String    @map("academy_id")
-  teacherId     String?   @map("teacher_id")
-  studentId     String?   @map("student_id")
-  bookingId     String?   @map("booking_id")
-  status        String
-  reason        String?
-  method        String    @default("QRCODE")
-  createdAt     DateTime  @default(now()) @map("created_at")
+model ProfessorUnit {
+  id                  String    @id @default(uuid())
+  professorId         String    @map("professor_id")
+  unitId              String    @map("unit_id")
+  active              Boolean?  @default(true)
+  commissionRate      Decimal?  @default(70.00) @map("commission_rate") @db.Decimal
+  firstAssociationAt  DateTime? @default(now()) @map("first_association_at")
+  lastAssociationAt   DateTime? @default(now()) @map("last_association_at")
+  createdAt           DateTime? @default(now()) @map("created_at")
+  updatedAt           DateTime? @default(now()) @map("updated_at")
 
-  @@map("checkins")
+  unit                Unit      @relation(fields: [unitId], references: [id])
+
+  @@map("professor_units")
 }
 
-model Notification {
-  id            String    @id @default(uuid())
-  academyId     String?   @map("academy_id")
-  userId        String?   @map("user_id")
-  type          String
-  title         String
-  message       String
-  data          Json?
-  link          String?
-  actorId       String?   @map("actor_id")
-  roleScope     String?   @map("role_scope")
-  read          Boolean   @default(false)
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+model StudentUnit {
+  id                String    @id @default(uuid())
+  studentId         String    @unique @map("student_id")
+  unitId            String    @map("unit_id")
+  active            Boolean?  @default(true)
+  isActive          Boolean?  @default(false) @map("is_active")
+  firstBookingDate  DateTime? @map("first_booking_date")
+  lastBookingDate   DateTime? @map("last_booking_date")
+  totalBookings     Int?      @default(0) @map("total_bookings")
+  createdAt         DateTime? @default(now()) @map("created_at")
+  updatedAt         DateTime? @default(now()) @map("updated_at")
 
-  @@map("notifications")
+  unit              Unit      @relation(fields: [unitId], references: [id])
+
+  @@map("student_units")
+}
+
+
+model TeacherStudent {
+  id                String    @id @default(dbgenerated("(gen_random_uuid())::text"))
+  teacherId         String    @map("teacher_id")
+  userId            String?   @map("user_id")
+  name              String
+  email             String
+  phone             String?
+  cpf               String?
+  gender            String?
+  birthDate         DateTime? @map("birth_date") @db.Date
+  hourlyRate        Decimal?  @map("hourly_rate") @db.Decimal
+  notes             String?
+  connectionStatus  String?   @default("APPROVED") @map("connection_status")
+  hideFreeClass     Boolean?  @default(false) @map("hide_free_class")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @default(now()) @map("updated_at")
+
+  @@index([teacherId])
+  @@index([email])
+  @@map("teacher_students")
 }
 
 model TeacherPreference {
-  id            String    @id @default(cuid())
-  teacherId     String    @map("teacher_id")
-  academyIds    String[]  @map("academy_ids")
-  bio           String?
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  id          String    @id @default(uuid())
+  teacherId   String    @unique @map("teacher_id")
+  academyIds  String[]  @default([]) @map("academy_ids")
+  bio         String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @default(now()) @map("updated_at")
 
   @@map("teacher_preferences")
 }
 
-model Franqueadora {
-  id            String    @id @default(uuid())
-  name          String
-  email         String
-  phone         String?
-  cnpj          String?
-  isActive      Boolean   @default(true) @map("is_active")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+model Notification {
+  id          String    @id @default(uuid())
+  academyId   String    @map("academy_id")
+  userId      String?   @map("user_id")
+  actorId     String?   @map("actor_id")
+  type        String
+  title       String
+  message     String
+  data        Json?     @default("{}")
+  link        String?
+  roleScope   String?   @map("role_scope")
+  read        Boolean?  @default(false)
+  createdAt   DateTime? @default(now()) @map("created_at")
+  updatedAt   DateTime? @default(now()) @map("updated_at")
 
-  @@map("franqueadora")
+  academy     Academy   @relation(fields: [academyId], references: [id])
+
+  @@map("notifications")
 }
 
+
 model FranqueadoraAdmin {
-  id            String    @id @default(cuid())
-  franqueadoraId String  @map("franqueadora_id")
-  userId        String    @map("user_id")
-  role          String
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  id              String              @id @default(uuid())
+  franqueadoraId  String?             @map("franqueadora_id")
+  userId          String?             @map("user_id")
+  role            FranchiseAdminRole? @default(ADMIN)
+  createdAt       DateTime?           @default(now()) @map("created_at")
+
+  franqueadora    Franqueadora?       @relation(fields: [franqueadoraId], references: [id])
 
   @@map("franqueadora_admins")
+}
+
+model FranqueadoraContact {
+  id                  String    @id @default(uuid())
+  franqueadoraId      String?   @map("franqueadora_id")
+  userId              String?   @unique @map("user_id")
+  role                String
+  status              String    @default("UNASSIGNED")
+  origin              String    @default("SELF_REGISTRATION")
+  assignedAcademyIds  String[]  @default([]) @map("assigned_academy_ids")
+  lastAssignmentAt    DateTime? @map("last_assignment_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @default(now()) @map("updated_at")
+
+  franqueadora        Franqueadora? @relation(fields: [franqueadoraId], references: [id])
+
+  @@map("franqueadora_contacts")
+}
+
+model FranchisorPolicy {
+  id                                String    @id @default(uuid())
+  franqueadoraId                    String    @map("franqueadora_id")
+  status                            String
+  version                           Int       @default(1)
+  effectiveFrom                     DateTime? @map("effective_from")
+  creditsPerClass                   Int       @default(1) @map("credits_per_class")
+  classDurationMinutes              Int       @default(60) @map("class_duration_minutes")
+  checkinToleranceMinutes           Int       @default(30) @map("checkin_tolerance_minutes")
+  studentMinBookingNoticeMinutes    Int       @default(0) @map("student_min_booking_notice_minutes")
+  studentRescheduleMinNoticeMinutes Int       @default(0) @map("student_reschedule_min_notice_minutes")
+  lateCancelThresholdMinutes        Int       @default(120) @map("late_cancel_threshold_minutes")
+  lateCancelPenaltyCredits          Int       @default(1) @map("late_cancel_penalty_credits")
+  noShowPenaltyCredits              Int       @default(1) @map("no_show_penalty_credits")
+  teacherMinutesPerClass            Int       @default(60) @map("teacher_minutes_per_class")
+  teacherRestMinutesBetweenClasses  Int       @default(10) @map("teacher_rest_minutes_between_classes")
+  teacherMaxDailyClasses            Int       @default(12) @map("teacher_max_daily_classes")
+  maxFutureBookingDays              Int       @default(30) @map("max_future_booking_days")
+  maxCancelPerMonth                 Int       @default(0) @map("max_cancel_per_month")
+  comment                           String?
+  createdBy                         String?   @map("created_by")
+  publishedBy                       String?   @map("published_by")
+  createdAt                         DateTime  @default(now()) @map("created_at")
+  updatedAt                         DateTime  @default(now()) @map("updated_at")
+
+  franqueadora                      Franqueadora @relation(fields: [franqueadoraId], references: [id])
+
+  @@map("franchisor_policies")
+}
+
+
+model ApprovalRequest {
+  id              String          @id @default(uuid())
+  type            ApprovalType
+  userId          String?         @map("user_id")
+  academyId       String?         @map("academy_id")
+  status          ApprovalStatus? @default(pending)
+  requestedData   Json?           @map("requested_data")
+  reviewedBy      String?         @map("reviewed_by")
+  reviewedAt      DateTime?       @map("reviewed_at")
+  rejectionReason String?         @map("rejection_reason")
+  createdAt       DateTime?       @default(now()) @map("created_at")
+  updatedAt       DateTime?       @default(now()) @map("updated_at")
+
+  @@map("approval_requests")
+}
+
+model Transaction {
+  id            String          @id @default(uuid())
+  userId        String?         @map("user_id")
+  type          TransactionType
+  amount        Int
+  description   String
+  referenceId   String?         @map("reference_id")
+  createdAt     DateTime?       @default(now()) @map("created_at")
+
+  user          User?           @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@map("transactions")
+}
+
+model Checkin {
+  id          String    @id @default(uuid())
+  academyId   String    @map("academy_id")
+  teacherId   String    @map("teacher_id")
+  bookingId   String?   @map("booking_id")
+  status      String
+  reason      String?
+  method      String    @default("QRCODE")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@map("checkins")
+}
+
+model Review {
+  id          String    @id @default(uuid())
+  bookingId   String?   @unique @map("booking_id")
+  studentId   String?   @map("student_id")
+  teacherId   String?   @map("teacher_id")
+  rating      Int?
+  comment     String?
+  isVisible   Boolean?  @default(false) @map("is_visible")
+  visibleAt   DateTime? @map("visible_at")
+  createdAt   DateTime? @default(now()) @map("created_at")
+  updatedAt   DateTime? @default(now()) @map("updated_at")
+
+  @@map("reviews")
+}
+
+model TeacherRating {
+  id          String    @id @default(uuid())
+  teacherId   String    @map("teacher_id")
+  studentId   String    @map("student_id")
+  bookingId   String    @map("booking_id")
+  rating      Int
+  comment     String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@map("teacher_ratings")
 }

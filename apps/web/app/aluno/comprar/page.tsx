@@ -89,7 +89,7 @@ export default function ComprarCreditosPage() {
         setSelectedPlan(prev => {
           if (!mapped.length) return null
           if (!prev) return mapped[0]
-          const exists = mapped.find(plan => plan.id === prev.id)
+          const exists = mapped.find((plan: Plan) => plan.id === prev.id)
           return exists || mapped[0]
         })
       })

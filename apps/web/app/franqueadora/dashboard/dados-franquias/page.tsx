@@ -855,11 +855,11 @@ export default function DadosFranquiasPage() {
                     <Button
                       variant="outline"
                       onClick={() => {
-                        if (!editingFranchise?.id) {
-                          toast.error('ID da franquia não encontrado')
+                        if (!editingFranchise?.id || !editingFranchise?.name) {
+                          toast.error('Dados da franquia incompletos')
                           return
                         }
-                        handleResetPassword(editingFranchise)
+                        handleResetPassword(editingFranchise as Academy)
                       }}
                       disabled={resetPasswordLoading || loadingAdmin || !editingFranchise?.id}
                       className="flex items-center gap-2"

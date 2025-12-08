@@ -20,7 +20,8 @@ const createBookingSchema = z.object({
   studentId: z.string().uuid().nullable().optional(),
   studentNotes: z.string().optional(),
   professorNotes: z.string().optional(),
-  isLinkedTeacher: z.boolean().optional() // Professor vinculado - não requer créditos
+  isLinkedTeacher: z.boolean().optional(), // Professor vinculado - não requer créditos
+  isFirstClass: z.boolean().optional() // Primeira aula grátis - não requer créditos
 })
 
 // Schema de validação para atualização de status
@@ -988,6 +989,102 @@ router.post(
       bookingData.studentId = user.userId // Aluno está criando para si mesmo
     }
 
+    // Validar primeira aula grátis por CPF
+    let skipBalance = bookingData.isLinkedTeacher || false
+    
+    console.log('[POST /api/bookings] Dados recebidos:', {
+      isFirstClass: bookingData.isFirstClass,
+      isLinkedTeacher: bookingData.isLinkedTeacher,
+      source: bookingData.source,
+      studentId: bookingData.studentId || user.userId
+    })
+    
+    if (bookingData.isFirstClass && bookingData.source === 'ALUNO') {
+      const studentId = bookingData.studentId || user.userId
+      
+      // Buscar dados do aluno (CPF e first_class_used)
+      const { data: student, error: studentError } = await supabase
+        .from('users')
+        .select('id, cpf, first_class_used')
+        .eq('id', studentId)
+        .single()
+      
+      console.log('[POST /api/bookings] Dados do aluno:', {
+        studentId,
+        cpf: student?.cpf,
+        first_class_used: student?.first_class_used,
+        error: studentError
+      })
+      
+      if (studentError || !student) {
+        return res.status(400).json({ error: 'Aluno não encontrado' })
+      }
+      
+      // Verificar se o aluno já usou a primeira aula
+      if (student.first_class_used) {
+        console.log('[POST /api/bookings] ❌ Bloqueado: first_class_used = true')
+        return res.status(400).json({ 
+          error: 'Você já utilizou sua primeira aula gratuita',
+          code: 'FIRST_CLASS_ALREADY_USED'
+        })
+      }
+      
+      // Verificar se já existe outro usuário com o mesmo CPF que já usou a primeira aula
+      if (student.cpf) {
+        const { data: existingUsers, error: cpfError } = await supabase
+          .from('users')
+          .select('id, first_class_used')
+          .eq('cpf', student.cpf)
+          .eq('first_class_used', true)
+          .neq('id', studentId)
+          .limit(1)
+        
+        if (!cpfError && existingUsers && existingUsers.length > 0) {
+          return res.status(400).json({ 
+            error: 'Já existe uma conta com este CPF que utilizou a primeira aula gratuita',
+            code: 'CPF_FIRST_CLASS_ALREADY_USED'
+          })
+        }
+      }
+      
+      // Verificar se o aluno já tem algum booking PAID ou DONE (já agendou primeira aula)
+      const { data: existingBookings, error: bookingsError } = await supabase
+        .from('bookings')
+        .select('id, status_canonical')
+        .eq('student_id', studentId)
+        .in('status_canonical', ['PAID', 'DONE'])
+        .limit(1)
+      
+      console.log('[POST /api/bookings] Bookings existentes:', {
+        count: existingBookings?.length || 0,
+        bookings: existingBookings,
+        error: bookingsError
+      })
+      
+      if (!bookingsError && existingBookings && existingBookings.length > 0) {
+        console.log('[POST /api/bookings] ❌ Bloqueado: já tem booking PAID/DONE')
+        return res.status(400).json({ 
+          error: 'Você já possui uma aula agendada. A primeira aula gratuita só pode ser usada no primeiro agendamento.',
+          code: 'FIRST_CLASS_BOOKING_EXISTS'
+        })
+      }
+      
+      // Tudo ok, permitir agendar sem crédito
+      skipBalance = true
+      console.log(`[POST /api/bookings] Primeira aula grátis aprovada para aluno ${studentId}`)
+    }
+
+    // Flag para saber se é primeira aula grátis (para marcar após sucesso)
+    // Marcar first_class_used mesmo se for professor vinculado, desde que isFirstClass seja true
+    const isFirstClassBooking = bookingData.isFirstClass === true
+    
+    console.log('[POST /api/bookings] Flags de primeira aula:', {
+      isFirstClass: bookingData.isFirstClass,
+      skipBalance,
+      isLinkedTeacher: bookingData.isLinkedTeacher,
+      isFirstClassBooking
+    })
+
     // Atualizar booking existente usando bookingId
     console.log(
       '[POST /api/bookings] Atualizando booking existente:',
@@ -1002,8 +1099,44 @@ router.post(
         source: bookingData.source,
         studentNotes: bookingData.studentNotes,
         professorNotes: bookingData.professorNotes,
-        skipBalance: bookingData.isLinkedTeacher || false // Professor vinculado - não debita crédito
+        skipBalance // Professor vinculado ou primeira aula grátis - não debita crédito
       })
+      
+      console.log('[POST /api/bookings] Booking criado com sucesso:', booking?.id)
+      
+      // Marcar first_class_used = true no primeiro agendamento (independente do tipo)
+      // Isso faz o banner de "primeira aula grátis" sumir do dashboard
+      if (booking) {
+        const studentId = bookingData.studentId || user.userId
+        
+        // Verificar se first_class_used ainda é false antes de atualizar
+        const { data: currentUser } = await supabase
+          .from('users')
+          .select('first_class_used')
+          .eq('id', studentId)
+          .single()
+        
+        if (currentUser && currentUser.first_class_used === false) {
+          console.log(`[POST /api/bookings] Marcando first_class_used = true para aluno ${studentId} (primeiro agendamento)`)
+          
+          const { data: updateData, error: updateError } = await supabase
+            .from('users')
+            .update({ 
+              first_class_used: true,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', studentId)
+            .select('id, first_class_used')
+          
+          if (updateError) {
+            console.error(`[POST /api/bookings] ❌ Erro ao marcar first_class_used:`, updateError)
+          } else {
+            console.log(`[POST /api/bookings] ✅ first_class_used atualizado:`, updateData)
+          }
+        } else {
+          console.log(`[POST /api/bookings] first_class_used já é true para aluno ${studentId}, não precisa atualizar`)
+        }
+      }
     } catch (error) {
       console.error('[POST /api/bookings] Erro ao atualizar booking:', error)
       const errorMessage =
@@ -1842,6 +1975,270 @@ router.post(
       },
       message: 'Check-in registrado com sucesso'
     })
+  })
+)
+
+// Schema for check-in request
+const checkinSchema = z.object({
+  method: z.enum(['QRCODE', 'MANUAL']).default('MANUAL')
+})
+
+// POST /api/bookings/:id/checkin - Perform check-in for a booking
+// Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 2.1, 2.2, 4.1, 4.2
+router.post(
+  '/:id/checkin',
+  requireAuth,
+  asyncErrorHandler(async (req, res) => {
+    const { id } = req.params
+    const user = req.user
+    const { method } = checkinSchema.parse(req.body)
+
+    // 1.1 - Validate booking exists
+    const { data: booking, error: getError } = await supabase
+      .from('bookings')
+      .select(`
+        id,
+        student_id,
+        teacher_id,
+        franchise_id,
+        date,
+        start_at,
+        duration,
+        status,
+        status_canonical
+      `)
+      .eq('id', id)
+      .single()
+
+    if (getError || !booking) {
+      return res.status(404).json({
+        success: false,
+        error: 'Agendamento não encontrado',
+        code: 'NOT_FOUND'
+      })
+    }
+
+    // 1.1 - Validate booking belongs to user (teacher or student)
+    const isTeacher = booking.teacher_id === user.userId
+    const isStudent = booking.student_id === user.userId
+    const isAdmin = ['FRANQUIA', 'FRANQUEADORA', 'ADMIN', 'SUPER_ADMIN'].includes(user.role)
+
+    if (!isTeacher && !isStudent && !isAdmin) {
+      // Record denied check-in attempt
+      try {
+        await supabase.from('checkins').insert({
+          academy_id: booking.franchise_id,
+          teacher_id: booking.teacher_id,
+          booking_id: booking.id,
+          status: 'DENIED',
+          reason: 'UNAUTHORIZED',
+          method,
+          created_at: new Date().toISOString()
+        })
+      } catch (e) {
+        console.warn('[checkin] Erro ao registrar check-in negado:', e)
+      }
+
+      return res.status(403).json({
+        success: false,
+        error: 'Você não tem permissão para fazer check-in neste agendamento',
+        code: 'UNAUTHORIZED'
+      })
+    }
+
+    // 1.5 - Check if booking is already COMPLETED (idempotency)
+    if (booking.status_canonical === 'DONE' || booking.status_canonical === 'COMPLETED' || booking.status === 'COMPLETED') {
+      return res.status(409).json({
+        success: false,
+        error: 'Check-in já foi realizado para este agendamento',
+        code: 'ALREADY_COMPLETED'
+      })
+    }
+
+    // 1.4 - Validate booking status is PAID
+    if (booking.status_canonical !== 'PAID') {
+      // Record denied check-in attempt
+      try {
+        await supabase.from('checkins').insert({
+          academy_id: booking.franchise_id,
+          teacher_id: booking.teacher_id,
+          booking_id: booking.id,
+          status: 'DENIED',
+          reason: 'INVALID_STATUS',
+          method,
+          created_at: new Date().toISOString()
+        })
+      } catch (e) {
+        console.warn('[checkin] Erro ao registrar check-in negado:', e)
+      }
+
+      return res.status(400).json({
+        success: false,
+        error: `Status do agendamento inválido para check-in. Status atual: ${booking.status_canonical}`,
+        code: 'INVALID_STATUS'
+      })
+    }
+
+    // Get academy for tolerance check and franqueadora_id
+    const { data: academy } = await supabase
+      .from('academies')
+      .select('id, name, checkin_tolerance, franqueadora_id')
+      .eq('id', booking.franchise_id)
+      .single()
+
+    const franqueadoraId = academy?.franqueadora_id
+
+    if (!franqueadoraId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Academia não possui franqueadora associada',
+        code: 'INVALID_STATUS'
+      })
+    }
+
+    // 2.4 - Check if booking date is within tolerance window (optional validation)
+    const toleranceMinutes = academy?.checkin_tolerance ?? 30
+    const now = new Date()
+    const bookingDate = new Date(booking.start_at || booking.date)
+    const bookingDuration = booking.duration || 60
+    const bookingEnd = new Date(bookingDate.getTime() + bookingDuration * 60 * 1000)
+    const toleranceMs = toleranceMinutes * 60 * 1000
+
+    const windowStart = new Date(bookingDate.getTime() - toleranceMs)
+    const windowEnd = new Date(bookingEnd.getTime() + toleranceMs)
+
+    if (now < windowStart) {
+      // Record denied check-in attempt
+      try {
+        await supabase.from('checkins').insert({
+          academy_id: booking.franchise_id,
+          teacher_id: booking.teacher_id,
+          booking_id: booking.id,
+          status: 'DENIED',
+          reason: 'FUTURE_BOOKING',
+          method,
+          created_at: new Date().toISOString()
+        })
+      } catch (e) {
+        console.warn('[checkin] Erro ao registrar check-in negado:', e)
+      }
+
+      return res.status(400).json({
+        success: false,
+        error: `Check-in só pode ser feito a partir de ${toleranceMinutes} minutos antes do horário agendado`,
+        code: 'FUTURE_BOOKING'
+      })
+    }
+
+    // Start transaction-like operations
+    const nowIso = new Date().toISOString()
+    const hoursToCredit = (booking.duration || 60) / 60 // Convert minutes to hours
+
+    try {
+      // 1.2 - Update booking status to COMPLETED
+      const { error: updateError } = await supabase
+        .from('bookings')
+        .update({
+          status: 'COMPLETED',
+          status_canonical: 'DONE',
+          updated_at: nowIso
+        })
+        .eq('id', id)
+
+      if (updateError) {
+        console.error('[checkin] Erro ao atualizar status do booking:', updateError)
+        throw new Error('Erro ao atualizar status do agendamento')
+      }
+
+      // 1.3 & 1.4 - Create CONSUME transaction and update professor balance
+      // Import balance service
+      const { balanceService } = await import('../services/balance.service')
+
+      // Unlock bonus hours that were locked when booking was created
+      // This converts locked_hours to available_hours
+      await balanceService.unlockProfessorBonusHours(
+        booking.teacher_id,
+        franqueadoraId,
+        hoursToCredit,
+        booking.id,
+        {
+          source: 'SYSTEM',
+          metaJson: {
+            booking_id: booking.id,
+            origin: method === 'QRCODE' ? 'checkin_qrcode' : 'checkin_manual',
+            student_id: booking.student_id
+          }
+        }
+      )
+
+      // Get updated balance
+      const updatedBalance = await balanceService.getProfessorBalance(
+        booking.teacher_id,
+        franqueadoraId
+      )
+
+      // 1.5 - Record check-in in checkins table
+      try {
+        await supabase.from('checkins').insert({
+          academy_id: booking.franchise_id,
+          teacher_id: booking.teacher_id,
+          booking_id: booking.id,
+          status: 'GRANTED',
+          reason: null,
+          method,
+          created_at: nowIso
+        })
+      } catch (e) {
+        console.warn('[checkin] Erro ao registrar check-in:', e)
+      }
+
+      // Trigger check-in granted event for notifications
+      try {
+        const { onCheckinGranted } = await import('../lib/events')
+        await onCheckinGranted(booking.franchise_id, booking)
+      } catch (e) {
+        console.warn('[checkin] Erro ao disparar evento de check-in:', e)
+      }
+
+      // Return success response
+      return res.status(200).json({
+        success: true,
+        message: `Check-in realizado com sucesso! ${hoursToCredit} hora(s) creditada(s).`,
+        booking: {
+          id: booking.id,
+          status_canonical: 'COMPLETED',
+          date: booking.date,
+          duration: booking.duration || 60
+        },
+        credits: {
+          hours_credited: hoursToCredit,
+          new_balance: updatedBalance.available_hours
+        }
+      })
+    } catch (error: any) {
+      console.error('[checkin] Erro durante check-in:', error)
+
+      // Record failed check-in attempt
+      try {
+        await supabase.from('checkins').insert({
+          academy_id: booking.franchise_id,
+          teacher_id: booking.teacher_id,
+          booking_id: booking.id,
+          status: 'DENIED',
+          reason: 'BALANCE_ERROR',
+          method,
+          created_at: new Date().toISOString()
+        })
+      } catch (e) {
+        console.warn('[checkin] Erro ao registrar check-in negado:', e)
+      }
+
+      return res.status(500).json({
+        success: false,
+        error: error.message || 'Erro ao processar check-in',
+        code: 'BALANCE_ERROR'
+      })
+    }
   })
 )
 
