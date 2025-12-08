@@ -577,7 +577,7 @@ export default function DisponibilidadePage() {
 
     const normalizedTime = normalizeTime(time)
     const bookingId = blockedBookingIdByDateTime[dateKey]?.[normalizedTime] || blockedBookingIdByDateTime[dateKey]?.[time]
-    
+
     if (!bookingId) {
       toast.error('Bloqueio não encontrado para remoção')
       setBlockedSlotRemovalModal({ open: false, dateKey: null, time: null })
@@ -751,7 +751,7 @@ export default function DisponibilidadePage() {
       // Input type="date" retorna YYYY-MM-DD, que new Date() interpreta como UTC
       const [startYear, startMonth, startDay] = newBlockStart.split('-').map(Number)
       const [endYear, endMonth, endDay] = newBlockEnd.split('-').map(Number)
-      
+
       // Criar datas em horário local (não UTC)
       const start = new Date(startYear, startMonth - 1, startDay)
       const end = new Date(endYear, endMonth - 1, endDay)
@@ -764,13 +764,13 @@ export default function DisponibilidadePage() {
         const month = String(currentDate.getMonth() + 1).padStart(2, '0')
         const day = String(currentDate.getDate()).padStart(2, '0')
         const dateStr = `${year}-${month}-${day}`
-        
+
         // Obter dia da semana (0=domingo, 1=segunda, etc.)
         const dayOfWeek = currentDate.getDay()
-        
+
         // Obter horários válidos para este dia da semana específico
         const hoursForDay = slotsByDay[dayOfWeek] || []
-        
+
         if (hoursForDay.length === 0) {
           // Academia fechada neste dia, pular
           currentDate.setDate(currentDate.getDate() + 1)
@@ -1128,78 +1128,125 @@ export default function DisponibilidadePage() {
             </CardContent>
           </Card>
 
-          {/* Bloqueios */}
+          {/* Bloqueios (Férias, Compromissos) */}
           <Card className="rounded-2xl shadow-lg border-0 overflow-hidden">
-            <CardHeader className="bg-gradient-to-r from-red-50 to-white border-b border-red-100">
-              <CardTitle className="flex items-center gap-3 text-lg">
-                <div className="p-2 bg-red-500/10 rounded-lg">
-                  <Lock className="h-5 w-5 text-red-500" />
+            <CardHeader className="bg-gradient-to-r from-red-50 via-rose-50/50 to-white border-b border-red-100/50 pb-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-gradient-to-br from-red-500 to-rose-600 rounded-xl shadow-lg shadow-red-200/50">
+                    <Lock className="h-6 w-6 text-white" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-xl font-bold text-gray-900">
+                      Bloqueios
+                    </CardTitle>
+                    <p className="text-sm text-gray-500 mt-0.5">
+                      Férias, compromissos e indisponibilidades
+                    </p>
+                  </div>
                 </div>
-                Bloqueios (Férias, Compromissos)
-              </CardTitle>
+              </div>
             </CardHeader>
             <CardContent className="p-6">
-              <div className="space-y-4">
-                {/* Formulário de novo bloqueio */}
-                <div className="p-4 border border-gray-100 rounded-xl bg-gray-50/50">
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div>
-                      <Label className="text-sm font-medium text-gray-700">Data início</Label>
-                      <input
-                        type="date"
-                        value={newBlockStart}
-                        onChange={(e) => setNewBlockStart(e.target.value)}
-                        min={new Date().toISOString().split('T')[0]}
-                        className="w-full mt-1.5 rounded-xl border border-gray-200 px-3 py-2.5 focus:ring-2 focus:ring-[#002C4E] focus:border-transparent transition-all"
-                      />
+              <div className="space-y-6">
+                {/* Formulário de novo bloqueio - Premium Design */}
+                <div className="relative">
+                  <div className="absolute inset-0 bg-gradient-to-r from-red-500/5 via-rose-500/5 to-orange-500/5 rounded-2xl" />
+                  <div className="relative p-6 border border-gray-100/80 rounded-2xl bg-white/80 backdrop-blur-sm shadow-sm">
+                    <div className="flex items-center gap-2 mb-5">
+                      <div className="p-1.5 bg-red-100 rounded-lg">
+                        <Plus className="h-4 w-4 text-red-600" />
+                      </div>
+                      <h3 className="font-semibold text-gray-800">Novo Bloqueio</h3>
                     </div>
-                    <div>
-                      <Label className="text-sm font-medium text-gray-700">Data fim</Label>
-                      <input
-                        type="date"
-                        value={newBlockEnd}
-                        onChange={(e) => setNewBlockEnd(e.target.value)}
-                        min={newBlockStart || new Date().toISOString().split('T')[0]}
-                        className="w-full mt-1.5 rounded-xl border border-gray-200 px-3 py-2.5 focus:ring-2 focus:ring-[#002C4E] focus:border-transparent transition-all"
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-sm font-medium text-gray-700">Motivo (opcional)</Label>
-                      <input
-                        type="text"
-                        value={newBlockReason}
-                        onChange={(e) => setNewBlockReason(e.target.value)}
-                        placeholder="Ex: Férias"
-                        className="w-full mt-1.5 rounded-xl border border-gray-200 px-3 py-2.5 focus:ring-2 focus:ring-[#002C4E] focus:border-transparent transition-all"
-                      />
-                    </div>
-                    <div className="flex items-end">
-                      <Button
-                        onClick={handleAddBlock}
-                        disabled={loading || !newBlockStart || !newBlockEnd}
-                        variant="destructive"
-                        className="w-full rounded-xl"
-                      >
-                        {loading ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <>
-                            <Plus className="h-4 w-4 mr-2" />
-                            Bloquear Período
-                          </>
-                        )}
-                      </Button>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                      {/* Data Início */}
+                      <div className="space-y-2">
+                        <Label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                          <Calendar className="h-3.5 w-3.5 text-gray-400" />
+                          Data de Início
+                        </Label>
+                        <div className="relative">
+                          <input
+                            type="date"
+                            value={newBlockStart}
+                            onChange={(e) => setNewBlockStart(e.target.value)}
+                            min={new Date().toISOString().split('T')[0]}
+                            className="w-full rounded-xl border border-gray-200 px-4 py-3 bg-gray-50/50 focus:bg-white focus:ring-2 focus:ring-red-500/20 focus:border-red-400 transition-all text-gray-900 font-medium"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Data Fim */}
+                      <div className="space-y-2">
+                        <Label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                          <Calendar className="h-3.5 w-3.5 text-gray-400" />
+                          Data de Término
+                        </Label>
+                        <div className="relative">
+                          <input
+                            type="date"
+                            value={newBlockEnd}
+                            onChange={(e) => setNewBlockEnd(e.target.value)}
+                            min={newBlockStart || new Date().toISOString().split('T')[0]}
+                            className="w-full rounded-xl border border-gray-200 px-4 py-3 bg-gray-50/50 focus:bg-white focus:ring-2 focus:ring-red-500/20 focus:border-red-400 transition-all text-gray-900 font-medium"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Motivo */}
+                      <div className="space-y-2">
+                        <Label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                          <AlertCircle className="h-3.5 w-3.5 text-gray-400" />
+                          Motivo
+                          <span className="text-xs text-gray-400 font-normal">(opcional)</span>
+                        </Label>
+                        <input
+                          type="text"
+                          value={newBlockReason}
+                          onChange={(e) => setNewBlockReason(e.target.value)}
+                          placeholder="Ex: Férias, viagem, compromisso..."
+                          className="w-full rounded-xl border border-gray-200 px-4 py-3 bg-gray-50/50 focus:bg-white focus:ring-2 focus:ring-red-500/20 focus:border-red-400 transition-all placeholder:text-gray-400"
+                        />
+                      </div>
+
+                      {/* Botão */}
+                      <div className="flex items-end">
+                        <Button
+                          onClick={handleAddBlock}
+                          disabled={loading || !newBlockStart || !newBlockEnd}
+                          className="w-full h-[50px] rounded-xl bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white font-semibold shadow-lg shadow-red-200/50 hover:shadow-red-300/50 transition-all disabled:opacity-50 disabled:shadow-none"
+                        >
+                          {loading ? (
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                          ) : (
+                            <>
+                              <Lock className="h-4 w-4 mr-2" />
+                              Bloquear Período
+                            </>
+                          )}
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Info */}
-                <div className="flex items-start gap-3 text-sm text-amber-800 bg-amber-50 p-4 rounded-xl border border-amber-100">
-                  <AlertCircle className="h-5 w-5 mt-0.5 text-amber-500 shrink-0" />
-                  <span>
-                    Bloqueios impedem que alunos agendem aulas no período selecionado.
-                    Aulas já agendadas não são afetadas automaticamente.
-                  </span>
+                {/* Alerta Informativo - Premium Style */}
+                <div className="relative overflow-hidden rounded-xl border border-amber-200/50 bg-gradient-to-r from-amber-50 via-orange-50/50 to-yellow-50/30">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-amber-200/20 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2" />
+                  <div className="relative flex items-start gap-4 p-5">
+                    <div className="p-2.5 bg-amber-100 rounded-xl shrink-0">
+                      <AlertCircle className="h-5 w-5 text-amber-600" />
+                    </div>
+                    <div className="space-y-1">
+                      <h4 className="font-semibold text-amber-900">Como funcionam os bloqueios?</h4>
+                      <p className="text-sm text-amber-800/80 leading-relaxed">
+                        Ao criar um bloqueio, os alunos <strong>não poderão agendar aulas</strong> no período selecionado.
+                        Aulas já agendadas anteriormente continuam valendo e precisam ser canceladas manualmente, se necessário.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </CardContent>
