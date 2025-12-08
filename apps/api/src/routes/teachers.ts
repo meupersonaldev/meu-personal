@@ -734,6 +734,8 @@ router.get('/:id/history', requireAuth, async (req, res) => {
       limit = '10'
     } = req.query
 
+    console.log('[HISTORY] Request:', { id, month, year, student_id, type })
+
     if (!ensureTeacherScope(req, res, id)) {
       return
     }
@@ -792,6 +794,7 @@ router.get('/:id/history', requireAuth, async (req, res) => {
       .eq('teacher_id', id)
       .neq('status_canonical', 'AVAILABLE') // Excluir slots disponíveis
       .neq('status_canonical', 'CANCELED') // Excluir cancelados
+      .neq('status_canonical', 'BLOCKED') // Excluir bloqueios (não são aulas)
       .order('date', { ascending: false })
 
     // Aplicar filtro de mês/ano
@@ -1412,98 +1415,6 @@ router.get('/:id/academies', requireAuth, async (req, res) => {
     res.json({ academies: uniqueAcademies })
   } catch (error: any) {
     console.error('Erro ao buscar academias do professor:', error)
-    res.status(500).json({ error: error.message })
-  }
-})
-
-// GET /api/teachers/:id/stats - Estatísticas do professor
-router.get('/:id/stats', requireAuth, async (req, res) => {
-  try {
-    const { id } = req.params
-
-    // Verificar se o professor existe
-    const { data: teacher, error: teacherError } = await supabase
-      .from('users')
-      .select('id, role')
-      .eq('id', id)
-      .eq('role', 'TEACHER')
-      .single()
-
-    if (teacherError || !teacher) {
-      return res.status(404).json({ error: 'Professor não encontrado' })
-    }
-
-    // Buscar academyId do professor (primeiro de academy_teachers, depois de teacher_profiles)
-    let academyId: string | null = null
-
-    const { data: academyTeacher } = await supabase
-      .from('academy_teachers')
-      .select('academy_id')
-      .eq('teacher_id', id)
-      .eq('status', 'active')
-      .limit(1)
-      .single()
-
-    if (academyTeacher) {
-      academyId = academyTeacher.academy_id
-    } else {
-      // Fallback: verificar teacher_profiles
-      const { data: teacherProfile } = await supabase
-        .from('teacher_profiles')
-        .select('academy_id')
-        .eq('user_id', id)
-        .single()
-
-      if (teacherProfile?.academy_id) {
-        academyId = teacherProfile.academy_id
-      }
-    }
-
-    if (!academyId) {
-      return res.json({
-        totalBookings: 0,
-        completedBookings: 0,
-        pendingBookings: 0,
-        cancelledBookings: 0,
-        totalStudents: 0
-      })
-    }
-
-    // Buscar estatísticas de bookings
-    const { data: bookings, error: bookingsError } = await supabase
-      .from('bookings')
-      .select('status, student_id')
-      .eq('teacher_id', id)
-
-    if (bookingsError) {
-      console.error('Erro ao buscar bookings:', bookingsError)
-      return res.status(500).json({ error: 'Erro ao buscar estatísticas' })
-    }
-
-    // Buscar total de alunos únicos
-    const uniqueStudents = new Set(
-      (bookings || []).map((b: any) => b.student_id)
-    )
-
-    const stats = {
-      totalBookings: bookings?.length || 0,
-      completedBookings:
-        bookings?.filter(
-          (b: any) => b.status === 'COMPLETED' || b.status === 'DONE'
-        ).length || 0,
-      pendingBookings:
-        bookings?.filter(
-          (b: any) => b.status === 'PENDING' || b.status === 'RESERVED'
-        ).length || 0,
-      cancelledBookings:
-        bookings?.filter((b: any) => b.status === 'CANCELLED').length || 0,
-      totalStudents: uniqueStudents.size,
-      academyId
-    }
-
-    res.json(stats)
-  } catch (error: any) {
-    console.error('Erro ao buscar estatísticas do professor:', error)
     res.status(500).json({ error: error.message })
   }
 })

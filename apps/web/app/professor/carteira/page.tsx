@@ -38,6 +38,7 @@ interface Transaction {
   description?: string
   studentName?: string
   status?: 'COMPLETED' | 'PENDING' | 'CANCELED'
+  meta_json?: any
 }
 
 interface FinancialSummary {
@@ -183,6 +184,20 @@ export default function ProfessorCarteira() {
                   : 'Aula cancelada pelo aluno',
                 studentName: tx.booking?.student_name,
                 status: 'CANCELED'
+              })
+            } else if (tx.type === 'REFUND') {
+              // Hora devolvida (reembolso de aula cancelada)
+              totalHoursBought += Number(tx.hours || 0) // Horas voltam pro saldo
+              processedTransactions.push({
+                id: tx.id,
+                type: 'REFUND',
+                hours: tx.hours,
+                amount: 0, // Não é receita/despesa monetária
+                created_at: tx.created_at,
+                description: tx.meta_json?.reason === 'booking_cancelled_refund_professor'
+                  ? 'Reembolso - Aula cancelada'
+                  : 'Horas devolvidas (reembolso)',
+                status: 'COMPLETED'
               })
             }
           })
@@ -510,14 +525,15 @@ export default function ProfessorCarteira() {
                           const isPurchase = tx.type === 'PURCHASE'
                           const isPending = tx.type === 'BONUS_LOCK'
                           const isCanceled = tx.type === 'REVOKE'
+                          const isRefund = tx.type === 'REFUND'
 
                           // Logic for visual signs:
                           // Money: Income = Green (+), Expense = Red (-) or Black
-                          // Hours: Purchase = Green (+), Consumed/Class = Red (-)
+                          // Hours: Purchase = Green (+), Consumed/Class = Red (-), Refund = Blue (+)
                           // Pending: Amber (waiting)
 
-                          const hoursSign = isPurchase || tx.type === 'BONUS_LOCK' || tx.type === 'BONUS_UNLOCK' ? '+' : '-'
-                          const hoursColor = isPending ? 'text-amber-500' : isCanceled ? 'text-gray-400 line-through' : isPurchase || tx.type === 'BONUS_UNLOCK' ? 'text-green-600' : 'text-red-500'
+                          const hoursSign = isPurchase || tx.type === 'BONUS_LOCK' || tx.type === 'BONUS_UNLOCK' || isRefund ? '+' : '-'
+                          const hoursColor = isPending ? 'text-amber-500' : isCanceled ? 'text-gray-400 line-through' : isRefund ? 'text-blue-600' : isPurchase || tx.type === 'BONUS_UNLOCK' ? 'text-green-600' : 'text-red-500'
 
                           const moneySign = isIncome ? '+' : ''
                           const moneyColor = isPending ? 'text-amber-500' : isIncome ? 'text-green-600' : 'text-gray-900'
@@ -529,11 +545,13 @@ export default function ProfessorCarteira() {
                                   <div className={cn("p-2 rounded-lg",
                                     isPending ? "bg-amber-100 text-amber-600" :
                                       isCanceled ? "bg-gray-100 text-gray-400" :
-                                        isIncome ? "bg-green-100 text-green-600" : "bg-red-100 text-red-600"
+                                        isRefund ? "bg-blue-100 text-blue-600" :
+                                          isIncome ? "bg-green-100 text-green-600" : "bg-red-100 text-red-600"
                                   )}>
                                     {isPending ? <Clock className="h-5 w-5" /> :
                                       isCanceled ? <ArrowDownRight className="h-5 w-5" /> :
-                                        isIncome ? <ArrowUpRight className="h-5 w-5" /> : <ArrowDownRight className="h-5 w-5" />}
+                                        isRefund ? <ArrowUpRight className="h-5 w-5" /> :
+                                          isIncome ? <ArrowUpRight className="h-5 w-5" /> : <ArrowDownRight className="h-5 w-5" />}
                                   </div>
                                   <div>
                                     <p className="font-medium text-gray-900">{tx.description}</p>
@@ -543,7 +561,8 @@ export default function ProfessorCarteira() {
                                           tx.type === 'BONUS_LOCK' ? 'Pendente' :
                                             tx.type === 'BONUS_UNLOCK' ? 'Aula Plataforma' :
                                               tx.type === 'REVOKE' ? 'Cancelado' :
-                                                'Aula Academia'}
+                                                tx.type === 'REFUND' ? 'Reembolso' :
+                                                  'Aula Academia'}
                                     </p>
                                   </div>
                                 </div>
