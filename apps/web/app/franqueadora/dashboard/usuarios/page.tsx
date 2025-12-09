@@ -323,44 +323,77 @@ function UsuariosPageContent() {
 
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      const url = userModalMode === 'create' ? `${API_URL}/api/users` : `${API_URL}/api/users/${selectedUser?.id}`
-      const method = userModalMode === 'create' ? 'POST' : 'PUT'
+      
+      // Para criação, usar o endpoint da franqueadora que envia email
+      if (userModalMode === 'create') {
+        // Gerar senha temporária aleatória
+        const tempPassword = Math.random().toString(36).slice(-8)
+        
+        const userData = {
+          name: formData.name,
+          email: formData.email,
+          phone: formData.phone,
+          cpf: formData.cpf,
+          password: tempPassword,
+          gender: 'PREFER_NOT_TO_SAY',
+          role: formData.role,
+          ...(formData.role === 'TEACHER' && {
+            cref: formData.cref
+          })
+        }
 
-      const userData = {
-        ...formData,
-        // Para alunos, sempre aprovado; para professores, pending
-        approval_status: formData.role === 'STUDENT' ? 'approved' : 'pending',
-        // Adicionar campos específicos de professores se for o caso
-        ...(formData.role === 'TEACHER' && {
-          specialization: [],
-          hourly_rate: 0,
-          available_online: true,
-          available_in_person: true
+        const response = await fetch(`${API_URL}/api/franqueadora/usuarios`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify(userData)
         })
+
+        const responseData = await response.json()
+
+        if (!response.ok) {
+          const errorMessage = responseData.error || responseData.message || 'Erro ao criar usuário'
+          throw new Error(errorMessage)
+        }
+
+        toast.success(`${formData.role === 'TEACHER' ? 'Professor' : 'Aluno'} criado com sucesso! Email enviado para ${formData.email}`)
+      } else {
+        // Para edição, usar o endpoint padrão
+        const url = `${API_URL}/api/users/${selectedUser?.id}`
+        const userData = {
+          ...formData,
+          approval_status: formData.role === 'STUDENT' ? 'approved' : 'pending',
+          ...(formData.role === 'TEACHER' && {
+            specialization: [],
+            hourly_rate: 0,
+            available_online: true,
+            available_in_person: true
+          })
+        }
+
+        const response = await fetch(url, {
+          method: 'PUT',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify(userData)
+        })
+
+        const responseData = await response.json()
+
+        if (!response.ok) {
+          const errorMessage = responseData.error || responseData.message || 'Erro ao atualizar usuário'
+          throw new Error(errorMessage)
+        }
+
+        toast.success(`${formData.role === 'TEACHER' ? 'Professor' : 'Aluno'} atualizado com sucesso!`)
       }
 
-      const response = await fetch(url, {
-        method,
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify(userData)
-      })
-
-      const responseData = await response.json()
-
-      if (!response.ok) {
-        const errorMessage = responseData.error || responseData.message || `Erro ao ${userModalMode === 'create' ? 'criar' : 'atualizar'} usuário`
-        throw new Error(errorMessage)
-      }
-
-      const successMessage = userModalMode === 'create'
-        ? `${formData.role === 'TEACHER' ? 'Professor' : 'Aluno'} criado com sucesso!`
-        : `${formData.role === 'TEACHER' ? 'Professor' : 'Aluno'} atualizado com sucesso!`
-
-      toast.success(successMessage)
       setShowUserModal(false)
       setSelectedUser(null)
       await fetchUsuarios() // Recarregar lista
