@@ -401,10 +401,21 @@ export default function ProfessorCarteira() {
             </Button>
             <Button 
               size="sm" 
-              className="bg-blue-600 hover:bg-blue-700 gap-2 flex-1 md:flex-none"
+              className={cn(
+                "gap-2 flex-1 md:flex-none relative",
+                (dateFilter.start || dateFilter.end || typeFilter.length > 0)
+                  ? "bg-blue-700 hover:bg-blue-800"
+                  : "bg-blue-600 hover:bg-blue-700"
+              )}
               onClick={() => setShowFilterModal(!showFilterModal)}
             >
-              <Filter className="h-4 w-4" /> Filtrar
+              <Filter className="h-4 w-4" /> 
+              Filtrar
+              {(dateFilter.start || dateFilter.end || typeFilter.length > 0) && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-amber-400 text-amber-900 text-xs font-bold rounded-full flex items-center justify-center">
+                  {(dateFilter.start ? 1 : 0) + (dateFilter.end ? 1 : 0) + typeFilter.length}
+                </span>
+              )}
             </Button>
           </div>
         </div>
