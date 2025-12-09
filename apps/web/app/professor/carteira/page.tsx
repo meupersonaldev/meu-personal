@@ -25,7 +25,10 @@ import {
   Filter,
   Download,
   PieChart,
-  History
+  History,
+  X,
+  Check,
+  AlertTriangle
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -73,6 +76,16 @@ export default function ProfessorCarteira() {
     end: ''
   })
   const [typeFilter, setTypeFilter] = useState<string[]>([])
+  const [toast, setToast] = useState<{ show: boolean; message: string; type: 'success' | 'error' | 'warning' }>({
+    show: false,
+    message: '',
+    type: 'success'
+  })
+
+  const showToast = (message: string, type: 'success' | 'error' | 'warning' = 'success') => {
+    setToast({ show: true, message, type })
+    setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 3000)
+  }
 
   useEffect(() => {
     const fetchData = async () => {
@@ -278,14 +291,17 @@ export default function ProfessorCarteira() {
   const formatHours = (val: number) => `${val.toFixed(1)}h`
 
   const handleExport = () => {
-    if (transactions.length === 0) {
-      alert('Nenhuma transação para exportar')
+    const dataToExport = filteredTransactions.length > 0 ? filteredTransactions : transactions
+    
+    if (dataToExport.length === 0) {
+      showToast('Nenhuma transação para exportar', 'warning')
       return
     }
 
-    const headers = ['Data', 'Descrição', 'Tipo', 'Horas', 'Valor (R$)', 'Status']
-    const rows = transactions.map(tx => [
+    const headers = ['Data', 'Hora', 'Descrição', 'Tipo', 'Horas', 'Valor (R$)', 'Status']
+    const rows = dataToExport.map(tx => [
       new Date(tx.created_at).toLocaleDateString('pt-BR'),
+      new Date(tx.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
       tx.description || '',
       tx.type,
       tx.hours.toFixed(1),
@@ -307,6 +323,8 @@ export default function ProfessorCarteira() {
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
+    
+    showToast(`${dataToExport.length} transações exportadas com sucesso!`, 'success')
   }
 
   const filteredTransactions = transactions.filter(tx => {
@@ -391,66 +409,204 @@ export default function ProfessorCarteira() {
           </div>
         </div>
 
-        {/* Filter Modal */}
+        {/* Toast Notification */}
+        {toast.show && (
+          <div className="fixed top-4 right-4 z-50 animate-in slide-in-from-top-2 fade-in duration-300">
+            <div className={cn(
+              "flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border",
+              toast.type === 'success' && "bg-green-50 border-green-200 text-green-800",
+              toast.type === 'error' && "bg-red-50 border-red-200 text-red-800",
+              toast.type === 'warning' && "bg-amber-50 border-amber-200 text-amber-800"
+            )}>
+              {toast.type === 'success' && <Check className="h-5 w-5 text-green-600" />}
+              {toast.type === 'error' && <AlertCircle className="h-5 w-5 text-red-600" />}
+              {toast.type === 'warning' && <AlertTriangle className="h-5 w-5 text-amber-600" />}
+              <span className="font-medium">{toast.message}</span>
+              <button onClick={() => setToast({ ...toast, show: false })} className="ml-2 hover:opacity-70">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Filter Modal Overlay */}
         {showFilterModal && (
-          <div className="bg-white border-b px-6 py-4 shadow-sm">
-            <div className="max-w-7xl mx-auto">
-              <h3 className="font-semibold text-gray-900 mb-4">Filtrar Transações</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Data Inicial</label>
-                  <input
-                    type="date"
-                    value={dateFilter.start}
-                    onChange={(e) => setDateFilter({ ...dateFilter, start: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  />
+          <div className="fixed inset-0 z-40 flex items-start justify-center pt-20 px-4">
+            {/* Backdrop */}
+            <div 
+              className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+              onClick={() => setShowFilterModal(false)}
+            />
+            
+            {/* Modal Content */}
+            <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-lg animate-in zoom-in-95 fade-in duration-200">
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <Filter className="h-5 w-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">Filtrar Transações</h3>
+                    <p className="text-xs text-gray-500">Refine sua busca por período e tipo</p>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Data Final</label>
-                  <input
-                    type="date"
-                    value={dateFilter.end}
-                    onChange={(e) => setDateFilter({ ...dateFilter, end: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de Transação</label>
-                  <select
-                    multiple
-                    value={typeFilter}
-                    onChange={(e) => setTypeFilter(Array.from(e.target.selectedOptions, option => option.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  >
-                    <option value="PURCHASE">Compra de Horas</option>
-                    <option value="CONSUME">Aula Academia</option>
-                    <option value="BONUS_LOCK">Aula Agendada</option>
-                    <option value="BONUS_UNLOCK">Aula Concluída</option>
-                    <option value="REVOKE">Cancelado</option>
-                    <option value="REFUND">Reembolso</option>
-                    <option value="PRIVATE_CLASS">Aula Particular</option>
-                  </select>
-                </div>
+                <button 
+                  onClick={() => setShowFilterModal(false)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <X className="h-5 w-5 text-gray-500" />
+                </button>
               </div>
-              <div className="flex gap-2 mt-4">
+              
+              {/* Body */}
+              <div className="p-6 space-y-6">
+                {/* Date Range */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">
+                    <Calendar className="h-4 w-4 inline mr-2" />
+                    Período
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">De</label>
+                      <input
+                        type="date"
+                        value={dateFilter.start}
+                        onChange={(e) => setDateFilter({ ...dateFilter, start: e.target.value })}
+                        className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Até</label>
+                      <input
+                        type="date"
+                        value={dateFilter.end}
+                        onChange={(e) => setDateFilter({ ...dateFilter, end: e.target.value })}
+                        className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Transaction Types */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">
+                    <History className="h-4 w-4 inline mr-2" />
+                    Tipo de Transação
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { value: 'PURCHASE', label: 'Compra de Horas', color: 'red' },
+                      { value: 'CONSUME', label: 'Aula Academia', color: 'green' },
+                      { value: 'BONUS_LOCK', label: 'Aula Agendada', color: 'amber' },
+                      { value: 'BONUS_UNLOCK', label: 'Aula Concluída', color: 'green' },
+                      { value: 'REVOKE', label: 'Cancelado', color: 'gray' },
+                      { value: 'REFUND', label: 'Reembolso', color: 'blue' },
+                      { value: 'PRIVATE_CLASS', label: 'Aula Particular', color: 'indigo' },
+                    ].map((type) => (
+                      <button
+                        key={type.value}
+                        onClick={() => {
+                          if (typeFilter.includes(type.value)) {
+                            setTypeFilter(typeFilter.filter(t => t !== type.value))
+                          } else {
+                            setTypeFilter([...typeFilter, type.value])
+                          }
+                        }}
+                        className={cn(
+                          "flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-all text-left",
+                          typeFilter.includes(type.value)
+                            ? "bg-blue-50 border-blue-300 text-blue-700"
+                            : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
+                        )}
+                      >
+                        <div className={cn(
+                          "w-3 h-3 rounded-full",
+                          type.color === 'red' && "bg-red-500",
+                          type.color === 'green' && "bg-green-500",
+                          type.color === 'amber' && "bg-amber-500",
+                          type.color === 'gray' && "bg-gray-400",
+                          type.color === 'blue' && "bg-blue-500",
+                          type.color === 'indigo' && "bg-indigo-500",
+                        )} />
+                        <span className="truncate">{type.label}</span>
+                        {typeFilter.includes(type.value) && (
+                          <Check className="h-4 w-4 ml-auto text-blue-600" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Active Filters Summary */}
+                {(dateFilter.start || dateFilter.end || typeFilter.length > 0) && (
+                  <div className="bg-blue-50 rounded-lg p-3">
+                    <p className="text-xs font-medium text-blue-700 mb-2">Filtros ativos:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {dateFilter.start && (
+                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-white rounded text-xs text-blue-700 border border-blue-200">
+                          De: {new Date(dateFilter.start).toLocaleDateString('pt-BR')}
+                          <button onClick={() => setDateFilter({ ...dateFilter, start: '' })}>
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      )}
+                      {dateFilter.end && (
+                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-white rounded text-xs text-blue-700 border border-blue-200">
+                          Até: {new Date(dateFilter.end).toLocaleDateString('pt-BR')}
+                          <button onClick={() => setDateFilter({ ...dateFilter, end: '' })}>
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      )}
+                      {typeFilter.map(t => (
+                        <span key={t} className="inline-flex items-center gap-1 px-2 py-1 bg-white rounded text-xs text-blue-700 border border-blue-200">
+                          {t === 'PURCHASE' ? 'Compra' : t === 'CONSUME' ? 'Academia' : t === 'BONUS_LOCK' ? 'Agendada' : t === 'BONUS_UNLOCK' ? 'Concluída' : t === 'REVOKE' ? 'Cancelado' : t === 'REFUND' ? 'Reembolso' : 'Particular'}
+                          <button onClick={() => setTypeFilter(typeFilter.filter(f => f !== t))}>
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-between px-6 py-4 border-t bg-gray-50 rounded-b-xl">
                 <Button
                   size="sm"
-                  variant="outline"
+                  variant="ghost"
                   onClick={() => {
                     setDateFilter({ start: '', end: '' })
                     setTypeFilter([])
                   }}
+                  className="text-gray-600"
                 >
-                  Limpar Filtros
+                  Limpar Tudo
                 </Button>
-                <Button
-                  size="sm"
-                  className="bg-blue-600 hover:bg-blue-700"
-                  onClick={() => setShowFilterModal(false)}
-                >
-                  Aplicar
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setShowFilterModal(false)}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="bg-blue-600 hover:bg-blue-700"
+                    onClick={() => {
+                      setShowFilterModal(false)
+                      if (dateFilter.start || dateFilter.end || typeFilter.length > 0) {
+                        showToast('Filtros aplicados com sucesso!', 'success')
+                      }
+                    }}
+                  >
+                    Aplicar Filtros
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
