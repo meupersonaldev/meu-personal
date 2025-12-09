@@ -47,12 +47,9 @@ async function isPasswordPwned(password: string): Promise<boolean> {
 }
 
 function isStrongPassword(password: string): boolean {
+  // Only check minimum length of 6 characters
   if (!password || password.length < 6) return false
-  const hasLower = /[a-z]/.test(password)
-  const hasUpper = /[A-Z]/.test(password)
-  const hasDigit = /\d/.test(password)
-  const hasSymbol = /[^A-Za-z0-9]/.test(password)
-  return hasLower && hasUpper && hasDigit && hasSymbol
+  return true
 }
 
 function normalizeCref(v?: string | null) {
@@ -258,7 +255,7 @@ router.post(
           .status(400)
           .json({
             message:
-              'Senha fraca. Mínimo 6 caracteres, com dígito, minúscula, maiúscula e símbolo.'
+              'Senha deve ter no mínimo 6 caracteres.'
           })
       }
       if (await isPasswordPwned(userData.password)) {
@@ -665,7 +662,7 @@ router.post(
           .status(400)
           .json({
             message:
-              'Senha fraca. Mínimo 6 caracteres, com dígito, minúscula, maiúscula e símbolo.'
+              'Senha deve ter no mínimo 6 caracteres.'
           })
       }
       if (await isPasswordPwned(password)) {
