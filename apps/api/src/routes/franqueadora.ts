@@ -1417,28 +1417,30 @@ router.post('/usuarios',
       }
 
       // Enviar email de boas-vindas
+      let emailSent = false
+      let emailError = null
+      
       try {
         const { getHtmlEmailTemplate } = await import('../services/email-templates')
         const { emailService } = await import('../services/email.service')
 
-        const loginUrl = `${process.env.FRONTEND_URL || 'https://meupersonalfranquia.com.br'}/login`
+        console.log('[FRANQUEADORA] Tentando enviar email de boas-vindas para:', email)
+
+        const loginUrl = 'https://meupersonalfranquia.com.br/login'
 
         const emailContent = `
           <p>Olá <strong>${name}</strong>,</p>
-          <p>Bem-vindo ao Meu Personal! Sua conta foi criada com sucesso pela franqueadora.</p>
-          <p style="margin-top: 20px; padding: 15px; background-color: #f3f4f6; border-radius: 8px;">
-            <strong>Suas credenciais de acesso:</strong><br>
-            Email: <code style="background-color: #e5e7eb; padding: 2px 6px; border-radius: 4px;">${email}</code><br>
-            Senha temporária: <code style="background-color: #e5e7eb; padding: 2px 6px; border-radius: 4px;">${password}</code>
-          </p>
-          <p>Na primeira vez que fizer login, você será solicitado a alterar sua senha.</p>
-          <p style="margin-top: 20px; color: #6b7280; font-size: 14px;">
-            Qualquer dúvida, entre em contato conosco.
-          </p>
+          <p>Bem-vindo ao <strong>Meu Personal</strong>!</p>
+          <p>Abaixo estão suas credenciais de acesso:</p>
+          <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 24px 0; border: 1px solid #e5e7eb;">
+            <p style="margin: 0 0 8px 0;"><strong>Email:</strong> ${email}</p>
+            <p style="margin: 0;"><strong>Senha temporária:</strong> <span style="font-family: monospace; background: #e5e7eb; padding: 4px 8px; border-radius: 4px; font-weight: bold; letter-spacing: 1px;">${password}</span></p>
+          </div>
+          <p style="color: #b91c1c; font-size: 14px; margin-top: 16px;"><strong>Importante:</strong> Por segurança, recomendamos que você altere sua senha no primeiro acesso.</p>
         `
 
         const htmlEmail = getHtmlEmailTemplate(
-          'Bem-vindo ao Meu Personal!',
+          'Bem-vindo ao Meu Personal! 🎉',
           emailContent,
           loginUrl,
           'Acessar Plataforma'
@@ -1446,18 +1448,27 @@ router.post('/usuarios',
 
         await emailService.sendEmail({
           to: email,
-          subject: 'Bem-vindo ao Meu Personal!',
+          subject: 'Bem-vindo ao Meu Personal! 🎉',
           html: htmlEmail,
-          text: `Bem-vindo ao Meu Personal! Suas credenciais: Email: ${email}, Senha: ${password}`
+          text: `Bem-vindo ao Meu Personal! Suas credenciais de acesso: Email: ${email}, Senha temporária: ${password}. Por segurança, recomendamos que você altere sua senha no primeiro acesso. Acesse: https://meupersonalfranquia.com.br/login`
         })
-      } catch (emailError: any) {
-        console.error('Erro ao enviar email de boas-vindas:', emailError)
+        
+        emailSent = true
+        console.log('[FRANQUEADORA] Email de boas-vindas enviado com sucesso para:', email)
+      } catch (err: any) {
+        emailError = err.message || 'Erro desconhecido'
+        console.error('[FRANQUEADORA] Erro ao enviar email de boas-vindas:', err)
         // Não falhar a criação do usuário se o email falhar
       }
 
       return res.status(201).json({
         success: true,
-        message: `Usuário ${role === 'TEACHER' ? 'professor' : 'aluno'} criado com sucesso`,
+        message: emailSent 
+          ? `${role === 'TEACHER' ? 'Professor' : 'Aluno'} criado com sucesso. Email enviado para ${email}`
+          : `${role === 'TEACHER' ? 'Professor' : 'Aluno'} criado com sucesso. Não foi possível enviar o email.`,
+        emailSent,
+        emailError,
+        temporaryPassword: !emailSent ? password : undefined,
         user: {
           id: newUser.id,
           name: newUser.name,

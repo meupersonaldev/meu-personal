@@ -15,19 +15,30 @@ export const emailService = {
     const smtpUser = process.env.SMTP_USER
     const smtpPass = process.env.SMTP_PASS
 
+    console.log('[EMAIL SERVICE] Configuração SMTP:', {
+      host: smtpHost ? 'configurado' : 'NÃO CONFIGURADO',
+      port: smtpPort ? 'configurado' : 'NÃO CONFIGURADO',
+      user: smtpUser ? 'configurado' : 'NÃO CONFIGURADO',
+      pass: smtpPass ? 'configurado' : 'NÃO CONFIGURADO'
+    })
+
     if (!smtpHost || !smtpPort || !smtpUser || !smtpPass) {
-      console.warn('SMTP credentials are not fully configured. Email will not be sent.')
+      console.warn('[EMAIL SERVICE] Credenciais SMTP não configuradas. Email não será enviado.')
+      console.warn('[EMAIL SERVICE] Configure as variáveis: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS')
+      
       if (process.env.NODE_ENV !== 'production') {
-        console.log('--- MOCK EMAIL ---')
-        console.log(`To: ${to}`)
-        console.log(`Subject: ${subject}`)
-        console.log('--- HTML BODY ---')
+        console.log('--- EMAIL SIMULADO ---')
+        console.log(`Para: ${to}`)
+        console.log(`Assunto: ${subject}`)
+        console.log('--- CORPO HTML ---')
         console.log(html)
-        console.log('--- TEXT BODY ---')
+        console.log('--- CORPO TEXTO ---')
         console.log(text)
         console.log('------------------')
       }
-      return
+      
+      // Lançar erro para que o chamador saiba que o email não foi enviado
+      throw new Error('Credenciais SMTP não configuradas')
     }
 
     const transporter = nodemailer.createTransport({
@@ -45,16 +56,19 @@ export const emailService = {
     })
 
     try {
-      await transporter.sendMail({
+      console.log('[EMAIL SERVICE] Enviando email para:', to)
+      const info = await transporter.sendMail({
         from: `"Meu Personal" <${smtpUser}>`,
         to,
         subject,
         html,
         text,
       })
-    } catch (error) {
-      console.error('Error sending email via SMTP:', error)
-      throw new Error('Failed to send email')
+      console.log('[EMAIL SERVICE] Email enviado com sucesso! ID:', info.messageId)
+      return info
+    } catch (error: any) {
+      console.error('[EMAIL SERVICE] Erro ao enviar email:', error.message)
+      throw new Error(`Falha ao enviar email: ${error.message}`)
     }
   },
 }

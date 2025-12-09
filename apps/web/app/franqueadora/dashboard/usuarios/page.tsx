@@ -359,7 +359,15 @@ function UsuariosPageContent() {
           throw new Error(errorMessage)
         }
 
-        toast.success(`${formData.role === 'TEACHER' ? 'Professor' : 'Aluno'} criado com sucesso! Email enviado para ${formData.email}`)
+        // Verificar se o email foi enviado
+        if (responseData.emailSent) {
+          toast.success(`${formData.role === 'TEACHER' ? 'Professor' : 'Aluno'} criado com sucesso! Email enviado para ${formData.email}`)
+        } else {
+          const senhaTemp = responseData.temporaryPassword || tempPassword
+          toast.warning(`${formData.role === 'TEACHER' ? 'Professor' : 'Aluno'} criado, mas não foi possível enviar o email. Senha temporária: ${senhaTemp}`, {
+            duration: 10000 // Mostrar por 10 segundos para dar tempo de copiar
+          })
+        }
       } else {
         // Para edição, usar o endpoint padrão
         const url = `${API_URL}/api/users/${selectedUser?.id}`
