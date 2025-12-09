@@ -1255,5 +1255,227 @@ router.get('/users',
   })
 );
 
+// POST /api/franqueadora/usuarios - Criar novo usuário (professor ou aluno)
+router.post('/usuarios',
+  requireAuth,
+  requireRole(['SUPER_ADMIN']),
+  requireFranqueadoraAdmin,
+  auditSensitiveOperation('CREATE', 'users'),
+  asyncErrorHandler(async (req, res) => {
+    const franqueadoraId = req.franqueadoraAdmin?.franqueadora_id
+
+    if (!franqueadoraId) {
+      return res.status(400).json({
+        success: false,
+        error: 'NO_FRANQUEADORA_CONTEXT',
+        message: 'Contexto da franqueadora não encontrado'
+      })
+    }
+
+    const { name, email, phone, cpf, password, gender, role, cref, crefCardFile } = req.body
+
+    // Validação de campos obrigatórios
+    if (!name || !email || !phone || !cpf || !password || !gender || !role) {
+      return res.status(400).json({
+        success: false,
+        error: 'MISSING_REQUIRED_FIELDS',
+        message: 'Preencha todos os campos obrigatórios'
+      })
+    }
+
+    // Validar role
+    if (!['STUDENT', 'TEACHER'].includes(role)) {
+      return res.status(400).json({
+        success: false,
+        error: 'INVALID_ROLE',
+        message: 'Role deve ser STUDENT ou TEACHER'
+      })
+    }
+
+    // Validar gender
+    const validGenders = ['MALE', 'FEMALE', 'NON_BINARY', 'OTHER', 'PREFER_NOT_TO_SAY']
+    if (!validGenders.includes(gender)) {
+      return res.status(400).json({
+        success: false,
+        error: 'INVALID_GENDER',
+        message: 'Gênero inválido'
+      })
+    }
+
+    // Validar CPF
+    const { validateCpfCnpj } = await import('../utils/validation')
+    if (!validateCpfCnpj(cpf)) {
+      return res.status(400).json({
+        success: false,
+        error: 'INVALID_CPF',
+        message: 'CPF inválido. Verifique os dígitos'
+      })
+    }
+
+    // Validar email único
+    const { data: existingUser, error: checkError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', email)
+      .single()
+
+    if (!checkError && existingUser) {
+      return res.status(400).json({
+        success: false,
+        error: 'EMAIL_ALREADY_EXISTS',
+        message: 'Este email já está registrado no sistema'
+      })
+    }
+
+    // Validar senha (mínimo 6 caracteres)
+    if (password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        error: 'WEAK_PASSWORD',
+        message: 'Senha deve ter no mínimo 6 caracteres'
+      })
+    }
+
+    // Validar CREF se for professor
+    if (role === 'TEACHER' && !cref) {
+      return res.status(400).json({
+        success: false,
+        error: 'MISSING_CREF',
+        message: 'CREF é obrigatório para professores'
+      })
+    }
+
+    try {
+      // Hash da senha
+      const bcrypt = await import('bcryptjs')
+      const passwordHash = await bcrypt.default.hash(password, 10)
+
+      // Criar usuário com status APPROVED
+      const { data: newUser, error: createError } = await supabase
+        .from('users')
+        .insert({
+          name,
+          email,
+          phone,
+          cpf,
+          password_hash: passwordHash,
+          gender,
+          role,
+          approval_status: 'approved',
+          is_active: true,
+          created_by_franqueadora: true,
+          franchisor_id: franqueadoraId
+        })
+        .select()
+        .single()
+
+      if (createError) {
+        console.error('Erro ao criar usuário:', createError)
+        return res.status(500).json({
+          success: false,
+          error: 'USER_CREATION_FAILED',
+          message: 'Erro ao criar usuário'
+        })
+      }
+
+      // Se for professor, criar perfil de professor e salvar CREF
+      if (role === 'TEACHER' && newUser) {
+        const { error: profileError } = await supabase
+          .from('teacher_profiles')
+          .insert({
+            user_id: newUser.id,
+            cref: cref,
+            is_available: true
+          })
+
+        if (profileError) {
+          console.error('Erro ao criar perfil de professor:', profileError)
+          // Não falhar a criação do usuário se o perfil falhar
+        }
+
+        // Atualizar CREF no usuário
+        await supabase
+          .from('users')
+          .update({ cref: cref })
+          .eq('id', newUser.id)
+      }
+
+      // Registrar na tabela franqueadora_contacts
+      const { error: contactError } = await supabase
+        .from('franqueadora_contacts')
+        .insert({
+          franqueadora_id: franqueadoraId,
+          user_id: newUser.id,
+          role: role,
+          status: 'ASSIGNED',
+          origin: 'FRANQUEADORA_CREATED'
+        })
+
+      if (contactError) {
+        console.error('Erro ao registrar contato da franqueadora:', contactError)
+        // Não falhar a criação do usuário se o contato falhar
+      }
+
+      // Enviar email de boas-vindas
+      try {
+        const { getHtmlEmailTemplate } = await import('../services/email-templates')
+        const { emailService } = await import('../services/email.service')
+
+        const loginUrl = `${process.env.FRONTEND_URL || 'https://meupersonalfranquia.com.br'}/login`
+
+        const emailContent = `
+          <p>Olá <strong>${name}</strong>,</p>
+          <p>Bem-vindo ao Meu Personal! Sua conta foi criada com sucesso pela franqueadora.</p>
+          <p style="margin-top: 20px; padding: 15px; background-color: #f3f4f6; border-radius: 8px;">
+            <strong>Suas credenciais de acesso:</strong><br>
+            Email: <code style="background-color: #e5e7eb; padding: 2px 6px; border-radius: 4px;">${email}</code><br>
+            Senha temporária: <code style="background-color: #e5e7eb; padding: 2px 6px; border-radius: 4px;">${password}</code>
+          </p>
+          <p>Na primeira vez que fizer login, você será solicitado a alterar sua senha.</p>
+          <p style="margin-top: 20px; color: #6b7280; font-size: 14px;">
+            Qualquer dúvida, entre em contato conosco.
+          </p>
+        `
+
+        const htmlEmail = getHtmlEmailTemplate(
+          'Bem-vindo ao Meu Personal!',
+          emailContent,
+          loginUrl,
+          'Acessar Plataforma'
+        )
+
+        await emailService.sendEmail({
+          to: email,
+          subject: 'Bem-vindo ao Meu Personal!',
+          html: htmlEmail,
+          text: `Bem-vindo ao Meu Personal! Suas credenciais: Email: ${email}, Senha: ${password}`
+        })
+      } catch (emailError: any) {
+        console.error('Erro ao enviar email de boas-vindas:', emailError)
+        // Não falhar a criação do usuário se o email falhar
+      }
+
+      return res.status(201).json({
+        success: true,
+        message: `Usuário ${role === 'TEACHER' ? 'professor' : 'aluno'} criado com sucesso`,
+        user: {
+          id: newUser.id,
+          name: newUser.name,
+          email: newUser.email,
+          role: newUser.role,
+          status: newUser.approval_status
+        }
+      })
+    } catch (error: any) {
+      console.error('Erro ao criar usuário:', error)
+      return res.status(500).json({
+        success: false,
+        error: 'INTERNAL_ERROR',
+        message: 'Erro interno ao criar usuário'
+      })
+    }
+  })
+)
+
 export default router
 
