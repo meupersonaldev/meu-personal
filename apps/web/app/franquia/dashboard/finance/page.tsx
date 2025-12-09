@@ -76,10 +76,8 @@ export default function FinancePageNew() {
 
     setLoading(true)
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      
-      // Buscar pagamentos do Asaas (com split da franquia)
-      let url = `${API_URL}/api/payments/franchise/${franquiaUser.academyId}/asaas?limit=100`
+      // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
+      let url = `/api/payments/franchise/${franquiaUser.academyId}/asaas?limit=100`
 
       if (statusFilter && statusFilter !== 'all') {
         url += `&status=${statusFilter}`
@@ -154,10 +152,8 @@ export default function FinancePageNew() {
     if (!franquiaUser?.academyId) return
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      
-      // Buscar stats do Asaas (já vem junto com os pagamentos)
-      let url = `${API_URL}/api/payments/franchise/${franquiaUser.academyId}/asaas?limit=1000`
+      // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
+      let url = `/api/payments/franchise/${franquiaUser.academyId}/asaas?limit=1000`
 
       if (startDate) {
         url += `&start_date=${startDate}`

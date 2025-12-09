@@ -720,11 +720,11 @@ export default function FranquiaDashboard() {
     }
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
       const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
 
       // Primeiro validar
-      const validateResp = await fetch(`${API_URL}/api/bookings/validate-orphans?franchise_id=${franquiaUser.academyId}`, {
+      const validateResp = await fetch(`/api/bookings/validate-orphans?franchise_id=${franquiaUser.academyId}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       })
 

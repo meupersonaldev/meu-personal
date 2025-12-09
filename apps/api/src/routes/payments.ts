@@ -440,6 +440,27 @@ router.get('/franchise/:academy_id/asaas', requireAuth, async (req, res) => {
       force_refresh
     } = req.query
 
+    // Buscar o asaas_account_id da academia
+    const { data: academy, error: academyError } = await supabase
+      .from('academies')
+      .select('asaas_account_id, asaas_wallet_id, name')
+      .eq('id', academy_id)
+      .single()
+
+    if (academyError || !academy) {
+      console.error('[payments/franchise/asaas] Academia não encontrada:', academy_id)
+      return res.status(404).json({ error: 'Academia não encontrada' })
+    }
+
+    if (!academy.asaas_account_id) {
+      console.error('[payments/franchise/asaas] Academia sem asaas_account_id:', academy_id)
+      return res.status(400).json({ 
+        error: 'Academia não possui conta Asaas configurada',
+        payments: [],
+        stats: null
+      })
+    }
+
     // Criar chave de cache baseada nos parâmetros
     const cacheKey = `franchise_payments_${academy_id}_${status || 'all'}_${
       start_date || ''
@@ -450,7 +471,7 @@ router.get('/franchise/:academy_id/asaas', requireAuth, async (req, res) => {
       const cached = await cacheService.get(cacheKey)
       if (cached) {
         console.log(
-          `[payments/franchise/asaas] Retornando dados do cache para ${academy_id}`
+          `[payments/franchise/asaas] Retornando dados do cache para ${academy.name}`
         )
         return res.json({
           ...cached,
@@ -460,16 +481,12 @@ router.get('/franchise/:academy_id/asaas', requireAuth, async (req, res) => {
     }
 
     console.log(
-      `[payments/franchise/asaas] Buscando pagamentos do Asaas para franquia ${academy_id}${
+      `[payments/franchise/asaas] Buscando pagamentos do Asaas para ${academy.name} (subconta: ${academy.asaas_account_id})${
         force_refresh === 'true' ? ' (forçando refresh)' : ''
       }`
     )
 
-    // WalletId da franquia (hardcoded - 90% do split)
-    const FRANCHISE_WALLET_ID = '03223ec1-c254-43a9-bcdd-6f54acac0609'
-
-    // Buscar pagamentos do Asaas (sem filtro de walletId, pois a API pode não suportar)
-    // Vamos buscar todos e filtrar pelos que têm split com o walletId da franquia
+    // Buscar pagamentos da subconta usando o header asaas-account
     const filters: any = {
       limit: Number(limit) || 100
     }
@@ -478,8 +495,8 @@ router.get('/franchise/:academy_id/asaas', requireAuth, async (req, res) => {
       filters.status = status
     }
 
-    // Buscar pagamentos do Asaas
-    const asaasResult = await asaasService.listPayments(filters)
+    // Usar a nova função que acessa a subconta
+    const asaasResult = await asaasService.listSubaccountPayments(academy.asaas_account_id, filters)
 
     if (!asaasResult.success) {
       console.error(
@@ -491,21 +508,10 @@ router.get('/franchise/:academy_id/asaas', requireAuth, async (req, res) => {
         .json({ error: 'Erro ao buscar pagamentos do Asaas' })
     }
 
-    const allAsaasPayments = asaasResult.data || []
-
-    // Filtrar pagamentos que têm split com o walletId da franquia
-    const asaasPayments = allAsaasPayments.filter((p: any) => {
-      // Verificar se o pagamento tem split com o walletId da franquia
-      if (p.split && Array.isArray(p.split)) {
-        return p.split.some((s: any) => s.walletId === FRANCHISE_WALLET_ID)
-      }
-      // Se não tiver split, pode ser um pagamento antigo - vamos incluir se for da unidade
-      // Verificar via externalReference ou outros campos
-      return false
-    })
+    const asaasPayments = asaasResult.data || []
 
     console.log(
-      `[payments/franchise/asaas] Encontrados ${allAsaasPayments.length} pagamentos no Asaas, ${asaasPayments.length} com split da franquia`
+      `[payments/franchise/asaas] Encontrados ${asaasPayments.length} pagamentos na subconta ${academy.name}`
     )
 
     // Filtrar por data se fornecido

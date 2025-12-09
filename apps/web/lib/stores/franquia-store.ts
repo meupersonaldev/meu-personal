@@ -275,29 +275,36 @@ export const useFranquiaStore = create<FranquiaState>()(
       login: async (email: string, password: string) => {
         try {
           set({ isLoading: true })
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
+          const API_URL = ''
+          console.log('[FRANQUIA-STORE] Usando URL relativa (rewrite Next.js)')
+          console.log('[FRANQUIA-STORE] Tentando login com email:', email)
 
-          // 1. Fazer login via API
-          const response = await fetch(`${API_URL}/api/auth/login`, {
+          // 1. Fazer login via API (usando rewrite do Next.js)
+          const response = await fetch(`/api/auth/login`, {
             method: 'POST',
             headers: { 
-              'Content-Type': 'application/json',
-              'Access-Control-Allow-Origin': '*',
-              'Access-Control-Allow-Headers': 'Origin, X-Requested-With, Content-Type, Accept'
+              'Content-Type': 'application/json'
             },
             credentials: 'include',
             body: JSON.stringify({ email, password })
           })
 
+          console.log('[FRANQUIA-STORE] Response status:', response.status)
+
           if (!response.ok) {
+            const errorText = await response.text()
+            console.log('[FRANQUIA-STORE] Response error:', errorText)
             set({ isLoading: false })
             return false
           }
 
           const { token, user } = await response.json()
+          console.log('[FRANQUIA-STORE] Login OK, user role:', user.role)
 
           // Verificar se é FRANCHISE_ADMIN
           if (user.role !== 'FRANCHISE_ADMIN') {
+            console.log('[FRANQUIA-STORE] Usuário não é FRANCHISE_ADMIN')
             set({ isLoading: false })
             return false
           }
@@ -442,11 +449,11 @@ export const useFranquiaStore = create<FranquiaState>()(
             set({ teachers: [] })
             return
           }
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
           
-          const resp = await fetch(`${API_URL}/api/teachers/by-academy?academy_id=${academyId}` , {
+          const resp = await fetch(`/api/teachers/by-academy?academy_id=${academyId}` , {
             headers: token ? { Authorization: `Bearer ${token}` } : {}
           })
           if (!resp.ok) {
@@ -469,12 +476,12 @@ export const useFranquiaStore = create<FranquiaState>()(
         try {
           const { academy } = get()
           if (!academy) return false
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
 
           // Criar professor via API
-          const resp = await fetch(`${API_URL}/api/teachers`, {
+          const resp = await fetch(`/api/teachers`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -497,7 +504,7 @@ export const useFranquiaStore = create<FranquiaState>()(
 
           // Se status desejado for diferente de 'active', atualizar vínculo
           if (teacherData.status && teacherData.status !== 'active' && created?.id) {
-            await fetch(`${API_URL}/api/teachers/${created.id}/academy-link`, {
+            await fetch(`/api/teachers/${created.id}/academy-link`, {
               method: 'PUT',
               headers: {
                 'Content-Type': 'application/json',
@@ -517,7 +524,7 @@ export const useFranquiaStore = create<FranquiaState>()(
       updateTeacher: async (id, updates) => {
         try {
           const { academy } = get()
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
 
@@ -529,7 +536,7 @@ export const useFranquiaStore = create<FranquiaState>()(
           if (updates.specialties !== undefined) body.specialties = updates.specialties
 
           if (Object.keys(body).length > 0) {
-            const resp = await fetch(`${API_URL}/api/teachers/${id}`, {
+            const resp = await fetch(`/api/teachers/${id}`, {
               method: 'PUT',
               headers: {
                 'Content-Type': 'application/json',
@@ -542,7 +549,7 @@ export const useFranquiaStore = create<FranquiaState>()(
 
           // Atualizar vínculo com academia (status/comissão)
           if (academy && (updates as any).status !== undefined) {
-            const resp2 = await fetch(`${API_URL}/api/teachers/${id}/academy-link`, {
+            const resp2 = await fetch(`/api/teachers/${id}/academy-link`, {
               method: 'PUT',
               headers: {
                 'Content-Type': 'application/json',
@@ -562,10 +569,10 @@ export const useFranquiaStore = create<FranquiaState>()(
 
       deleteTeacher: async (id) => {
         try {
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
-          const resp = await fetch(`${API_URL}/api/teachers/${id}`, {
+          const resp = await fetch(`/api/teachers/${id}`, {
             method: 'DELETE',
             headers: token ? { Authorization: `Bearer ${token}` } : {}
           })
@@ -586,11 +593,11 @@ export const useFranquiaStore = create<FranquiaState>()(
             set({ students: [] })
             return
           }
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
           
-          const resp = await fetch(`${API_URL}/api/students?academy_id=${academyId}`, {
+          const resp = await fetch(`/api/students?academy_id=${academyId}`, {
             headers: token ? { Authorization: `Bearer ${token}` } : {}
           })
           if (!resp.ok) {
@@ -620,11 +627,11 @@ export const useFranquiaStore = create<FranquiaState>()(
         try {
           const { academy } = get()
           if (!academy) return false
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
 
-          const resp = await fetch(`${API_URL}/api/students`, {
+          const resp = await fetch(`/api/students`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -649,7 +656,7 @@ export const useFranquiaStore = create<FranquiaState>()(
 
       updateStudent: async (id, updates) => {
         try {
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
 
@@ -664,7 +671,7 @@ export const useFranquiaStore = create<FranquiaState>()(
           if (updates.status !== undefined) body.status = updates.status
           if (updates.credits !== undefined) body.credits = updates.credits
 
-          const resp = await fetch(`${API_URL}/api/students/${id}`, {
+          const resp = await fetch(`/api/students/${id}`, {
             method: 'PUT',
             headers: {
               'Content-Type': 'application/json',
@@ -682,10 +689,10 @@ export const useFranquiaStore = create<FranquiaState>()(
 
       deleteStudent: async (id) => {
         try {
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
-          const resp = await fetch(`${API_URL}/api/students/${id}`, {
+          const resp = await fetch(`/api/students/${id}`, {
             method: 'DELETE',
             headers: token ? { Authorization: `Bearer ${token}` } : {}
           })
@@ -702,10 +709,10 @@ export const useFranquiaStore = create<FranquiaState>()(
         try {
           const { academy } = get()
           if (!academy) return
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
-          const resp = await fetch(`${API_URL}/api/plans/student?academy_id=${academy.id}`, {
+          const resp = await fetch(`/api/plans/student?academy_id=${academy.id}`, {
             headers: token ? { Authorization: `Bearer ${token}` } : {}
           })
           if (!resp.ok) { set({ plans: [] }); return }
@@ -734,11 +741,11 @@ export const useFranquiaStore = create<FranquiaState>()(
         try {
           const { academy } = get()
           if (!academy) return false
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
 
-          const resp = await fetch(`${API_URL}/api/plans/students`, {
+          const resp = await fetch(`/api/plans/students`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -764,7 +771,7 @@ export const useFranquiaStore = create<FranquiaState>()(
 
       updatePlan: async (id, updates) => {
         try {
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
 
@@ -778,7 +785,7 @@ export const useFranquiaStore = create<FranquiaState>()(
           if (updates.status !== undefined) body.is_active = updates.status === 'active'
           if ((updates as any).is_active !== undefined) body.is_active = (updates as any).is_active
 
-          const resp = await fetch(`${API_URL}/api/plans/students/${id}`, {
+          const resp = await fetch(`/api/plans/students/${id}`, {
             method: 'PUT',
             headers: {
               'Content-Type': 'application/json',
@@ -796,10 +803,10 @@ export const useFranquiaStore = create<FranquiaState>()(
 
       deletePlan: async (id) => {
         try {
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
-          const resp = await fetch(`${API_URL}/api/plans/students/${id}`, {
+          const resp = await fetch(`/api/plans/students/${id}`, {
             method: 'DELETE',
             headers: token ? { Authorization: `Bearer ${token}` } : {}
           })
@@ -846,7 +853,7 @@ export const useFranquiaStore = create<FranquiaState>()(
           }
 
           // Buscar bookings válidos (apenas com aluno) para calcular aulas do mês
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
           
@@ -854,7 +861,7 @@ export const useFranquiaStore = create<FranquiaState>()(
           try {
             const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
             const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString()
-            const resp = await fetch(`${API_URL}/api/bookings?franchise_id=${academyId}&from=${startOfMonth}&to=${endOfMonth}`, {
+            const resp = await fetch(`/api/bookings?franchise_id=${academyId}&from=${startOfMonth}&to=${endOfMonth}`, {
               headers: token ? { Authorization: `Bearer ${token}` } : {}
             })
             if (resp.ok) {
@@ -897,11 +904,11 @@ export const useFranquiaStore = create<FranquiaState>()(
         try {
           const { academy } = get()
           if (!academy) return
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
 
-          const resp = await fetch(`${API_URL}/api/bookings?unit_id=${academy.id}`, {
+          const resp = await fetch(`/api/bookings?unit_id=${academy.id}`, {
             headers: token ? { Authorization: `Bearer ${token}` } : {}
           })
           if (!resp.ok) { set({ classes: [] }); return }
@@ -934,7 +941,7 @@ export const useFranquiaStore = create<FranquiaState>()(
 
       updateClass: async (id, updates) => {
         try {
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
 
@@ -948,7 +955,7 @@ export const useFranquiaStore = create<FranquiaState>()(
           const mapped = statusMap[updates.status]
           if (!mapped) return false
 
-          const resp = await fetch(`${API_URL}/api/bookings/${id}`, {
+          const resp = await fetch(`/api/bookings/${id}`, {
             method: 'PATCH',
             headers: {
               'Content-Type': 'application/json',
@@ -967,10 +974,10 @@ export const useFranquiaStore = create<FranquiaState>()(
 
       deleteClass: async (id) => {
         try {
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
-          const resp = await fetch(`${API_URL}/api/bookings/${id}`, {
+          const resp = await fetch(`/api/bookings/${id}`, {
             method: 'DELETE',
             headers: token ? { Authorization: `Bearer ${token}` } : {}
           })
@@ -987,10 +994,10 @@ export const useFranquiaStore = create<FranquiaState>()(
         try {
           const { academy } = get()
           if (!academy) return
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
-          const resp = await fetch(`${API_URL}/api/time-slots?academy_id=${academy.id}`, {
+          const resp = await fetch(`/api/time-slots?academy_id=${academy.id}`, {
             headers: token ? { Authorization: `Bearer ${token}` } : {}
           })
           if (!resp.ok) { set({ timeSlots: [] }); return }
@@ -1015,10 +1022,10 @@ export const useFranquiaStore = create<FranquiaState>()(
           const { timeSlots } = get()
           const slot = timeSlots.find(s => s.id === id)
           if (!slot) return false
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
-          const resp = await fetch(`${API_URL}/api/time-slots/${id}`, {
+          const resp = await fetch(`/api/time-slots/${id}`, {
             method: 'PUT',
             headers: {
               'Content-Type': 'application/json',
@@ -1039,10 +1046,10 @@ export const useFranquiaStore = create<FranquiaState>()(
         try {
           const { franquiaUser, academy } = get()
           if (!franquiaUser || !academy) return
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
-          const resp = await fetch(`${API_URL}/api/notifications?academy_id=${academy.id}`, {
+          const resp = await fetch(`/api/notifications?academy_id=${academy.id}`, {
             headers: token ? { Authorization: `Bearer ${token}` } : {}
           })
           if (!resp.ok) return
@@ -1057,10 +1064,10 @@ export const useFranquiaStore = create<FranquiaState>()(
 
       markNotificationAsRead: async (id) => {
         try {
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
-          const resp = await fetch(`${API_URL}/api/notifications/${id}/read`, {
+          const resp = await fetch(`/api/notifications/${id}/read`, {
             method: 'PATCH',
             headers: token ? { Authorization: `Bearer ${token}` } : {}
           })
@@ -1076,10 +1083,10 @@ export const useFranquiaStore = create<FranquiaState>()(
         try {
           const { academy } = get()
           if (!academy) return false
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
-          const resp = await fetch(`${API_URL}/api/notifications/mark-all-read`, {
+          const resp = await fetch(`/api/notifications/mark-all-read`, {
             method: 'PATCH',
             headers: {
               'Content-Type': 'application/json',
@@ -1100,10 +1107,10 @@ export const useFranquiaStore = create<FranquiaState>()(
         try {
           const { academy } = get()
           if (!academy) return
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
-          const resp = await fetch(`${API_URL}/api/plans/teacher?academy_id=${academy.id}`, {
+          const resp = await fetch(`/api/plans/teacher?academy_id=${academy.id}`, {
             headers: token ? { Authorization: `Bearer ${token}` } : {}
           })
           if (!resp.ok) { set({ teacherPlans: [] }); return }
@@ -1118,11 +1125,11 @@ export const useFranquiaStore = create<FranquiaState>()(
         try {
           const { academy } = get()
           if (!academy) return false
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
 
-          const resp = await fetch(`${API_URL}/api/plans/teachers`, {
+          const resp = await fetch(`/api/plans/teachers`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -1150,10 +1157,10 @@ export const useFranquiaStore = create<FranquiaState>()(
         try {
           const { academy } = get()
           if (!academy) return
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
-          const resp = await fetch(`${API_URL}/api/plans/student?academy_id=${academy.id}`, {
+          const resp = await fetch(`/api/plans/student?academy_id=${academy.id}`, {
             headers: token ? { Authorization: `Bearer ${token}` } : {}
           })
           if (!resp.ok) { set({ studentPlans: [] }); return }
@@ -1168,11 +1175,11 @@ export const useFranquiaStore = create<FranquiaState>()(
         try {
           const { academy } = get()
           if (!academy) return false
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
           let token: string | null = null
           try { token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null } catch {}
 
-          const resp = await fetch(`${API_URL}/api/plans/students`, {
+          const resp = await fetch(`/api/plans/students`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

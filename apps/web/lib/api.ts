@@ -303,7 +303,7 @@ export const notificationsAPI = {
 
   async markAsRead (notificationId: string) {
     return apiRequest(`/api/notifications/${notificationId}/read`, {
-      method: 'PUT'
+      method: 'PATCH'
     })
   }
 }

@@ -85,9 +85,9 @@ export default function AgendaAcademiaPage() {
         endDate = currentDate
       }
 
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
       const response = await fetch(
-        `${API_URL}/api/calendar/events?academy_id=${franquiaUser.academyId}&start_date=${format(startDate, 'yyyy-MM-dd')}&end_date=${format(endDate, 'yyyy-MM-dd')}`,
+        `/api/calendar/events?academy_id=${franquiaUser.academyId}&start_date=${format(startDate, 'yyyy-MM-dd')}&end_date=${format(endDate, 'yyyy-MM-dd')}`,
         { credentials: 'include' }
       )
 

@@ -95,12 +95,12 @@ export default function AgendamentosGestaoPage() {
     }
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
       const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
       
       console.log('[fetchBookings] Buscando agendamentos para academia:', franquiaUser.academyId)
       
-      const url = `${API_URL}/api/bookings?franchise_id=${franquiaUser.academyId}`
+      const url = `/api/bookings?franchise_id=${franquiaUser.academyId}`
       const headers: HeadersInit = {
         'Content-Type': 'application/json'
       }
@@ -157,8 +157,8 @@ export default function AgendamentosGestaoPage() {
     const reason = prompt('Motivo do cancelamento (opcional):')
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      const response = await fetch(`${API_URL}/api/bookings/${cancelConfirm.bookingId}`, {
+      // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
+      const response = await fetch(`/api/bookings/${cancelConfirm.bookingId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -180,10 +180,10 @@ export default function AgendamentosGestaoPage() {
 
   const handleComplete = async (bookingId: string) => {
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
       const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
       
-      const response = await fetch(`${API_URL}/api/bookings/${bookingId}`, {
+      const response = await fetch(`/api/bookings/${bookingId}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -214,14 +214,14 @@ export default function AgendamentosGestaoPage() {
     if (!editingBooking) return
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
       const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
       
       const updates: any = {}
       if (editingBooking.notes !== undefined) updates.notes = editingBooking.notes
       if (editingBooking.status) updates.status = editingBooking.status
 
-      const response = await fetch(`${API_URL}/api/bookings/${editingBooking.id}`, {
+      const response = await fetch(`/api/bookings/${editingBooking.id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -254,10 +254,10 @@ export default function AgendamentosGestaoPage() {
     if (!deleteConfirm.bookingId) return
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
       const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
       
-      const response = await fetch(`${API_URL}/api/bookings/${deleteConfirm.bookingId}`, {
+      const response = await fetch(`/api/bookings/${deleteConfirm.bookingId}`, {
         method: 'DELETE',
         headers: {
           ...(token && { 'Authorization': `Bearer ${token}` })
@@ -310,11 +310,11 @@ export default function AgendamentosGestaoPage() {
     if (selectedBookings.size === 0) return
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
       const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
       
       const deletePromises = Array.from(selectedBookings).map(bookingId =>
-        fetch(`${API_URL}/api/bookings/${bookingId}`, {
+        fetch(`/api/bookings/${bookingId}`, {
           method: 'DELETE',
           headers: {
             ...(token && { 'Authorization': `Bearer ${token}` })

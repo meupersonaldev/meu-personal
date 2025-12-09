@@ -516,6 +516,72 @@ export class AsaasService {
   }
 
   /**
+   * Listar pagamentos de uma subconta específica
+   * Usa o header asaas-account para acessar a subconta
+   */
+  async listSubaccountPayments(subaccountId: string, filters?: {
+    customer?: string
+    subscription?: string
+    status?: string
+    paymentDate?: string
+    dueDate?: string
+    limit?: number
+    offset?: number
+  }) {
+    try {
+      const params = new URLSearchParams()
+      
+      if (filters?.customer) params.append('customer', filters.customer)
+      if (filters?.subscription) params.append('subscription', filters.subscription)
+      if (filters?.status) params.append('status', filters.status)
+      if (filters?.paymentDate) params.append('paymentDate', filters.paymentDate)
+      if (filters?.dueDate) params.append('dueDate', filters.dueDate)
+      if (filters?.limit) params.append('limit', String(filters.limit))
+      if (filters?.offset) params.append('offset', String(filters.offset))
+
+      const path = `/payments${params.toString() ? `?${params.toString()}` : ''}`
+      const startedAt = Date.now()
+      
+      // Usar header asaas-account para acessar a subconta
+      const response = await this.withRetry(() => 
+        this.api.get(path, {
+          headers: {
+            'asaas-account': subaccountId
+          }
+        })
+      )
+      
+      const duration = Date.now() - startedAt
+      console.log('[ASAAS] Listagem de pagamentos da subconta bem-sucedida:', { 
+        subaccountId, 
+        path, 
+        status: response.status, 
+        count: response.data?.data?.length || 0, 
+        ms: duration 
+      })
+      
+      return {
+        success: true,
+        data: response.data?.data || [],
+        totalCount: response.data?.totalCount || 0,
+        hasMore: response.data?.hasMore || false
+      }
+    } catch (error: any) {
+      console.error('[ASAAS] Erro ao listar pagamentos da subconta:', { 
+        subaccountId, 
+        filters, 
+        status: error?.response?.status, 
+        error: error.response?.data || error.message 
+      })
+      return {
+        success: false,
+        error: error.response?.data?.errors || error.message,
+        data: []
+      }
+    }
+  }
+
+  /**
    * Cancelar assinatura
    */
   async cancelSubscription(subscriptionId: string) {

@@ -95,7 +95,8 @@ export default function ConfiguracoesPage() {
     if (!franquiaUser?.academyId) return
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/academies/${franquiaUser.academyId}`, {
+      // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
+      const response = await fetch(`/api/academies/${franquiaUser.academyId}`, {
         credentials: 'include'
       })
 
@@ -118,7 +119,8 @@ export default function ConfiguracoesPage() {
     if (!franquiaUser?.academyId) return
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/academies/${franquiaUser.academyId}`, {
+      // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
+      const response = await fetch(`/api/academies/${franquiaUser.academyId}`, {
         credentials: 'include'
       })
 
@@ -174,7 +176,8 @@ export default function ConfiguracoesPage() {
     if (!franquiaUser?.academyId) return
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/time-slots?academy_id=${franquiaUser.academyId}`, {
+      // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
+      const response = await fetch(`/api/time-slots?academy_id=${franquiaUser.academyId}`, {
         credentials: 'include'
       })
 
@@ -190,7 +193,8 @@ export default function ConfiguracoesPage() {
     if (!franquiaUser?.academyId) return
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/time-slots/generate`, {
+      // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
+      const response = await fetch(`/api/time-slots/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -228,7 +232,8 @@ export default function ConfiguracoesPage() {
       const formData = new FormData()
       formData.append('avatar', file)
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/${franquiaUser?.id}/avatar`, {
+      // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
+      const response = await fetch(`/api/users/${franquiaUser?.id}/avatar`, {
         method: 'POST',
         credentials: 'include',
         body: formData
@@ -261,7 +266,8 @@ export default function ConfiguracoesPage() {
 
     setLoading(true)
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/${franquiaUser.id}`, {
+      // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
+      const response = await fetch(`/api/users/${franquiaUser.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -298,7 +304,8 @@ export default function ConfiguracoesPage() {
 
     setLoading(true)
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/academies/${franquiaUser.academyId}`, {
+      // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
+      const response = await fetch(`/api/academies/${franquiaUser.academyId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -338,7 +345,8 @@ export default function ConfiguracoesPage() {
       }
 
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/academies/${franquiaUser!.academyId}`, {
+      // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
+      const response = await fetch(`/api/academies/${franquiaUser!.academyId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
