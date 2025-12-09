@@ -67,6 +67,12 @@ export default function ProfessorCarteira() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [filterTab, setFilterTab] = useState<'all' | 'income' | 'expense'>('all')
+  const [showFilterModal, setShowFilterModal] = useState(false)
+  const [dateFilter, setDateFilter] = useState<{ start: string; end: string }>({
+    start: '',
+    end: ''
+  })
+  const [typeFilter, setTypeFilter] = useState<string[]>([])
 
   useEffect(() => {
     const fetchData = async () => {
@@ -271,6 +277,62 @@ export default function ProfessorCarteira() {
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val)
   const formatHours = (val: number) => `${val.toFixed(1)}h`
 
+  const handleExport = () => {
+    if (transactions.length === 0) {
+      alert('Nenhuma transação para exportar')
+      return
+    }
+
+    const headers = ['Data', 'Descrição', 'Tipo', 'Horas', 'Valor (R$)', 'Status']
+    const rows = transactions.map(tx => [
+      new Date(tx.created_at).toLocaleDateString('pt-BR'),
+      tx.description || '',
+      tx.type,
+      tx.hours.toFixed(1),
+      formatCurrency(tx.amount),
+      tx.status || 'COMPLETED'
+    ])
+
+    const csv = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n')
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    link.setAttribute('download', `carteira-${new Date().toISOString().split('T')[0]}.csv`)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  const filteredTransactions = transactions.filter(tx => {
+    // Filter by tab (income/expense)
+    if (filterTab === 'income' && tx.amount <= 0) return false
+    if (filterTab === 'expense' && tx.amount >= 0) return false
+
+    // Filter by date range
+    if (dateFilter.start) {
+      const txDate = new Date(tx.created_at)
+      const startDate = new Date(dateFilter.start)
+      if (txDate < startDate) return false
+    }
+    if (dateFilter.end) {
+      const txDate = new Date(tx.created_at)
+      const endDate = new Date(dateFilter.end)
+      endDate.setHours(23, 59, 59, 999)
+      if (txDate > endDate) return false
+    }
+
+    // Filter by type
+    if (typeFilter.length > 0 && !typeFilter.includes(tx.type)) return false
+
+    return true
+  })
+
   // Chart Data Preparation (Simple Last 6 Months)
   const chartData = useMemo(() => {
     const months: Record<string, { revenue: number, expenses: number }> = {}
@@ -311,14 +373,88 @@ export default function ProfessorCarteira() {
             <p className="text-sm text-gray-500">Acompanhe seus saldos e faturamentos</p>
           </div>
           <div className="flex gap-2 w-full md:w-auto">
-            <Button variant="outline" size="sm" className="gap-2 flex-1 md:flex-none">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="gap-2 flex-1 md:flex-none"
+              onClick={handleExport}
+            >
               <Download className="h-4 w-4" /> Exportar
             </Button>
-            <Button size="sm" className="bg-blue-600 hover:bg-blue-700 gap-2 flex-1 md:flex-none">
+            <Button 
+              size="sm" 
+              className="bg-blue-600 hover:bg-blue-700 gap-2 flex-1 md:flex-none"
+              onClick={() => setShowFilterModal(!showFilterModal)}
+            >
               <Filter className="h-4 w-4" /> Filtrar
             </Button>
           </div>
         </div>
+
+        {/* Filter Modal */}
+        {showFilterModal && (
+          <div className="bg-white border-b px-6 py-4 shadow-sm">
+            <div className="max-w-7xl mx-auto">
+              <h3 className="font-semibold text-gray-900 mb-4">Filtrar Transações</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Data Inicial</label>
+                  <input
+                    type="date"
+                    value={dateFilter.start}
+                    onChange={(e) => setDateFilter({ ...dateFilter, start: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Data Final</label>
+                  <input
+                    type="date"
+                    value={dateFilter.end}
+                    onChange={(e) => setDateFilter({ ...dateFilter, end: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de Transação</label>
+                  <select
+                    multiple
+                    value={typeFilter}
+                    onChange={(e) => setTypeFilter(Array.from(e.target.selectedOptions, option => option.value))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  >
+                    <option value="PURCHASE">Compra de Horas</option>
+                    <option value="CONSUME">Aula Academia</option>
+                    <option value="BONUS_LOCK">Aula Agendada</option>
+                    <option value="BONUS_UNLOCK">Aula Concluída</option>
+                    <option value="REVOKE">Cancelado</option>
+                    <option value="REFUND">Reembolso</option>
+                    <option value="PRIVATE_CLASS">Aula Particular</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex gap-2 mt-4">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setDateFilter({ start: '', end: '' })
+                    setTypeFilter([])
+                  }}
+                >
+                  Limpar Filtros
+                </Button>
+                <Button
+                  size="sm"
+                  className="bg-blue-600 hover:bg-blue-700"
+                  onClick={() => setShowFilterModal(false)}
+                >
+                  Aplicar
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="max-w-7xl mx-auto p-6 space-y-8">
 
@@ -514,13 +650,7 @@ export default function ProfessorCarteira() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {transactions
-                        .filter(tx => {
-                          if (filterTab === 'income') return tx.amount > 0
-                          if (filterTab === 'expense') return tx.amount < 0
-                          return true
-                        })
-                        .map((tx) => {
+                      {filteredTransactions.map((tx) => {
                           const isIncome = tx.amount > 0 // Money In
                           const isPurchase = tx.type === 'PURCHASE'
                           const isPending = tx.type === 'BONUS_LOCK'
