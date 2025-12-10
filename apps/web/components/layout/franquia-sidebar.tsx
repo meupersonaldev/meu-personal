@@ -14,19 +14,16 @@ import {
   LogOut,
   ChevronDown,
   ChevronRight,
-  Building2,
   DollarSign,
   Calendar,
   CalendarCheck,
-  FileText,
   UserCheck,
-  Bell,
-  Clock,
-  Settings
+  Settings,
+  Gift
 } from 'lucide-react'
 
 export default function FranquiaSidebar() {
-  const { franquiaUser, logout: franquiaLogout, unreadNotifications } = useFranquiaStore()
+  const { franquiaUser, academy, logout: franquiaLogout } = useFranquiaStore()
   const pathname = usePathname()
   const router = useRouter()
   const [expandedSections, setExpandedSections] = useState<string[]>(['overview'])
@@ -46,6 +43,9 @@ export default function FranquiaSidebar() {
     toast.success('Logout realizado com sucesso')
     router.push('/franquia')
   }
+
+  // Verificar se a funcionalidade de créditos está habilitada
+  const isCreditReleaseEnabled = academy?.settings?.manualCreditReleaseEnabled === true
 
   const menuItems = [
     {
@@ -86,6 +86,14 @@ export default function FranquiaSidebar() {
         { label: 'Professores', href: '/franquia/dashboard/professores', icon: GraduationCap }
       ]
     },
+    // Créditos - só aparece se funcionalidade estiver habilitada
+    ...(isCreditReleaseEnabled ? [{
+      id: 'creditos',
+      label: 'Créditos',
+      icon: Gift,
+      href: '/franquia/dashboard/creditos',
+      isExpanded: expandedSections.includes('creditos')
+    }] : []),
     {
       id: 'finance',
       label: 'Financeiro',

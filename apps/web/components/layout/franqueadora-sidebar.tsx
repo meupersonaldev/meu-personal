@@ -19,7 +19,8 @@ import {
   Briefcase,
   Settings2,
   BookOpen,
-  UserPlus
+  UserPlus,
+  Gift
 } from 'lucide-react'
 
 interface FranqueadoraSidebarProps {
@@ -90,6 +91,13 @@ export default function FranqueadoraSidebar({ isMobile = false, onNavigate }: Fr
         { label: 'Pacotes aluno', href: '/franqueadora/pacotes/aluno', icon: GraduationCap },
         { label: 'Pacotes professor', href: '/franqueadora/pacotes/professor', icon: Briefcase }
       ]
+    },
+    {
+      id: 'credits',
+      label: 'Créditos',
+      icon: Gift,
+      href: '/franqueadora/dashboard/creditos',
+      isExpanded: expandedSections.includes('credits')
     },
     {
       id: 'policies',

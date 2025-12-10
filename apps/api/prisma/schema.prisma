@@ -152,6 +152,7 @@ enum StudentClassTxType {
   UNLOCK
   REFUND
   REVOKE
+  GRANT
 
   @@map("student_class_tx_type")
 }
@@ -163,6 +164,7 @@ enum HourTxType {
   BONUS_UNLOCK
   REFUND
   REVOKE
+  GRANT
 
   @@map("hour_tx_type")
 }
@@ -171,6 +173,7 @@ enum TxSourceEnum {
   ALUNO
   PROFESSOR
   SYSTEM
+  ADMIN
 
   @@map("tx_source_enum")
 }

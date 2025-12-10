@@ -31,6 +31,12 @@ export interface Franqueadora {
   is_active: boolean
 }
 
+export interface AcademySettings {
+  requireApproval?: boolean
+  allowSameTimeBookings?: boolean
+  manualCreditReleaseEnabled?: boolean
+}
+
 export interface Academy {
   id: string
   name: string
@@ -51,6 +57,8 @@ export interface Academy {
   contract_end_date?: string
   is_active: boolean
   created_at: string
+  // Settings (JSON field)
+  settings?: AcademySettings
 }
 
 export interface CreateAcademyPayload {

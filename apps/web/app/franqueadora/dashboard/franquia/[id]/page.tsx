@@ -26,8 +26,11 @@ import {
   XCircle,
   Edit,
   Save,
-  X
+  X,
+  Settings,
+  Coins
 } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
 import { useFranqueadoraStore, type Academy, type AcademyStats } from '@/lib/stores/franqueadora-store'
 import FranqueadoraGuard from '@/components/auth/franqueadora-guard'
 
@@ -46,6 +49,7 @@ export default function FranquiaDetailsPage() {
   const [loadingStats, setLoadingStats] = useState(true)
   const [editingFranchise, setEditingFranchise] = useState<EditingFranchise | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [isTogglingCreditRelease, setIsTogglingCreditRelease] = useState(false)
 
   const successRate = stats && stats.totalBookings > 0
     ? stats.completedBookings / stats.totalBookings
@@ -153,6 +157,38 @@ export default function FranquiaDetailsPage() {
 
   const handleCancelEdit = () => {
     setEditingFranchise(null)
+  }
+
+  const handleToggleCreditRelease = async (enabled: boolean) => {
+    if (!franchise) return
+    
+    setIsTogglingCreditRelease(true)
+    try {
+      // Get current settings or create empty object
+      const currentSettings = franchise.settings || {}
+      const newSettings = {
+        ...currentSettings,
+        manualCreditReleaseEnabled: enabled
+      }
+      
+      const success = await updateAcademy(franchise.id, { settings: newSettings })
+      
+      if (success) {
+        toast.success(
+          enabled 
+            ? 'Liberação manual de créditos habilitada para esta franquia' 
+            : 'Liberação manual de créditos desabilitada para esta franquia'
+        )
+        // Refresh data
+        await fetchAcademies()
+      } else {
+        toast.error('Erro ao atualizar configuração')
+      }
+    } catch {
+      toast.error('Erro ao atualizar configuração')
+    } finally {
+      setIsTogglingCreditRelease(false)
+    }
   }
 
   const formatCurrency = (value: number) => {
@@ -503,6 +539,37 @@ export default function FranquiaDetailsPage() {
             </Card>
           </>
         )}
+
+        {/* Configurações de Funcionalidades */}
+        <Card className="p-6 mt-8">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+            <Settings className="h-5 w-5 mr-2 text-meu-primary" />
+            Configurações de Funcionalidades
+          </h3>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+              <div className="flex items-center space-x-3">
+                <Coins className="h-5 w-5 text-meu-primary" />
+                <div>
+                  <p className="font-medium text-gray-900">Liberação Manual de Créditos</p>
+                  <p className="text-sm text-gray-600">
+                    Permite que administradores da franquia liberem créditos manualmente para alunos e professores
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                {isTogglingCreditRelease && (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-meu-primary"></div>
+                )}
+                <Switch
+                  checked={franchise?.settings?.manualCreditReleaseEnabled === true}
+                  onCheckedChange={handleToggleCreditRelease}
+                  disabled={isTogglingCreditRelease}
+                />
+              </div>
+            </div>
+          </div>
+        </Card>
 
         {/* Modal de Edição */}
         {editingFranchise && (

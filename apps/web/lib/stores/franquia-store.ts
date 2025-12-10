@@ -14,6 +14,12 @@ export interface FranquiaUser {
   avatar_url?: string
 }
 
+export interface AcademySettings {
+  requireApproval?: boolean
+  allowSameTimeBookings?: boolean
+  manualCreditReleaseEnabled?: boolean
+}
+
 export interface Academy {
   id: string
   name: string
@@ -24,6 +30,7 @@ export interface Academy {
   state?: string
   zip_code?: string
   is_active: boolean
+  settings?: AcademySettings | null
 }
 
 export interface Teacher {

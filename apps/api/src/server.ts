@@ -183,6 +183,7 @@ import studentsRoutes from './routes/students'
 import franchisorPoliciesRoutes from './routes/franchisor-policies'
 import asaasRoutes from './routes/asaas'
 import bookingSeriesRoutes from './routes/booking-series'
+import creditsRoutes from './routes/credits'
 import { bookingScheduler } from './jobs/booking-scheduler'
 import { reservationScheduler } from './jobs/reservation-processor'
 import { teacherAvailabilityScheduler } from './jobs/teacher-availability-scheduler'
@@ -213,6 +214,7 @@ app.use('/api/admin', adminRoutes)
 app.use('/api/franchisor/policies', franchisorPoliciesRoutes)
 app.use('/api/asaas', asaasRoutes)
 app.use('/api/booking-series', bookingSeriesRoutes)
+app.use('/api/admin/credits', creditsRoutes)
 
 // SEGURANÇA CRÍTICA: Middleware para rotas não encontradas (deve vir antes do errorHandler)
 app.use(notFoundHandler)

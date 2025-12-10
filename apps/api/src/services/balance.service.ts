@@ -21,8 +21,8 @@ export interface StudentClassTransaction {
   student_id: string;
   franqueadora_id: string;
   unit_id?: string | null;
-  type: 'PURCHASE' | 'CONSUME' | 'LOCK' | 'UNLOCK' | 'REFUND' | 'REVOKE';
-  source: 'ALUNO' | 'PROFESSOR' | 'SYSTEM';
+  type: 'PURCHASE' | 'CONSUME' | 'LOCK' | 'UNLOCK' | 'REFUND' | 'REVOKE' | 'GRANT';
+  source: 'ALUNO' | 'PROFESSOR' | 'SYSTEM' | 'ADMIN';
   qty: number;
   booking_id?: string;
   meta_json: Record<string, any>;
@@ -45,8 +45,8 @@ export interface HourTransaction {
   professor_id: string;
   franqueadora_id: string;
   unit_id?: string | null;
-  type: 'PURCHASE' | 'CONSUME' | 'BONUS_LOCK' | 'BONUS_UNLOCK' | 'REFUND' | 'REVOKE';
-  source: 'ALUNO' | 'PROFESSOR' | 'SYSTEM';
+  type: 'PURCHASE' | 'CONSUME' | 'BONUS_LOCK' | 'BONUS_UNLOCK' | 'REFUND' | 'REVOKE' | 'GRANT';
+  source: 'ALUNO' | 'PROFESSOR' | 'SYSTEM' | 'ADMIN';
   hours: number;
   booking_id?: string;
   meta_json: Record<string, any>;
@@ -423,6 +423,52 @@ class BalanceService {
     return { balance: updatedBalance, transaction };
   }
 
+  /**
+   * Libera aulas manualmente para um aluno (GRANT)
+   * Usado por admins da franqueadora/franquia para conceder créditos fora do fluxo de compra
+   * Cria automaticamente o saldo se não existir
+   * 
+   * @param studentId - ID do aluno destinatário
+   * @param franqueadoraId - ID da franqueadora
+   * @param qty - Quantidade de aulas a liberar (deve ser > 0)
+   * @param grantedById - ID do admin que está liberando
+   * @param reason - Motivo da liberação
+   * @returns Saldo atualizado e transação criada
+   */
+  async grantStudentClasses(
+    studentId: string,
+    franqueadoraId: string,
+    qty: number,
+    grantedById: string,
+    reason: string
+  ): Promise<{ balance: StudentClassBalance; transaction: StudentClassTransaction }> {
+    // Garantir que o saldo existe (cria se não existir)
+    const balance = await this.ensureStudentBalance(studentId, franqueadoraId);
+
+    // Criar transação do tipo GRANT com source ADMIN
+    const transaction = await this.createStudentTransaction(
+      studentId,
+      franqueadoraId,
+      'GRANT',
+      qty,
+      {
+        source: 'ADMIN',
+        metaJson: {
+          granted_by_id: grantedById,
+          reason: reason,
+          grant_type: 'manual_release'
+        }
+      }
+    );
+
+    // Atualizar total_purchased (aumenta o saldo disponível)
+    const updatedBalance = await this.updateStudentBalance(studentId, franqueadoraId, {
+      total_purchased: balance.total_purchased + qty
+    });
+
+    return { balance: updatedBalance, transaction };
+  }
+
   // ---------------------------------------------------------------------------
   // Professor helpers
   private async ensureProfessorBalance(professorId: string, franqueadoraId: string): Promise<ProfHourBalance> {
@@ -536,6 +582,52 @@ class BalanceService {
       }
     );
 
+    const updatedBalance = await this.updateProfessorBalance(professorId, franqueadoraId, {
+      available_hours: balance.available_hours + hours
+    });
+
+    return { balance: updatedBalance, transaction };
+  }
+
+  /**
+   * Libera horas manualmente para um professor (GRANT)
+   * Usado por admins da franqueadora/franquia para conceder créditos fora do fluxo de compra
+   * Cria automaticamente o saldo se não existir
+   * 
+   * @param professorId - ID do professor destinatário
+   * @param franqueadoraId - ID da franqueadora
+   * @param hours - Quantidade de horas a liberar (deve ser > 0)
+   * @param grantedById - ID do admin que está liberando
+   * @param reason - Motivo da liberação
+   * @returns Saldo atualizado e transação criada
+   */
+  async grantProfessorHours(
+    professorId: string,
+    franqueadoraId: string,
+    hours: number,
+    grantedById: string,
+    reason: string
+  ): Promise<{ balance: ProfHourBalance; transaction: HourTransaction }> {
+    // Garantir que o saldo existe (cria se não existir)
+    const balance = await this.ensureProfessorBalance(professorId, franqueadoraId);
+
+    // Criar transação do tipo GRANT com source ADMIN
+    const transaction = await this.createHourTransaction(
+      professorId,
+      franqueadoraId,
+      'GRANT',
+      hours,
+      {
+        source: 'ADMIN',
+        metaJson: {
+          granted_by_id: grantedById,
+          reason: reason,
+          grant_type: 'manual_release'
+        }
+      }
+    );
+
+    // Atualizar available_hours (aumenta o saldo disponível)
     const updatedBalance = await this.updateProfessorBalance(professorId, franqueadoraId, {
       available_hours: balance.available_hours + hours
     });
