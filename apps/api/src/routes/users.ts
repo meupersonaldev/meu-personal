@@ -8,7 +8,7 @@ import path from 'path'
 import { requireAuth, requireRole } from '../middleware/auth'
 import { validateCpfCnpj } from '../utils/validation'
 import { emailService } from '../services/email.service'
-import { getHtmlEmailTemplate } from '../services/email-templates'
+import { getHtmlEmailTemplate, getTeacherApprovedEmailTemplate, getTeacherRejectedEmailTemplate } from '../services/email-templates'
 
 // Cliente Supabase centralizado importado de ../lib/supabase
 
@@ -618,6 +618,17 @@ router.put('/:id/approve', requireAuth, async (req, res) => {
       return res.status(403).json({ error: 'Apenas administradores podem aprovar usuários' })
     }
 
+    // Buscar dados do usuário antes de aprovar
+    const { data: userData, error: fetchError } = await supabase
+      .from('users')
+      .select('name, email, role')
+      .eq('id', id)
+      .single()
+
+    if (fetchError || !userData) {
+      return res.status(404).json({ error: 'Usuário não encontrado' })
+    }
+
     const { error } = await supabase
       .from('users')
       .update({
@@ -630,6 +641,45 @@ router.put('/:id/approve', requireAuth, async (req, res) => {
 
     if (error) throw error
 
+    // Enviar email de aprovação (assíncrono)
+    if (userData.role === 'TEACHER') {
+      const frontendUrl = process.env.FRONTEND_URL || 'https://meupersonalfranquia.com.br'
+      const loginUrl = `${frontendUrl}/professor/login`
+      
+      ;(async () => {
+        try {
+          const html = getTeacherApprovedEmailTemplate(userData.name, loginUrl)
+          await emailService.sendEmail({
+            to: userData.email,
+            subject: 'Seu cadastro foi aprovado! 🎉',
+            html,
+            text: [
+              `Olá ${userData.name}!`,
+              '',
+              'Temos uma ótima notícia!',
+              '',
+              '✅ SEU CADASTRO FOI APROVADO!',
+              'Você já pode começar a atender alunos na plataforma Meu Personal.',
+              '',
+              'O que você pode fazer agora:',
+              '- Configurar sua disponibilidade de horários',
+              '- Receber agendamentos de alunos',
+              '- Realizar check-in via QR Code nas aulas',
+              '- Acompanhar seus ganhos na carteira',
+              '',
+              `Acesse sua conta: ${loginUrl}`,
+              '',
+              'Bons treinos e sucesso!',
+              'Equipe Meu Personal'
+            ].join('\n')
+          })
+          console.log('[USERS] Email de aprovação enviado para:', userData.email)
+        } catch (emailError) {
+          console.warn('[USERS] Falha ao enviar email de aprovação:', emailError)
+        }
+      })()
+    }
+
     res.json({ message: 'Usuário aprovado com sucesso' })
   } catch (error: any) {
     console.error('Error approving user:', error)
@@ -641,11 +691,23 @@ router.put('/:id/approve', requireAuth, async (req, res) => {
 router.put('/:id/reject', requireAuth, async (req, res) => {
   try {
     const { id } = req.params
+    const { reason } = req.body // Motivo opcional da rejeição
     const user = (req as any).user
     const isAdmin = ['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN', 'FRANCHISE_ADMIN'].includes(user?.role)
 
     if (!isAdmin) {
       return res.status(403).json({ error: 'Apenas administradores podem reprovar usuários' })
+    }
+
+    // Buscar dados do usuário antes de rejeitar
+    const { data: userData, error: fetchError } = await supabase
+      .from('users')
+      .select('name, email, role')
+      .eq('id', id)
+      .single()
+
+    if (fetchError || !userData) {
+      return res.status(404).json({ error: 'Usuário não encontrado' })
     }
 
     const { error } = await supabase
@@ -659,6 +721,40 @@ router.put('/:id/reject', requireAuth, async (req, res) => {
       .eq('id', id)
 
     if (error) throw error
+
+    // Enviar email de rejeição (assíncrono)
+    if (userData.role === 'TEACHER') {
+      ;(async () => {
+        try {
+          const html = getTeacherRejectedEmailTemplate(userData.name, reason)
+          await emailService.sendEmail({
+            to: userData.email,
+            subject: 'Atualização do seu cadastro - Meu Personal',
+            html,
+            text: [
+              `Olá ${userData.name},`,
+              '',
+              'Infelizmente, precisamos informar que seu cadastro como professor na plataforma Meu Personal não foi aprovado neste momento.',
+              '',
+              reason ? `Motivo: ${reason}` : '',
+              '',
+              'O que você pode fazer:',
+              '- Verificar se todos os dados do seu cadastro estão corretos',
+              '- Conferir se o CREF está válido e atualizado',
+              '- Entrar em contato com a franquia para mais informações',
+              '',
+              'Se você acredita que houve um engano ou deseja mais informações, entre em contato com a administração.',
+              '',
+              'Atenciosamente,',
+              'Equipe Meu Personal'
+            ].filter(Boolean).join('\n')
+          })
+          console.log('[USERS] Email de rejeição enviado para:', userData.email)
+        } catch (emailError) {
+          console.warn('[USERS] Falha ao enviar email de rejeição:', emailError)
+        }
+      })()
+    }
 
     res.json({ message: 'Usuário reprovado' })
   } catch (error: any) {

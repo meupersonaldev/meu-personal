@@ -147,3 +147,68 @@ export const getWelcomeTeacherEmailTemplate = (name: string, loginUrl: string) =
     'Acessar Minha Conta'
   )
 }
+
+// Template de aprovação de professor
+export const getTeacherApprovedEmailTemplate = (name: string, loginUrl: string) => {
+  const content = `
+    <p>Olá <strong>${name}</strong>!</p>
+    
+    <p>Temos uma ótima notícia! 🎉</p>
+    
+    <p style="background-color: #d1fae5; border-left: 4px solid #10b981; padding: 16px; margin: 24px 0; border-radius: 0 8px 8px 0;">
+      <strong style="color: #065f46;">✅ Seu cadastro foi aprovado!</strong><br>
+      Você já pode começar a atender alunos na plataforma Meu Personal.
+    </p>
+    
+    <p><strong>O que você pode fazer agora:</strong></p>
+    <ul>
+      <li>Configurar sua disponibilidade de horários</li>
+      <li>Receber agendamentos de alunos</li>
+      <li>Realizar check-in via QR Code nas aulas</li>
+      <li>Acompanhar seus ganhos na carteira</li>
+    </ul>
+    
+    <p>Estamos muito felizes em ter você na nossa equipe!</p>
+    
+    <p>Bons treinos e sucesso!</p>
+  `
+
+  return getHtmlEmailTemplate(
+    'Cadastro Aprovado! 🎉',
+    content,
+    loginUrl,
+    'Acessar Minha Conta'
+  )
+}
+
+// Template de rejeição de professor
+export const getTeacherRejectedEmailTemplate = (name: string, reason?: string) => {
+  const content = `
+    <p>Olá <strong>${name}</strong>,</p>
+    
+    <p>Infelizmente, precisamos informar que seu cadastro como professor na plataforma <strong>Meu Personal</strong> não foi aprovado neste momento.</p>
+    
+    ${reason ? `
+    <p style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 16px; margin: 24px 0; border-radius: 0 8px 8px 0;">
+      <strong style="color: #991b1b;">Motivo:</strong><br>
+      ${reason}
+    </p>
+    ` : ''}
+    
+    <p><strong>O que você pode fazer:</strong></p>
+    <ul>
+      <li>Verificar se todos os dados do seu cadastro estão corretos</li>
+      <li>Conferir se o CREF está válido e atualizado</li>
+      <li>Entrar em contato com a franquia para mais informações</li>
+    </ul>
+    
+    <p>Se você acredita que houve um engano ou deseja mais informações, entre em contato com a administração.</p>
+    
+    <p>Atenciosamente,<br>Equipe Meu Personal</p>
+  `
+
+  return getHtmlEmailTemplate(
+    'Atualização do seu cadastro',
+    content
+  )
+}
