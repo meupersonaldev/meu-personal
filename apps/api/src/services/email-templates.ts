@@ -7,6 +7,81 @@ const LOGO_URL = `${
 const PRIMARY_COLOR = '#002C4E'
 const ACCENT_COLOR = '#FFF373'
 
+// Template de boas-vindas para alunos
+export const getWelcomeStudentEmailTemplate = (name: string, loginUrl: string) => {
+  const content = `
+    <p>Olá <strong>${name}</strong>! 👋</p>
+    
+    <p>Seja muito bem-vindo(a) ao <strong>Meu Personal</strong>!</p>
+    
+    <p>Estamos muito felizes em ter você conosco. Agora você faz parte de uma comunidade que valoriza saúde, bem-estar e treinos personalizados.</p>
+    
+    <div style="background-color: #f0f9ff; border-left: 4px solid ${PRIMARY_COLOR}; padding: 16px; margin: 24px 0; border-radius: 0 8px 8px 0;">
+      <p style="margin: 0; font-weight: bold; color: ${PRIMARY_COLOR};">🎁 Presente de Boas-Vindas!</p>
+      <p style="margin: 8px 0 0 0;">Você ganhou <strong>1 aula gratuita</strong> para experimentar nossos serviços! Aproveite para conhecer nossos professores e encontrar o profissional ideal para você.</p>
+    </div>
+    
+    <p><strong>O que você pode fazer agora:</strong></p>
+    <ul style="padding-left: 20px;">
+      <li>📅 Agendar sua primeira aula gratuita</li>
+      <li>👨‍🏫 Conhecer nossos professores</li>
+      <li>💳 Comprar pacotes de aulas quando quiser</li>
+    </ul>
+    
+    <p>Qualquer dúvida, estamos à disposição!</p>
+    
+    <p>Bons treinos! 💪</p>
+  `
+  
+  return getHtmlEmailTemplate(
+    'Bem-vindo ao Meu Personal! 🎉',
+    content,
+    loginUrl,
+    'Acessar Minha Conta'
+  )
+}
+
+// Template de boas-vindas para professores
+export const getWelcomeTeacherEmailTemplate = (name: string, loginUrl: string) => {
+  const content = `
+    <p>Olá <strong>${name}</strong>! 👋</p>
+    
+    <p>Seja muito bem-vindo(a) ao <strong>Meu Personal</strong>!</p>
+    
+    <p>Estamos muito felizes em ter você como parte da nossa equipe de profissionais. Aqui você terá acesso a ferramentas que vão facilitar sua rotina e ajudar a gerenciar seus alunos de forma eficiente.</p>
+    
+    <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; margin: 24px 0; border-radius: 0 8px 8px 0;">
+      <p style="margin: 0; font-weight: bold; color: #92400e;">⏳ Aguardando Aprovação</p>
+      <p style="margin: 8px 0 0 0;">Seu cadastro está sendo analisado pela nossa equipe. Assim que for aprovado, você receberá uma notificação e poderá começar a atender seus alunos.</p>
+    </div>
+    
+    <p><strong>Enquanto isso, você pode:</strong></p>
+    <ul style="padding-left: 20px;">
+      <li>📝 Completar seu perfil profissional</li>
+      <li>⏰ Configurar sua disponibilidade de horários</li>
+      <li>📚 Conhecer a plataforma e suas funcionalidades</li>
+    </ul>
+    
+    <p><strong>Após a aprovação:</strong></p>
+    <ul style="padding-left: 20px;">
+      <li>👥 Receber agendamentos de alunos</li>
+      <li>📱 Realizar check-in via QR Code</li>
+      <li>💰 Acompanhar seus ganhos na carteira</li>
+    </ul>
+    
+    <p>Qualquer dúvida, entre em contato com a franquia onde você está vinculado.</p>
+    
+    <p>Sucesso na sua jornada! 🚀</p>
+  `
+  
+  return getHtmlEmailTemplate(
+    'Bem-vindo ao Meu Personal! 🎉',
+    content,
+    loginUrl,
+    'Acessar Minha Conta'
+  )
+}
+
 export const getHtmlEmailTemplate = (
   title: string,
   content: string,

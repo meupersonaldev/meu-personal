@@ -11,7 +11,7 @@ import { auditAuthEvent, auditSensitiveOperation } from '../middleware/audit'
 import { auditService } from '../services/audit.service'
 import { emailService } from '../services/email.service'
 import { validateCpfCnpj, validateCpfWithAPI } from '../utils/validation'
-import { getHtmlEmailTemplate } from '../services/email-templates'
+import { getHtmlEmailTemplate, getWelcomeStudentEmailTemplate, getWelcomeTeacherEmailTemplate } from '../services/email-templates'
 
 const router = express.Router()
 
@@ -448,6 +448,79 @@ router.post(
           path: '/'
         })
       } catch { }
+
+      // Enviar email de boas-vindas (assíncrono, não bloqueia resposta)
+      const frontendUrl = process.env.FRONTEND_URL || 'https://meupersonalfranquia.com.br'
+      const loginUrl = userData.role === 'STUDENT' 
+        ? `${frontendUrl}/aluno/login`
+        : `${frontendUrl}/professor/login`
+      
+      // Enviar email em background (não espera)
+      ;(async () => {
+        try {
+          if (userData.role === 'STUDENT') {
+            const html = getWelcomeStudentEmailTemplate(createdUser.name, loginUrl)
+            await emailService.sendEmail({
+              to: createdUser.email,
+              subject: 'Bem-vindo ao Meu Personal! 🎉',
+              html,
+              text: [
+                `Olá ${createdUser.name}!`,
+                '',
+                'Seja muito bem-vindo(a) ao Meu Personal!',
+                '',
+                'Estamos muito felizes em ter você conosco.',
+                '',
+                '🎁 PRESENTE DE BOAS-VINDAS!',
+                'Você ganhou 1 aula gratuita para experimentar nossos serviços!',
+                '',
+                'O que você pode fazer agora:',
+                '- Agendar sua primeira aula gratuita',
+                '- Conhecer nossos professores',
+                '- Comprar pacotes de aulas quando quiser',
+                '',
+                `Acesse sua conta: ${loginUrl}`,
+                '',
+                'Bons treinos!',
+                'Equipe Meu Personal'
+              ].join('\n')
+            })
+            console.log('[AUTH] Email de boas-vindas enviado para aluno:', createdUser.email)
+          } else if (userData.role === 'TEACHER') {
+            const html = getWelcomeTeacherEmailTemplate(createdUser.name, loginUrl)
+            await emailService.sendEmail({
+              to: createdUser.email,
+              subject: 'Bem-vindo ao Meu Personal! 🎉',
+              html,
+              text: [
+                `Olá ${createdUser.name}!`,
+                '',
+                'Seja muito bem-vindo(a) ao Meu Personal!',
+                '',
+                'Estamos muito felizes em ter você como parte da nossa equipe de profissionais.',
+                '',
+                '⏳ AGUARDANDO APROVAÇÃO',
+                'Seu cadastro está sendo analisado pela nossa equipe.',
+                'Assim que for aprovado, você receberá uma notificação.',
+                '',
+                'Enquanto isso, você pode:',
+                '- Completar seu perfil profissional',
+                '- Configurar sua disponibilidade de horários',
+                '- Conhecer a plataforma e suas funcionalidades',
+                '',
+                `Acesse sua conta: ${loginUrl}`,
+                '',
+                'Sucesso na sua jornada!',
+                'Equipe Meu Personal'
+              ].join('\n')
+            })
+            console.log('[AUTH] Email de boas-vindas enviado para professor:', createdUser.email)
+          }
+        } catch (emailError) {
+          console.warn('[AUTH] Falha ao enviar email de boas-vindas:', emailError)
+          // Não falha o registro se o email não for enviado
+        }
+      })()
 
       // Retornar dados do usuário
       res.status(201).json({
