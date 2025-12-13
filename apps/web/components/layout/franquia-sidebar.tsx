@@ -19,7 +19,8 @@ import {
   CalendarCheck,
   UserCheck,
   Settings,
-  Gift
+  Gift,
+  Shield
 } from 'lucide-react'
 
 export default function FranquiaSidebar() {
@@ -100,6 +101,13 @@ export default function FranquiaSidebar() {
       icon: DollarSign,
       href: '/franquia/dashboard/finance',
       isExpanded: expandedSections.includes('finance')
+    },
+    {
+      id: 'politicas',
+      label: 'Políticas',
+      icon: Shield,
+      href: '/franquia/dashboard/politicas',
+      isExpanded: expandedSections.includes('politicas')
     },
     {
       id: 'settings',

@@ -4,6 +4,7 @@ import {
   StudentClassBalance,
   ProfHourBalance
 } from './balance.service';
+import { policyService } from './policy.service';
 
 async function fetchFranqueadoraIdFromAcademy(academyId: string): Promise<string> {
   console.log(`🔍 Buscando franqueadora_id para academyId: ${academyId}`)
@@ -247,6 +248,17 @@ class BookingCanonicalService {
 
     if (availableClasses < 1) {
       throw new Error('Saldo insuficiente de aulas');
+    }
+
+    // VALIDAÇÃO DE POLÍTICAS: Verificar regras da franqueadora/franquia
+    const policyValidation = await policyService.validateBookingCreation({
+      academyId: params.franchiseId,
+      startAt: params.startAt,
+      studentId: params.studentId
+    });
+
+    if (!policyValidation.valid) {
+      throw new Error(policyValidation.errors.join('. '));
     }
 
     // VALIDAÇÃO 1: Verificar capacidade da unidade
@@ -531,6 +543,17 @@ class BookingCanonicalService {
       throw new Error('Saldo de horas insuficiente');
     }
 
+    // VALIDAÇÃO DE POLÍTICAS: Verificar limite diário do professor
+    const teacherDailyLimit = await policyService.validateTeacherDailyLimit({
+      academyId: params.franchiseId,
+      teacherId: params.professorId,
+      date: params.startAt
+    });
+
+    if (!teacherDailyLimit.valid) {
+      throw new Error(teacherDailyLimit.error || 'Limite diário de aulas atingido');
+    }
+
     // VALIDAÇÃO 1: Verificar capacidade da unidade
     let unitCapacity = 1; // padrão
     const { data: unit } = await supabase
@@ -731,9 +754,25 @@ class BookingCanonicalService {
     const hasStudent = Boolean(booking.student_id);
 
     if (hasStudent && booking.source === 'ALUNO') {
-      // Regra 4h: cancelamento gratuito até 4h antes estorna o crédito; após esse prazo, não estorna.
+      // VALIDAÇÃO DE POLÍTICAS: Verificar regras de cancelamento
+      const bookingStartAt = new Date(booking.start_at || booking.date);
+      const cancellationValidation = await policyService.validateCancellation({
+        academyId: booking.franchise_id,
+        bookingStartAt,
+        studentId: booking.student_id
+      });
+
+      if (!cancellationValidation.canCancel) {
+        throw new Error(cancellationValidation.errors.join('. '));
+      }
+
+      // Usar política efetiva para determinar late cancel
       const nowUtc = new Date();
-      const cutoff = booking.cancellable_until ? new Date(booking.cancellable_until) : new Date(new Date(booking.start_at || booking.date).getTime() - 4 * 60 * 60 * 1000);
+      const policy = await policyService.getEffectivePolicy(booking.franchise_id);
+      const lateCancelMs = policy.late_cancel_threshold_minutes * 60 * 1000;
+      const cutoff = booking.cancellable_until 
+        ? new Date(booking.cancellable_until) 
+        : new Date(bookingStartAt.getTime() - lateCancelMs);
       const freeCancel = nowUtc <= cutoff;
 
       console.log('[CANCEL BOOKING] Verificando cancelamento gratuito:', {

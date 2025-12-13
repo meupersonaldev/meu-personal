@@ -110,13 +110,16 @@ export default function ConfiguracoesPage() {
 
     try {
       const data = await api.teachers.getById(user.id)
-      const profileData = data.teacher_profiles?.[0] || data.teacher_profiles || {}
+      // Backend retorna { teacher: { ..., teacher_profiles: [...] } }
+      const teacher = data.teacher || data
+      const profiles = teacher.teacher_profiles || []
+      const profileData = Array.isArray(profiles) ? profiles[0] : profiles
 
       setProfessionalProfile({
-        bio: profileData.bio || '',
-        specialties: profileData.specialties || [],
-        hourly_rate: profileData.hourly_rate || 0,
-        is_available: profileData.is_available ?? true
+        bio: profileData?.bio || '',
+        specialties: profileData?.specialties || [],
+        hourly_rate: profileData?.hourly_rate || 0,
+        is_available: profileData?.is_available ?? true
       })
     } catch (error) {
       // Silenciosamente define valores padrão - o perfil pode não existir ainda

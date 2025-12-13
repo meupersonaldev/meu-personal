@@ -1184,7 +1184,7 @@ router.get('/:id', requireAuth, async (req, res) => {
         teacher_profiles (
           id,
           bio,
-          specialties: specialization,
+          specialization,
           hourly_rate,
           availability,
           is_available,
@@ -1201,7 +1201,24 @@ router.get('/:id', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'Professor não encontrado' })
     }
 
-    res.json({ teacher })
+    // Normalizar teacher_profiles para mapear specialization -> specialties
+    const profilesArray = Array.isArray(teacher.teacher_profiles)
+      ? teacher.teacher_profiles
+      : teacher.teacher_profiles
+        ? [teacher.teacher_profiles]
+        : []
+
+    const normalizedProfiles = profilesArray.map((profile: any) => ({
+      ...profile,
+      specialties: profile.specialization || []
+    }))
+
+    const normalizedTeacher = {
+      ...teacher,
+      teacher_profiles: normalizedProfiles
+    }
+
+    res.json({ teacher: normalizedTeacher })
   } catch (error: any) {
     console.error('Erro ao buscar professor:', error)
     res.status(500).json({ error: error.message })
@@ -1455,7 +1472,10 @@ router.put('/:id', requireAuth, async (req, res) => {
     }
     if (bio !== undefined) profileData.bio = bio
     // A tabela usa 'specialization' não 'specialties'
-    if (specialties !== undefined) profileData.specialization = specialties
+    // Garantir que specialties seja um array
+    if (specialties !== undefined) {
+      profileData.specialization = Array.isArray(specialties) ? specialties : []
+    }
     if (hourly_rate !== undefined) profileData.hourly_rate = Number(hourly_rate)
     if (is_available !== undefined) profileData.is_available = is_available
 
