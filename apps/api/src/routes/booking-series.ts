@@ -891,6 +891,32 @@ router.delete('/:seriesId', requireAuth, async (req: Request, res: Response): Pr
       }
     }
 
+    // Revogar horas pendentes do professor (BONUS_LOCK -> REVOKE)
+    if (refundedCredits > 0 && series.teacher_id) {
+      try {
+        const franqueadoraId = await fetchFranqueadoraIdFromAcademy(series.academy_id)
+        if (franqueadoraId) {
+          await balanceService.revokeBonusLock(
+            series.teacher_id,
+            franqueadoraId,
+            refundedCredits,
+            seriesId,
+            {
+              source: 'SYSTEM',
+              metaJson: {
+                series_id: seriesId,
+                reason: 'series_deleted',
+                bookings_count: refundedCredits
+              }
+            }
+          )
+          console.log(`[booking-series/delete] ✅ ${refundedCredits} hora(s) pendente(s) revogada(s) do professor ${series.teacher_id}`)
+        }
+      } catch (revokeErr) {
+        console.error(`[booking-series/delete] ⚠️ Erro ao revogar horas do professor:`, revokeErr)
+      }
+    }
+
     // Deletar notificações da série
     await supabase
       .from('booking_series_notifications')
@@ -994,6 +1020,20 @@ router.delete('/:seriesId/bookings/:bookingId', requireAuth, async (req: Request
           'BOOKING_CANCELLED_SINGLE'
         )
         if (refunded) refundedCredits = 1
+
+        // Revogar hora pendente do professor
+        try {
+          const franqueadoraId = await fetchFranqueadoraIdFromAcademy(booking.franchise_id || series.academy_id)
+          if (franqueadoraId && series.teacher_id) {
+            await balanceService.revokeBonusLock(series.teacher_id, franqueadoraId, 1, booking.id, {
+              source: 'SYSTEM',
+              metaJson: { booking_id: booking.id, reason: 'single_booking_cancelled' }
+            })
+            console.log(`[booking-series] ✅ Hora pendente revogada do professor (single)`)
+          }
+        } catch (err) {
+          console.error(`[booking-series] ⚠️ Erro ao revogar hora:`, err)
+        }
       }
 
     } else if (cancelType === 'future') {
@@ -1027,6 +1067,20 @@ router.delete('/:seriesId/bookings/:bookingId', requireAuth, async (req: Request
             booking.franchise_id || series.academy_id,
             'BOOKING_CANCELLED_FUTURE'
           )
+
+          // Revogar horas pendentes do professor
+          try {
+            const franqueadoraId = await fetchFranqueadoraIdFromAcademy(booking.franchise_id || series.academy_id)
+            if (franqueadoraId && series.teacher_id) {
+              await balanceService.revokeBonusLock(series.teacher_id, franqueadoraId, refundedCredits, booking.id, {
+                source: 'SYSTEM',
+                metaJson: { booking_id: booking.id, reason: 'future_bookings_cancelled', count: refundedCredits }
+              })
+              console.log(`[booking-series] ✅ ${refundedCredits} hora(s) pendente(s) revogada(s) do professor (future)`)
+            }
+          } catch (err) {
+            console.error(`[booking-series] ⚠️ Erro ao revogar horas:`, err)
+          }
         }
       }
 
@@ -1060,6 +1114,20 @@ router.delete('/:seriesId/bookings/:bookingId', requireAuth, async (req: Request
             series.academy_id,
             'BOOKING_CANCELLED_ALL'
           )
+
+          // Revogar horas pendentes do professor
+          try {
+            const franqueadoraId = await fetchFranqueadoraIdFromAcademy(series.academy_id)
+            if (franqueadoraId && series.teacher_id) {
+              await balanceService.revokeBonusLock(series.teacher_id, franqueadoraId, refundedCredits, seriesId, {
+                source: 'SYSTEM',
+                metaJson: { series_id: seriesId, reason: 'all_bookings_cancelled', count: refundedCredits }
+              })
+              console.log(`[booking-series] ✅ ${refundedCredits} hora(s) pendente(s) revogada(s) do professor (all)`)
+            }
+          } catch (err) {
+            console.error(`[booking-series] ⚠️ Erro ao revogar horas:`, err)
+          }
         }
 
         // Atualizar status da série
