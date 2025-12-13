@@ -207,6 +207,33 @@ class BookingCanonicalService {
       await this.syncUserCredits(params.studentId, franqueadoraId);
     }
 
+    // Professor recebe as horas TRAVADAS (visíveis mas não utilizáveis)
+    // Serão liberadas quando a aula for marcada como COMPLETED/DONE
+    if (existingBooking.teacher_id) {
+      try {
+        await balanceService.lockProfessorBonusHours(
+          existingBooking.teacher_id,
+          franqueadoraId,
+          1,
+          updatedBooking.id,
+          null, // unlock_at = null, liberado via completeBooking
+          {
+            unitId: null,
+            source: 'SYSTEM',
+            metaJson: {
+              booking_id: updatedBooking.id,
+              origin: 'student_booking_reward',
+              student_id: params.studentId
+            }
+          }
+        );
+        console.log(`[updateBookingToStudent] ✅ Hora bônus travada para professor ${existingBooking.teacher_id}`);
+      } catch (bonusError) {
+        console.error(`[updateBookingToStudent] ❌ Erro ao travar hora bônus:`, bonusError);
+        // Não impedir o agendamento se falhar
+      }
+    }
+
     return updatedBooking;
   }
 
