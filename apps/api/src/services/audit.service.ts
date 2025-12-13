@@ -36,16 +36,17 @@ class AuditService {
     const { data: auditLog, error } = await supabase
       .from('audit_logs')
       .insert({
-        table_name: params.tableName,
-        record_id: params.recordId,
-        operation: params.operation,
-        actor_id: params.actorId,
-        actor_role: params.actorRole,
-        old_values: params.oldValues,
-        new_values: params.newValues,
-        metadata: params.metadata,
-        ip_address: params.ipAddress,
-        user_agent: params.userAgent
+        entity: params.tableName,
+        entity_id: params.recordId,
+        action: params.operation,
+        actor_user_id: params.actorId || null,
+        diff_json: params.oldValues || params.newValues ? { old: params.oldValues, new: params.newValues } : null,
+        metadata_json: {
+          ...params.metadata,
+          actor_role: params.actorRole,
+          ip_address: params.ipAddress,
+          user_agent: params.userAgent
+        }
       })
       .select()
       .single();
@@ -76,24 +77,24 @@ class AuditService {
       .from('audit_logs')
       .select(`
         *,
-        actor:users!audit_logs_actor_id_fkey(name, email, role)
+        actor:users!audit_logs_actor_user_id_fkey(name, email, role)
       `)
       .order('created_at', { ascending: false });
 
     if (filters?.tableName) {
-      query = query.eq('table_name', filters.tableName);
+      query = query.eq('entity', filters.tableName);
     }
 
     if (filters?.recordId) {
-      query = query.eq('record_id', filters.recordId);
+      query = query.eq('entity_id', filters.recordId);
     }
 
     if (filters?.actorId) {
-      query = query.eq('actor_id', filters.actorId);
+      query = query.eq('actor_user_id', filters.actorId);
     }
 
     if (filters?.operation) {
-      query = query.eq('operation', filters.operation);
+      query = query.eq('action', filters.operation);
     }
 
     if (filters?.fromDate) {
