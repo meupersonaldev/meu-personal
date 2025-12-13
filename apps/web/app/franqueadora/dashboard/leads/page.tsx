@@ -174,8 +174,7 @@ export default function FranchiseLeadsPage() {
     setExporting(true)
 
     try {
-      const xlsxModule = await import('xlsx')
-      const XLSX = xlsxModule.default || xlsxModule
+      const ExcelJS = await import('exceljs')
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
       // Buscar todos os leads (sem paginação)
@@ -186,7 +185,7 @@ export default function FranchiseLeadsPage() {
       while (hasMore) {
         const params = new URLSearchParams({
           page: currentPage.toString(),
-          limit: '100', // Buscar em lotes maiores para exportação
+          limit: '100',
           sortBy: 'created_at',
           sortOrder: 'desc'
         })
@@ -235,53 +234,50 @@ export default function FranchiseLeadsPage() {
         })
       }
 
-      const headers = [
-        'Nome',
-        'Email',
-        'Telefone',
-        'Cidade',
-        'Capacidade de Investimento',
-        'Status',
-        'Mensagem',
-        'Data de Cadastro',
-        'Última Atualização'
+      // Criar workbook com ExcelJS
+      const workbook = new ExcelJS.Workbook()
+      const worksheet = workbook.addWorksheet('Leads')
+
+      // Definir colunas
+      worksheet.columns = [
+        { header: 'Nome', key: 'name', width: 25 },
+        { header: 'Email', key: 'email', width: 30 },
+        { header: 'Telefone', key: 'phone', width: 15 },
+        { header: 'Cidade', key: 'city', width: 20 },
+        { header: 'Capacidade de Investimento', key: 'investment', width: 25 },
+        { header: 'Status', key: 'status', width: 20 },
+        { header: 'Mensagem', key: 'message', width: 50 },
+        { header: 'Data de Cadastro', key: 'created', width: 20 },
+        { header: 'Última Atualização', key: 'updated', width: 20 }
       ]
 
-      const rows = [
-        headers,
-        ...allLeads.map((lead) => [
-          lead.name || '',
-          lead.email || '',
-          lead.phone || '',
-          lead.city || '',
-          lead.investment_capacity || '',
-          STATUS_LABELS[lead.status] || lead.status,
-          lead.message || '',
-          formatDate(lead.created_at),
-          lead.updated_at ? formatDate(lead.updated_at) : ''
-        ])
-      ]
+      // Estilizar header
+      worksheet.getRow(1).font = { bold: true }
+      worksheet.getRow(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF002C4E' }
+      }
+      worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } }
 
-      const worksheet = XLSX.utils.aoa_to_sheet(rows)
-      const workbook = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Leads')
+      // Adicionar dados
+      allLeads.forEach((lead) => {
+        worksheet.addRow({
+          name: lead.name || '',
+          email: lead.email || '',
+          phone: lead.phone || '',
+          city: lead.city || '',
+          investment: lead.investment_capacity || '',
+          status: STATUS_LABELS[lead.status] || lead.status,
+          message: lead.message || '',
+          created: formatDate(lead.created_at),
+          updated: lead.updated_at ? formatDate(lead.updated_at) : ''
+        })
+      })
 
-      // Ajustar largura das colunas
-      const colWidths = [
-        { wch: 25 }, // Nome
-        { wch: 30 }, // Email
-        { wch: 15 }, // Telefone
-        { wch: 20 }, // Cidade
-        { wch: 25 }, // Capacidade de Investimento
-        { wch: 20 }, // Status
-        { wch: 50 }, // Mensagem
-        { wch: 20 }, // Data de Cadastro
-        { wch: 20 }  // Última Atualização
-      ]
-      worksheet['!cols'] = colWidths
-
-      const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' })
-      const blob = new Blob([excelBuffer], {
+      // Gerar buffer e download
+      const buffer = await workbook.xlsx.writeBuffer()
+      const blob = new Blob([buffer], {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
       })
       const link = document.createElement('a')

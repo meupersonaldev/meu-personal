@@ -20,7 +20,8 @@ import {
   Settings2,
   BookOpen,
   UserPlus,
-  Gift
+  Gift,
+  Mail
 } from 'lucide-react'
 
 interface FranqueadoraSidebarProps {
@@ -105,6 +106,13 @@ export default function FranqueadoraSidebar({ isMobile = false, onNavigate }: Fr
       icon: Settings2,
       href: '/franqueadora/dashboard/politicas',
       isExpanded: expandedSections.includes('policies')
+    },
+    {
+      id: 'emails',
+      label: 'Templates de Email',
+      icon: Mail,
+      href: '/franqueadora/dashboard/emails',
+      isExpanded: expandedSections.includes('emails')
     },
     {
       id: 'docs',

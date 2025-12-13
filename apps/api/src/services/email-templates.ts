@@ -1,3 +1,5 @@
+import { emailTemplateService, replaceVariables, SystemTemplateSlug } from './email-template.service'
+
 // Logo URL - using direct URL instead of base64
 const LOGO_URL = `${
   process.env.FRONTEND_URL ||
@@ -5,6 +7,148 @@ const LOGO_URL = `${
   'https://meupersonalfranquia.com.br'
 }/images/logo.png`
 const PRIMARY_COLOR = '#002C4E'
+
+// ============================================================================
+// New Template Functions using EmailTemplateService
+// These functions fetch custom templates from DB, falling back to defaults
+// ============================================================================
+
+/**
+ * Get rendered email HTML using EmailTemplateService
+ * Fetches custom template if exists, falls back to default
+ * Requirements: 5.1, 5.3
+ */
+export async function getEmailFromTemplate(
+  slug: SystemTemplateSlug,
+  variables: Record<string, string>
+): Promise<string> {
+  try {
+    const template = await emailTemplateService.getTemplateForSending(slug)
+    
+    // Replace variables in content
+    const title = replaceVariables(template.title, variables)
+    const content = replaceVariables(template.content, variables)
+    const buttonUrl = template.buttonUrl ? replaceVariables(template.buttonUrl, variables) : undefined
+    
+    return getHtmlEmailTemplate(title, content, buttonUrl, template.buttonText)
+  } catch (error) {
+    console.error(`[EMAIL-TEMPLATES] Error fetching template ${slug}:`, error)
+    // Re-throw to let caller handle the error
+    throw error
+  }
+}
+
+/**
+ * Get welcome student email using EmailTemplateService
+ * Requirements: 5.1, 5.3
+ */
+export async function getWelcomeStudentEmail(name: string, loginUrl: string): Promise<string> {
+  return getEmailFromTemplate('welcome-student', {
+    nome: name,
+    login_url: loginUrl
+  })
+}
+
+/**
+ * Get welcome teacher email using EmailTemplateService
+ * Requirements: 5.1, 5.3
+ */
+export async function getWelcomeTeacherEmail(name: string, loginUrl: string): Promise<string> {
+  return getEmailFromTemplate('welcome-teacher', {
+    nome: name,
+    login_url: loginUrl
+  })
+}
+
+/**
+ * Get welcome student created (with password) email using EmailTemplateService
+ * Requirements: 5.1, 5.3
+ */
+export async function getWelcomeStudentCreatedEmail(
+  name: string, 
+  email: string, 
+  password: string, 
+  loginUrl: string
+): Promise<string> {
+  return getEmailFromTemplate('welcome-student-created', {
+    nome: name,
+    email: email,
+    senha: password,
+    login_url: loginUrl
+  })
+}
+
+/**
+ * Get welcome teacher created (with password) email using EmailTemplateService
+ * Requirements: 5.1, 5.3
+ */
+export async function getWelcomeTeacherCreatedEmail(
+  name: string, 
+  email: string, 
+  password: string, 
+  loginUrl: string
+): Promise<string> {
+  return getEmailFromTemplate('welcome-teacher-created', {
+    nome: name,
+    email: email,
+    senha: password,
+    login_url: loginUrl
+  })
+}
+
+/**
+ * Get student linked email using EmailTemplateService
+ * Requirements: 5.1, 5.3
+ */
+export async function getStudentLinkedEmail(
+  studentName: string, 
+  teacherName: string, 
+  loginUrl: string
+): Promise<string> {
+  return getEmailFromTemplate('student-linked', {
+    nome: studentName,
+    professor_nome: teacherName,
+    login_url: loginUrl
+  })
+}
+
+/**
+ * Get teacher approved email using EmailTemplateService
+ * Requirements: 5.1, 5.3
+ */
+export async function getTeacherApprovedEmail(name: string, loginUrl: string): Promise<string> {
+  return getEmailFromTemplate('teacher-approved', {
+    nome: name,
+    login_url: loginUrl
+  })
+}
+
+/**
+ * Get teacher rejected email using EmailTemplateService
+ * Requirements: 5.1, 5.3
+ */
+export async function getTeacherRejectedEmail(name: string, reason?: string): Promise<string> {
+  return getEmailFromTemplate('teacher-rejected', {
+    nome: name,
+    motivo: reason || 'Não especificado'
+  })
+}
+
+/**
+ * Get password reset email using EmailTemplateService
+ * Requirements: 5.1, 5.3
+ */
+export async function getPasswordResetEmail(name: string, resetUrl: string): Promise<string> {
+  return getEmailFromTemplate('password-reset', {
+    nome: name,
+    reset_url: resetUrl
+  })
+}
+
+// ============================================================================
+// Legacy Template Functions (kept for backward compatibility)
+// These will be deprecated in favor of the async versions above
+// ============================================================================
 
 export const getHtmlEmailTemplate = (
   title: string,

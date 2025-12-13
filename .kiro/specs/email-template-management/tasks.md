@@ -1,0 +1,94 @@
+# Implementation Plan
+
+- [x] 1. Create database migration for email_templates table
+  - Create table with id, slug, title, content, button_text, button_url, variables, updated_at, updated_by, created_at
+  - Add unique constraint on slug
+  - Add foreign key to users table for updated_by
+  - _Requirements: 2.4, 5.1_
+
+- [x] 2. Create EmailTemplateService
+  - [x] 2.1 Define default templates configuration with all 8 system templates
+    - Include slug, name, description, title, content, buttonText, variables for each
+    - _Requirements: 5.1_
+  - [x] 2.2 Implement getAllTemplates method
+    - Merge custom templates from DB with defaults
+    - Return complete list with metadata
+    - _Requirements: 1.1, 1.2_
+  - [x] 2.3 Implement getTemplate method
+    - Fetch by slug, return custom or default
+    - _Requirements: 5.1, 5.3_
+  - [x] 2.4 Implement updateTemplate method
+    - Validate required fields (title, content)
+    - Upsert to database
+    - _Requirements: 2.3, 2.4_
+  - [x] 2.5 Implement resetTemplate method
+    - Delete custom template from DB
+    - Return default values
+    - _Requirements: 5.2_
+  - [x] 2.6 Implement getPreview method
+    - Replace variables with example values
+    - Render with base template
+    - _Requirements: 3.1, 3.2, 3.3_
+  - [x] 2.7 Write property tests for EmailTemplateService
+    - **Property 2: Save round-trip consistency**
+    - **Property 3: Required field validation**
+    - **Property 4: Preview variable replacement**
+    - **Property 5: Custom template priority**
+    - **Property 6: Reset restores defaults**
+    - **Validates: Requirements 2.3, 2.4, 3.2, 5.1, 5.2, 5.3**
+
+- [x] 3. Create API routes for email templates
+  - [x] 3.1 GET /api/email-templates - List all templates
+    - Require franqueadora admin auth
+    - _Requirements: 1.1, 1.2_
+  - [x] 3.2 GET /api/email-templates/:slug - Get single template
+    - Include variables list
+    - _Requirements: 4.1, 4.2_
+  - [x] 3.3 PUT /api/email-templates/:slug - Update template
+    - Validate required fields
+    - _Requirements: 2.1, 2.3, 2.4_
+  - [x] 3.4 POST /api/email-templates/:slug/reset - Reset to default
+    - _Requirements: 5.2_
+  - [x] 3.5 GET /api/email-templates/:slug/preview - Get rendered preview
+    - _Requirements: 3.1, 3.2, 3.3_
+  - [x] 3.6 Write property test for template list completeness
+    - **Property 1: Template list completeness**
+    - **Validates: Requirements 1.1, 1.2**
+
+- [x] 4. Checkpoint - Ensure all backend tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 5. Create frontend email templates list page
+  - [x] 5.1 Create /franqueadora/emails page
+    - Display grid of template cards
+    - Show name, description, last modified
+    - _Requirements: 1.1, 1.2_
+  - [x] 5.2 Add navigation link in franqueadora menu
+    - _Requirements: 1.1_
+
+- [x] 6. Create frontend email template editor page
+  - [x] 6.1 Create /franqueadora/emails/[slug] page
+    - Split layout: editor left, preview right
+    - _Requirements: 2.1, 3.1_
+  - [x] 6.2 Implement template edit form
+    - Fields for title, content (textarea), button text
+    - Save and Reset buttons
+    - _Requirements: 2.1, 2.5, 5.2_
+  - [x] 6.3 Implement variables panel
+    - Show available variables with descriptions
+    - Click to insert at cursor
+    - _Requirements: 4.1, 4.2_
+  - [x] 6.4 Implement real-time preview
+    - Update preview as user types
+    - Show complete email with header/footer
+    - _Requirements: 3.1, 3.2, 3.3_
+
+- [x] 7. Integrate templates with email sending
+  - [x] 7.1 Update email-templates.ts to use EmailTemplateService
+    - Fetch custom template if exists, fallback to default
+    - _Requirements: 5.1, 5.3_
+  - [x] 7.2 Update all email sending calls to use new service
+    - _Requirements: 5.3_
+
+- [x] 8. Final Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.

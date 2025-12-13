@@ -597,8 +597,7 @@ function UsuariosPageContent() {
     setExporting(true)
 
     try {
-      const xlsxModule = await import('xlsx')
-      const XLSX = xlsxModule.default || xlsxModule
+      const ExcelJS = await import('exceljs')
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
       let franqueadoraId: string | null = franqueadora?.id ?? null
@@ -704,43 +703,54 @@ function UsuariosPageContent() {
         return
       }
 
-      const headers = [
-        'Nome',
-        'Email',
-        'Telefone',
-        'CPF',
-        'Tipo',
-        'Status',
-        'Email cadastrado',
-        'Telefone cadastrado',
-        'Carteira Professor',
-        'Último Acesso',
-        'Criado em'
+      // Criar workbook com ExcelJS
+      const workbook = new ExcelJS.Workbook()
+      const worksheet = workbook.addWorksheet('Usuários')
+
+      // Definir colunas
+      worksheet.columns = [
+        { header: 'Nome', key: 'name', width: 25 },
+        { header: 'Email', key: 'email', width: 30 },
+        { header: 'Telefone', key: 'phone', width: 15 },
+        { header: 'CPF', key: 'cpf', width: 15 },
+        { header: 'Tipo', key: 'role', width: 15 },
+        { header: 'Status', key: 'status', width: 10 },
+        { header: 'Email cadastrado', key: 'emailStatus', width: 18 },
+        { header: 'Telefone cadastrado', key: 'phoneStatus', width: 18 },
+        { header: 'Carteira Professor', key: 'teacherSource', width: 20 },
+        { header: 'Último Acesso', key: 'lastLogin', width: 18 },
+        { header: 'Criado em', key: 'createdAt', width: 18 }
       ]
 
-      const rows = [
-        headers,
-        ...allUsers.map((usuario) => [
-          usuario.name || '',
-          usuario.email || '',
-          usuario.phone ? formatarTelefone(usuario.phone) : '',
-          usuario.cpf ? formatarCPF(usuario.cpf) : '',
-          getRoleLabel(usuario.role),
-          usuario.active ? 'Ativo' : 'Inativo',
-          getEmailStatusValue(usuario),
-          getPhoneStatusValue(usuario),
-          usuario.teacher_lead_source?.teacher_name || '',
-          usuario.last_login_at ? formatarData(usuario.last_login_at) : 'Nunca',
-          formatarData(usuario.created_at)
-        ])
-      ]
+      // Estilizar header
+      worksheet.getRow(1).font = { bold: true }
+      worksheet.getRow(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF002C4E' }
+      }
+      worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } }
 
-      const worksheet = XLSX.utils.aoa_to_sheet(rows)
-      const workbook = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Usuários')
+      // Adicionar dados
+      allUsers.forEach((usuario) => {
+        worksheet.addRow({
+          name: usuario.name || '',
+          email: usuario.email || '',
+          phone: usuario.phone ? formatarTelefone(usuario.phone) : '',
+          cpf: usuario.cpf ? formatarCPF(usuario.cpf) : '',
+          role: getRoleLabel(usuario.role),
+          status: usuario.active ? 'Ativo' : 'Inativo',
+          emailStatus: getEmailStatusValue(usuario),
+          phoneStatus: getPhoneStatusValue(usuario),
+          teacherSource: usuario.teacher_lead_source?.teacher_name || '',
+          lastLogin: usuario.last_login_at ? formatarData(usuario.last_login_at) : 'Nunca',
+          createdAt: formatarData(usuario.created_at)
+        })
+      })
 
-      const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' })
-      const blob = new Blob([excelBuffer], {
+      // Gerar buffer e download
+      const buffer = await workbook.xlsx.writeBuffer()
+      const blob = new Blob([buffer], {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
       })
       const link = document.createElement('a')

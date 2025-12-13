@@ -184,6 +184,8 @@ import franchisorPoliciesRoutes from './routes/franchisor-policies'
 import asaasRoutes from './routes/asaas'
 import bookingSeriesRoutes from './routes/booking-series'
 import creditsRoutes from './routes/credits'
+import emailTemplatesRoutes from './routes/email-templates'
+import emailLogsRoutes from './routes/email-logs'
 import { bookingScheduler } from './jobs/booking-scheduler'
 import { reservationScheduler } from './jobs/reservation-processor'
 import { teacherAvailabilityScheduler } from './jobs/teacher-availability-scheduler'
@@ -215,6 +217,8 @@ app.use('/api/franchisor/policies', franchisorPoliciesRoutes)
 app.use('/api/asaas', asaasRoutes)
 app.use('/api/booking-series', bookingSeriesRoutes)
 app.use('/api/admin/credits', creditsRoutes)
+app.use('/api/email-templates', emailTemplatesRoutes)
+app.use('/api/email-logs', emailLogsRoutes)
 
 // SEGURANÇA CRÍTICA: Middleware para rotas não encontradas (deve vir antes do errorHandler)
 app.use(notFoundHandler)

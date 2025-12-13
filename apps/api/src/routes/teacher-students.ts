@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs'
 import { supabase } from '../lib/supabase'
 import { requireAuth } from '../middleware/auth'
 import { emailService } from '../services/email.service'
-import { getHtmlEmailTemplate } from '../services/email-templates'
+import { getStudentLinkedEmail, getWelcomeStudentCreatedEmail } from '../services/email-templates'
 import { ensureFranqueadoraContact } from '../services/franqueadora-contacts.service'
 import { createUserNotification } from './notifications'
 
@@ -224,22 +224,10 @@ router.post('/:teacherId/students', requireAuth, async (req, res) => {
         { teacher_id: teacherId, teacher_name: teacherName }
       )
 
-      // Enviar email pro email cadastrado
+      // Enviar email pro email cadastrado - usando EmailTemplateService
       try {
-        const emailContent = `
-          <p>Olá <strong>${existingUser.name}</strong>,</p>
-          <p><strong>${teacherName}</strong> adicionou você à carteira de alunos no Meu Personal.</p>
-          <p>Agora você pode ver seus agendamentos e histórico com este personal diretamente pela plataforma.</p>
-        `
-
-        const html = getHtmlEmailTemplate(
-          'Novo personal vinculado!',
-          emailContent,
-          `${
-            process.env.WEB_URL || 'https://meupersonalfranquia.com.br'
-          }/aluno/login`,
-          'Acessar Minha Conta'
-        )
+        const loginUrl = `${process.env.WEB_URL || 'https://meupersonalfranquia.com.br'}/aluno/login`
+        const html = await getStudentLinkedEmail(existingUser.name, teacherName, loginUrl)
 
         await emailService.sendEmail({
           to: existingUser.email,
@@ -331,36 +319,10 @@ router.post('/:teacherId/students', requireAuth, async (req, res) => {
         console.warn('Lead error', e)
       }
 
-      // Enviar email boa vinda
+      // Enviar email boa vinda - usando EmailTemplateService
       try {
-        // Buscar nome do personal/professor
-        const { data: teacherUser } = await supabase
-          .from('users')
-          .select('name')
-          .eq('id', teacherId)
-          .single()
-
-        const teacherName = teacherUser?.name || 'Seu personal'
-
-        const emailContent = `
-          <p>Olá <strong>${name}</strong>,</p>
-          <p><strong>${teacherName}</strong> cadastrou você na plataforma <strong>Meu Personal</strong>.</p>
-          <p>Abaixo estão suas credenciais de acesso:</p>
-          <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 24px 0; border: 1px solid #e5e7eb;">
-            <p style="margin: 0 0 8px 0;"><strong>Email:</strong> ${email}</p>
-            <p style="margin: 0;"><strong>Senha temporária:</strong> <span style="font-family: monospace; background: #e5e7eb; padding: 4px 8px; border-radius: 4px; font-weight: bold; letter-spacing: 1px;">${tempPassword}</span></p>
-          </div>
-          <p style="color: #b91c1c; font-size: 14px; margin-top: 16px;"><strong>Importante:</strong> Por segurança, recomendamos que você altere sua senha no primeiro acesso.</p>
-        `
-
-        const html = getHtmlEmailTemplate(
-          'Bem-vindo ao Meu Personal! 🎉',
-          emailContent,
-          `${
-            process.env.WEB_URL || 'https://meupersonalfranquia.com.br'
-          }/aluno/login`,
-          'Acessar Plataforma'
-        )
+        const loginUrl = `${process.env.WEB_URL || 'https://meupersonalfranquia.com.br'}/aluno/login`
+        const html = await getWelcomeStudentCreatedEmail(name, email, tempPassword, loginUrl)
 
         await emailService.sendEmail({
           to: email,

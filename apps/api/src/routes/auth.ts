@@ -11,7 +11,7 @@ import { auditAuthEvent, auditSensitiveOperation } from '../middleware/audit'
 import { auditService } from '../services/audit.service'
 import { emailService } from '../services/email.service'
 import { validateCpfCnpj, validateCpfWithAPI } from '../utils/validation'
-import { getHtmlEmailTemplate, getWelcomeStudentEmailTemplate, getWelcomeTeacherEmailTemplate } from '../services/email-templates'
+import { getHtmlEmailTemplate, getWelcomeStudentEmail, getWelcomeTeacherEmail, getPasswordResetEmail } from '../services/email-templates'
 
 const router = express.Router()
 
@@ -455,11 +455,11 @@ router.post(
         ? `${frontendUrl}/aluno/login`
         : `${frontendUrl}/professor/login`
       
-      // Enviar email em background (não espera)
+      // Enviar email em background (não espera) - usando EmailTemplateService
       ;(async () => {
         try {
           if (userData.role === 'STUDENT') {
-            const html = getWelcomeStudentEmailTemplate(createdUser.name, loginUrl)
+            const html = await getWelcomeStudentEmail(createdUser.name, loginUrl)
             await emailService.sendEmail({
               to: createdUser.email,
               subject: 'Bem-vindo ao Meu Personal! 🎉',
@@ -487,7 +487,7 @@ router.post(
             })
             console.log('[AUTH] Email de boas-vindas enviado para aluno:', createdUser.email)
           } else if (userData.role === 'TEACHER') {
-            const html = getWelcomeTeacherEmailTemplate(createdUser.name, loginUrl)
+            const html = await getWelcomeTeacherEmail(createdUser.name, loginUrl)
             await emailService.sendEmail({
               to: createdUser.email,
               subject: 'Bem-vindo ao Meu Personal! 🎉',
@@ -640,19 +640,8 @@ router.post('/forgot-password', async (req, res) => {
       const resetLink = resetUrl.toString()
 
       try {
-        const emailContent = `
-          <p>Olá <strong>${user.name || ''}</strong>,</p>
-          <p>Recebemos uma solicitação para redefinir a sua senha na plataforma <strong>Meu Personal</strong>.</p>
-          <p>Clique no botão abaixo para criar uma nova senha:</p>
-          <p>Se você não solicitou essa alteração, ignore este e-mail.</p>
-        `
-
-        const html = getHtmlEmailTemplate(
-          'Redefinição de Senha',
-          emailContent,
-          resetLink,
-          'Redefinir Minha Senha'
-        )
+        // Usando EmailTemplateService para buscar template customizado
+        const html = await getPasswordResetEmail(user.name || '', resetLink)
 
         await emailService.sendEmail({
           to: email,

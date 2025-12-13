@@ -8,7 +8,7 @@ import path from 'path'
 import { requireAuth, requireRole } from '../middleware/auth'
 import { validateCpfCnpj } from '../utils/validation'
 import { emailService } from '../services/email.service'
-import { getHtmlEmailTemplate, getTeacherApprovedEmailTemplate, getTeacherRejectedEmailTemplate } from '../services/email-templates'
+import { getHtmlEmailTemplate, getTeacherApprovedEmail, getTeacherRejectedEmail, getPasswordResetEmail } from '../services/email-templates'
 
 // Cliente Supabase centralizado importado de ../lib/supabase
 
@@ -457,22 +457,9 @@ router.post('/:id/reset-password', requireAuth, requireRole(['FRANQUEADORA', 'SU
     resetUrl.searchParams.set('token', resetToken)
     const resetLink = resetUrl.toString()
 
-    // Enviar email
+    // Enviar email - usando EmailTemplateService
     try {
-      const emailContent = `
-        <p>Olá <strong>${targetUser.name || ''}</strong>,</p>
-        <p>Um administrador solicitou a redefinição da sua senha na plataforma <strong>Meu Personal</strong>.</p>
-        <p>Clique no botão abaixo para criar uma nova senha:</p>
-        <p>Este link expira em 1 hora.</p>
-        <p>Se você não solicitou essa alteração, entre em contato com o suporte imediatamente.</p>
-      `
-
-      const html = getHtmlEmailTemplate(
-        'Redefinição de Senha (Solicitado por Admin)',
-        emailContent,
-        resetLink,
-        'Redefinir Minha Senha'
-      )
+      const html = await getPasswordResetEmail(targetUser.name || '', resetLink)
 
       await emailService.sendEmail({
         to: targetUser.email,
@@ -641,14 +628,14 @@ router.put('/:id/approve', requireAuth, async (req, res) => {
 
     if (error) throw error
 
-    // Enviar email de aprovação (assíncrono)
+    // Enviar email de aprovação (assíncrono) - usando EmailTemplateService
     if (userData.role === 'TEACHER') {
       const frontendUrl = process.env.FRONTEND_URL || 'https://meupersonalfranquia.com.br'
       const loginUrl = `${frontendUrl}/professor/login`
       
       ;(async () => {
         try {
-          const html = getTeacherApprovedEmailTemplate(userData.name, loginUrl)
+          const html = await getTeacherApprovedEmail(userData.name, loginUrl)
           await emailService.sendEmail({
             to: userData.email,
             subject: 'Seu cadastro foi aprovado! 🎉',
@@ -722,11 +709,11 @@ router.put('/:id/reject', requireAuth, async (req, res) => {
 
     if (error) throw error
 
-    // Enviar email de rejeição (assíncrono)
+    // Enviar email de rejeição (assíncrono) - usando EmailTemplateService
     if (userData.role === 'TEACHER') {
       ;(async () => {
         try {
-          const html = getTeacherRejectedEmailTemplate(userData.name, reason)
+          const html = await getTeacherRejectedEmail(userData.name, reason)
           await emailService.sendEmail({
             to: userData.email,
             subject: 'Atualização do seu cadastro - Meu Personal',

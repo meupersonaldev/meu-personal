@@ -1416,41 +1416,30 @@ router.post('/usuarios',
         // Não falhar a criação do usuário se o contato falhar
       }
 
-      // Enviar email de boas-vindas
+      // Enviar email de boas-vindas - usando EmailTemplateService
       let emailSent = false
       let emailError = null
       
       try {
-        const { getHtmlEmailTemplate } = await import('../services/email-templates')
+        const { getWelcomeStudentCreatedEmail, getWelcomeTeacherCreatedEmail } = await import('../services/email-templates')
         const { emailService } = await import('../services/email.service')
 
         console.log('[FRANQUEADORA] Tentando enviar email de boas-vindas para:', email)
 
-        const loginUrl = 'https://meupersonalfranquia.com.br/login'
+        const loginUrl = role === 'TEACHER' 
+          ? 'https://meupersonalfranquia.com.br/professor/login'
+          : 'https://meupersonalfranquia.com.br/aluno/login'
 
-        const emailContent = `
-          <p>Olá <strong>${name}</strong>,</p>
-          <p>Bem-vindo ao <strong>Meu Personal</strong>!</p>
-          <p>Abaixo estão suas credenciais de acesso:</p>
-          <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 24px 0; border: 1px solid #e5e7eb;">
-            <p style="margin: 0 0 8px 0;"><strong>Email:</strong> ${email}</p>
-            <p style="margin: 0;"><strong>Senha temporária:</strong> <span style="font-family: monospace; background: #e5e7eb; padding: 4px 8px; border-radius: 4px; font-weight: bold; letter-spacing: 1px;">${password}</span></p>
-          </div>
-          <p style="color: #b91c1c; font-size: 14px; margin-top: 16px;"><strong>Importante:</strong> Por segurança, recomendamos que você altere sua senha no primeiro acesso.</p>
-        `
-
-        const htmlEmail = getHtmlEmailTemplate(
-          'Bem-vindo ao Meu Personal! 🎉',
-          emailContent,
-          loginUrl,
-          'Acessar Plataforma'
-        )
+        // Usar template apropriado baseado no role
+        const htmlEmail = role === 'TEACHER'
+          ? await getWelcomeTeacherCreatedEmail(name, email, password, loginUrl)
+          : await getWelcomeStudentCreatedEmail(name, email, password, loginUrl)
 
         await emailService.sendEmail({
           to: email,
           subject: 'Bem-vindo ao Meu Personal! 🎉',
           html: htmlEmail,
-          text: `Bem-vindo ao Meu Personal! Suas credenciais de acesso: Email: ${email}, Senha temporária: ${password}. Por segurança, recomendamos que você altere sua senha no primeiro acesso. Acesse: https://meupersonalfranquia.com.br/login`
+          text: `Bem-vindo ao Meu Personal! Suas credenciais de acesso: Email: ${email}, Senha temporária: ${password}. Por segurança, recomendamos que você altere sua senha no primeiro acesso. Acesse: ${loginUrl}`
         })
         
         emailSent = true
