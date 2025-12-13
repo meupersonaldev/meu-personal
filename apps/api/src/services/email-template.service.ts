@@ -76,6 +76,8 @@ export const SYSTEM_TEMPLATE_SLUGS = [
   'teacher-approved',          // Professor aprovado
   'teacher-rejected',          // Professor rejeitado
   'password-reset',            // Redefinição de senha
+  'policy-published',          // Nova política publicada
+  'policy-rollback',           // Rollback de política
 ] as const
 
 export type SystemTemplateSlug = typeof SYSTEM_TEMPLATE_SLUGS[number]
@@ -344,6 +346,66 @@ export const DEFAULT_TEMPLATES: DefaultTemplate[] = [
     variables: [
       { name: 'nome', placeholder: '{{nome}}', description: 'Nome do usuário', example: 'João Silva' },
       { name: 'reset_url', placeholder: '{{reset_url}}', description: 'URL de redefinição de senha', example: 'https://meupersonalfranquia.com.br/redefinir-senha?token=abc123' }
+    ]
+  },
+  {
+    slug: 'policy-published',
+    name: 'Nova Política Publicada',
+    description: 'Email enviado às franquias quando uma nova política é publicada',
+    title: 'Nova Política de Operação - Versão {{version}}',
+    content: `<p>Olá <strong>{{academyName}}</strong>,</p>
+
+<p>A <strong>{{franqueadoraName}}</strong> publicou uma nova versão das políticas de operação.</p>
+
+<p style="background-color: #f0f9ff; border-left: 4px solid ${PRIMARY_COLOR}; padding: 16px; margin: 24px 0; border-radius: 0 8px 8px 0;">
+  <strong style="color: ${PRIMARY_COLOR};">📋 Versão {{version}}</strong><br>
+  Vigente a partir de: {{effectiveFrom}}
+</p>
+
+<p>Acesse o dashboard para ver todos os detalhes das novas políticas.</p>
+
+<p>Atenciosamente,<br>Equipe Meu Personal</p>`,
+    buttonText: 'Acessar Dashboard',
+    buttonUrl: '{{dashboardUrl}}',
+    variables: [
+      { name: 'academyName', placeholder: '{{academyName}}', description: 'Nome da franquia', example: 'Academia Fitness Center' },
+      { name: 'franqueadoraName', placeholder: '{{franqueadoraName}}', description: 'Nome da franqueadora', example: 'Meu Personal' },
+      { name: 'version', placeholder: '{{version}}', description: 'Número da versão', example: '5' },
+      { name: 'effectiveFrom', placeholder: '{{effectiveFrom}}', description: 'Data de vigência', example: '13/12/2025' },
+      { name: 'dashboardUrl', placeholder: '{{dashboardUrl}}', description: 'URL do dashboard', example: 'https://app.meupersonal.com/franquia/dashboard' }
+    ]
+  },
+  {
+    slug: 'policy-rollback',
+    name: 'Rollback de Política',
+    description: 'Email enviado às franquias quando há rollback de política',
+    title: 'Política Revertida - Versão {{newVersion}}',
+    content: `<p>Olá <strong>{{academyName}}</strong>,</p>
+
+<p>A <strong>{{franqueadoraName}}</strong> reverteu as políticas de operação para uma versão anterior.</p>
+
+<p style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; margin: 24px 0; border-radius: 0 8px 8px 0;">
+  <strong style="color: #92400e;">⚠️ Rollback Realizado</strong><br>
+  Nova versão: {{newVersion}}<br>
+  Revertido para: Versão {{rolledBackTo}}
+</p>
+
+{{#if comment}}
+<p><strong>Motivo:</strong> {{comment}}</p>
+{{/if}}
+
+<p>Acesse o dashboard para ver todos os detalhes.</p>
+
+<p>Atenciosamente,<br>Equipe Meu Personal</p>`,
+    buttonText: 'Acessar Dashboard',
+    buttonUrl: '{{dashboardUrl}}',
+    variables: [
+      { name: 'academyName', placeholder: '{{academyName}}', description: 'Nome da franquia', example: 'Academia Fitness Center' },
+      { name: 'franqueadoraName', placeholder: '{{franqueadoraName}}', description: 'Nome da franqueadora', example: 'Meu Personal' },
+      { name: 'newVersion', placeholder: '{{newVersion}}', description: 'Nova versão criada', example: '6' },
+      { name: 'rolledBackTo', placeholder: '{{rolledBackTo}}', description: 'Versão revertida', example: '3' },
+      { name: 'comment', placeholder: '{{comment}}', description: 'Motivo do rollback', example: 'Valores anteriores causaram problemas' },
+      { name: 'dashboardUrl', placeholder: '{{dashboardUrl}}', description: 'URL do dashboard', example: 'https://app.meupersonal.com/franquia/dashboard' }
     ]
   }
 ]

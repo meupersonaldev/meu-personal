@@ -2,9 +2,52 @@ import { Router } from 'express'
 import { supabase } from '../lib/supabase'
 import { requireAuth, requireRole, requireFranqueadoraAdmin } from '../middleware/auth'
 import { asyncErrorHandler } from '../middleware/errorHandler'
-import { sendEmail } from '../services/email-unified.service'
+import { emailUnifiedService } from '../services/email-unified.service'
+import { emailTemplateService, replaceVariables } from '../services/email-template.service'
+import { getHtmlEmailTemplate } from '../services/email-templates'
 
 const router = Router()
+
+// Helper para enviar email usando template do banco
+async function sendEmail(params: {
+  to: string
+  templateSlug: string
+  data: Record<string, any>
+  franqueadoraId?: string
+}): Promise<void> {
+  try {
+    // Buscar template do banco
+    const { data: template } = await supabase
+      .from('email_templates')
+      .select('title, content, button_text, button_url')
+      .eq('slug', params.templateSlug)
+      .single()
+
+    if (!template) {
+      console.warn(`[POLICY-EMAIL] Template ${params.templateSlug} não encontrado`)
+      return
+    }
+
+    // Substituir variáveis
+    const title = replaceVariables(template.title, params.data)
+    const content = replaceVariables(template.content, params.data)
+    const buttonUrl = template.button_url ? replaceVariables(template.button_url, params.data) : undefined
+
+    // Gerar HTML completo
+    const html = getHtmlEmailTemplate(title, content, buttonUrl, template.button_text)
+
+    // Enviar email
+    await emailUnifiedService.sendEmail({
+      to: params.to,
+      subject: title,
+      html,
+      templateSlug: params.templateSlug,
+      franqueadoraId: params.franqueadoraId
+    })
+  } catch (err) {
+    console.error(`[POLICY-EMAIL] Erro ao enviar email:`, err)
+  }
+}
 
 // Helpers
 const parseIntOr = (v: any, d: number) => {

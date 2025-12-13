@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
-import { Loader2, Save, MapPin, Building2, MoreVertical, Edit, History, Mail, AlertTriangle } from 'lucide-react'
+import { Loader2, Save, MapPin, Building2, Edit, History, Mail } from 'lucide-react'
 import FranqueadoraGuard from '@/components/auth/franqueadora-guard'
 import PolicyOverrideDialog from '@/components/policies/PolicyOverrideDialog'
 import PolicyDraftForm from '@/components/policies/PolicyDraftForm'
@@ -62,8 +62,8 @@ function PoliticasPageContent() {
   const [overridesByAcademy, setOverridesByAcademy] = useState<Record<string, string[]>>({})
   const [history, setHistory] = useState<any[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
-  const [hasConflicts, setHasConflicts] = useState(false)
-  const [conflictsCount, setConflictsCount] = useState(0)
+  const [, setHasConflicts] = useState(false)
+  const [, setConflictsCount] = useState(0)
   const [notifyFranchises, setNotifyFranchises] = useState(true)
   const [rollbackOpen, setRollbackOpen] = useState(false)
   const [rollbackTarget, setRollbackTarget] = useState<any>(null)
