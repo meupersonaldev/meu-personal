@@ -279,8 +279,8 @@ export function FranqueadoraPackageManager({ variant = DEFAULT_VARIANT }: Franqu
       classesQty: qty,
       priceCents,
       description: studentForm.description.trim() || undefined,
-      status: (editingStudentPackage?.status === 'active' || editingStudentPackage?.status === 'inactive') 
-        ? editingStudentPackage.status 
+      status: (editingStudentPackage?.status === 'active' || editingStudentPackage?.status === 'inactive')
+        ? editingStudentPackage.status
         : 'active'
     }
 
@@ -368,299 +368,276 @@ export function FranqueadoraPackageManager({ variant = DEFAULT_VARIANT }: Franqu
     <div className="space-y-6">
       <div className={`grid grid-cols-1 ${variant === 'all' ? 'lg:grid-cols-2 gap-6' : 'gap-6'}`}>
         {showStudent && (
-        <Card className="p-6 space-y-6">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">Pacotes para alunos</h2>
-              <p className="text-sm text-gray-600">
-                Crie pacotes de treinos que os alunos podem adquirir via checkout Asaas.
-              </p>
-            </div>
-            <Button
-              onClick={() => {
-                setEditingStudentPackage(null)
-                setStudentForm(initialStudentForm)
-                setStudentModalOpen(true)
-              }}
-            >
-              Novo pacote
-            </Button>
-          </div>
-          {false && (
-          <form className="space-y-4" onSubmit={editingStudentPackage ? handleUpdateStudentPackage : handleCreateStudentPackage}>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700" htmlFor="student-title">Nome do pacote</label>
-              <Input
-                id="student-title"
-                placeholder="Ex: Pacote Premium - 20 treinos"
-                value={studentForm.title}
-                onChange={(event) => setStudentForm((prev) => ({ ...prev, title: event.target.value }))}
-                required
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-gray-700" htmlFor="student-qty">Qtd. de treinos</label>
-                <Input
-                  id="student-qty"
-                  type="number"
-                  min={1}
-                  placeholder="Ex: 10"
-                  value={studentForm.classesQty}
-                  onChange={(event) => setStudentForm((prev) => ({ ...prev, classesQty: event.target.value }))}
-                  required
-                />
+          <Card className="p-6 space-y-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Pacotes para alunos</h2>
+                <p className="text-sm text-gray-600">
+                  Crie pacotes de treinos que os alunos podem adquirir via checkout Asaas.
+                </p>
               </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-gray-700" htmlFor="student-price">Valor (R$)</label>
-                <Input
-                  id="student-price"
-                  inputMode="decimal"
-                  placeholder="Ex: 349,90"
-                  value={studentForm.price}
-                  onChange={(event) => setStudentForm((prev) => ({ ...prev, price: event.target.value }))}
-                  required
-                />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700" htmlFor="student-description">Descrição (opcional)</label>
-              <Textarea
-                id="student-description"
-                rows={3}
-                placeholder="Informações adicionais do pacote"
-                value={studentForm.description}
-                onChange={(event) => setStudentForm((prev) => ({ ...prev, description: event.target.value }))}
-              />
-            </div>
-            <div className="flex gap-2">
-              <Button type="submit" className="w-full sm:w-auto" disabled={isSubmittingStudent || isEditingStudent}>
-                {(isSubmittingStudent || isEditingStudent) ? <Loader2 className="h-4 w-4 animate-spin" /> : (editingStudentPackage ? 'Atualizar pacote' : 'Criar pacote')}
+              <Button
+                onClick={() => {
+                  setEditingStudentPackage(null)
+                  setStudentForm(initialStudentForm)
+                  setStudentModalOpen(true)
+                }}
+              >
+                Novo pacote
               </Button>
-              {editingStudentPackage && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setEditingStudentPackage(null)
-                    setStudentForm(initialStudentForm)
-                  }}
-                >
-                  Cancelar
-                </Button>
+            </div>
+            {false && (
+              <form className="space-y-4" onSubmit={editingStudentPackage ? handleUpdateStudentPackage : handleCreateStudentPackage}>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-gray-700" htmlFor="student-title">Nome do pacote</label>
+                  <Input
+                    id="student-title"
+                    placeholder="Ex: Pacote Premium - 20 treinos"
+                    value={studentForm.title}
+                    onChange={(event) => setStudentForm((prev) => ({ ...prev, title: event.target.value }))}
+                    required
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700" htmlFor="student-qty">Qtd. de treinos</label>
+                    <Input
+                      id="student-qty"
+                      type="number"
+                      min={1}
+                      placeholder="Ex: 10"
+                      value={studentForm.classesQty}
+                      onChange={(event) => setStudentForm((prev) => ({ ...prev, classesQty: event.target.value }))}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-gray-700" htmlFor="student-price">Valor (R$)</label>
+                    <Input
+                      id="student-price"
+                      inputMode="decimal"
+                      placeholder="Ex: 349,90"
+                      value={studentForm.price}
+                      onChange={(event) => setStudentForm((prev) => ({ ...prev, price: event.target.value }))}
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-gray-700" htmlFor="student-description">Descrição (opcional)</label>
+                  <Textarea
+                    id="student-description"
+                    rows={3}
+                    placeholder="Informações adicionais do pacote"
+                    value={studentForm.description}
+                    onChange={(event) => setStudentForm((prev) => ({ ...prev, description: event.target.value }))}
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button type="submit" className="w-full sm:w-auto" disabled={isSubmittingStudent || isEditingStudent}>
+                    {(isSubmittingStudent || isEditingStudent) ? <Loader2 className="h-4 w-4 animate-spin" /> : (editingStudentPackage ? 'Atualizar pacote' : 'Criar pacote')}
+                  </Button>
+                  {editingStudentPackage && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setEditingStudentPackage(null)
+                        setStudentForm(initialStudentForm)
+                      }}
+                    >
+                      Cancelar
+                    </Button>
+                  )}
+                </div>
+              </form>
+            )}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900 mb-3">Pacotes cadastrados</h3>
+              {isPackagesLoading && !hasStudentPackages ? (
+                <div className="flex flex-col items-center justify-center py-12 text-sm text-gray-500">
+                  <Loader2 className="mb-2 h-8 w-8 animate-spin text-meu-primary" />
+                  Carregando pacotes...
+                </div>
+              ) : !hasStudentPackages ? (
+                <div className="text-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                  <p className="text-gray-500">Nenhum pacote cadastrado.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {displayedStudentPackages.map((pkg) => (
+                    <Card key={pkg.id} className="group relative overflow-hidden border-gray-100 hover:shadow-lg transition-all duration-300">
+                      <div className={`absolute top-0 left-0 w-1.5 h-full ${pkg.status === 'active' ? 'bg-meu-primary' : 'bg-gray-300'}`} />
+                      <div className="p-5">
+                        <div className="flex justify-between items-start mb-4">
+                          <div className="bg-blue-50 text-meu-primary p-2 rounded-lg">
+                            <Edit className="h-5 w-5" />
+                          </div>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => { handleEditStudentPackage(pkg); setStudentModalOpen(true) }}>
+                                <Edit className="mr-2 h-4 w-4" />
+                                Editar
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => setDeletingStudentPackage(pkg)}
+                                className="text-red-600"
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Excluir
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+
+                        <h4 className="text-lg font-bold text-gray-900 mb-1 line-clamp-1" title={pkg.title}>{pkg.title}</h4>
+
+                        <div className="flex items-baseline gap-1 mb-4">
+                          <span className="text-2xl font-bold text-meu-primary">
+                            {currencyFormatter.format(pkg.price_cents / 100)}
+                          </span>
+                        </div>
+
+                        <div className="space-y-2 mb-4">
+                          <div className="flex items-center text-sm text-gray-600">
+                            <span className="font-medium mr-2">Qtd:</span> {pkg.classes_qty} treinos
+                          </div>
+                          {pkg.metadata_json?.description && (
+                            <div className="text-sm text-gray-500 line-clamp-2 min-h-[40px]">
+                              {pkg.metadata_json.description}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="pt-4 border-t border-gray-100 flex items-center justify-between">
+                          <span className={`text-xs font-semibold px-2 py-1 rounded-full ${pkg.status === 'active'
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-gray-100 text-gray-600'
+                            }`}>
+                            {pkg.status === 'active' ? 'ATIVO' : 'INATIVO'}
+                          </span>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
               )}
             </div>
-            </form>
-          )}
-          <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Pacotes cadastrados</h3>
-            {isPackagesLoading && !hasStudentPackages ? (
-              <div className="flex items-center justify-center py-6 text-sm text-gray-500">
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Carregando pacotes...
-              </div>
-            ) : !hasStudentPackages ? (
-              <p className="text-sm text-gray-500">Nenhum pacote cadastrado.</p>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {displayedStudentPackages.map((pkg) => (
-                  <Card key={pkg.id} className="p-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <h4 className="text-sm font-semibold text-gray-900">{pkg.title}</h4>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {pkg.classes_qty} treino(s) · {currencyFormatter.format(pkg.price_cents / 100)}
-                        </p>
-                        {pkg.metadata_json?.description && (
-                          <p className="text-xs text-gray-600 mt-2">{pkg.metadata_json.description}</p>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {showStudentStatus && (
-                          <span className={`text-xs font-medium ${pkg.status === 'active' ? 'text-green-600' : 'text-gray-400'}`}>
-                            {pkg.status === 'active' ? 'Ativo' : 'Inativo'}
-                          </span>
-                        )}
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => { handleEditStudentPackage(pkg); setStudentModalOpen(true) }}>
-                              <Edit className="mr-2 h-4 w-4" />
-                              Editar
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => setDeletingStudentPackage(pkg)}
-                              className="text-red-600"
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Excluir
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </div>
-        </Card>
+          </Card>
         )}
         {showHour && (
-        <Card className="p-6 space-y-6">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">Pacotes para professores</h2>
-              <p className="text-sm text-gray-600">
-                Defina pacotes de horas para que professores habilitados possam comprar via Asaas.
-              </p>
-            </div>
-            <Button
-              onClick={() => {
-                setEditingHourPackage(null)
-                setHourForm(initialHourForm)
-                setHourModalOpen(true)
-              }}
-            >
-              Novo pacote
-            </Button>
-          </div>
-          {false && (
-          <form className="space-y-4" onSubmit={editingHourPackage ? handleUpdateHourPackage : handleCreateHourPackage}>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700" htmlFor="hour-title">Nome do pacote</label>
-              <Input
-                id="hour-title"
-                placeholder="Ex: Pacote Professor - 25 horas"
-                value={hourForm.title}
-                onChange={(event) => setHourForm((prev) => ({ ...prev, title: event.target.value }))}
-                required
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-gray-700" htmlFor="hour-qty">Qtd. de horas</label>
-                <Input
-                  id="hour-qty"
-                  type="number"
-                  min={1}
-                  placeholder="Ex: 25"
-                  value={hourForm.hoursQty}
-                  onChange={(event) => setHourForm((prev) => ({ ...prev, hoursQty: event.target.value }))}
-                  required
-                />
+          <Card className="p-6 space-y-6 border-none shadow-none bg-transparent">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+              <div>
+                <h2 className="text-xl font-bold text-meu-primary">Pacotes para Professores</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  Gerencie os pacotes de horas disponíveis para compra pelos professores.
+                </p>
               </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-gray-700" htmlFor="hour-price">Valor (R$)</label>
-                <Input
-                  id="hour-price"
-                  inputMode="decimal"
-                  placeholder="Ex: 325,00"
-                  value={hourForm.price}
-                  onChange={(event) => setHourForm((prev) => ({ ...prev, price: event.target.value }))}
-                  required
-                />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700" htmlFor="hour-description">Descrição (opcional)</label>
-              <Textarea
-                id="hour-description"
-                rows={3}
-                placeholder="Diferenciais do pacote de horas"
-                value={hourForm.description}
-                onChange={(event) => setHourForm((prev) => ({ ...prev, description: event.target.value }))}
-              />
-            </div>
-            <div className="flex gap-2">
-              <Button type="submit" className="w-full sm:w-auto" disabled={isSubmittingHour || isEditingHour}>
-                {(isSubmittingHour || isEditingHour) ? <Loader2 className="h-4 w-4 animate-spin" /> : (editingHourPackage ? 'Atualizar pacote' : 'Criar pacote')}
+              <Button
+                onClick={() => {
+                  setEditingHourPackage(null)
+                  setHourForm(initialHourForm)
+                  setHourModalOpen(true)
+                }}
+                className="bg-meu-primary hover:bg-meu-primary-dark text-white shadow-lg shadow-blue-900/10"
+              >
+                Novo Pacote
               </Button>
-              {editingHourPackage && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setEditingHourPackage(null)
-                    setHourForm(initialHourForm)
-                  }}
-                >
-                  Cancelar
-                </Button>
+            </div>
+
+            <div>
+              {isPackagesLoading && !hasHourPackages ? (
+                <div className="flex flex-col items-center justify-center py-12 text-sm text-gray-500">
+                  <Loader2 className="mb-2 h-8 w-8 animate-spin text-meu-primary" />
+                  Carregando pacotes...
+                </div>
+              ) : !hasHourPackages ? (
+                <div className="text-center py-12 bg-white rounded-xl border border-dashed border-gray-200">
+                  <p className="text-gray-500">Nenhum pacote cadastrado.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {displayedHourPackages.map((pkg) => (
+                    <Card key={pkg.id} className="group relative overflow-hidden border-gray-100 hover:shadow-lg transition-all duration-300">
+                      <div className={`absolute top-0 left-0 w-1.5 h-full ${pkg.status === 'active' ? 'bg-meu-primary' : 'bg-gray-300'}`} />
+                      <div className="p-5">
+                        <div className="flex justify-between items-start mb-4">
+                          <div className="bg-blue-50 text-meu-primary p-2 rounded-lg">
+                            <Edit className="h-5 w-5" />
+                          </div>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => { handleEditHourPackage(pkg); setHourModalOpen(true) }}>
+                                <Edit className="mr-2 h-4 w-4" />
+                                Editar
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => setDeletingHourPackage(pkg)}
+                                className="text-red-600"
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Excluir
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+
+                        <h4 className="text-lg font-bold text-gray-900 mb-1 line-clamp-1" title={pkg.title}>{pkg.title}</h4>
+
+                        <div className="flex items-baseline gap-1 mb-4">
+                          <span className="text-2xl font-bold text-meu-primary">
+                            {currencyFormatter.format(pkg.price_cents / 100)}
+                          </span>
+                        </div>
+
+                        <div className="space-y-2 mb-4">
+                          <div className="flex items-center text-sm text-gray-600">
+                            <span className="font-medium mr-2">Qtd:</span> {pkg.hours_qty} horas
+                          </div>
+                          {pkg.metadata_json?.description && (
+                            <div className="text-sm text-gray-500 line-clamp-2 min-h-[40px]">
+                              {pkg.metadata_json.description}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="pt-4 border-t border-gray-100 flex items-center justify-between">
+                          <span className={`text-xs font-semibold px-2 py-1 rounded-full ${pkg.status === 'active'
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-gray-100 text-gray-600'
+                            }`}>
+                            {pkg.status === 'active' ? 'ATIVO' : 'INATIVO'}
+                          </span>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
               )}
             </div>
-            </form>
-          )}
-          <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Pacotes cadastrados</h3>
-            {isPackagesLoading && !hasHourPackages ? (
-              <div className="flex items-center justify-center py-6 text-sm text-gray-500">
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Carregando pacotes...
-              </div>
-            ) : !hasHourPackages ? (
-              <p className="text-sm text-gray-500">Nenhum pacote cadastrado.</p>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {displayedHourPackages.map((pkg) => (
-                  <Card key={pkg.id} className="p-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <h4 className="text-sm font-semibold text-gray-900">{pkg.title}</h4>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {pkg.hours_qty} hora(s) · {currencyFormatter.format(pkg.price_cents / 100)}
-                        </p>
-                        {pkg.metadata_json?.description && (
-                          <p className="text-xs text-gray-600 mt-2">{pkg.metadata_json.description}</p>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className={`text-xs font-medium ${pkg.status === 'active' ? 'text-green-600' : 'text-gray-400'}`}>
-                          {pkg.status === 'active' ? 'Ativo' : 'Inativo'}
-                        </span>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => { handleEditHourPackage(pkg); setHourModalOpen(true) }}>
-                              <Edit className="mr-2 h-4 w-4" />
-                              Editar
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => setDeletingHourPackage(pkg)}
-                              className="text-red-600"
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Excluir
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </div>
-        </Card>
+          </Card>
         )}
       </div>
 
       {/* Modal: Criar/Editar Pacote de Aluno */}
       {showStudent && (
         <Dialog open={studentModalOpen} onOpenChange={setStudentModalOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{editingStudentPackage ? 'Editar pacote de aluno' : 'Novo pacote de aluno'}</DialogTitle>
-              <DialogDescription>
-                {editingStudentPackage ? 'Atualize as informações do pacote.' : 'Preencha os dados do novo pacote.'}
+          <DialogContent className="sm:max-w-[600px]">
+            <DialogHeader className="border-b border-gray-100 pb-4 mb-4">
+              <DialogTitle className="text-xl font-bold text-meu-primary">{editingStudentPackage ? 'Editar Pacote de Aluno' : 'Novo Pacote de Aluno'}</DialogTitle>
+              <DialogDescription className="text-gray-500">
+                {editingStudentPackage ? 'Atualize as informações do pacote abaixo.' : 'Preencha os dados para criar um novo pacote de treinos.'}
               </DialogDescription>
             </DialogHeader>
             <form className="space-y-4" onSubmit={editingStudentPackage ? handleUpdateStudentPackage : handleCreateStudentPackage}>
@@ -712,12 +689,12 @@ export function FranqueadoraPackageManager({ variant = DEFAULT_VARIANT }: Franqu
                   onChange={(event) => setStudentForm((prev) => ({ ...prev, description: event.target.value }))}
                 />
               </div>
-              <DialogFooter>
+              <DialogFooter className="border-t border-gray-100 pt-4 mt-6">
                 <DialogClose asChild>
-                  <Button type="button" variant="outline" onClick={() => setStudentModalOpen(false)}>Cancelar</Button>
+                  <Button type="button" variant="ghost" onClick={() => setStudentModalOpen(false)} className="text-gray-500 hover:text-gray-700 hover:bg-gray-50">Cancelar</Button>
                 </DialogClose>
-                <Button type="submit" disabled={isSubmittingStudent || isEditingStudent}>
-                  {(isSubmittingStudent || isEditingStudent) ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
+                <Button type="submit" disabled={isSubmittingStudent || isEditingStudent} className="bg-meu-primary hover:bg-meu-primary-dark text-white px-6">
+                  {(isSubmittingStudent || isEditingStudent) ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar Pacote'}
                 </Button>
               </DialogFooter>
             </form>
@@ -728,11 +705,11 @@ export function FranqueadoraPackageManager({ variant = DEFAULT_VARIANT }: Franqu
       {/* Modal: Criar/Editar Pacote de Professor */}
       {showHour && (
         <Dialog open={hourModalOpen} onOpenChange={setHourModalOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{editingHourPackage ? 'Editar pacote de horas' : 'Novo pacote de horas'}</DialogTitle>
-              <DialogDescription>
-                {editingHourPackage ? 'Atualize as informações do pacote.' : 'Preencha os dados do novo pacote.'}
+          <DialogContent className="sm:max-w-[600px]">
+            <DialogHeader className="border-b border-gray-100 pb-4 mb-4">
+              <DialogTitle className="text-xl font-bold text-meu-primary">{editingHourPackage ? 'Editar Pacote de Horas' : 'Novo Pacote de Horas'}</DialogTitle>
+              <DialogDescription className="text-gray-500">
+                {editingHourPackage ? 'Atualize as informações do pacote abaixo.' : 'Preencha os dados para criar um novo pacote de horas.'}
               </DialogDescription>
             </DialogHeader>
             <form className="space-y-4" onSubmit={editingHourPackage ? handleUpdateHourPackage : handleCreateHourPackage}>
@@ -784,12 +761,12 @@ export function FranqueadoraPackageManager({ variant = DEFAULT_VARIANT }: Franqu
                   onChange={(event) => setHourForm((prev) => ({ ...prev, description: event.target.value }))}
                 />
               </div>
-              <DialogFooter>
+              <DialogFooter className="border-t border-gray-100 pt-4 mt-6">
                 <DialogClose asChild>
-                  <Button type="button" variant="outline" onClick={() => setHourModalOpen(false)}>Cancelar</Button>
+                  <Button type="button" variant="ghost" onClick={() => setHourModalOpen(false)} className="text-gray-500 hover:text-gray-700 hover:bg-gray-50">Cancelar</Button>
                 </DialogClose>
-                <Button type="submit" disabled={isSubmittingHour || isEditingHour}>
-                  {(isSubmittingHour || isEditingHour) ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
+                <Button type="submit" disabled={isSubmittingHour || isEditingHour} className="bg-meu-primary hover:bg-meu-primary-dark text-white px-6">
+                  {(isSubmittingHour || isEditingHour) ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar Pacote'}
                 </Button>
               </DialogFooter>
             </form>
@@ -801,26 +778,55 @@ export function FranqueadoraPackageManager({ variant = DEFAULT_VARIANT }: Franqu
       {deletingStudentPackage && (
         <Dialog open={true} onOpenChange={(open) => { if (!open) setDeletingStudentPackage(null) }}>
           <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Excluir pacote de aluno</DialogTitle>
-              <DialogDescription>
-                Tem certeza que deseja excluir o pacote {deletingStudentPackage.title}?
-                Esta ação não poderá ser desfeita.
+            <DialogHeader className="border-b border-gray-100 pb-4 mb-4">
+              <DialogTitle className="text-xl font-bold text-red-600">Excluir Pacote de Aluno</DialogTitle>
+              <DialogDescription className="text-gray-500">
+                Tem certeza que deseja excluir o pacote <span className="font-semibold text-gray-900">{deletingStudentPackage.title}</span>?
+                <br />Esta ação não poderá ser desfeita.
               </DialogDescription>
             </DialogHeader>
-            <DialogFooter>
+            <DialogFooter className="bg-gray-50 -mx-6 -mb-6 p-4 border-t border-gray-100 mt-4 rounded-b-lg">
               <DialogClose asChild>
-                <Button variant="outline" onClick={() => setDeletingStudentPackage(null)}>
+                <Button variant="outline" onClick={() => setDeletingStudentPackage(null)} className="bg-white hover:bg-gray-50">
                   Cancelar
                 </Button>
               </DialogClose>
               <Button
                 onClick={handleDeleteStudentPackage}
-                className="bg-red-600 hover:bg-red-700"
+                className="bg-red-600 hover:bg-red-700 text-white shadow-sm shadow-red-200"
                 disabled={isDeletingStudent}
               >
-                {isDeletingStudent ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                Excluir
+                {isDeletingStudent ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+                Excluir Permanentemente
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {deletingHourPackage && (
+        <Dialog open={true} onOpenChange={(open) => { if (!open) setDeletingHourPackage(null) }}>
+          <DialogContent>
+            <DialogHeader className="border-b border-gray-100 pb-4 mb-4">
+              <DialogTitle className="text-xl font-bold text-red-600">Excluir Pacote de Horas</DialogTitle>
+              <DialogDescription className="text-gray-500">
+                Tem certeza que deseja excluir o pacote <span className="font-semibold text-gray-900">{deletingHourPackage.title}</span>?
+                <br />Esta ação não poderá ser desfeita.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="bg-gray-50 -mx-6 -mb-6 p-4 border-t border-gray-100 mt-4 rounded-b-lg">
+              <DialogClose asChild>
+                <Button variant="outline" onClick={() => setDeletingHourPackage(null)} className="bg-white hover:bg-gray-50">
+                  Cancelar
+                </Button>
+              </DialogClose>
+              <Button
+                onClick={handleDeleteHourPackage}
+                className="bg-red-600 hover:bg-red-700 text-white shadow-sm shadow-red-200"
+                disabled={isDeletingHour}
+              >
+                {isDeletingHour ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+                Excluir Permanentemente
               </Button>
             </DialogFooter>
           </DialogContent>

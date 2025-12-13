@@ -22,7 +22,7 @@ export default function FranqueadoraLayout({ children }: FranqueadoraLayoutProps
       router.push('/')
     }
   }, [user, router])
-  
+
   return (
     <div className="min-h-screen">
       {/* Background principal */}
@@ -50,8 +50,8 @@ export default function FranqueadoraLayout({ children }: FranqueadoraLayoutProps
         {sidebarOpen && (
           <div className="lg:hidden fixed inset-0 z-50 flex">
             {/* Backdrop */}
-            <div 
-              className="fixed inset-0 bg-black/50" 
+            <div
+              className="fixed inset-0 bg-black/50"
               onClick={() => setSidebarOpen(false)}
             />
             {/* Sidebar */}

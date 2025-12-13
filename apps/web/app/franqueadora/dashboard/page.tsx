@@ -7,12 +7,19 @@ import {
   DollarSign,
   BarChart3,
   MapPin,
-  Activity
+  Activity,
+  ArrowUpRight,
+  TrendingUp,
+  Users,
+  Wallet,
+  PieChart
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { useFranqueadoraStore } from '@/lib/stores/franqueadora-store'
 import FranqueadoraGuard from '@/components/auth/franqueadora-guard'
 import FranqueadoraNotificationsDropdown from '@/components/notifications/FranqueadoraNotificationsDropdown'
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 
 export default function FranqueadoraDashboard() {
   const router = useRouter()
@@ -42,129 +49,109 @@ export default function FranqueadoraDashboard() {
 
   if (!hydrated || isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-meu-primary mx-auto mb-4"></div>
-          <p className="text-gray-600">Carregando dashboard...</p>
+          <p className="text-gray-500 font-medium">Carregando dashboard...</p>
         </div>
       </div>
     )
   }
 
+  // Novo Design: Card Corporativo
+  const KPICard = ({
+    title,
+    value,
+    trend,
+    trendLabel,
+    icon: Icon,
+  }: {
+    title: string
+    value: string | number
+    trend?: string
+    trendLabel?: string
+    icon: any
+  }) => (
+    <Card className="relative overflow-hidden border border-gray-100 shadow-sm hover:shadow-lg transition-all duration-300 bg-white group">
+      <div className="absolute top-0 left-0 w-1 h-full bg-meu-primary group-hover:w-2 transition-all duration-300" />
+      <div className="p-4 sm:p-6 pl-6 sm:pl-8">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-xs sm:text-sm font-semibold text-gray-500 uppercase tracking-wider">{title}</h3>
+          <Icon className="h-4 w-4 sm:h-5 sm:w-5 text-meu-primary/40 group-hover:text-meu-primary transition-colors" />
+        </div>
+        <div className="flex flex-col sm:flex-row sm:items-baseline sm:space-x-3">
+          <span className="text-2xl sm:text-3xl font-bold text-meu-primary font-feature-settings-tnum tracking-tight">
+            {value}
+          </span>
+          {trend && (
+            <span className="inline-flex items-center text-[10px] sm:text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full mt-1 sm:mt-0 w-fit">
+              <TrendingUp className="h-3 w-3 mr-1" />
+              {trend}
+            </span>
+          )}
+        </div>
+        {trendLabel && (
+          <p className="text-[10px] sm:text-xs text-gray-400 mt-2 font-medium">{trendLabel}</p>
+        )}
+      </div>
+    </Card>
+  )
+
   const renderTabContent = () => {
     switch (activeTab) {
       case 'overview':
         return (
-          <div className="space-y-3 sm:space-y-4 lg:space-y-6">
+          <div className="space-y-6 sm:space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             {/* KPIs Principais - Linha 1 */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
-              <Card className="p-4 sm:p-6">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <Building className="h-6 w-6 sm:h-8 sm:w-8 text-meu-primary" />
-                  </div>
-                  <div className="ml-3 sm:ml-4 min-w-0 flex-1">
-                    <p className="text-xs sm:text-sm font-medium text-gray-600">Total Franquias</p>
-                    <p className="text-xl sm:text-2xl font-bold text-gray-900">{analytics?.totalFranchises || 0}</p>
-                    <p className="text-xs sm:text-sm text-meu-primary truncate">+{Number(analytics?.monthlyGrowth || 0).toFixed(1)}% este mês</p>
-                  </div>
-                </div>
-              </Card>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+              <KPICard
+                title="Total de Franquias"
+                value={analytics?.totalFranchises || 0}
+                trend={`+${Number(analytics?.monthlyGrowth || 0).toFixed(1)}%`}
+                trendLabel="vs. mês anterior"
+                icon={Building}
+              />
 
-              <Card className="p-4 sm:p-6">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <BarChart3 className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
-                  </div>
-                  <div className="ml-3 sm:ml-4 min-w-0 flex-1">
-                    <p className="text-xs sm:text-sm font-medium text-gray-600">Franquias Ativas</p>
-                    <p className="text-xl sm:text-2xl font-bold text-gray-900">{analytics?.activeFranchises || 0}</p>
-                    <p className="text-xs sm:text-sm text-blue-600 truncate">
-                      {(Number(analytics?.activeFranchises || 0) / Number(analytics?.totalFranchises || 1) * 100).toFixed(0)}% da rede
-                    </p>
-                  </div>
-                </div>
-              </Card>
+              <KPICard
+                title="Franquias Ativas"
+                value={`${analytics?.activeFranchises || 0}`}
+                trend={`${(Number(analytics?.activeFranchises || 0) / Number(analytics?.totalFranchises || 1) * 100).toFixed(0)}%`}
+                trendLabel="Taxa de ocupação"
+                icon={Activity}
+              />
 
-              <Card className="p-4 sm:p-6">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <DollarSign className="h-6 w-6 sm:h-8 sm:w-8 text-green-600" />
-                  </div>
-                  <div className="ml-3 sm:ml-4 min-w-0 flex-1">
-                    <p className="text-xs sm:text-sm font-medium text-gray-600">Receita Total</p>
-                    <p className="text-xl sm:text-2xl font-bold text-gray-900">
-                      R$ {(Number(analytics?.totalRevenue || 0) / 1000).toFixed(1)}k
-                    </p>
-                    <p className="text-xs sm:text-sm text-green-600 truncate">
-                      Média: R$ {(Number(analytics?.averageRevenuePerFranchise || 0) / 1000).toFixed(1)}k
-                    </p>
-                  </div>
-                </div>
-              </Card>
+              <KPICard
+                title="Receita Total"
+                value={`R$ ${(Number(analytics?.totalRevenue || 0) / 1000).toFixed(1)}k`}
+                trendLabel="Faturamento acumulado"
+                icon={Wallet}
+              />
 
-              <Card className="p-4 sm:p-6 bg-gradient-to-br from-green-50 to-emerald-50 border-green-200">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <DollarSign className="h-6 w-6 sm:h-8 sm:w-8 text-green-700" />
-                  </div>
-                  <div className="ml-3 sm:ml-4 min-w-0 flex-1">
-                    <p className="text-xs sm:text-sm font-medium text-green-700">Royalties Mensais</p>
-                    <p className="text-xl sm:text-2xl font-bold text-green-900">
-                      R$ {(Number(analytics?.totalRoyalties || 0) / 1000).toFixed(1)}k
-                    </p>
-                    <p className="text-xs sm:text-sm text-green-600 truncate">Receita da franqueadora</p>
-                  </div>
-                </div>
-              </Card>
+              <KPICard
+                title="Royalties (Mês)"
+                value={`R$ ${(Number(analytics?.totalRoyalties || 0) / 1000).toFixed(1)}k`}
+                trendLabel="Receita recorrente"
+                icon={DollarSign}
+              />
             </div>
 
-            {/* KPIs Secundários - Linha 2 */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 lg:gap-6">
-              <Card className="p-4 sm:p-6">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <MapPin className="h-6 w-6 sm:h-8 sm:w-8 text-cyan-600" />
+            {/* Gráficos e Listas - Linha 2 */}
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 sm:gap-8">
+              {/* Gráfico de Crescimento (Ocupa 2 colunas) */}
+              <Card className="col-span-1 xl:col-span-2 border border-gray-100 shadow-sm p-4 sm:p-8 bg-white">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 sm:mb-8 gap-4">
+                  <div>
+                    <h3 className="text-lg font-bold text-meu-primary">Crescimento da Rede</h3>
+                    <p className="text-xs sm:text-sm text-gray-500">Evolução do número de franquias nos últimos 6 meses</p>
                   </div>
-                  <div className="ml-3 sm:ml-4 min-w-0 flex-1">
-                    <p className="text-xs sm:text-sm font-medium text-gray-600">Estados Atendidos</p>
-                    <p className="text-xl sm:text-2xl font-bold text-gray-900">
-                      {new Set(academies.map(a => a.state)).size}
-                    </p>
-                    <p className="text-xs sm:text-sm text-cyan-600 truncate">Cobertura nacional</p>
-                  </div>
+                  <Button variant="outline" size="sm" className="text-xs border-gray-200 text-gray-600 hover:text-meu-primary hover:border-meu-primary transition-colors w-full sm:w-auto">
+                    Relatório Detalhado
+                  </Button>
                 </div>
-              </Card>
 
-              <Card className="p-4 sm:p-6">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <Activity className="h-6 w-6 sm:h-8 sm:w-8 text-pink-600" />
-                  </div>
-                  <div className="ml-3 sm:ml-4 min-w-0 flex-1">
-                    <p className="text-xs sm:text-sm font-medium text-gray-600">Royalty Médio</p>
-                    <p className="text-xl sm:text-2xl font-bold text-gray-900">
-                      {academies.length > 0
-                        ? (academies.reduce((sum, a) => sum + Number(a.royalty_percentage || 0), 0) / academies.length).toFixed(1)
-                        : '0'
-                      }%
-                    </p>
-                    <p className="text-xs sm:text-sm text-pink-600 truncate">Taxa padrão da rede</p>
-                  </div>
-                </div>
-              </Card>
-            </div>
-
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 sm:gap-4 lg:gap-6">
-              <Card className="p-4 sm:p-6">
-                <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">Crescimento de Franquias</h3>
-                <p className="text-xs sm:text-sm text-gray-500 mb-3 sm:mb-4">Franquias criadas nos últimos 6 meses</p>
                 {(() => {
-                  // Calcular dados dos últimos 6 meses
                   const now = new Date()
                   const monthsData = []
-
-                  // Usar dados vindos da API; caso não haja created_at, o mês contará como 0
                   const sourceAcademies = academies
 
                   for (let i = 5; i >= 0; i--) {
@@ -178,31 +165,34 @@ export default function FranqueadoraDashboard() {
                     }).length
 
                     monthsData.push({
-                      month: monthDate.toLocaleDateString('pt-BR', { month: 'short' }),
+                      month: monthDate.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', ''),
                       count
                     })
                   }
 
                   const maxCount = Math.max(...monthsData.map(m => m.count), 1)
-                  
+
                   return (
-                    <div className="h-40 sm:h-56">
-                      <div className="flex items-end justify-between h-full space-x-1 sm:space-x-2">
+                    <div className="h-[250px] sm:h-[320px] w-full mt-4">
+                      <div className="flex items-end justify-between h-full space-x-2 sm:space-x-6 px-2 sm:px-4">
                         {monthsData.map((data, index) => (
-                          <div key={index} className="flex-1 flex flex-col items-center justify-end h-full">
-                            <div className="w-full flex flex-col items-center justify-end h-full pb-6 sm:pb-8">
-                              <span className="text-[10px] sm:text-xs font-semibold text-meu-primary mb-1">
-                                {data.count}
-                              </span>
-                              <div 
-                                className="w-full bg-gradient-to-t from-meu-primary to-meu-cyan rounded-t-lg transition-all duration-500 hover:opacity-80"
-                                style={{ 
+                          <div key={index} className="flex-1 flex flex-col items-center justify-end h-full group cursor-pointer">
+                            <div className="relative w-full flex flex-col items-center justify-end h-full">
+                              <div className="mb-2 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0">
+                                <span className="text-[10px] sm:text-sm font-bold text-meu-primary bg-blue-50 px-2 py-1 rounded">
+                                  {data.count}
+                                </span>
+                              </div>
+                              <div
+                                className="w-full max-w-[30px] sm:max-w-[50px] bg-meu-primary/80 group-hover:bg-meu-primary rounded-t-sm transition-all duration-500 relative"
+                                style={{
                                   height: `${(data.count / maxCount) * 100}%`,
-                                  minHeight: data.count > 0 ? '8px' : '0px'
+                                  minHeight: '4px'
                                 }}
-                              />
+                              >
+                              </div>
                             </div>
-                            <span className="text-[10px] sm:text-xs text-gray-600 capitalize mt-1 sm:mt-2">
+                            <span className="text-[10px] sm:text-xs font-semibold text-gray-400 uppercase mt-2 sm:mt-4 group-hover:text-meu-primary transition-colors">
                               {data.month}
                             </span>
                           </div>
@@ -213,37 +203,60 @@ export default function FranqueadoraDashboard() {
                 })()}
               </Card>
 
-              <Card className="p-4 sm:p-6">
-                <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">Top Franquias</h3>
-                <p className="text-xs sm:text-sm text-gray-500 mb-3 sm:mb-4">Ranking das franquias com melhor performance financeira.</p>
-                <div className="space-y-2 sm:space-y-3">
+              {/* Top Franquias (Ocupa 1 coluna) */}
+              <Card className="col-span-1 border border-gray-100 shadow-sm p-4 sm:p-8 bg-white flex flex-col h-[400px] sm:h-auto">
+                <div className="flex items-center justify-between mb-4 sm:mb-8">
+                  <div>
+                    <h3 className="text-lg font-bold text-meu-primary">Top Performance</h3>
+                    <p className="text-xs sm:text-sm text-gray-500">Ranking por faturamento</p>
+                  </div>
+                </div>
+
+                <div className="space-y-2 flex-1 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-gray-200">
                   {academies
                     .sort((a, b) => Number(b.monthly_revenue || 0) - Number(a.monthly_revenue || 0))
                     .slice(0, 5)
                     .map((academy, index) => (
-                      <div key={academy.id} className="flex items-start sm:items-center justify-between gap-2">
-                        <div className="flex items-start sm:items-center flex-1 min-w-0">
-                          <div className="w-7 h-7 sm:w-8 sm:h-8 bg-meu-primary rounded-full flex items-center justify-center mr-2 sm:mr-3 flex-shrink-0">
-                            <span className="text-xs sm:text-sm font-medium text-white">#{index + 1}</span>
+                      <div key={academy.id} className="group flex items-center justify-between p-2 sm:p-3 rounded-lg hover:bg-gray-50 transition-all border border-transparent hover:border-gray-100">
+                        <div className="flex items-center gap-3 sm:gap-4">
+                          <div className={cn(
+                            "w-6 h-6 sm:w-8 sm:h-8 rounded-md flex items-center justify-center text-xs sm:text-sm font-bold transition-transform group-hover:scale-110",
+                            index === 0 ? "bg-meu-primary text-meu-accent" :
+                              index === 1 ? "bg-gray-100 text-gray-600" :
+                                index === 2 ? "bg-orange-50 text-orange-600" :
+                                  "bg-slate-50 text-slate-400"
+                          )}>
+                            {index + 1}º
                           </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm sm:text-base font-medium text-gray-900 truncate">{academy.name}</p>
-                            <p className="text-xs sm:text-sm text-gray-600 flex items-center truncate">
-                              <MapPin className="h-3 w-3 mr-1 flex-shrink-0" />
-                              <span className="truncate">{academy.city}, {academy.state}</span>
+                          <div>
+                            <p className="text-xs sm:text-sm font-semibold text-gray-700 group-hover:text-meu-primary transition-colors truncate max-w-[100px] sm:max-w-[140px]">{academy.name}</p>
+                            <p className="text-[10px] sm:text-[11px] text-gray-400 flex items-center uppercase tracking-wide">
+                              <MapPin className="h-3 w-3 mr-1" />
+                              {academy.city}
                             </p>
                           </div>
                         </div>
-                        <div className="text-right flex-shrink-0">
-                          <p className="text-xs sm:text-sm text-gray-500 whitespace-nowrap">R$ {(Number(academy.monthly_revenue || 0) / 1000).toFixed(0)}k/mês</p>
-                          <p className="text-xs sm:text-sm text-gray-600 whitespace-nowrap">⭐ {Number(academy.royalty_percentage || 0)}%</p>
+                        <div className="text-right">
+                          <p className="text-xs sm:text-sm font-bold text-gray-900 group-hover:text-meu-primary transition-colors">
+                            {(Number(academy.monthly_revenue || 0) / 1000).toFixed(1)}k
+                          </p>
                         </div>
                       </div>
                     ))}
+
+                  {academies.length === 0 && (
+                    <div className="h-full flex flex-col items-center justify-center text-center py-8 text-gray-400">
+                      <BarChart3 className="h-12 w-12 text-gray-200 mb-2" />
+                      <p className="text-sm">Nenhuma franquia registrada</p>
+                    </div>
+                  )}
                 </div>
+
+                <Button variant="ghost" className="w-full mt-4 sm:mt-6 text-[10px] sm:text-xs font-medium text-gray-400 hover:text-meu-primary hover:bg-meu-primary/5 uppercase tracking-wider">
+                  Ver Ranking Completo
+                </Button>
               </Card>
             </div>
-
           </div>
         )
       default:
@@ -251,35 +264,40 @@ export default function FranqueadoraDashboard() {
     }
   }
 
-
   return (
     <FranqueadoraGuard requiredPermission="canViewDashboard">
-      <div className="p-3 sm:p-4 lg:p-8">
-          {/* Header Mobile - Removido pois já temos no layout */}
-          
-          {/* Header Desktop */}
-          <div className="hidden lg:flex lg:items-center lg:justify-between mb-8">
-            <div>
-              <p className="text-sm uppercase tracking-wide text-gray-500">Painel</p>
-              <h1 className="text-3xl font-bold text-gray-900">Dashboard — {franqueadora?.name || 'Franqueadora'}</h1>
+      <div className="p-4 sm:p-6 lg:p-10 max-w-[1920px] mx-auto space-y-6 sm:space-y-10 mb-20">
+
+        {/* Header Section */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-gray-200">
+          <div>
+            <div className="flex items-center gap-3 mb-2">
+              <span className="px-3 py-1 bg-meu-primary/5 text-meu-primary text-[10px] sm:text-xs font-bold rounded-full uppercase tracking-wider">
+                Dashboard
+              </span>
+              <span className="text-[10px] sm:text-xs text-gray-400 font-mono">v1.2.0</span>
             </div>
-            <FranqueadoraNotificationsDropdown />
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-meu-primary tracking-tight">
+              Visão Geral
+            </h1>
+            <p className="text-sm sm:text-base text-gray-500 mt-2 max-w-2xl">
+              Acompanhe o desempenho da rede {franqueadora?.name} e gerencie suas franquias.
+            </p>
           </div>
 
-          {/* Mobile Title */}
-          <div className="lg:hidden mb-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900">Visão Geral</h2>
-                <p className="text-sm text-gray-600">Acompanhe o desempenho da rede</p>
-              </div>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
+            <div className="w-full sm:w-auto">
               <FranqueadoraNotificationsDropdown />
             </div>
+            <Button size="lg" className="w-full sm:w-auto bg-meu-primary hover:bg-meu-primary-dark text-white shadow-lg shadow-meu-primary/20 transition-all hover:scale-105 active:scale-95">
+              <PieChart className="h-4 w-4 mr-2" />
+              Relatório Mensal
+            </Button>
           </div>
+        </div>
 
-          <div className="space-y-3 sm:space-y-4 lg:space-y-6">
-            {renderTabContent()}
-          </div>
+        {/* Main Content */}
+        {renderTabContent()}
       </div>
     </FranqueadoraGuard>
   )

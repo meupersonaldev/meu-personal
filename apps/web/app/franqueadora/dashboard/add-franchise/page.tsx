@@ -44,7 +44,7 @@ interface FranchiseFormData {
 }
 
 const BRAZILIAN_STATES = [
-  'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 
+  'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG',
   'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
 ]
 
@@ -54,7 +54,7 @@ export default function AddFranchisePage() {
   const [isLoading, setIsLoading] = useState(false)
   const [currentStep, setCurrentStep] = useState(0)
   const [errors, setErrors] = useState<Record<string, string>>({})
-  
+
   const [formData, setFormData] = useState<FranchiseFormData>({
     name: '',
     email: '',
@@ -102,7 +102,7 @@ export default function AddFranchisePage() {
     if (!formData.address) e.address = 'Endereço é obrigatório'
     if (!formData.address_number) e.address_number = 'Número é obrigatório'
     if (!formData.province) e.province = 'Bairro é obrigatório'
-    
+
     // CPF/CNPJ é obrigatório
     if (!formData.cpf_cnpj || formData.cpf_cnpj.trim() === '') {
       e.cpf_cnpj = 'CPF/CNPJ é obrigatório'
@@ -113,14 +113,14 @@ export default function AddFranchisePage() {
       const cpfCnpjDigits = formData.cpf_cnpj.replace(/\D/g, '')
       const isCpf = cpfCnpjDigits.length === 11
       const isCnpj = cpfCnpjDigits.length === 14
-      
+
       // Data de nascimento é obrigatória para CPF (pessoa física)
       if (isCpf) {
         if (!formData.birth_date || formData.birth_date.trim() === '') {
           e.birth_date = 'Data de nascimento é obrigatória para pessoa física (CPF)'
         }
       }
-      
+
       // Tipo de empresa é obrigatório para CNPJ (pessoa jurídica)
       if (isCnpj) {
         if (!formData.company_type || formData.company_type.trim() === '') {
@@ -130,7 +130,7 @@ export default function AddFranchisePage() {
         }
       }
     }
-    
+
     setErrors(e)
     return Object.keys(e).length === 0
   }
@@ -203,7 +203,7 @@ export default function AddFranchisePage() {
       // CPF/CNPJ já está sem formatação (removida no BasicStep)
       // Mas vamos garantir que não seja null (já validado acima)
       const cpfCnpjValue = formData.cpf_cnpj?.trim() || ''
-      
+
       if (!cpfCnpjValue) {
         toast.error('CPF/CNPJ é obrigatório')
         setCurrentStep(0)
@@ -246,7 +246,7 @@ export default function AddFranchisePage() {
 
       toast.success('Franquia e usuário admin criados com sucesso!')
       router.push('/franqueadora/dashboard')
-      
+
     } catch {
       toast.error('Erro ao adicionar franquia. Tente novamente.')
     } finally {
@@ -260,88 +260,87 @@ export default function AddFranchisePage() {
 
   return (
     <FranqueadoraGuard requiredPermission="canCreateFranchise">
-      <div className="p-6 lg:p-8">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-8">
-            <div className="flex items-center space-x-4">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleCancel}
-                className="text-gray-600 hover:text-gray-900"
-              >
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Voltar
-              </Button>
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900">Adicionar Nova Franquia</h1>
-                <p className="text-sm text-gray-600">Cadastre uma nova franquia no sistema</p>
-              </div>
+      <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto pb-20">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
+          <div className="flex items-center space-x-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleCancel}
+              className="text-gray-500 hover:text-meu-primary -ml-2 h-10 w-10 rounded-full"
+            >
+              <ArrowLeft className="h-6 w-6" />
+            </Button>
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold text-meu-primary tracking-tight">Nova Franquia</h1>
+              <p className="text-sm text-gray-500">Preencha os dados abaixo para cadastrar uma unidade.</p>
             </div>
           </div>
+        </div>
 
-          <form onSubmit={handleSubmit} className="space-y-8">
-            <WizardStepper steps={["Básico", "Financeiro", "Contrato & Admin"]} current={currentStep} />
+        <form onSubmit={handleSubmit} className="space-y-8">
+          <WizardStepper steps={["Básico", "Financeiro", "Contrato & Admin"]} current={currentStep} />
 
-            <Card className="p-6">
-              {currentStep === 0 && (
-                <BasicStep
-                  data={{
-                    name: formData.name,
-                    email: formData.email,
-                    phone: formData.phone,
-                    address: formData.address,
-                    address_number: formData.address_number,
-                    province: formData.province,
-                    zip_code: formData.zip_code,
-                    city: formData.city,
-                    state: formData.state,
-                    cpf_cnpj: formData.cpf_cnpj,
-                    company_type: formData.company_type,
-                    birth_date: formData.birth_date,
-                    manager_name: formData.manager_name,
-                    manager_phone: formData.manager_phone,
-                    manager_email: formData.manager_email,
-                  }}
-                  states={BRAZILIAN_STATES}
-                  errors={errors}
-                  onChange={(field, value) => handleInputChange(field as any, value)}
-                  onNext={() => { if (validateBasic()) setCurrentStep(1) }}
-                />
-              )}
+          <Card className="p-6">
+            {currentStep === 0 && (
+              <BasicStep
+                data={{
+                  name: formData.name,
+                  email: formData.email,
+                  phone: formData.phone,
+                  address: formData.address,
+                  address_number: formData.address_number,
+                  province: formData.province,
+                  zip_code: formData.zip_code,
+                  city: formData.city,
+                  state: formData.state,
+                  cpf_cnpj: formData.cpf_cnpj,
+                  company_type: formData.company_type,
+                  birth_date: formData.birth_date,
+                  manager_name: formData.manager_name,
+                  manager_phone: formData.manager_phone,
+                  manager_email: formData.manager_email,
+                }}
+                states={BRAZILIAN_STATES}
+                errors={errors}
+                onChange={(field, value) => handleInputChange(field as any, value)}
+                onNext={() => { if (validateBasic()) setCurrentStep(1) }}
+              />
+            )}
 
-              {currentStep === 1 && (
-                <FinancialStep
-                  data={{
-                    franchise_fee: formData.franchise_fee,
-                    royalty_percentage: formData.royalty_percentage,
-                    monthly_revenue: formData.monthly_revenue,
-                  }}
-                  errors={errors}
-                  onChange={(field, value) => handleInputChange(field as any, value)}
-                  onPrev={() => setCurrentStep(0)}
-                  onNext={() => { if (validateFinancial()) setCurrentStep(2) }}
-                />
-              )}
+            {currentStep === 1 && (
+              <FinancialStep
+                data={{
+                  franchise_fee: formData.franchise_fee,
+                  royalty_percentage: formData.royalty_percentage,
+                  monthly_revenue: formData.monthly_revenue,
+                }}
+                errors={errors}
+                onChange={(field, value) => handleInputChange(field as any, value)}
+                onPrev={() => setCurrentStep(0)}
+                onNext={() => { if (validateFinancial()) setCurrentStep(2) }}
+              />
+            )}
 
-              {currentStep === 2 && (
-                <ContractAdminStep
-                  data={{
-                    contract_start_date: formData.contract_start_date,
-                    contract_end_date: formData.contract_end_date,
-                    is_active: formData.is_active,
-                    admin_name: formData.admin_name,
-                    admin_email: formData.admin_email,
-                    admin_password: formData.admin_password,
-                  }}
-                  errors={errors}
-                  onChange={(field, value) => handleInputChange(field as any, value as any)}
-                  onPrev={() => setCurrentStep(1)}
-                  submitting={isLoading}
-                />
-              )}
-            </Card>
-          </form>
+            {currentStep === 2 && (
+              <ContractAdminStep
+                data={{
+                  contract_start_date: formData.contract_start_date,
+                  contract_end_date: formData.contract_end_date,
+                  is_active: formData.is_active,
+                  admin_name: formData.admin_name,
+                  admin_email: formData.admin_email,
+                  admin_password: formData.admin_password,
+                }}
+                errors={errors}
+                onChange={(field, value) => handleInputChange(field as any, value as any)}
+                onPrev={() => setCurrentStep(1)}
+                submitting={isLoading}
+              />
+            )}
+          </Card>
+        </form>
       </div>
     </FranqueadoraGuard>
   )

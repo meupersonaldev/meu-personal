@@ -11,6 +11,10 @@ import {
   Loader2,
   Filter,
   X,
+  CreditCard,
+  User,
+  Calendar,
+  FileText
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -142,8 +146,8 @@ export function CreditGrantHistory({ token, refreshTrigger }: CreditGrantHistory
 
   const getCreditTypeBadgeClass = (type: string) => {
     return type === 'STUDENT_CLASS'
-      ? 'bg-blue-100 text-blue-700'
-      : 'bg-purple-100 text-purple-700'
+      ? 'bg-blue-100 text-blue-700 border-blue-200'
+      : 'bg-indigo-100 text-indigo-700 border-indigo-200'
   }
 
   const formatDate = (dateString: string) => {
@@ -158,31 +162,38 @@ export function CreditGrantHistory({ token, refreshTrigger }: CreditGrantHistory
     filters.startDate || filters.endDate || filters.recipientEmail || filters.creditType
 
   return (
-    <Card className="p-6">
-      <div className="space-y-4">
+    <Card className="border-gray-100 shadow-sm overflow-hidden">
+      <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <History className="h-5 w-5 text-meu-primary" />
-            <h3 className="text-lg font-semibold">Histórico de Liberações</h3>
+        <div className="p-6 pb-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-meu-primary/10 flex items-center justify-center">
+              <History className="h-5 w-5 text-meu-primary" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-gray-900">Histórico de Liberações</h3>
+              <p className="text-sm text-gray-500">Acompanhe todos os créditos liberados</p>
+            </div>
           </div>
           <Button
             variant="outline"
             size="sm"
             onClick={() => setShowFilters(!showFilters)}
-            className={hasActiveFilters ? 'border-meu-primary text-meu-primary' : ''}
+            className={`h-9 border-dashed ${hasActiveFilters ? 'border-meu-primary text-meu-primary bg-blue-50' : 'border-gray-300'}`}
           >
             <Filter className="h-4 w-4 mr-2" />
-            Filtros
+            <span className="mr-2">Filtros</span>
             {hasActiveFilters && (
-              <span className="ml-2 h-2 w-2 rounded-full bg-meu-primary" />
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-meu-primary text-[10px] text-white">
+                !
+              </span>
             )}
           </Button>
         </div>
 
         {/* Filters */}
         {showFilters && (
-          <div className="rounded-lg border p-4 bg-gray-50 space-y-4">
+          <div className="mx-6 p-4 rounded-xl border border-gray-100 bg-gray-50/50 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="filter-start-date">Data Inicial</Label>
@@ -250,60 +261,117 @@ export function CreditGrantHistory({ token, refreshTrigger }: CreditGrantHistory
           </div>
         )}
 
-        {/* Table */}
-        <div className="rounded-lg border overflow-hidden">
+        {/* Table/List */}
+        <div className="border-t border-gray-100">
           {isLoading ? (
-            <div className="flex items-center justify-center py-12">
+            <div className="flex flex-col items-center justify-center py-12 gap-3">
               <Loader2 className="h-8 w-8 animate-spin text-meu-primary" />
+              <p className="text-sm text-gray-500">Carregando histórico...</p>
             </div>
           ) : data && data.grants.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Destinatário</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead className="text-center">Qtd</TableHead>
-                  <TableHead>Motivo</TableHead>
-                  <TableHead>Liberado por</TableHead>
-                  <TableHead>Data</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <>
+              {/* Mobile Card View (< md) */}
+              <div className="md:hidden divide-y divide-gray-100">
                 {data.grants.map((grant) => (
-                  <TableRow key={grant.id}>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{grant.recipient_name}</p>
-                        <p className="text-sm text-gray-500">{grant.recipient_email}</p>
+                  <div key={grant.id} className="p-4 bg-white space-y-3">
+                    <div className="flex justify-between items-start">
+                      <div className="flex items-center gap-2">
+                        <div className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500">
+                          <User className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-900 text-sm">{grant.recipient_name}</p>
+                          <p className="text-xs text-gray-500">{grant.recipient_email}</p>
+                        </div>
                       </div>
-                    </TableCell>
-                    <TableCell>
                       <span
-                        className={`px-2 py-1 text-xs font-medium rounded-full ${getCreditTypeBadgeClass(
+                        className={`px-2 py-0.5 text-xs font-semibold rounded-full border ${getCreditTypeBadgeClass(
                           grant.credit_type
                         )}`}
                       >
                         {getCreditTypeLabel(grant.credit_type)}
                       </span>
-                    </TableCell>
-                    <TableCell className="text-center font-semibold">
-                      {grant.quantity}
-                    </TableCell>
-                    <TableCell>
-                      <p className="max-w-xs truncate" title={grant.reason}>
-                        {grant.reason}
-                      </p>
-                    </TableCell>
-                    <TableCell>
-                      <p className="text-sm text-gray-600">{grant.granted_by_email}</p>
-                    </TableCell>
-                    <TableCell>
-                      <p className="text-sm text-gray-600">{formatDate(grant.created_at)}</p>
-                    </TableCell>
-                  </TableRow>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-sm bg-gray-50 p-3 rounded-lg">
+                      <div>
+                        <span className="text-xs text-gray-500 block mb-1">Quantidade</span>
+                        <span className="font-bold text-gray-900 text-lg">+{grant.quantity}</span>
+                      </div>
+                      <div>
+                        <span className="text-xs text-gray-500 block mb-1">Data</span>
+                        <span className="text-gray-700">{formatDate(grant.created_at)}</span>
+                      </div>
+                      <div className="col-span-2 pt-2 border-t border-gray-100 mt-1">
+                        <span className="text-xs text-gray-500 block mb-1">Motivo</span>
+                        <p className="text-gray-700 italic text-xs">{grant.reason}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1 text-xs text-gray-400">
+                      <CreditCard className="h-3 w-3" />
+                      <span>Liberado por: {grant.granted_by_email}</span>
+                    </div>
+                  </div>
                 ))}
-              </TableBody>
-            </Table>
+              </div>
+
+              {/* Desktop Table View (>= md) */}
+              <div className="hidden md:block">
+                <Table>
+                  <TableHeader className="bg-gray-50">
+                    <TableRow>
+                      <TableHead className="font-semibold text-meu-primary">Destinatário</TableHead>
+                      <TableHead className="font-semibold text-meu-primary">Tipo</TableHead>
+                      <TableHead className="text-center font-semibold text-meu-primary">Qtd</TableHead>
+                      <TableHead className="font-semibold text-meu-primary">Motivo</TableHead>
+                      <TableHead className="font-semibold text-meu-primary">Liberado por</TableHead>
+                      <TableHead className="font-semibold text-meu-primary">Data</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {data.grants.map((grant) => (
+                      <TableRow key={grant.id} className="hover:bg-gray-50/50">
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <div className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 shrink-0">
+                              <span className="text-xs font-bold">{grant.recipient_name.charAt(0)}</span>
+                            </div>
+                            <div>
+                              <p className="font-medium text-gray-900">{grant.recipient_name}</p>
+                              <p className="text-xs text-gray-500">{grant.recipient_email}</p>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span
+                            className={`px-2.5 py-0.5 text-xs font-semibold rounded-full border ${getCreditTypeBadgeClass(
+                              grant.credit_type
+                            )}`}
+                          >
+                            {getCreditTypeLabel(grant.credit_type)}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <span className="font-bold text-gray-900 bg-gray-100 px-2 py-1 rounded-md">+{grant.quantity}</span>
+                        </TableCell>
+                        <TableCell>
+                          <p className="max-w-xs truncate text-gray-600 text-sm" title={grant.reason}>
+                            {grant.reason}
+                          </p>
+                        </TableCell>
+                        <TableCell>
+                          <p className="text-sm text-gray-500 truncate max-w-[150px]" title={grant.granted_by_email}>{grant.granted_by_email}</p>
+                        </TableCell>
+                        <TableCell>
+                          <p className="text-sm text-gray-500">{formatDate(grant.created_at)}</p>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           ) : (
             <div className="flex flex-col items-center justify-center py-12 text-gray-500">
               <History className="h-12 w-12 mb-4 opacity-50" />
@@ -317,9 +385,9 @@ export function CreditGrantHistory({ token, refreshTrigger }: CreditGrantHistory
           )}
         </div>
 
-        {/* Pagination */}
+        {/* Pagination - only show if there are pages */}
         {data && data.totalPages > 1 && (
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-6 pt-2 border-t border-gray-100">
             <p className="text-sm text-gray-600">
               Mostrando {(data.page - 1) * filters.limit + 1} a{' '}
               {Math.min(data.page * filters.limit, data.total)} de {data.total} registros

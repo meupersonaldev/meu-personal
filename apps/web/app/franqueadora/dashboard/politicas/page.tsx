@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
-import { Loader2, Save } from 'lucide-react'
+import { Loader2, Save, MapPin, Building2, MoreVertical, Edit } from 'lucide-react'
 import FranqueadoraGuard from '@/components/auth/franqueadora-guard'
 import PolicyOverrideDialog from '@/components/policies/PolicyOverrideDialog'
 import PolicyDraftForm from '@/components/policies/PolicyDraftForm'
@@ -15,6 +15,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import DraftDiffChips from '@/components/policies/DraftDiffChips'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Badge } from '@/components/ui/badge'
 
 interface PolicyForm {
   credits_per_class: number
@@ -113,7 +114,7 @@ function PoliticasPageContent() {
           pub = json.data as PolicyForm
           if (mounted) setPublished(pub)
         }
-      } catch {}
+      } catch { }
       finally { if (mounted) setLoadingPublished(false) }
       try {
         const dRes = await fetch(`${API_URL}/api/franchisor/policies?status=draft`, { credentials: 'include', headers })
@@ -160,7 +161,7 @@ function PoliticasPageContent() {
           }
         }
         setOverridesByAcademy(map)
-      } catch {}
+      } catch { }
     }
     loadOverrides()
     return () => { cancelled = true }
@@ -300,174 +301,215 @@ function PoliticasPageContent() {
     router.replace(`${pathname}?${p.toString()}`, { scroll: false })
   }
 
-  // Removido: edição por unidade. Agora usamos política central (draft/published).
-
   return (
     <FranqueadoraGuard requiredPermission="canViewDashboard">
-    <div className="p-4 sm:p-6 lg:p-8">
-      <div className="mb-6 sm:mb-8">
+      <div className="p-3 sm:p-4 lg:p-8 space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Políticas de Operação</h1>
-            <p className="text-sm sm:text-base text-gray-600">Definições centralizadas da Franqueadora</p>
+            <p className="text-sm uppercase tracking-wide text-gray-500 font-bold mb-1">Administração</p>
+            <h1 className="text-3xl font-bold text-meu-primary tracking-tight">Políticas de Operação</h1>
+            <p className="text-gray-500 mt-1">Definições centralizadas da Franqueadora</p>
           </div>
         </div>
-      </div>
 
-      {!canEdit && (
-        <Card className="p-4 border-l-4 border-red-400 mb-6">
-          <p className="text-sm text-gray-700">Você não tem permissão para editar. Contate a Franqueadora.</p>
-        </Card>
-      )}
-
-      <Tabs value={activeTab} onValueChange={onTabChange}>
-        <TabsList className="mb-4">
-          <TabsTrigger value="resumo">Resumo</TabsTrigger>
-          {canEdit && <TabsTrigger value="rascunho">Rascunho</TabsTrigger>}
-          <TabsTrigger value="unidades">Unidades</TabsTrigger>
-          <TabsTrigger value="historico">Histórico</TabsTrigger>
-        </TabsList>
-
-      <TabsContent value="resumo">
-      <Card className="p-4 sm:p-6 mb-6">
-        <div className="flex items-center justify-between gap-4">
-          <h2 className="text-base sm:text-lg font-semibold text-gray-900">Política vigente</h2>
-          {published ? (
-            <div className="flex items-center gap-2">
-              {((published as any).version) ? (
-                <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs text-gray-700">Versão {(published as any).version}</span>
-              ) : null}
-              {((published as any).effective_from) ? (
-                <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs text-gray-700">Vigendo desde {format(new Date((published as any).effective_from), 'dd/MM/yyyy HH:mm')}</span>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-        {loadingPublished ? (
-          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 animate-pulse">
-            <div className="rounded-md border p-3 h-16 bg-gray-50" />
-            <div className="rounded-md border p-3 h-16 bg-gray-50" />
-            <div className="rounded-md border p-3 h-16 bg-gray-50" />
-          </div>
-        ) : published ? (
-          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div className="rounded-md border p-3">
-              <div className="text-xs text-gray-500">Créditos por aula</div>
-              <div className="text-lg font-semibold text-gray-900">{published.credits_per_class}</div>
-            </div>
-            <div className="rounded-md border p-3">
-              <div className="text-xs text-gray-500">Duração da aula (min)</div>
-              <div className="text-lg font-semibold text-gray-900">{published.class_duration_minutes}</div>
-            </div>
-            <div className="rounded-md border p-3">
-              <div className="text-xs text-gray-500">Tolerância de check-in (min)</div>
-              <div className="text-lg font-semibold text-gray-900">{published.checkin_tolerance_minutes}</div>
-            </div>
-            <div className="rounded-md border p-3">
-              <div className="text-xs text-gray-500">Antecedência p/ agendar (min)</div>
-              <div className="text-lg font-semibold text-gray-900">{published.student_min_booking_notice_minutes}</div>
-            </div>
-            <div className="rounded-md border p-3">
-              <div className="text-xs text-gray-500">Janela late cancel (min)</div>
-              <div className="text-lg font-semibold text-gray-900">{published.late_cancel_threshold_minutes}</div>
-            </div>
-            <div className="rounded-md border p-3">
-              <div className="text-xs text-gray-500">Dias p/ agendar no futuro</div>
-              <div className="text-lg font-semibold text-gray-900">{published.max_future_booking_days}</div>
-            </div>
-          </div>
-        ) : (
-          <div className="py-2 text-sm text-gray-500">Nenhuma política publicada.</div>
+        {!canEdit && (
+          <Card className="p-4 border-l-4 border-l-red-400 bg-red-50 text-red-900 shadow-sm">
+            <p className="text-sm font-medium">Você não tem permissão para editar. Contate a Franqueadora.</p>
+          </Card>
         )}
-      </Card>
-      </TabsContent>
 
-      {canEdit && (
-        <TabsContent value="rascunho">
-        <Card className="p-4 sm:p-6 mb-6">
-          <div className="flex items-center justify-between gap-4">
-            <h2 className="text-base sm:text-lg font-semibold text-gray-900">Política (Rascunho)</h2>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={saveDraft} disabled={savingDraft || !draft}>
-                {savingDraft ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-                Salvar rascunho
-              </Button>
-              <Button onClick={publishDraft} disabled={publishing || !draft} className="bg-meu-primary text-white">
-                {publishing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                Publicar
-              </Button>
-            </div>
-          </div>
-          {!loadingDraft && draft && published && (
-            <DraftDiffChips draft={draft} published={published} />
-          )}
-          <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="sm:col-span-1">
-              <label className="block text-xs text-gray-600 mb-1" title="Ao definir, a publicação passará a valer a partir deste momento (UTC).">Effective from (opcional)</label>
-              <Input type="datetime-local" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} />
-            </div>
-          </div>
-          {loadingDraft ? (
-            <div className="py-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 animate-pulse">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="h-20 rounded-md border bg-gray-50" />
-                ))}
+        <Tabs value={activeTab} onValueChange={onTabChange} className="w-full">
+          <TabsList className="bg-gray-100/50 p-1 rounded-xl mb-6 flex flex-wrap h-auto gap-2 sm:gap-0">
+            <TabsTrigger
+              value="resumo"
+              className="flex-1 min-w-[120px] rounded-lg data-[state=active]:bg-white data-[state=active]:text-meu-primary data-[state=active]:shadow-sm transition-all"
+            >
+              Resumo
+            </TabsTrigger>
+            {canEdit && <TabsTrigger value="rascunho" className="flex-1 min-w-[120px] rounded-lg data-[state=active]:bg-white data-[state=active]:text-meu-primary data-[state=active]:shadow-sm transition-all">Rascunho</TabsTrigger>}
+            <TabsTrigger value="unidades" className="flex-1 min-w-[120px] rounded-lg data-[state=active]:bg-white data-[state=active]:text-meu-primary data-[state=active]:shadow-sm transition-all">Unidades</TabsTrigger>
+            <TabsTrigger value="historico" className="flex-1 min-w-[120px] rounded-lg data-[state=active]:bg-white data-[state=active]:text-meu-primary data-[state=active]:shadow-sm transition-all">Histórico</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="resumo" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
+            <Card className="p-4 sm:p-6 border-l-4 border-l-meu-primary shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between gap-4 mb-6">
+                <h2 className="text-xl font-bold text-gray-900">Política Vigente</h2>
+                {published ? (
+                  <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
+                    {((published as any).version) ? (
+                      <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">Versão {(published as any).version}</Badge>
+                    ) : null}
+                    {((published as any).effective_from) ? (
+                      <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                        Vigendo desde {format(new Date((published as any).effective_from), 'dd/MM/yyyy')}
+                      </Badge>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
-            </div>
-          ) : !draft ? (
-            <div className="py-6 text-sm text-gray-500">Nenhum rascunho disponível.</div>
-          ) : (
-            <div className="mt-4">
-              <PolicyDraftForm draft={draft} onChange={handleChange} />
-            </div>
+              {loadingPublished ? (
+                <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 animate-pulse">
+                  <div className="rounded-xl border border-gray-100 p-4 h-24 bg-gray-50" />
+                  <div className="rounded-xl border border-gray-100 p-4 h-24 bg-gray-50" />
+                  <div className="rounded-xl border border-gray-100 p-4 h-24 bg-gray-50" />
+                </div>
+              ) : published ? (
+                <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="rounded-xl border border-gray-100 bg-gray-50/30 p-4 transition-colors hover:bg-gray-50">
+                    <div className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-1">Créditos por aula</div>
+                    <div className="text-2xl font-bold text-meu-primary">{published.credits_per_class}</div>
+                  </div>
+                  <div className="rounded-xl border border-gray-100 bg-gray-50/30 p-4 transition-colors hover:bg-gray-50">
+                    <div className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-1">Duração da aula</div>
+                    <div className="text-2xl font-bold text-meu-primary">{published.class_duration_minutes} <span className="text-sm font-normal text-gray-500">min</span></div>
+                  </div>
+                  <div className="rounded-xl border border-gray-100 bg-gray-50/30 p-4 transition-colors hover:bg-gray-50">
+                    <div className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-1">Tolerância check-in</div>
+                    <div className="text-2xl font-bold text-meu-primary">{published.checkin_tolerance_minutes} <span className="text-sm font-normal text-gray-500">min</span></div>
+                  </div>
+                  <div className="rounded-xl border border-gray-100 bg-gray-50/30 p-4 transition-colors hover:bg-gray-50">
+                    <div className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-1">Antecedência p/ agendar</div>
+                    <div className="text-2xl font-bold text-meu-primary">{published.student_min_booking_notice_minutes} <span className="text-sm font-normal text-gray-500">min</span></div>
+                  </div>
+                  <div className="rounded-xl border border-gray-100 bg-gray-50/30 p-4 transition-colors hover:bg-gray-50">
+                    <div className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-1">Janela late cancel</div>
+                    <div className="text-2xl font-bold text-meu-primary">{published.late_cancel_threshold_minutes} <span className="text-sm font-normal text-gray-500">min</span></div>
+                  </div>
+                  <div className="rounded-xl border border-gray-100 bg-gray-50/30 p-4 transition-colors hover:bg-gray-50">
+                    <div className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-1">Dias p/ agendar no futuro</div>
+                    <div className="text-2xl font-bold text-meu-primary">{published.max_future_booking_days} <span className="text-sm font-normal text-gray-500">dias</span></div>
+                  </div>
+                </div>
+              ) : (
+                <div className="py-8 text-center bg-gray-50 rounded-lg border border-dashed border-gray-200">
+                  <p className="text-gray-500">Nenhuma política publicada encontrada.</p>
+                </div>
+              )}
+            </Card>
+          </TabsContent>
+
+          {canEdit && (
+            <TabsContent value="rascunho" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
+              <Card className="p-4 sm:p-6 border-l-4 border-l-meu-accent shadow-sm hover:shadow-md transition-shadow">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
+                  <h2 className="text-xl font-bold text-gray-900">Editor de Política</h2>
+                  <div className="flex items-center gap-3 w-full sm:w-auto">
+                    <Button variant="outline" onClick={saveDraft} disabled={savingDraft || !draft} className="flex-1 sm:flex-none">
+                      {savingDraft ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                      Salvar Rascunho
+                    </Button>
+                    <Button onClick={publishDraft} disabled={publishing || !draft} className="bg-meu-primary hover:bg-meu-primary-dark text-white flex-1 sm:flex-none">
+                      {publishing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                      Publicar
+                    </Button>
+                  </div>
+                </div>
+
+                {!loadingDraft && draft && published && (
+                  <div className="mb-6 p-4 bg-gray-50 rounded-xl border border-gray-100">
+                    <p className="text-sm font-medium text-gray-700 mb-2">Alterações Pendentes:</p>
+                    <DraftDiffChips draft={draft} published={published} />
+                  </div>
+                )}
+
+                <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  <div className="sm:col-span-2 lg:col-span-1">
+                    <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wide" title="Ao definir, a publicação passará a valer a partir deste momento (UTC).">
+                      Effective From (Opcional)
+                    </label>
+                    <Input
+                      type="datetime-local"
+                      value={effectiveFrom}
+                      onChange={(e) => setEffectiveFrom(e.target.value)}
+                      className="bg-white"
+                    />
+                    <p className="text-[10px] text-gray-500 mt-1">Ao definir, a publicação passará a valer a partir deste momento (UTC).</p>
+                  </div>
+                </div>
+
+                <div className="mt-6 border-t border-gray-100 pt-6">
+                  {loadingDraft ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 animate-pulse">
+                      {Array.from({ length: 6 }).map((_, i) => (
+                        <div key={i} className="h-14 rounded-lg bg-gray-100" />
+                      ))}
+                    </div>
+                  ) : !draft ? (
+                    <div className="py-8 text-center text-gray-500">Nenhum rascunho disponível.</div>
+                  ) : (
+                    <PolicyDraftForm draft={draft} onChange={handleChange} />
+                  )}
+                </div>
+              </Card>
+            </TabsContent>
           )}
-        </Card>
-        </TabsContent>
-      )}
 
-      <TabsContent value="unidades">
-      <Card className="p-4 sm:p-6">
-        <div className="flex items-center justify-between gap-2 mb-2">
-          <h3 className="text-base sm:text-lg font-semibold text-gray-900">Unidades</h3>
-          <Button variant="outline" onClick={() => fetchAcademies()} disabled={isLoading}>
-            {isLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-            Atualizar
-          </Button>
-        </div>
-        <p className="text-xs text-gray-500 mb-4">As unidades herdam automaticamente a política vigente. Você pode ajustar overrides por unidade conforme necessário.</p>
+          <TabsContent value="unidades" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
+            <Card className="border-gray-100 shadow-sm overflow-hidden">
+              <div className="p-4 sm:p-6 border-b border-gray-100 bg-gray-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">Unidades e Exceções</h3>
+                  <p className="text-xs text-gray-500 mt-1">Gerencie overrides específicos por unidade da franquia.</p>
+                </div>
+                <Button variant="outline" onClick={() => fetchAcademies()} disabled={isLoading} size="sm" className="w-full sm:w-auto">
+                  {isLoading ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : null}
+                  Atualizar Lista
+                </Button>
+              </div>
 
-        {isLoading ? (
-          <div className="py-10 text-center text-sm text-gray-500">
-            <Loader2 className="inline h-4 w-4 mr-2 animate-spin" /> Carregando unidades...
-          </div>
-        ) : isEmpty ? (
-          <div className="py-8 text-center text-sm text-gray-500">Nenhuma unidade encontrada.</div>
-        ) : (
-          <div className="overflow-x-auto -mx-4 sm:mx-0">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unidade</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Créditos</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Duração (min)</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tolerância</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-100">
-                {academies.map((a) => (
-                  <tr key={a.id}>
-                    <td className="px-4 py-3">
-                      <div className="text-sm font-medium text-gray-900">{a.name}</div>
-                      <div className="text-xs text-gray-500">{a.city} • {a.state}</div>
-                      {!!overridesByAcademy[a.id]?.length && (
-                        <div className="mt-1">
+              {isLoading ? (
+                <div className="py-12 text-center text-sm text-gray-500">
+                  <Loader2 className="inline h-5 w-5 mr-2 animate-spin text-meu-primary" /> Carregando unidades...
+                </div>
+              ) : isEmpty ? (
+                <div className="py-12 text-center text-gray-500 flex flex-col items-center gap-2">
+                  <Building2 className="h-8 w-8 text-gray-300" />
+                  <p>Nenhuma unidade encontrada.</p>
+                </div>
+              ) : (
+                <div className="bg-white">
+                  {/* Mobile View (Cards) */}
+                  <div className="block sm:hidden divide-y divide-gray-100">
+                    {academies.map((a) => (
+                      <div key={a.id} className="p-4">
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex gap-3">
+                            <div className="h-10 w-10 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+                              <Building2 className="h-5 w-5 text-meu-primary" />
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-gray-900">{a.name}</h4>
+                              <div className="flex items-center text-xs text-gray-500 mt-0.5">
+                                <MapPin className="h-3 w-3 mr-1" />
+                                {a.city} • {a.state}
+                              </div>
+                            </div>
+                          </div>
+                          <Button variant="ghost" size="icon" className="-mr-2" onClick={() => { setSelectedAcademy({ id: a.id, name: a.name, city: a.city, state: a.state }); setOverrideOpen(true) }}>
+                            <Edit className="h-4 w-4 text-gray-400" />
+                          </Button>
+                        </div>
+
+                        <div className="bg-gray-50 rounded-lg p-3 grid grid-cols-2 gap-3 text-xs mb-3">
+                          <div>
+                            <span className="text-gray-400 block mb-0.5">Créditos</span>
+                            <span className="font-semibold text-gray-900">{published?.credits_per_class ?? '—'}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-400 block mb-0.5">Duração</span>
+                            <span className="font-semibold text-gray-900">{published?.class_duration_minutes ?? '—'} min</span>
+                          </div>
+                        </div>
+
+                        {!!overridesByAcademy[a.id]?.length && (
                           <DropdownMenu>
-                            <DropdownMenuTrigger className="text-[11px] text-meu-primary-700 underline underline-offset-2">
-                              Overrides ativos ({overridesByAcademy[a.id].length})
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="outline" size="sm" className="w-full text-xs h-8 border-dashed border-meu-primary/30 text-meu-primary hover:bg-meu-primary/5">
+                                {overridesByAcademy[a.id].length} overrides ativos
+                              </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent>
+                            <DropdownMenuContent align="start" className="w-[--radix-dropdown-menu-trigger-width]">
                               {overridesByAcademy[a.id].map((f) => (
                                 <DropdownMenuItem key={f} className="text-xs">
                                   {f}
@@ -475,67 +517,119 @@ function PoliticasPageContent() {
                               ))}
                             </DropdownMenuContent>
                           </DropdownMenu>
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="text-sm text-gray-900">{published?.credits_per_class ?? '—'}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="text-sm text-gray-900">{published?.class_duration_minutes ?? '—'}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="text-sm text-gray-900">{published?.checkin_tolerance_minutes ?? '—'}</div>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <Button variant="outline" size="sm" disabled={!canEdit} onClick={() => { setSelectedAcademy({ id: a.id, name: a.name, city: a.city, state: a.state }); setOverrideOpen(true) }}>Editar overrides</Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
-      </TabsContent>
-      <TabsContent value="historico">
-        <Card className="p-4 sm:p-6">
-          <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-3">Publicações anteriores</h3>
-          {loadingHistory ? (
-            <div className="space-y-2 animate-pulse">
-              <div className="h-10 rounded border bg-gray-50" />
-              <div className="h-10 rounded border bg-gray-50" />
-              <div className="h-10 rounded border bg-gray-50" />
-            </div>
-          ) : history.length === 0 ? (
-            <div className="text-sm text-gray-500">Nenhum histórico encontrado.</div>
-          ) : (
-            <div className="divide-y divide-gray-100 rounded-md border">
-              {history.map((h: any) => (
-                <div key={h.id || `${h.version}-${h.effective_from}`} className="flex items-center justify-between px-3 py-2">
-                  <div className="flex items-center gap-3">
-                    <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs">Versão {h.version}</span>
-                    <span className="text-sm text-gray-700">Efetiva em {h.effective_from ? format(new Date(h.effective_from), 'dd/MM/yyyy HH:mm') : '—'}</span>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                  <span className="text-xs text-gray-500">Criada em {h.created_at ? format(new Date(h.created_at), 'dd/MM/yyyy HH:mm') : '—'}</span>
+
+                  {/* Desktop View (Table) */}
+                  <div className="hidden sm:block overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-100">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Unidade</th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Créditos</th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Duração (min)</th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Tolerância (min)</th>
+                          <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-100">
+                        {academies.map((a) => (
+                          <tr key={a.id} className="hover:bg-gray-50/50 transition-colors">
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center gap-3">
+                                <div className="h-8 w-8 rounded bg-gray-100 flex items-center justify-center text-gray-400 shrink-0">
+                                  <Building2 className="h-4 w-4" />
+                                </div>
+                                <div>
+                                  <div className="text-sm font-bold text-gray-900">{a.name}</div>
+                                  <div className="text-xs text-gray-500">{a.city} - {a.state}</div>
+                                  {!!overridesByAcademy[a.id]?.length && (
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger className="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded mt-1 hover:bg-blue-100 inline-block">
+                                        {overridesByAcademy[a.id].length} overrides
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent>
+                                        {overridesByAcademy[a.id].map((f) => (
+                                          <DropdownMenuItem key={f} className="text-xs">
+                                            {f}
+                                          </DropdownMenuItem>
+                                        ))}
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm font-medium text-gray-900 bg-gray-50 px-2 py-1 rounded inline-block">
+                                {published?.credits_per_class ?? '—'}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-600">{published?.class_duration_minutes ?? '—'}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-600">{published?.checkin_tolerance_minutes ?? '—'}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-right">
+                              <Button variant="ghost" size="sm" disabled={!canEdit} onClick={() => { setSelectedAcademy({ id: a.id, name: a.name, city: a.city, state: a.state }); setOverrideOpen(true) }} className="hover:bg-gray-100">
+                                <Edit className="h-4 w-4 text-gray-500" />
+                                <span className="ml-2">Editar</span>
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </Card>
-      </TabsContent>
-      </Tabs>
-      {selectedAcademy && (
-        <PolicyOverrideDialog
-          open={overrideOpen}
-          onOpenChange={setOverrideOpen}
-          academy={selectedAcademy}
-          token={token || undefined}
-          apiUrl={API_URL}
-          onSaved={() => {}}
-        />
-      )}
-    </div>
+              )}
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="historico" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
+            <Card className="p-4 sm:p-6 shadow-sm border-gray-100">
+              <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                <div className="h-1 w-4 bg-gray-300 rounded-full" />
+                Histórico de Versões
+              </h3>
+              {loadingHistory ? (
+                <div className="space-y-3 animate-pulse">
+                  <div className="h-12 rounded-lg bg-gray-50 border border-gray-100" />
+                  <div className="h-12 rounded-lg bg-gray-50 border border-gray-100" />
+                  <div className="h-12 rounded-lg bg-gray-50 border border-gray-100" />
+                </div>
+              ) : history.length === 0 ? (
+                <div className="text-sm text-gray-500 text-center py-6 bg-gray-50 rounded-lg border border-dashed border-gray-200">Nenhum histórico encontrado.</div>
+              ) : (
+                <div className="divide-y divide-gray-100 rounded-xl border border-gray-100 overflow-hidden">
+                  {history.map((h: any) => (
+                    <div key={h.id || `${h.version}-${h.effective_from}`} className="flex flex-col sm:flex-row sm:items-center justify-between px-4 py-3 bg-white hover:bg-gray-50/50 transition-colors gap-2 sm:gap-0">
+                      <div className="flex items-center gap-3">
+                        <Badge variant="secondary" className="bg-gray-100 text-gray-700">v{h.version}</Badge>
+                        <span className="text-sm font-medium text-gray-900">Efetiva em: {h.effective_from ? format(new Date(h.effective_from), 'dd/MM/yyyy HH:mm') : 'Imediato'}</span>
+                      </div>
+                      <span className="text-xs text-gray-400">Criada em: {h.created_at ? format(new Date(h.created_at), 'dd/MM/yyyy HH:mm') : '—'}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+          </TabsContent>
+        </Tabs>
+        {selectedAcademy && (
+          <PolicyOverrideDialog
+            open={overrideOpen}
+            onOpenChange={setOverrideOpen}
+            academy={selectedAcademy}
+            token={token || undefined}
+            apiUrl={API_URL}
+            onSaved={() => { }}
+          />
+        )}
+      </div>
     </FranqueadoraGuard>
   )
 }

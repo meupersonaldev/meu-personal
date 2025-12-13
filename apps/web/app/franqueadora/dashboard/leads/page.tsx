@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
 import {
   Table,
   TableBody,
@@ -16,13 +17,13 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import FranchiseLeadDetailsModal from '@/components/franchise-lead-details-modal'
-import { 
-  Building, 
-  Mail, 
-  Phone, 
-  MapPin, 
-  DollarSign, 
-  MessageSquare, 
+import {
+  Building,
+  Mail,
+  Phone,
+  MapPin,
+  DollarSign,
+  MessageSquare,
   Calendar,
   Search,
   Loader2,
@@ -92,7 +93,7 @@ export default function FranchiseLeadsPage() {
     setIsLoading(true)
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      
+
       const params = new URLSearchParams({
         page: page.toString(),
         limit: limit.toString(),
@@ -122,12 +123,12 @@ export default function FranchiseLeadsPage() {
       }
 
       const data = await response.json()
-      console.log('[LEADS PAGE] Dados recebidos:', { 
-        success: data.success, 
+      console.log('[LEADS PAGE] Dados recebidos:', {
+        success: data.success,
         total: data.pagination?.total,
-        leadsCount: data.data?.length 
+        leadsCount: data.data?.length
       })
-      
+
       if (data.success) {
         setLeads(data.data || [])
         setTotal(data.pagination?.total || 0)
@@ -340,31 +341,88 @@ export default function FranchiseLeadsPage() {
     })
   }
 
+  // Componente de Card Mobile
+  const LeadCard = ({ lead }: { lead: FranchiseLead }) => (
+    <div className="bg-white p-4 rounded-lg border border-gray-100 shadow-sm hover:shadow-md transition-all space-y-3 relative group">
+      <div className="absolute left-0 top-0 bottom-0 w-1 bg-meu-primary rounded-l-lg" />
+
+      <div className="flex justify-between items-start pl-2">
+        <div>
+          <h3 className="font-bold text-gray-900 line-clamp-1">{lead.name}</h3>
+          <p className="text-xs text-gray-500 flex items-center gap-1 mt-1">
+            <Calendar className="h-3 w-3" /> {formatDate(lead.created_at)}
+          </p>
+        </div>
+        <Badge className={cn("text-[10px] px-2 py-0.5", STATUS_COLORS[lead.status] || STATUS_COLORS.NEW)}>
+          {STATUS_LABELS[lead.status] || lead.status}
+        </Badge>
+      </div>
+
+      <div className="space-y-2 pl-2 text-sm text-gray-600">
+        <div className="flex items-center gap-2">
+          <Mail className="h-3 w-3 text-meu-primary/60" />
+          <span className="truncate">{lead.email}</span>
+        </div>
+        {lead.phone && (
+          <div className="flex items-center gap-2">
+            <Phone className="h-3 w-3 text-meu-primary/60" />
+            <span>{lead.phone}</span>
+          </div>
+        )}
+        {lead.city && (
+          <div className="flex items-center gap-2">
+            <MapPin className="h-3 w-3 text-meu-primary/60" />
+            <span>{lead.city}</span>
+          </div>
+        )}
+      </div>
+
+      <div className="flex gap-2 pt-2 pl-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="flex-1 h-9 bg-gray-50 border-gray-200 text-meu-primary hover:bg-meu-primary hover:text-white transition-colors"
+          onClick={() => handleViewDetails(lead)}
+        >
+          <Eye className="h-4 w-4 mr-2" /> Detalhes
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-9 w-9 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+          onClick={() => setDeletingId(lead.id)}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  )
+
   return (
     <FranqueadoraGuard requiredPermission="canViewDashboard">
-      <div className="p-3 sm:p-4 lg:p-8">
+      <div className="p-4 sm:p-6 lg:p-8 space-y-6">
         {/* Header */}
-        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-gray-100 pb-6">
+          <div className="space-y-1">
+            <h1 className="text-2xl sm:text-3xl font-bold text-meu-primary tracking-tight">
               Leads de Franquias
             </h1>
-            <p className="text-gray-600">
-              Gerencie os interessados em se tornar franqueados
+            <p className="text-sm text-gray-500 max-w-lg">
+              Gerencie e acompanhe os interessados em abrir uma nova franquia.
             </p>
           </div>
           <Button
             onClick={handleExportLeads}
             disabled={!total || exporting}
-            className="flex items-center gap-2"
+            className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white shadow-sm shadow-green-600/20"
           >
-            <Download className={`h-4 w-4 ${exporting ? 'animate-spin' : ''}`} />
+            <Download className={`h-4 w-4 mr-2 ${exporting ? 'animate-spin' : ''}`} />
             {exporting ? 'Exportando...' : 'Exportar Excel'}
           </Button>
         </div>
 
-        {/* Search Bar */}
-        <div className="mb-6">
+        {/* Filters */}
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
             <Input
@@ -375,209 +433,167 @@ export default function FranchiseLeadsPage() {
                 setSearchTerm(e.target.value)
                 setPage(1)
               }}
-              className="pl-10 bg-white border-gray-200"
+              className="pl-10 h-11 border-gray-200 focus:border-meu-primary focus:ring-meu-primary/20 transition-all font-medium text-gray-700"
             />
           </div>
         </div>
 
-        {/* Leads Table */}
+        {/* Content */}
         {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-meu-primary" />
+          <div className="flex flex-col items-center justify-center py-20 space-y-4">
+            <Loader2 className="h-10 w-10 animate-spin text-meu-primary" />
+            <p className="text-gray-500 font-medium animate-pulse">Carregando leads...</p>
           </div>
         ) : leads.length === 0 ? (
-          <Card className="p-8 text-center">
-            <Building className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-600 text-lg">
-              {searchTerm ? 'Nenhum lead encontrado com os filtros aplicados.' : 'Nenhum lead cadastrado ainda.'}
+          <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-gray-200">
+            <div className="bg-gray-50 h-20 w-20 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Building className="h-10 w-10 text-gray-300" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-1">Nenhum lead encontrado</h3>
+            <p className="text-gray-500 max-w-sm mx-auto">
+              {searchTerm ? 'Tente ajustar seus filtros de busca.' : 'Novos cadastros aparecerão aqui.'}
             </p>
-          </Card>
+          </div>
         ) : (
-          <>
-            <Card className="overflow-hidden">
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[200px]">Nome</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Telefone</TableHead>
-                      <TableHead>Cidade</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Data</TableHead>
-                      <TableHead className="text-right">Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {leads.map((lead) => (
-                      <TableRow key={lead.id} className="hover:bg-gray-50">
-                        <TableCell className="font-medium">{lead.name}</TableCell>
-                        <TableCell>
-                          <a
-                            href={`mailto:${lead.email}`}
-                            className="text-meu-primary hover:underline flex items-center gap-1"
-                          >
-                            <Mail className="h-3 w-3" />
-                            {lead.email}
+          <div className="space-y-6">
+
+            {/* Desktop View (Table) */}
+            <div className="hidden md:block bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <Table>
+                <TableHeader className="bg-gray-50/50">
+                  <TableRow>
+                    <TableHead className="w-[200px] font-semibold text-meu-primary">Nome</TableHead>
+                    <TableHead className="font-semibold text-meu-primary">Email</TableHead>
+                    <TableHead className="font-semibold text-meu-primary">Telefone</TableHead>
+                    <TableHead className="font-semibold text-meu-primary">Localização</TableHead>
+                    <TableHead className="font-semibold text-meu-primary">Status</TableHead>
+                    <TableHead className="font-semibold text-meu-primary">Data</TableHead>
+                    <TableHead className="text-right font-semibold text-meu-primary">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {leads.map((lead) => (
+                    <TableRow key={lead.id} className="hover:bg-blue-50/30 transition-colors group">
+                      <TableCell className="font-medium text-gray-900">
+                        {lead.name}
+                      </TableCell>
+                      <TableCell>
+                        <a href={`mailto:${lead.email}`} className="text-sm text-gray-600 hover:text-meu-primary flex items-center gap-1 transition-colors">
+                          <Mail className="h-3 w-3" /> {lead.email}
+                        </a>
+                      </TableCell>
+                      <TableCell>
+                        {lead.phone ? (
+                          <a href={`tel:${lead.phone}`} className="text-sm text-gray-500 hover:text-meu-primary flex items-center gap-1 transition-colors">
+                            <Phone className="h-3 w-3" /> {lead.phone}
                           </a>
-                        </TableCell>
-                        <TableCell>
-                          {lead.phone ? (
-                            <a
-                              href={`tel:${lead.phone}`}
-                              className="text-gray-700 hover:text-meu-primary flex items-center gap-1"
-                            >
-                              <Phone className="h-3 w-3" />
-                              {lead.phone}
-                            </a>
-                          ) : (
-                            <span className="text-gray-400">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {lead.city ? (
-                            <span className="flex items-center gap-1">
-                              <MapPin className="h-3 w-3 text-gray-400" />
-                              {lead.city}
-                            </span>
-                          ) : (
-                            <span className="text-gray-400">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={STATUS_COLORS[lead.status] || STATUS_COLORS.NEW}>
-                            {STATUS_LABELS[lead.status] || lead.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-sm text-gray-600 flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
-                            {formatDate(lead.created_at)}
+                        ) : <span className="text-gray-400">-</span>}
+                      </TableCell>
+                      <TableCell>
+                        {lead.city ? (
+                          <span className="flex items-center gap-1 text-sm text-gray-600">
+                            <MapPin className="h-3 w-3 text-gray-400" />
+                            {lead.city}
                           </span>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleViewDetails(lead)}
-                              className="flex items-center gap-2"
-                            >
-                              <Eye className="h-4 w-4" />
-                              Ver Detalhes
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setDeletingId(lead.id)}
-                              className="flex items-center gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                              Deletar
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </Card>
+                        ) : <span className="text-gray-400">-</span>}
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={cn("font-medium border shadow-sm", STATUS_COLORS[lead.status] || STATUS_COLORS.NEW)}>
+                          {STATUS_LABELS[lead.status] || lead.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-xs text-gray-500 font-medium bg-gray-100 px-2 py-1 rounded-full">
+                          {formatDate(lead.created_at)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2 text-gray-500">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleViewDetails(lead)}
+                            className="h-8 w-8 p-0 text-meu-primary hover:bg-blue-50 hover:text-meu-primary-dark"
+                            title="Ver Detalhes"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setDeletingId(lead.id)}
+                            className="h-8 w-8 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50"
+                            title="Deletar"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Mobile View (Cards) */}
+            <div className="md:hidden grid grid-cols-1 gap-4">
+              {leads.map((lead) => (
+                <LeadCard key={lead.id} lead={lead} />
+              ))}
+            </div>
 
             {/* Pagination */}
             {total > 0 && (
-              <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="text-sm text-gray-600">
-                  Mostrando <span className="font-medium">{((page - 1) * limit) + 1}</span> a{' '}
-                  <span className="font-medium">{Math.min(page * limit, total)}</span> de{' '}
-                  <span className="font-medium">{total}</span> leads
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-gray-100">
+                <div className="text-sm text-gray-500">
+                  Mostrando <span className="font-bold text-gray-900">{((page - 1) * limit) + 1}</span> a{' '}
+                  <span className="font-bold text-gray-900">{Math.min(page * limit, total)}</span> de{' '}
+                  <span className="font-bold text-gray-900">{total}</span> leads
                 </div>
+
                 <div className="flex items-center gap-2">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setPage(p => Math.max(1, p - 1))}
-                    disabled={page === 1 || isLoading}
-                    className="rounded-l-md"
+                    disabled={page === 1}
+                    className="h-9 w-9 p-0"
                   >
                     <ChevronLeft className="h-4 w-4" />
-                    Anterior
                   </Button>
-                  
-                  {/* Page Numbers */}
-                  <div className="flex items-center gap-1">
-                    {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                      let pageNum: number
-                      if (totalPages <= 5) {
-                        pageNum = i + 1
-                      } else if (page <= 3) {
-                        pageNum = i + 1
-                      } else if (page >= totalPages - 2) {
-                        pageNum = totalPages - 4 + i
-                      } else {
-                        pageNum = page - 2 + i
-                      }
-                      
-                      return (
-                        <Button
-                          key={pageNum}
-                          variant={page === pageNum ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => setPage(pageNum)}
-                          disabled={isLoading}
-                          className="min-w-[40px]"
-                        >
-                          {pageNum}
-                        </Button>
-                      )
-                    })}
-                    {totalPages > 5 && page < totalPages - 2 && (
-                      <>
-                        <span className="px-2 text-gray-400">...</span>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setPage(totalPages)}
-                          disabled={isLoading}
-                          className="min-w-[40px]"
-                        >
-                          {totalPages}
-                        </Button>
-                      </>
-                    )}
+                  <div className="text-sm font-medium px-2">
+                    Página {page} de {totalPages}
                   </div>
-                  
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                    disabled={page === totalPages || isLoading}
-                    className="rounded-r-md"
+                    disabled={page === totalPages}
+                    className="h-9 w-9 p-0"
                   >
-                    Próxima
                     <ChevronRight className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
             )}
-          </>
+
+          </div>
         )}
 
-        {/* Details Modal */}
+        {/* Modals */}
         <FranchiseLeadDetailsModal
           isOpen={isModalOpen}
           onClose={handleCloseModal}
           lead={selectedLead}
         />
 
-        {/* Delete Confirmation Modal */}
         <ConfirmDialog
           isOpen={!!deletingId}
           onClose={() => !isDeleting && setDeletingId(null)}
           onConfirm={() => deletingId && handleDeleteLead(deletingId)}
-          title="Confirmar Exclusão"
-          description="Tem certeza que deseja deletar este lead? Esta ação não pode ser desfeita."
-          confirmText="Sim, Deletar"
+          title="Excluir Lead"
+          description="Tem certeza que deseja excluir este lead permanentemente? Esta ação não pode ser desfeita."
+          confirmText="Sim, Excluir"
           cancelText="Cancelar"
           type="danger"
           loading={isDeleting}

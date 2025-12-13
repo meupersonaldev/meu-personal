@@ -9,10 +9,10 @@ import { CreditGrantForm, CreditGrantHistory } from '@/components/credits'
 
 export default function FranqueadoraCreditosPage() {
   const { franqueadora, isAuthenticated, token, isLoading } = useFranqueadoraStore()
-  
+
   // Trigger para atualizar histórico após liberação
   const [refreshTrigger, setRefreshTrigger] = useState(0)
-  
+
   // Hydration fix
   const [hydrated, setHydrated] = useState(false)
   useEffect(() => { setHydrated(true) }, [])
@@ -44,27 +44,28 @@ export default function FranqueadoraCreditosPage() {
 
   return (
     <FranqueadoraGuard requiredPermission="canViewDashboard">
-      <div className="p-3 sm:p-4 lg:p-8">
+      <div className="p-3 sm:p-4 lg:p-8 space-y-6">
         {/* Header Desktop */}
         <div className="hidden lg:flex lg:items-center lg:justify-between mb-8">
           <div>
-            <p className="text-sm uppercase tracking-wide text-gray-500">Administração</p>
-            <h1 className="text-3xl font-bold text-gray-900">
-              Liberação de Créditos — {franqueadora?.name || 'Franqueadora'}
+            <p className="text-sm uppercase tracking-wide text-gray-500 font-bold mb-1">Administração</p>
+            <h1 className="text-3xl font-bold text-gray-900 tracking-tight">
+              Liberação de Créditos
             </h1>
+            <p className="text-gray-500 mt-1">Gerencie saldo de aulas e horas</p>
           </div>
           <FranqueadoraNotificationsDropdown />
         </div>
 
         {/* Mobile Title */}
-        <div className="lg:hidden mb-4">
+        <div className="lg:hidden mb-4 p-1">
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2">
                 <Gift className="h-5 w-5 text-meu-primary" />
-                <h2 className="text-lg font-semibold text-gray-900">Créditos</h2>
+                <h2 className="text-lg font-bold text-gray-900">Créditos</h2>
               </div>
-              <p className="text-sm text-gray-600">Libere créditos para usuários</p>
+              <p className="text-sm text-gray-500">Libere créditos para usuários</p>
             </div>
             <FranqueadoraNotificationsDropdown />
           </div>
@@ -73,16 +74,16 @@ export default function FranqueadoraCreditosPage() {
         {/* Content */}
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           {/* Formulário de Liberação */}
-          <div>
-            <CreditGrantForm 
-              token={token} 
+          <div className="xl:col-span-1">
+            <CreditGrantForm
+              token={token}
               onSuccess={handleGrantSuccess}
             />
           </div>
 
           {/* Histórico de Liberações */}
           <div className="xl:col-span-1">
-            <CreditGrantHistory 
+            <CreditGrantHistory
               token={token}
               refreshTrigger={refreshTrigger}
             />

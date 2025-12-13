@@ -186,13 +186,13 @@ export function CreditGrantForm({ token, onSuccess }: CreditGrantFormProps) {
       }
 
       toast.success('Créditos liberados com sucesso!')
-      
+
       // Reset form
       form.reset()
       setSearchEmail('')
       setSearchResult(null)
       setPendingSubmit(null)
-      
+
       onSuccess?.()
     } catch (error: any) {
       toast.error(error.message || 'Erro ao liberar créditos')
@@ -252,11 +252,16 @@ export function CreditGrantForm({ token, onSuccess }: CreditGrantFormProps) {
 
   return (
     <>
-      <Card className="p-6">
-        <div className="space-y-6">
-          <div className="flex items-center gap-2 mb-4">
-            <Gift className="h-5 w-5 text-meu-primary" />
-            <h3 className="text-lg font-semibold">Liberar Créditos</h3>
+      <Card className="border-gray-100 shadow-sm overflow-hidden">
+        <div className="p-6 space-y-6">
+          <div className="flex items-center gap-2 mb-4 border-b border-gray-100 pb-4">
+            <div className="h-8 w-8 rounded-lg bg-meu-primary/10 flex items-center justify-center">
+              <Gift className="h-5 w-5 text-meu-primary" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-gray-900">Liberar Créditos</h3>
+              <p className="text-sm text-gray-500">Adicione aulas ou horas para usuários</p>
+            </div>
           </div>
 
           {/* Search Section */}
@@ -280,7 +285,7 @@ export function CreditGrantForm({ token, onSuccess }: CreditGrantFormProps) {
 
           {/* User Info Card */}
           {searchResult && (
-            <div className="rounded-lg border p-4 bg-gray-50">
+            <div className="rounded-xl border border-meu-primary/20 bg-blue-50/50 p-4">
               {searchResult.user ? (
                 <div className="space-y-3">
                   <div className="flex items-center gap-3">
@@ -384,18 +389,18 @@ export function CreditGrantForm({ token, onSuccess }: CreditGrantFormProps) {
 
                 <Button
                   type="submit"
-                  className="w-full"
+                  className="w-full bg-meu-primary hover:bg-meu-primary-dark text-white font-semibold py-6 shadow-md shadow-blue-900/10"
                   disabled={isSubmitting || !searchResult?.user}
                 >
                   {isSubmitting ? (
                     <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Liberando...
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      Processando Liberação...
                     </>
                   ) : (
                     <>
-                      <Gift className="mr-2 h-4 w-4" />
-                      Liberar Créditos
+                      <Gift className="mr-2 h-5 w-5" />
+                      Confirmar Liberação de Créditos
                     </>
                   )}
                 </Button>

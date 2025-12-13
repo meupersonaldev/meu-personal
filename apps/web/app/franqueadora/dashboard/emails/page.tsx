@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Mail, Clock, Edit2, History } from 'lucide-react'
+import { Mail, Clock, Edit2, History, ChevronRight } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useFranqueadoraStore } from '@/lib/stores/franqueadora-store'
 import FranqueadoraGuard from '@/components/auth/franqueadora-guard'
 import { formatDistanceToNow } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
+import { Badge } from '@/components/ui/badge'
 
 interface Variable {
   name: string
@@ -85,10 +86,10 @@ export default function EmailTemplatesPage() {
 
   if (!hydrated || isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center p-6">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-meu-primary mx-auto mb-4"></div>
-          <p className="text-gray-600">Carregando templates...</p>
+          <p className="text-gray-500 font-medium">Carregando templates...</p>
         </div>
       </div>
     )
@@ -96,10 +97,12 @@ export default function EmailTemplatesPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-red-600 mb-4">{error}</p>
-          <Button onClick={fetchTemplates}>Tentar novamente</Button>
+      <div className="min-h-screen flex items-center justify-center p-6">
+        <div className="text-center max-w-md">
+          <div className="bg-red-50 text-red-900 p-4 rounded-xl mb-6 border border-red-100">
+            <p className="font-medium">{error}</p>
+          </div>
+          <Button onClick={fetchTemplates} variant="outline" className="min-w-[150px]">Tentar novamente</Button>
         </div>
       </div>
     )
@@ -107,88 +110,63 @@ export default function EmailTemplatesPage() {
 
   return (
     <FranqueadoraGuard requiredPermission="canViewDashboard">
-      <div className="p-3 sm:p-4 lg:p-8">
+      <div className="p-3 sm:p-4 lg:p-8 space-y-6">
         {/* Header Desktop */}
-        <div className="hidden lg:flex lg:items-center lg:justify-between mb-8">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
-            <p className="text-sm uppercase tracking-wide text-gray-500">Configurações</p>
-            <h1 className="text-3xl font-bold text-gray-900">Templates de Email</h1>
+            <p className="text-sm uppercase tracking-wide text-gray-500 font-bold mb-1">Comunicação</p>
+            <h1 className="text-3xl font-bold text-meu-primary tracking-tight">Templates de Email</h1>
+            <p className="text-gray-500 mt-1">Personalize os emails transacionais do sistema</p>
           </div>
           <Button
             variant="outline"
+            className="w-full lg:w-auto"
             onClick={() => router.push('/franqueadora/dashboard/emails/historico')}
           >
             <History className="h-4 w-4 mr-2" />
-            Histórico de Envios
+            Ver Histórico de Envios
           </Button>
-        </div>
-
-        {/* Mobile Title */}
-        <div className="lg:hidden mb-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">Templates de Email</h2>
-              <p className="text-sm text-gray-600">Personalize os emails do sistema</p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => router.push('/franqueadora/dashboard/emails/historico')}
-            >
-              <History className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-
-        {/* Description */}
-        <div className="mb-6">
-          <p className="text-gray-600">
-            Personalize o conteúdo dos emails enviados pelo sistema. O layout base (cabeçalho, rodapé e estilo) 
-            permanece fixo para manter a identidade visual.
-          </p>
         </div>
 
         {/* Templates Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-6">
           {templates.map((template) => (
-            <Card 
-              key={template.slug} 
-              className="hover:shadow-lg transition-shadow cursor-pointer group"
+            <Card
+              key={template.slug}
+              className="group hover:shadow-lg hover:border-meu-primary/30 transition-all cursor-pointer overflow-hidden border-gray-200"
               onClick={() => router.push(`/franqueadora/dashboard/emails/${template.slug}`)}
             >
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
+              <CardHeader className="pb-3 bg-gray-50/50 border-b border-gray-100">
+                <div className="flex items-start justify-between gap-4">
                   <div className="flex items-center gap-3">
-                    <div className="p-2 bg-meu-primary/10 rounded-lg">
-                      <Mail className="h-5 w-5 text-meu-primary" />
+                    <div className="p-2.5 bg-white rounded-xl shadow-sm border border-gray-100 text-meu-primary group-hover:scale-105 transition-transform">
+                      <Mail className="h-5 w-5" />
                     </div>
                     <div>
-                      <CardTitle className="text-base">{template.name}</CardTitle>
+                      <CardTitle className="text-base font-bold text-gray-900 leading-tight">
+                        {template.name}
+                      </CardTitle>
                       {template.isCustom && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 mt-1">
+                        <Badge variant="secondary" className="bg-green-100 text-green-800 hover:bg-green-100 mt-1.5 text-[10px] h-5 border-none">
                           Personalizado
-                        </span>
+                        </Badge>
                       )}
                     </div>
                   </div>
-                  <Button 
-                    variant="ghost" 
-                    size="sm"
-                    className="opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <Edit2 className="h-4 w-4" />
-                  </Button>
+                  <div className="text-gray-300 group-hover:text-meu-primary transition-colors">
+                    <ChevronRight className="h-5 w-5" />
+                  </div>
                 </div>
               </CardHeader>
-              <CardContent>
-                <CardDescription className="mb-3 line-clamp-2">
+              <CardContent className="pt-4">
+                <CardDescription className="mb-4 line-clamp-2 text-sm text-gray-600">
                   {template.description}
                 </CardDescription>
-                <div className="flex items-center text-xs text-gray-500">
-                  <Clock className="h-3 w-3 mr-1" />
-                  {template.isCustom 
+                <div className="flex items-center text-xs text-gray-400 font-medium">
+                  <Clock className="h-3 w-3 mr-1.5" />
+                  {template.isCustom
                     ? formatLastModified(template.updatedAt)
-                    : 'Usando padrão do sistema'
+                    : 'Padrão do sistema'
                   }
                 </div>
               </CardContent>
@@ -197,9 +175,10 @@ export default function EmailTemplatesPage() {
         </div>
 
         {templates.length === 0 && (
-          <div className="text-center py-12">
-            <Mail className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-600">Nenhum template encontrado</p>
+          <div className="text-center py-16 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+            <Mail className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+            <h3 className="text-lg font-medium text-gray-900">Nenhum template encontrado</h3>
+            <p className="text-gray-500 text-sm">Parece que ainda não há templates configurados.</p>
           </div>
         )}
       </div>
