@@ -1416,13 +1416,13 @@ router.post('/usuarios',
         // Não falhar a criação do usuário se o contato falhar
       }
 
-      // Enviar email de boas-vindas - usando EmailTemplateService
+      // Enviar email de boas-vindas - usando EmailUnifiedService para registrar no histórico
       let emailSent = false
       let emailError = null
       
       try {
         const { getWelcomeStudentCreatedEmail, getWelcomeTeacherCreatedEmail } = await import('../services/email-templates')
-        const { emailService } = await import('../services/email.service')
+        const { emailUnifiedService } = await import('../services/email-unified.service')
 
         console.log('[FRANQUEADORA] Tentando enviar email de boas-vindas para:', email)
 
@@ -1435,15 +1435,22 @@ router.post('/usuarios',
           ? await getWelcomeTeacherCreatedEmail(name, email, password, loginUrl)
           : await getWelcomeStudentCreatedEmail(name, email, password, loginUrl)
 
-        await emailService.sendEmail({
+        const templateSlug = role === 'TEACHER' ? 'welcome-teacher-created' : 'welcome-student-created'
+
+        const result = await emailUnifiedService.sendEmail({
           to: email,
+          toName: name,
           subject: 'Bem-vindo ao Meu Personal! 🎉',
           html: htmlEmail,
-          text: `Bem-vindo ao Meu Personal! Suas credenciais de acesso: Email: ${email}, Senha temporária: ${password}. Por segurança, recomendamos que você altere sua senha no primeiro acesso. Acesse: ${loginUrl}`
+          text: `Bem-vindo ao Meu Personal! Suas credenciais de acesso: Email: ${email}, Senha temporária: ${password}. Por segurança, recomendamos que você altere sua senha no primeiro acesso. Acesse: ${loginUrl}`,
+          templateSlug,
+          recipientId: newUser.id,
+          franqueadoraId: franqueadoraId,
+          triggeredBy: 'franqueadora-create-user'
         })
         
-        emailSent = true
-        console.log('[FRANQUEADORA] Email de boas-vindas enviado com sucesso para:', email)
+        emailSent = result.success
+        console.log('[FRANQUEADORA] Email de boas-vindas enviado com sucesso para:', email, '- LogId:', result.logId)
       } catch (err: any) {
         emailError = err.message || 'Erro desconhecido'
         console.error('[FRANQUEADORA] Erro ao enviar email de boas-vindas:', err)
