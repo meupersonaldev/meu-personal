@@ -9,6 +9,7 @@ const router = Router()
 
 /**
  * Cria ou atualiza vínculo automático professor-aluno quando aluno agenda pela plataforma
+ * Busca dados completos do usuário no sistema
  */
 async function ensureTeacherStudentLink(
   teacherId: string,
@@ -41,20 +42,32 @@ async function ensureTeacherStudentLink(
       return
     }
 
+    // Buscar dados completos do usuário no sistema
+    const { data: userData } = await supabase
+      .from('users')
+      .select('name, email, phone, cpf, gender, birth_date')
+      .eq('id', studentId)
+      .single()
+
     await supabase
       .from('teacher_students')
       .insert({
         teacher_id: teacherId,
         user_id: studentId,
-        name: studentName,
-        email: studentEmail,
+        name: userData?.name || studentName,
+        email: userData?.email || studentEmail,
+        phone: userData?.phone || null,
+        cpf: userData?.cpf || null,
+        gender: userData?.gender || null,
+        birth_date: userData?.birth_date || null,
         connection_status: 'APPROVED',
         source: 'PLATFORM',
+        is_portfolio: false,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })
 
-    console.log(`[booking-series] ✅ Vínculo professor-aluno criado: teacher=${teacherId}, student=${studentId}`)
+    console.log(`[booking-series] ✅ Vínculo professor-aluno criado com dados completos: teacher=${teacherId}, student=${studentId}`)
   } catch (err) {
     console.error(`[booking-series] Erro ao criar vínculo professor-aluno:`, err)
   }

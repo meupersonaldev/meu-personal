@@ -490,18 +490,63 @@ router.patch(
   async (req, res) => {
     try {
       const { teacherId, studentId } = req.params
-      const { is_portfolio } = req.body
+      const { is_portfolio, hourly_rate, notes } = req.body
 
       if (!ensureTeacherStudentAccess(req, res, teacherId)) {
         return
       }
 
+      // Buscar o registro atual
+      const { data: currentStudent } = await supabase
+        .from('teacher_students')
+        .select('*')
+        .eq('id', studentId)
+        .eq('teacher_id', teacherId)
+        .single()
+
+      if (!currentStudent) {
+        return res.status(404).json({ error: 'Aluno não encontrado' })
+      }
+
+      // Se está fidelizando, buscar dados completos do usuário no sistema
+      let updateData: any = {
+        is_portfolio: is_portfolio === true,
+        updated_at: new Date().toISOString()
+      }
+
+      if (is_portfolio && currentStudent.user_id) {
+        // Buscar dados do usuário na tabela users
+        const { data: userData } = await supabase
+          .from('users')
+          .select('name, email, phone, cpf, gender, birth_date')
+          .eq('id', currentStudent.user_id)
+          .single()
+
+        if (userData) {
+          // Atualizar com dados do sistema (se não tiver já preenchido)
+          updateData = {
+            ...updateData,
+            name: currentStudent.name || userData.name,
+            email: currentStudent.email || userData.email,
+            phone: currentStudent.phone || userData.phone,
+            cpf: currentStudent.cpf || userData.cpf,
+            gender: currentStudent.gender || userData.gender,
+            birth_date: currentStudent.birth_date || userData.birth_date
+          }
+        }
+      }
+
+      // Adicionar campos opcionais do request
+      if (hourly_rate !== undefined) {
+        updateData.hourly_rate = hourly_rate || null
+      }
+      if (notes !== undefined) {
+        updateData.notes = notes || null
+      }
+
       const { data, error } = await supabase
         .from('teacher_students')
-        .update({
-          is_portfolio: is_portfolio === true,
-          updated_at: new Date().toISOString()
-        })
+        .update(updateData)
         .eq('id', studentId)
         .eq('teacher_id', teacherId)
         .select()
@@ -509,12 +554,8 @@ router.patch(
 
       if (error) throw error
 
-      if (!data) {
-        return res.status(404).json({ error: 'Aluno não encontrado' })
-      }
-
       res.json({
-        message: is_portfolio ? 'Aluno adicionado à carteira' : 'Aluno removido da carteira',
+        message: is_portfolio ? 'Aluno fidelizado com sucesso!' : 'Aluno removido da carteira',
         student: data
       })
     } catch (error: any) {

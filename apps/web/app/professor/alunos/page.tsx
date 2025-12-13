@@ -100,6 +100,21 @@ export default function AlunosPage() {
     studentName: ''
   })
 
+  // Portfolio modal state
+  const [portfolioModal, setPortfolioModal] = useState<{
+    isOpen: boolean
+    student: Student | null
+    hourlyRate: string
+    notes: string
+    loading: boolean
+  }>({
+    isOpen: false,
+    student: null,
+    hourlyRate: '',
+    notes: '',
+    loading: false
+  })
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 8
@@ -326,7 +341,31 @@ export default function AlunosPage() {
     }
   }
 
-  const handleTogglePortfolio = async (studentId: string, currentStatus: boolean) => {
+  const openPortfolioModal = (student: Student) => {
+    setPortfolioModal({
+      isOpen: true,
+      student,
+      hourlyRate: student.hourly_rate?.toString() || '',
+      notes: student.notes || '',
+      loading: false
+    })
+  }
+
+  const closePortfolioModal = () => {
+    setPortfolioModal({
+      isOpen: false,
+      student: null,
+      hourlyRate: '',
+      notes: '',
+      loading: false
+    })
+  }
+
+  const handleFidelizar = async () => {
+    if (!portfolioModal.student) return
+
+    setPortfolioModal(prev => ({ ...prev, loading: true }))
+
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
       const headers: Record<string, string> = {
@@ -335,23 +374,30 @@ export default function AlunosPage() {
       }
 
       const response = await fetch(
-        `${API_URL}/api/teachers/${user?.id}/students/${studentId}/portfolio`,
+        `${API_URL}/api/teachers/${user?.id}/students/${portfolioModal.student.id}/portfolio`,
         {
           method: 'PATCH',
           headers,
           credentials: 'include',
-          body: JSON.stringify({ is_portfolio: !currentStatus })
+          body: JSON.stringify({
+            is_portfolio: true,
+            hourly_rate: portfolioModal.hourlyRate ? parseFloat(portfolioModal.hourlyRate) : null,
+            notes: portfolioModal.notes || null
+          })
         }
       )
 
       if (response.ok) {
-        toast.success(!currentStatus ? 'Aluno adicionado à carteira!' : 'Aluno removido da carteira')
+        toast.success('Aluno fidelizado com sucesso!')
         fetchStudents()
+        closePortfolioModal()
       } else {
-        toast.error('Erro ao atualizar status')
+        toast.error('Erro ao fidelizar aluno')
       }
     } catch (error) {
       toast.error('Erro ao processar requisição')
+    } finally {
+      setPortfolioModal(prev => ({ ...prev, loading: false }))
     }
   }
 
@@ -555,7 +601,7 @@ export default function AlunosPage() {
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation()
-                                      handleTogglePortfolio(student.id, false)
+                                      openPortfolioModal(student)
                                     }}
                                     className="text-[10px] font-medium text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1"
                                   >
@@ -1080,6 +1126,115 @@ export default function AlunosPage() {
               cancelText="Manter aluno"
               type="danger"
             />
+
+            {/* Modal de Fidelização */}
+            {portfolioModal.isOpen && portfolioModal.student && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center">
+                <div
+                  className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+                  onClick={closePortfolioModal}
+                />
+                <Card className="relative z-10 w-[95vw] max-w-md border-none shadow-2xl bg-white rounded-2xl overflow-hidden">
+                  {/* Header */}
+                  <div className="p-5 bg-[#002C4E] text-white relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-24 bg-[#27DFFF]/10 rounded-full -mr-12 -mt-12 blur-2xl"></div>
+                    <div className="relative z-10 flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center backdrop-blur-sm">
+                        <UserPlus className="h-5 w-5 text-[#27DFFF]" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold text-white">Fidelizar Aluno</h3>
+                        <p className="text-white/70 text-xs mt-0.5">Adicionar à sua carteira</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={closePortfolioModal}
+                      className="absolute top-4 right-4 p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+                    >
+                      <X className="h-4 w-4 text-white" />
+                    </button>
+                  </div>
+
+                  {/* Content */}
+                  <CardContent className="p-5 space-y-5">
+                    {/* Info do Aluno */}
+                    <div className="flex items-center gap-4 p-4 bg-blue-50 rounded-xl border border-blue-100">
+                      <div className="h-12 w-12 rounded-full bg-[#002C4E] text-white flex items-center justify-center text-lg font-bold">
+                        {portfolioModal.student.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="font-bold text-[#002C4E]">{portfolioModal.student.name}</p>
+                        <p className="text-sm text-gray-500">{portfolioModal.student.email}</p>
+                        {portfolioModal.student.phone && (
+                          <p className="text-xs text-gray-400">{portfolioModal.student.phone}</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <p className="text-sm text-gray-600">
+                      Ao fidelizar, este aluno será adicionado à sua carteira pessoal. 
+                      Você poderá definir um valor/hora personalizado e acompanhar o histórico.
+                    </p>
+
+                    {/* Valor/Hora */}
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-500 mb-1.5 uppercase tracking-wider">
+                        Valor por Hora (opcional)
+                      </label>
+                      <div className="relative">
+                        <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={portfolioModal.hourlyRate}
+                          onChange={(e) => setPortfolioModal(prev => ({ ...prev, hourlyRate: e.target.value }))}
+                          className="w-full pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#002C4E]/20 focus:border-[#002C4E] focus:bg-white transition-all outline-none text-sm font-medium"
+                          placeholder="Ex: 150.00"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Observações */}
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-500 mb-1.5 uppercase tracking-wider">
+                        Observações (opcional)
+                      </label>
+                      <textarea
+                        value={portfolioModal.notes}
+                        onChange={(e) => setPortfolioModal(prev => ({ ...prev, notes: e.target.value }))}
+                        className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#002C4E]/20 focus:border-[#002C4E] focus:bg-white transition-all outline-none text-sm font-medium resize-none"
+                        placeholder="Anotações sobre o aluno..."
+                        rows={3}
+                      />
+                    </div>
+
+                    {/* Botões */}
+                    <div className="flex gap-3 pt-2">
+                      <Button
+                        onClick={closePortfolioModal}
+                        variant="outline"
+                        className="flex-1 h-11 rounded-xl font-medium border-gray-200"
+                        disabled={portfolioModal.loading}
+                      >
+                        Cancelar
+                      </Button>
+                      <Button
+                        onClick={handleFidelizar}
+                        className="flex-1 h-11 rounded-xl font-medium bg-[#002C4E] hover:bg-[#003f70] text-white"
+                        disabled={portfolioModal.loading}
+                      >
+                        {portfolioModal.loading ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        ) : (
+                          <UserPlus className="h-4 w-4 mr-2" />
+                        )}
+                        Fidelizar
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
           </>
         )}
       </div>

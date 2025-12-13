@@ -37,6 +37,7 @@ function getAvailableHours(balance: ProfHourBalance): number {
 /**
  * Cria ou atualiza vínculo automático professor-aluno quando aluno agenda pela plataforma
  * Se já existe vínculo, não faz nada. Se não existe, cria com source='PLATFORM'
+ * Busca dados completos do usuário no sistema
  */
 async function ensureTeacherStudentLink(
   teacherId: string,
@@ -76,16 +77,28 @@ async function ensureTeacherStudentLink(
       return;
     }
 
-    // Criar novo vínculo automático
+    // Buscar dados completos do usuário no sistema
+    const { data: userData } = await supabase
+      .from('users')
+      .select('name, email, phone, cpf, gender, birth_date')
+      .eq('id', studentId)
+      .single();
+
+    // Criar novo vínculo automático (NÃO fidelizado - aguarda ação do professor)
     const { error: insertError } = await supabase
       .from('teacher_students')
       .insert({
         teacher_id: teacherId,
         user_id: studentId,
-        name: studentName,
-        email: studentEmail,
+        name: userData?.name || studentName,
+        email: userData?.email || studentEmail,
+        phone: userData?.phone || null,
+        cpf: userData?.cpf || null,
+        gender: userData?.gender || null,
+        birth_date: userData?.birth_date || null,
         connection_status: 'APPROVED',
         source: 'PLATFORM',
+        is_portfolio: false, // Aluno da plataforma NÃO é fidelizado automaticamente
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       });
@@ -93,7 +106,7 @@ async function ensureTeacherStudentLink(
     if (insertError) {
       console.error(`[ensureTeacherStudentLink] Erro ao criar vínculo:`, insertError);
     } else {
-      console.log(`[ensureTeacherStudentLink] ✅ Vínculo criado: teacher=${teacherId}, student=${studentId}, source=PLATFORM`);
+      console.log(`[ensureTeacherStudentLink] ✅ Vínculo criado: teacher=${teacherId}, student=${studentId}, source=PLATFORM, is_portfolio=false`);
     }
   } catch (err) {
     console.error(`[ensureTeacherStudentLink] Erro inesperado:`, err);
