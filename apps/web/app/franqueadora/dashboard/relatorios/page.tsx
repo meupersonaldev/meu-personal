@@ -121,50 +121,148 @@ export default function RelatoriosPage() {
 
   // Função para exportar PDF
   const exportToPDF = async () => {
-    if (!reportRef.current) return
+    if (!reportRef.current) {
+      setModal({
+        isOpen: true,
+        type: 'error',
+        title: 'Erro ao Gerar PDF',
+        message: 'Conteúdo do relatório não encontrado. Recarregue a página e tente novamente.'
+      })
+      return
+    }
     
     setIsExporting(true)
     
     try {
-      const { default: jsPDF } = await import('jspdf')
-      const { default: html2canvas } = await import('html2canvas')
+      // Importar bibliotecas dinamicamente
+      console.log('Importando bibliotecas...')
       
-      // Configurar o canvas para melhor qualidade
-      const canvas = await html2canvas(reportRef.current, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: '#ffffff',
-        width: reportRef.current.scrollWidth,
-        height: reportRef.current.scrollHeight
+      const jsPDFModule = await import('jspdf').catch(err => {
+        console.error('Erro ao importar jsPDF:', err)
+        throw new Error('Falha ao carregar biblioteca jsPDF')
       })
       
-      const imgData = canvas.toDataURL('image/png')
+      const html2canvasModule = await import('html2canvas').catch(err => {
+        console.error('Erro ao importar html2canvas:', err)
+        throw new Error('Falha ao carregar biblioteca html2canvas')
+      })
+      
+      const jsPDF = jsPDFModule.default
+      const html2canvas = html2canvasModule.default
+      
+      if (!jsPDF || !html2canvas) {
+        throw new Error('Bibliotecas não carregaram corretamente')
+      }
+      
+      console.log('Bibliotecas carregadas, gerando canvas...')
+      
+      // Configurar o canvas com configurações mais simples
+      const canvas = await html2canvas(reportRef.current, {
+        scale: 1.2,
+        useCORS: true,
+        allowTaint: false,
+        backgroundColor: '#ffffff',
+        logging: false,
+        removeContainer: true,
+        imageTimeout: 15000,
+        ignoreElements: (element) => {
+          // Ignorar elementos que podem causar problemas
+          return element.classList?.contains('animate-spin') || 
+                 element.tagName === 'SCRIPT' ||
+                 element.tagName === 'STYLE'
+        },
+        onclone: (clonedDoc) => {
+          // Limpar estilos problemáticos no documento clonado
+          const clonedElement = clonedDoc.querySelector('[data-pdf-content]')
+          if (clonedElement) {
+            clonedElement.style.display = 'block'
+            clonedElement.style.visibility = 'visible'
+            
+            // Remover classes que podem ter cores CSS modernas
+            const elementsWithProblematicClasses = clonedElement.querySelectorAll('*')
+            elementsWithProblematicClasses.forEach(el => {
+              // Remover classes que podem ter cores lab(), oklch(), etc.
+              if (el.className) {
+                el.className = el.className
+                  .split(' ')
+                  .filter(cls => !cls.includes('animate') && !cls.includes('transition'))
+                  .join(' ')
+              }
+              
+              // Forçar cores básicas para evitar problemas
+              const computedStyle = window.getComputedStyle(el)
+              if (computedStyle.color && (computedStyle.color.includes('lab') || computedStyle.color.includes('oklch'))) {
+                el.style.color = '#000000'
+              }
+              if (computedStyle.backgroundColor && (computedStyle.backgroundColor.includes('lab') || computedStyle.backgroundColor.includes('oklch'))) {
+                el.style.backgroundColor = '#ffffff'
+              }
+            })
+          }
+          
+          // Adicionar CSS para sobrescrever cores problemáticas
+          const style = clonedDoc.createElement('style')
+          style.textContent = `
+            * {
+              color: inherit !important;
+              background-color: inherit !important;
+            }
+            .text-meu-primary { color: #002C4E !important; }
+            .bg-meu-primary { background-color: #002C4E !important; }
+            .text-green-600 { color: #059669 !important; }
+            .bg-green-100 { background-color: #dcfce7 !important; }
+            .text-red-600 { color: #dc2626 !important; }
+            .bg-red-100 { background-color: #fee2e2 !important; }
+            .text-gray-900 { color: #111827 !important; }
+            .text-gray-600 { color: #4b5563 !important; }
+            .text-gray-500 { color: #6b7280 !important; }
+            .bg-gray-50 { background-color: #f9fafb !important; }
+            .bg-white { background-color: #ffffff !important; }
+          `
+          clonedDoc.head.appendChild(style)
+        }
+      })
+      
+      console.log('Canvas gerado, criando PDF...')
+      
+      const imgData = canvas.toDataURL('image/png', 0.95)
       const pdf = new jsPDF('p', 'mm', 'a4')
       
-      // Calcular dimensões para caber na página A4
+      // Calcular dimensões
       const pdfWidth = pdf.internal.pageSize.getWidth()
       const pdfHeight = pdf.internal.pageSize.getHeight()
-      const imgWidth = canvas.width
-      const imgHeight = canvas.height
-      const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight)
-      const imgX = (pdfWidth - imgWidth * ratio) / 2
-      const imgY = 10
+      const canvasAspectRatio = canvas.height / canvas.width
+      
+      // Calcular tamanho da imagem mantendo proporção
+      let imgWidth = pdfWidth - 20 // margem de 10mm de cada lado
+      let imgHeight = imgWidth * canvasAspectRatio
+      
+      // Se a altura for maior que a página, ajustar
+      if (imgHeight > pdfHeight - 40) {
+        imgHeight = pdfHeight - 40
+        imgWidth = imgHeight / canvasAspectRatio
+      }
+      
+      const imgX = (pdfWidth - imgWidth) / 2
+      const imgY = 20
       
       // Adicionar cabeçalho
       pdf.setFontSize(16)
       pdf.setFont('helvetica', 'bold')
-      pdf.text(`Relatório Detalhado - ${franqueadora?.name || 'Meu Personal'}`, pdfWidth / 2, 20, { align: 'center' })
+      pdf.text(`Relatório Detalhado - ${franqueadora?.name || 'Meu Personal'}`, pdfWidth / 2, 15, { align: 'center' })
       
-      pdf.setFontSize(10)
+      // Adicionar imagem
+      pdf.addImage(imgData, 'PNG', imgX, imgY, imgWidth, imgHeight)
+      
+      // Adicionar rodapé
+      pdf.setFontSize(8)
       pdf.setFont('helvetica', 'normal')
-      pdf.text(`Gerado em: ${format(new Date(), 'dd/MM/yyyy HH:mm', { locale: ptBR })}`, pdfWidth / 2, 28, { align: 'center' })
-      
-      // Adicionar imagem do relatório
-      pdf.addImage(imgData, 'PNG', imgX, 35, imgWidth * ratio, imgHeight * ratio)
+      pdf.text(`Gerado em: ${format(new Date(), 'dd/MM/yyyy HH:mm', { locale: ptBR })}`, pdfWidth / 2, pdfHeight - 5, { align: 'center' })
       
       // Salvar o PDF
       const fileName = `relatorio-${franqueadora?.name?.toLowerCase().replace(/\s+/g, '-') || 'franqueadora'}-${format(new Date(), 'yyyy-MM-dd')}.pdf`
+      
+      console.log('Salvando PDF:', fileName)
       pdf.save(fileName)
       
       // Mostrar sucesso
@@ -172,18 +270,36 @@ export default function RelatoriosPage() {
         isOpen: true,
         type: 'success',
         title: 'PDF Gerado com Sucesso!',
-        message: `O relatório foi baixado como "${fileName}"`
+        message: `O relatório "${fileName}" foi baixado com sucesso.`
       })
       
-    } catch (error) {
-      console.error('Erro ao gerar PDF:', error)
+    } catch (error: any) {
+      console.error('Erro detalhado ao gerar PDF:', error)
+      
+      let errorMessage = 'Não foi possível gerar o relatório.'
+      
+      if (error.message?.includes('color function') || error.message?.includes('lab') || error.message?.includes('oklch')) {
+        errorMessage = 'Erro de compatibilidade com estilos CSS. Tentando novamente com configurações simplificadas...'
+        
+        // Tentar novamente com configurações mais básicas
+        setTimeout(() => {
+          exportToPDFSimple()
+        }, 1000)
+        return
+      } else if (error.message?.includes('html2canvas')) {
+        errorMessage = 'Erro ao capturar o conteúdo da página. Tente recarregar a página.'
+      } else if (error.message?.includes('jsPDF')) {
+        errorMessage = 'Erro ao gerar o arquivo PDF. Verifique se há espaço suficiente no disco.'
+      } else if (error.message?.includes('network') || error.message?.includes('fetch')) {
+        errorMessage = 'Erro de conexão. Verifique sua internet e tente novamente.'
+      }
       
       // Mostrar erro
       setModal({
         isOpen: true,
         type: 'error',
         title: 'Erro ao Gerar PDF',
-        message: 'Não foi possível gerar o relatório. Verifique sua conexão e tente novamente.'
+        message: errorMessage
       })
     } finally {
       setIsExporting(false)
@@ -192,6 +308,68 @@ export default function RelatoriosPage() {
 
   const closeModal = () => {
     setModal(prev => ({ ...prev, isOpen: false }))
+  }
+
+  // Função de fallback mais simples para casos de erro CSS
+  const exportToPDFSimple = async () => {
+    if (!reportRef.current) return
+    
+    try {
+      const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
+        import('jspdf'),
+        import('html2canvas')
+      ])
+      
+      // Configuração muito básica para evitar problemas CSS
+      const canvas = await html2canvas(reportRef.current, {
+        scale: 1,
+        useCORS: false,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        width: 800,
+        height: 1200,
+        onclone: (clonedDoc) => {
+          // Aplicar estilos inline básicos
+          const style = clonedDoc.createElement('style')
+          style.textContent = `
+            * { 
+              color: #000 !important; 
+              background-color: transparent !important;
+              font-family: Arial, sans-serif !important;
+            }
+            .bg-white { background-color: #fff !important; }
+          `
+          clonedDoc.head.appendChild(style)
+        }
+      })
+      
+      const pdf = new jsPDF('p', 'mm', 'a4')
+      const imgData = canvas.toDataURL('image/png')
+      
+      pdf.addImage(imgData, 'PNG', 10, 10, 190, 270)
+      
+      const fileName = `relatorio-simples-${format(new Date(), 'yyyy-MM-dd')}.pdf`
+      pdf.save(fileName)
+      
+      setModal({
+        isOpen: true,
+        type: 'success',
+        title: 'PDF Gerado!',
+        message: `Relatório salvo como "${fileName}" (versão simplificada)`
+      })
+      
+    } catch (error) {
+      console.error('Erro na versão simplificada:', error)
+      setModal({
+        isOpen: true,
+        type: 'error',
+        title: 'Erro ao Gerar PDF',
+        message: 'Não foi possível gerar o relatório mesmo com configurações simplificadas. Tente usar a função de impressão do navegador (Ctrl+P).'
+      })
+    } finally {
+      setIsExporting(false)
+    }
   }
 
   if (!hydrated) {
@@ -205,7 +383,7 @@ export default function RelatoriosPage() {
   return (
     <FranqueadoraGuard requiredPermission="canViewDashboard">
       <div className="p-3 sm:p-4 lg:p-8 min-h-screen space-y-6">
-        <div ref={reportRef} className="space-y-6 bg-white">
+        <div ref={reportRef} data-pdf-content className="space-y-6 bg-white p-4">
         {/* Header */}
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div className="flex items-center gap-4">
