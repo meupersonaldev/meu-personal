@@ -486,6 +486,31 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<any> 
               } else {
                 console.error(`[booking-series] ⚠️ Falha ao debitar crédito para booking ${booking.id}`)
               }
+
+              // Adicionar hora pendente para o professor (BONUS_LOCK)
+              try {
+                const franqueadoraId = await fetchFranqueadoraIdFromAcademy(academyId)
+                if (franqueadoraId) {
+                  await balanceService.lockProfessorBonusHours(
+                    teacherId,
+                    franqueadoraId,
+                    1,
+                    booking.id,
+                    null,
+                    {
+                      source: 'ALUNO',
+                      metaJson: {
+                        booking_id: booking.id,
+                        origin: 'booking_series_slot_update',
+                        date: dateStr
+                      }
+                    }
+                  )
+                  console.log(`[booking-series] ✅ Hora pendente adicionada para professor ${teacherId}`)
+                }
+              } catch (lockErr) {
+                console.error(`[booking-series] ⚠️ Erro ao adicionar hora pendente para professor:`, lockErr)
+              }
             } else {
               reservedCount++
             }
@@ -535,6 +560,31 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<any> 
                 confirmedCount++
               } else {
                 console.error(`[booking-series] ⚠️ Falha ao debitar crédito para booking ${booking.id}`)
+              }
+
+              // Adicionar hora pendente para o professor (BONUS_LOCK)
+              try {
+                const franqueadoraId = await fetchFranqueadoraIdFromAcademy(academyId)
+                if (franqueadoraId) {
+                  await balanceService.lockProfessorBonusHours(
+                    teacherId,
+                    franqueadoraId,
+                    1,
+                    booking.id,
+                    null,
+                    {
+                      source: 'ALUNO',
+                      metaJson: {
+                        booking_id: booking.id,
+                        origin: 'booking_series_new_booking',
+                        date: dateStr
+                      }
+                    }
+                  )
+                  console.log(`[booking-series] ✅ Hora pendente adicionada para professor ${teacherId}`)
+                }
+              } catch (lockErr) {
+                console.error(`[booking-series] ⚠️ Erro ao adicionar hora pendente para professor:`, lockErr)
               }
             } else {
               reservedCount++
