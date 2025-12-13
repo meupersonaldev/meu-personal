@@ -649,11 +649,13 @@ model TeacherStudent {
   notes             String?
   connectionStatus  String?   @default("APPROVED") @map("connection_status")
   hideFreeClass     Boolean?  @default(false) @map("hide_free_class")
+  source            String?   @default("MANUAL") // MANUAL or PLATFORM
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @default(now()) @map("updated_at")
 
   @@index([teacherId])
   @@index([email])
+  @@index([source])
   @@map("teacher_students")
 }
 

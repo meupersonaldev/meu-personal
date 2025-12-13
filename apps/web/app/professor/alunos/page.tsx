@@ -58,6 +58,7 @@ interface Student {
   cpf?: string
   gender?: GenderType
   birth_date?: string
+  source?: 'MANUAL' | 'PLATFORM'
   created_at: string
   connection_status?: 'PENDING' | 'APPROVED' | 'REJECTED'
   user_photo?: string
@@ -487,15 +488,20 @@ export default function AlunosPage() {
                               </div>
                             </td>
                             <td className="py-4 px-6">
-                              {student.connection_status === 'PENDING' ? (
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-50 text-yellow-700 border border-yellow-100">
-                                  Pendente
+                              <div className="flex flex-col gap-1">
+                                {student.connection_status === 'PENDING' ? (
+                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-50 text-yellow-700 border border-yellow-100 w-fit">
+                                    Pendente
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-100 w-fit">
+                                    Ativo
+                                  </span>
+                                )}
+                                <span className={`text-[10px] font-medium ${student.source === 'PLATFORM' ? 'text-blue-500' : 'text-gray-400'}`}>
+                                  {student.source === 'PLATFORM' ? 'Via Plataforma' : 'Cadastro Manual'}
                                 </span>
-                              ) : (
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-100">
-                                  Ativo
-                                </span>
-                              )}
+                              </div>
                             </td>
                             <td className="py-4 px-6">
                               {student.hourly_rate ? (

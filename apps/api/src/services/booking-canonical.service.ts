@@ -35,6 +35,72 @@ function getAvailableHours(balance: ProfHourBalance): number {
 }
 
 /**
+ * Cria ou atualiza vínculo automático professor-aluno quando aluno agenda pela plataforma
+ * Se já existe vínculo, não faz nada. Se não existe, cria com source='PLATFORM'
+ */
+async function ensureTeacherStudentLink(
+  teacherId: string,
+  studentId: string,
+  studentName: string,
+  studentEmail: string
+): Promise<void> {
+  try {
+    // Verificar se já existe vínculo
+    const { data: existingLink } = await supabase
+      .from('teacher_students')
+      .select('id, source')
+      .eq('teacher_id', teacherId)
+      .eq('user_id', studentId)
+      .maybeSingle();
+
+    if (existingLink) {
+      console.log(`[ensureTeacherStudentLink] Vínculo já existe: teacher=${teacherId}, student=${studentId}`);
+      return;
+    }
+
+    // Verificar também por email (caso user_id não esteja preenchido)
+    const { data: existingByEmail } = await supabase
+      .from('teacher_students')
+      .select('id')
+      .eq('teacher_id', teacherId)
+      .eq('email', studentEmail)
+      .maybeSingle();
+
+    if (existingByEmail) {
+      // Atualizar o registro existente com o user_id
+      await supabase
+        .from('teacher_students')
+        .update({ user_id: studentId, updated_at: new Date().toISOString() })
+        .eq('id', existingByEmail.id);
+      console.log(`[ensureTeacherStudentLink] Vínculo atualizado com user_id: ${existingByEmail.id}`);
+      return;
+    }
+
+    // Criar novo vínculo automático
+    const { error: insertError } = await supabase
+      .from('teacher_students')
+      .insert({
+        teacher_id: teacherId,
+        user_id: studentId,
+        name: studentName,
+        email: studentEmail,
+        connection_status: 'APPROVED',
+        source: 'PLATFORM',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+
+    if (insertError) {
+      console.error(`[ensureTeacherStudentLink] Erro ao criar vínculo:`, insertError);
+    } else {
+      console.log(`[ensureTeacherStudentLink] ✅ Vínculo criado: teacher=${teacherId}, student=${studentId}, source=PLATFORM`);
+    }
+  } catch (err) {
+    console.error(`[ensureTeacherStudentLink] Erro inesperado:`, err);
+  }
+}
+
+/**
  * Extrai a data (YYYY-MM-DD) no fuso horário de São Paulo (UTC-3)
  * Isso é necessário porque o campo 'date' deve refletir a data local, não UTC
  */
@@ -230,6 +296,27 @@ class BookingCanonicalService {
         console.log(`[updateBookingToStudent] ✅ Hora bônus travada para professor ${existingBooking.teacher_id}`);
       } catch (bonusError) {
         console.error(`[updateBookingToStudent] ❌ Erro ao travar hora bônus:`, bonusError);
+        // Não impedir o agendamento se falhar
+      }
+
+      // Criar vínculo automático professor-aluno (se não existir)
+      try {
+        const { data: studentData } = await supabase
+          .from('users')
+          .select('name, email')
+          .eq('id', params.studentId)
+          .single();
+
+        if (studentData) {
+          await ensureTeacherStudentLink(
+            existingBooking.teacher_id,
+            params.studentId,
+            studentData.name || 'Aluno',
+            studentData.email
+          );
+        }
+      } catch (linkError) {
+        console.error(`[updateBookingToStudent] ❌ Erro ao criar vínculo professor-aluno:`, linkError);
         // Não impedir o agendamento se falhar
       }
     }

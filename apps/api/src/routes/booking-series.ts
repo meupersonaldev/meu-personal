@@ -5,8 +5,60 @@ import { requireAuth } from '../middleware/auth'
 import { addDays, addWeeks, addMonths, startOfDay, format, getDay, setDay, isBefore, isAfter } from 'date-fns'
 import { balanceService } from '../services/balance.service'
 
-
 const router = Router()
+
+/**
+ * Cria ou atualiza vínculo automático professor-aluno quando aluno agenda pela plataforma
+ */
+async function ensureTeacherStudentLink(
+  teacherId: string,
+  studentId: string,
+  studentName: string,
+  studentEmail: string
+): Promise<void> {
+  try {
+    const { data: existingLink } = await supabase
+      .from('teacher_students')
+      .select('id')
+      .eq('teacher_id', teacherId)
+      .eq('user_id', studentId)
+      .maybeSingle()
+
+    if (existingLink) return
+
+    const { data: existingByEmail } = await supabase
+      .from('teacher_students')
+      .select('id')
+      .eq('teacher_id', teacherId)
+      .eq('email', studentEmail)
+      .maybeSingle()
+
+    if (existingByEmail) {
+      await supabase
+        .from('teacher_students')
+        .update({ user_id: studentId, updated_at: new Date().toISOString() })
+        .eq('id', existingByEmail.id)
+      return
+    }
+
+    await supabase
+      .from('teacher_students')
+      .insert({
+        teacher_id: teacherId,
+        user_id: studentId,
+        name: studentName,
+        email: studentEmail,
+        connection_status: 'APPROVED',
+        source: 'PLATFORM',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+
+    console.log(`[booking-series] ✅ Vínculo professor-aluno criado: teacher=${teacherId}, student=${studentId}`)
+  } catch (err) {
+    console.error(`[booking-series] Erro ao criar vínculo professor-aluno:`, err)
+  }
+}
 
 // ============================================
 // Schemas de validação
@@ -629,6 +681,28 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<any> 
         message: `Nova série de aulas agendada`,
         sent_at: new Date().toISOString()
       })
+
+    // Criar vínculo automático professor-aluno (se não existir)
+    if (studentId && bookings.length > 0) {
+      try {
+        const { data: studentData } = await supabase
+          .from('users')
+          .select('name, email')
+          .eq('id', studentId)
+          .single()
+
+        if (studentData) {
+          await ensureTeacherStudentLink(
+            teacherId,
+            studentId,
+            studentData.name || 'Aluno',
+            studentData.email
+          )
+        }
+      } catch (linkError) {
+        console.error(`[booking-series] Erro ao criar vínculo:`, linkError)
+      }
+    }
 
     return res.status(201).json({
       seriesId: series.id,
