@@ -1,11 +1,7 @@
 import { emailTemplateService, replaceVariables, SystemTemplateSlug } from './email-template.service'
 
-// Logo URL - using direct URL instead of base64
-const LOGO_URL = `${
-  process.env.FRONTEND_URL ||
-  process.env.WEB_URL ||
-  'https://meupersonalfranquia.com.br'
-}/images/logo.png`
+// Logo URL - hospedada no Supabase Storage para garantir acesso em emails
+const LOGO_URL = 'https://fstbhakmmznfdeluyexc.supabase.co/storage/v1/object/public/assets/logo.png'
 const PRIMARY_COLOR = '#002C4E'
 
 // ============================================================================
