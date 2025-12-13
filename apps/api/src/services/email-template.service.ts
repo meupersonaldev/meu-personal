@@ -390,9 +390,7 @@ export const DEFAULT_TEMPLATES: DefaultTemplate[] = [
   Revertido para: Versão {{rolledBackTo}}
 </p>
 
-{{#if comment}}
 <p><strong>Motivo:</strong> {{comment}}</p>
-{{/if}}
 
 <p>Acesse o dashboard para ver todos os detalhes.</p>
 
@@ -404,7 +402,7 @@ export const DEFAULT_TEMPLATES: DefaultTemplate[] = [
       { name: 'franqueadoraName', placeholder: '{{franqueadoraName}}', description: 'Nome da franqueadora', example: 'Meu Personal' },
       { name: 'newVersion', placeholder: '{{newVersion}}', description: 'Nova versão criada', example: '6' },
       { name: 'rolledBackTo', placeholder: '{{rolledBackTo}}', description: 'Versão revertida', example: '3' },
-      { name: 'comment', placeholder: '{{comment}}', description: 'Motivo do rollback', example: 'Valores anteriores causaram problemas' },
+      { name: 'comment', placeholder: '{{comment}}', description: 'Motivo do rollback', example: 'Ajuste necessário nas configurações' },
       { name: 'dashboardUrl', placeholder: '{{dashboardUrl}}', description: 'URL do dashboard', example: 'https://app.meupersonal.com/franquia/dashboard' }
     ]
   }
