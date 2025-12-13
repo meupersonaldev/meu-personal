@@ -483,6 +483,47 @@ router.delete(
   }
 )
 
+// PATCH /api/teachers/:teacherId/students/:studentId/portfolio - Fidelizar aluno na carteira
+router.patch(
+  '/:teacherId/students/:studentId/portfolio',
+  requireAuth,
+  async (req, res) => {
+    try {
+      const { teacherId, studentId } = req.params
+      const { is_portfolio } = req.body
+
+      if (!ensureTeacherStudentAccess(req, res, teacherId)) {
+        return
+      }
+
+      const { data, error } = await supabase
+        .from('teacher_students')
+        .update({
+          is_portfolio: is_portfolio === true,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', studentId)
+        .eq('teacher_id', teacherId)
+        .select()
+        .single()
+
+      if (error) throw error
+
+      if (!data) {
+        return res.status(404).json({ error: 'Aluno não encontrado' })
+      }
+
+      res.json({
+        message: is_portfolio ? 'Aluno adicionado à carteira' : 'Aluno removido da carteira',
+        student: data
+      })
+    } catch (error: any) {
+      console.error('Error updating portfolio status:', error)
+      res.status(500).json({ error: error.message })
+    }
+  }
+)
+
 // PATCH /api/teachers/requests/:requestId/respond - Aceitar/Rejeitar vínculo (Pelo Aluno)
 router.patch('/requests/:requestId/respond', requireAuth, async (req, res) => {
   try {

@@ -36,7 +36,9 @@ import {
   CreditCard,
   Gift,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  UserPlus,
+  Globe
 } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { toast } from 'sonner'
@@ -59,6 +61,7 @@ interface Student {
   gender?: GenderType
   birth_date?: string
   source?: 'MANUAL' | 'PLATFORM'
+  is_portfolio?: boolean
   created_at: string
   connection_status?: 'PENDING' | 'APPROVED' | 'REJECTED'
   user_photo?: string
@@ -323,6 +326,35 @@ export default function AlunosPage() {
     }
   }
 
+  const handleTogglePortfolio = async (studentId: string, currentStatus: boolean) => {
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      }
+
+      const response = await fetch(
+        `${API_URL}/api/teachers/${user?.id}/students/${studentId}/portfolio`,
+        {
+          method: 'PATCH',
+          headers,
+          credentials: 'include',
+          body: JSON.stringify({ is_portfolio: !currentStatus })
+        }
+      )
+
+      if (response.ok) {
+        toast.success(!currentStatus ? 'Aluno adicionado à carteira!' : 'Aluno removido da carteira')
+        fetchStudents()
+      } else {
+        toast.error('Erro ao atualizar status')
+      }
+    } catch (error) {
+      toast.error('Erro ao processar requisição')
+    }
+  }
+
   const filteredStudents = students.filter(student =>
     student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     student.email.toLowerCase().includes(searchTerm.toLowerCase())
@@ -387,26 +419,42 @@ export default function AlunosPage() {
             </div>
 
             {/* Stats e Busca */}
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
-              {/* Card Total */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+              {/* Card Carteira */}
               <Card className="bg-[#002C4E] text-white border-none shadow-meu relative overflow-hidden group">
                 <div className="absolute top-0 right-0 p-16 bg-[#27DFFF]/10 rounded-full -mr-8 -mt-8 blur-xl transition-all group-hover:bg-[#27DFFF]/20"></div>
-                <CardContent className="p-6 relative z-10">
-                  <div className="flex items-center justify-between mb-4">
+                <CardContent className="p-5 relative z-10">
+                  <div className="flex items-center justify-between mb-3">
                     <div className="p-2 bg-white/10 rounded-lg backdrop-blur-sm">
-                      <Users className="h-5 w-5 text-[#27DFFF]" />
+                      <Users className="h-4 w-4 text-[#27DFFF]" />
                     </div>
-                    <span className="text-xs font-medium text-white/60 bg-white/10 px-2 py-1 rounded-full">Total</span>
+                    <span className="text-[10px] font-medium text-white/60 bg-white/10 px-2 py-0.5 rounded-full">Carteira</span>
                   </div>
                   <div>
-                    <h2 className="text-4xl font-bold text-white mb-1">{students.length}</h2>
-                    <p className="text-white/60 text-sm font-medium">Alunos Cadastrados</p>
+                    <h2 className="text-3xl font-bold text-white mb-0.5">{students.filter(s => s.is_portfolio).length}</h2>
+                    <p className="text-white/60 text-xs font-medium">Alunos Fidelizados</p>
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Search Bar Container - Agora ocupa mais espaço e tem design clean */}
-              <div className="lg:col-span-3">
+              {/* Card Plataforma */}
+              <Card className="bg-white border-none shadow-meu relative overflow-hidden group">
+                <CardContent className="p-5 relative z-10">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="p-2 bg-blue-50 rounded-lg">
+                      <Globe className="h-4 w-4 text-blue-500" />
+                    </div>
+                    <span className="text-[10px] font-medium text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">Plataforma</span>
+                  </div>
+                  <div>
+                    <h2 className="text-3xl font-bold text-gray-800 mb-0.5">{students.filter(s => s.source === 'PLATFORM' && !s.is_portfolio).length}</h2>
+                    <p className="text-gray-500 text-xs font-medium">Aguardando Fidelização</p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Search Bar Container */}
+              <div className="md:col-span-2">
                 <Card className="h-full border-none shadow-meu bg-white flex flex-col justify-center">
                   <CardContent className="p-6">
                     <div className="relative group">
@@ -493,14 +541,28 @@ export default function AlunosPage() {
                                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-50 text-yellow-700 border border-yellow-100 w-fit">
                                     Pendente
                                   </span>
-                                ) : (
+                                ) : student.is_portfolio ? (
                                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-100 w-fit">
-                                    Ativo
+                                    Na Carteira
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100 w-fit">
+                                    <Globe className="h-3 w-3 mr-1" />
+                                    Plataforma
                                   </span>
                                 )}
-                                <span className={`text-[10px] font-medium ${student.source === 'PLATFORM' ? 'text-blue-500' : 'text-gray-400'}`}>
-                                  {student.source === 'PLATFORM' ? 'Via Plataforma' : 'Cadastro Manual'}
-                                </span>
+                                {student.source === 'PLATFORM' && !student.is_portfolio && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleTogglePortfolio(student.id, false)
+                                    }}
+                                    className="text-[10px] font-medium text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1"
+                                  >
+                                    <UserPlus className="h-3 w-3" />
+                                    Fidelizar
+                                  </button>
+                                )}
                               </div>
                             </td>
                             <td className="py-4 px-6">

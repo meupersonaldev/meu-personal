@@ -650,12 +650,14 @@ model TeacherStudent {
   connectionStatus  String?   @default("APPROVED") @map("connection_status")
   hideFreeClass     Boolean?  @default(false) @map("hide_free_class")
   source            String?   @default("MANUAL") // MANUAL or PLATFORM
+  isPortfolio       Boolean?  @default(false) @map("is_portfolio") // true = fidelizado na carteira
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @default(now()) @map("updated_at")
 
   @@index([teacherId])
   @@index([email])
   @@index([source])
+  @@index([isPortfolio])
   @@map("teacher_students")
 }
 
