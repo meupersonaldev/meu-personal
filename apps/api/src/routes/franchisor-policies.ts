@@ -3,8 +3,9 @@ import { supabase } from '../lib/supabase'
 import { requireAuth, requireRole, requireFranqueadoraAdmin } from '../middleware/auth'
 import { asyncErrorHandler } from '../middleware/errorHandler'
 import { emailUnifiedService } from '../services/email-unified.service'
-import { emailTemplateService, replaceVariables } from '../services/email-template.service'
+import { replaceVariables } from '../services/email-template.service'
 import { getHtmlEmailTemplate } from '../services/email-templates'
+import { ERROR_MESSAGES } from '../lib/error-messages'
 
 const router = Router()
 
@@ -108,8 +109,8 @@ router.get('/', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN'
 
   if (status === 'draft') {
     const { data, error } = await q.eq('status', 'draft').limit(1).single()
-    if (error && error.code !== 'PGRST116') return res.status(500).json({ error: error.message })
-    if (!data) return res.status(404).json({ error: 'DRAFT_NOT_FOUND' })
+    if (error && error.code !== 'PGRST116') return res.status(500).json({ error: ERROR_MESSAGES.DATABASE_ERROR })
+    if (!data) return res.status(404).json({ error: ERROR_MESSAGES.DRAFT_NOT_FOUND })
     return res.json({ success: true, data })
   }
 
@@ -120,8 +121,8 @@ router.get('/', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 'ADMIN'
     .limit(1)
     .maybeSingle()
 
-  if (error) return res.status(500).json({ error: error.message })
-  if (!data) return res.status(404).json({ error: 'PUBLISHED_NOT_FOUND' })
+  if (error) return res.status(500).json({ error: ERROR_MESSAGES.DATABASE_ERROR })
+  if (!data) return res.status(404).json({ error: ERROR_MESSAGES.PUBLISHED_NOT_FOUND })
   return res.json({ success: true, data })
 }))
 
@@ -137,7 +138,7 @@ router.get('/history', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN', 
     .order('created_at', { ascending: false })
     .limit(limit)
 
-  if (error) return res.status(500).json({ error: error.message })
+  if (error) return res.status(500).json({ error: ERROR_MESSAGES.DATABASE_ERROR })
   return res.json({ success: true, data })
 }))
 
@@ -237,7 +238,7 @@ router.get('/validate-conflicts', requireAuth, requireRole(['FRANQUEADORA', 'SUP
 router.put('/', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN']), requireFranqueadoraAdmin, asyncErrorHandler(async (req, res) => {
   const payload = req.body || {}
   const errors = validatePolicyPayload(payload)
-  if (errors.length) return res.status(400).json({ error: 'VALIDATION_ERROR', details: errors })
+  if (errors.length) return res.status(400).json({ error: ERROR_MESSAGES.VALIDATION_ERROR, details: errors })
 
   const franqueadora_id = req.franqueadoraAdmin!.franqueadora_id
 
@@ -250,7 +251,7 @@ router.put('/', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN']), requi
     .limit(1)
     .maybeSingle()
 
-  if (dErr) return res.status(500).json({ error: dErr.message })
+  if (dErr) return res.status(500).json({ error: ERROR_MESSAGES.DATABASE_ERROR })
 
   const base = {
     franqueadora_id,
@@ -266,7 +267,7 @@ router.put('/', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN']), requi
       .eq('id', draft.id)
       .select()
       .single()
-    if (error) return res.status(500).json({ error: error.message })
+    if (error) return res.status(500).json({ error: ERROR_MESSAGES.DATABASE_ERROR })
     return res.json({ success: true, data })
   } else {
     const { data: lastPub } = await supabase
@@ -283,7 +284,7 @@ router.put('/', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN']), requi
       .insert({ ...base, version: nextVersion, created_at: nowIso() })
       .select()
       .single()
-    if (error) return res.status(500).json({ error: error.message })
+    if (error) return res.status(500).json({ error: ERROR_MESSAGES.DATABASE_ERROR })
     return res.status(201).json({ success: true, data })
   }
 }))
@@ -303,10 +304,10 @@ router.post('/publish', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN']
     .limit(1)
     .single()
 
-  if (dErr || !draft) return res.status(404).json({ error: 'DRAFT_NOT_FOUND' })
+  if (dErr || !draft) return res.status(404).json({ error: ERROR_MESSAGES.DRAFT_NOT_FOUND })
 
   const errors = validatePolicyPayload(draft)
-  if (errors.length) return res.status(400).json({ error: 'VALIDATION_ERROR', details: errors })
+  if (errors.length) return res.status(400).json({ error: ERROR_MESSAGES.VALIDATION_ERROR, details: errors })
 
   // Buscar política anterior para comparação
   const { data: previousPolicy } = await supabase
@@ -337,7 +338,7 @@ router.post('/publish', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN']
     .select()
     .single()
 
-  if (error) return res.status(500).json({ error: error.message })
+  if (error) return res.status(500).json({ error: ERROR_MESSAGES.DATABASE_ERROR })
 
   // Notificar franquias se solicitado
   let notificationsSent = 0
@@ -417,7 +418,7 @@ router.post('/rollback', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN'
   const { target_version, comment, notify_franchises } = req.body || {}
 
   if (!target_version || typeof target_version !== 'number') {
-    return res.status(400).json({ error: 'target_version é obrigatório' })
+    return res.status(400).json({ error: 'Versão alvo é obrigatória' })
   }
 
   // Buscar versão alvo
@@ -430,7 +431,7 @@ router.post('/rollback', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN'
     .single()
 
   if (tErr || !targetPolicy) {
-    return res.status(404).json({ error: 'Versão não encontrada' })
+    return res.status(404).json({ error: ERROR_MESSAGES.VERSION_NOT_FOUND })
   }
 
   // Buscar versão atual
@@ -444,11 +445,11 @@ router.post('/rollback', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN'
     .single()
 
   if (!currentPolicy) {
-    return res.status(404).json({ error: 'Nenhuma política publicada encontrada' })
+    return res.status(404).json({ error: ERROR_MESSAGES.PUBLISHED_NOT_FOUND })
   }
 
   if (currentPolicy.version === target_version) {
-    return res.status(400).json({ error: 'Não é possível fazer rollback para a versão atual' })
+    return res.status(400).json({ error: ERROR_MESSAGES.ROLLBACK_SAME_VERSION })
   }
 
   const nextVersion = currentPolicy.version + 1
@@ -488,7 +489,7 @@ router.post('/rollback', requireAuth, requireRole(['FRANQUEADORA', 'SUPER_ADMIN'
     .select()
     .single()
 
-  if (error) return res.status(500).json({ error: error.message })
+  if (error) return res.status(500).json({ error: ERROR_MESSAGES.DATABASE_ERROR })
 
   // Notificar franquias se solicitado
   let notificationsSent = 0

@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { supabase } from '../lib/supabase'
 import { requireAuth, requireRole, requireFranqueadoraAdmin } from '../middleware/auth'
 import { auditService } from '../services/audit.service'
+import { ERROR_MESSAGES } from '../lib/error-messages'
 
 const router = Router()
 
@@ -107,7 +108,7 @@ router.put('/:id', requireAuth, requireRole(['FRANQUEADORA', 'FRANQUIA', 'SUPER_
         .eq('id', id)
         .single()
       if (current && current.franqueadora_id !== req.franqueadoraAdmin.franqueadora_id) {
-        return res.status(403).json({ error: 'Forbidden' })
+        return res.status(403).json({ error: ERROR_MESSAGES.FORBIDDEN })
       }
     }
 
@@ -185,7 +186,7 @@ router.delete('/:id', requireAuth, requireRole(['FRANQUEADORA', 'FRANQUIA']), as
         return res.status(404).json({ error: 'Academia não encontrada' })
       }
       if (current.franqueadora_id !== req.franqueadoraAdmin.franqueadora_id) {
-        return res.status(403).json({ error: 'Forbidden' })
+        return res.status(403).json({ error: ERROR_MESSAGES.FORBIDDEN })
       }
     }
 
@@ -514,11 +515,11 @@ router.put('/:id/policies-overrides', requireAuth, requireRole(['FRANQUEADORA'])
       .select('franqueadora_id')
       .eq('id', id)
       .single()
-    if (aErr || !academy) return res.status(404).json({ error: 'ACADEMY_NOT_FOUND' })
-    if (academy.franqueadora_id !== req.franqueadoraAdmin?.franqueadora_id) return res.status(403).json({ error: 'Forbidden' })
+    if (aErr || !academy) return res.status(404).json({ error: ERROR_MESSAGES.ACADEMY_NOT_FOUND })
+    if (academy.franqueadora_id !== req.franqueadoraAdmin?.franqueadora_id) return res.status(403).json({ error: ERROR_MESSAGES.FORBIDDEN })
 
     const errors = validateOverrides(overrides)
-    if (errors.length) return res.status(400).json({ error: 'VALIDATION_ERROR', details: errors })
+    if (errors.length) return res.status(400).json({ error: ERROR_MESSAGES.VALIDATION_ERROR, details: errors })
 
     // Upsert overrides
     const { data: current } = await supabase
@@ -554,7 +555,7 @@ router.put('/:id/policies-overrides', requireAuth, requireRole(['FRANQUEADORA'])
 router.delete('/:id/policies-overrides/:field', requireAuth, requireRole(['FRANQUEADORA']), requireFranqueadoraAdmin, async (req, res) => {
   try {
     const { id, field } = req.params as { id: string; field: string }
-    if (!(field in POLICY_FIELDS)) return res.status(400).json({ error: 'FIELD_NOT_ALLOWED' })
+    if (!(field in POLICY_FIELDS)) return res.status(400).json({ error: ERROR_MESSAGES.FIELD_NOT_ALLOWED })
 
     // Validar ownership
     const { data: academy, error: aErr } = await supabase
@@ -562,8 +563,8 @@ router.delete('/:id/policies-overrides/:field', requireAuth, requireRole(['FRANQ
       .select('franqueadora_id')
       .eq('id', id)
       .single()
-    if (aErr || !academy) return res.status(404).json({ error: 'ACADEMY_NOT_FOUND' })
-    if (academy.franqueadora_id !== req.franqueadoraAdmin?.franqueadora_id) return res.status(403).json({ error: 'Forbidden' })
+    if (aErr || !academy) return res.status(404).json({ error: ERROR_MESSAGES.ACADEMY_NOT_FOUND })
+    if (academy.franqueadora_id !== req.franqueadoraAdmin?.franqueadora_id) return res.status(403).json({ error: ERROR_MESSAGES.FORBIDDEN })
 
     const { data: current, error: cErr } = await supabase
       .from('academy_policy_overrides')
@@ -597,7 +598,7 @@ router.get('/:id/policies-effective', requireAuth, requireRole(['FRANQUEADORA', 
       .select('franqueadora_id')
       .eq('id', id)
       .single()
-    if (aErr || !academy) return res.status(404).json({ error: 'ACADEMY_NOT_FOUND' })
+    if (aErr || !academy) return res.status(404).json({ error: ERROR_MESSAGES.ACADEMY_NOT_FOUND })
 
     // Buscar política publicada da franqueadora
     const { data: published, error: pErr } = await supabase
