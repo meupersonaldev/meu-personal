@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { toast } from 'sonner'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Building2, Wallet, FileCheck } from 'lucide-react'
 import { useFranqueadoraStore } from '@/lib/stores/franqueadora-store'
 import FranqueadoraGuard from '@/components/auth/franqueadora-guard'
 import WizardStepper from '@/components/franchise-form/WizardStepper'
@@ -13,6 +13,7 @@ import BasicStep from '@/components/franchise-form/BasicStep'
 import FinancialStep from '@/components/franchise-form/FinancialStep'
 import ContractAdminStep from '@/components/franchise-form/ContractAdminStep'
 import { validateCpfCnpj } from '@/lib/utils'
+import { motion, AnimatePresence } from 'framer-motion'
 
 interface FranchiseFormData {
   name: string
@@ -260,88 +261,147 @@ export default function AddFranchisePage() {
     router.push('/franqueadora/dashboard')
   }
 
+  // Define steps with icons
+  const steps = [
+    { title: "Dados Básicos", icon: Building2 },
+    { title: "Financeiro", icon: Wallet },
+    { title: "Contrato & Admin", icon: FileCheck }
+  ]
 
   return (
     <FranqueadoraGuard requiredPermission="canCreateFranchise">
-      <div className="min-h-screen py-8 px-4">
-        <div className="max-w-3xl mx-auto">
-          {/* Header */}
-          <div className="text-center mb-8 relative">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleCancel}
-              className="absolute left-0 top-0 text-gray-500 hover:text-meu-primary h-10 w-10 rounded-full"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <h1 className="text-2xl font-bold text-meu-primary">Nova Franquia</h1>
-            <p className="text-sm text-gray-500 mt-1">Preencha os dados abaixo para cadastrar uma unidade.</p>
+      <div className="min-h-screen bg-gray-50/50 py-12 px-4 sm:px-6 lg:px-8">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="max-w-4xl mx-auto"
+        >
+          {/* Header Premium */}
+          <div className="flex items-center justify-between mb-10">
+            <div className="flex items-center gap-4">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={handleCancel}
+                className="h-10 w-10 rounded-full border-gray-200 hover:border-meu-primary text-gray-500 hover:text-meu-primary hover:bg-blue-50 transition-all duration-300"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+              <div>
+                <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-meu-primary to-blue-600">
+                  Nova Franquia
+                </h1>
+                <p className="text-gray-500 text-sm mt-1">
+                  Cadastre uma nova unidade na rede Meu Personal
+                </p>
+              </div>
+            </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <WizardStepper steps={["Básico", "Financeiro", "Contrato & Admin"]} current={currentStep} />
-
-            <Card className="p-6 sm:p-8">
-            {currentStep === 0 && (
-              <BasicStep
-                data={{
-                  name: formData.name,
-                  email: formData.email,
-                  phone: formData.phone,
-                  address: formData.address,
-                  address_number: formData.address_number,
-                  province: formData.province,
-                  zip_code: formData.zip_code,
-                  city: formData.city,
-                  state: formData.state,
-                  cpf_cnpj: formData.cpf_cnpj,
-                  company_type: formData.company_type,
-                  birth_date: formData.birth_date,
-                  manager_name: formData.manager_name,
-                  manager_phone: formData.manager_phone,
-                  manager_email: formData.manager_email,
-                }}
-                states={BRAZILIAN_STATES}
-                errors={errors}
-                onChange={(field, value) => handleInputChange(field as any, value)}
-                onNext={() => { if (validateBasic()) setCurrentStep(1) }}
+          <form onSubmit={handleSubmit} className="space-y-8">
+            {/* Custom Stepper */}
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex items-center justify-between relative overflow-hidden">
+              <div className="absolute top-1/2 left-10 right-10 h-1 bg-gray-100 -z-0 -translate-y-1/2 rounded-full" />
+              <div
+                className="absolute top-1/2 left-10 h-1 bg-meu-primary -z-0 -translate-y-1/2 rounded-full transition-all duration-500"
+                style={{ width: `${(currentStep / (steps.length - 1)) * 80}%` }}
               />
-            )}
 
-            {currentStep === 1 && (
-              <FinancialStep
-                data={{
-                  franchise_fee: formData.franchise_fee,
-                  royalty_percentage: formData.royalty_percentage,
-                  monthly_revenue: formData.monthly_revenue,
-                }}
-                errors={errors}
-                onChange={(field, value) => handleInputChange(field as any, value)}
-                onPrev={() => setCurrentStep(0)}
-                onNext={() => { if (validateFinancial()) setCurrentStep(2) }}
-              />
-            )}
+              {steps.map((step, index) => {
+                const Icon = step.icon
+                const isActive = index === currentStep
+                const isCompleted = index < currentStep
 
-            {currentStep === 2 && (
-              <ContractAdminStep
-                data={{
-                  contract_start_date: formData.contract_start_date,
-                  contract_end_date: formData.contract_end_date,
-                  is_active: formData.is_active,
-                  admin_name: formData.admin_name,
-                  admin_email: formData.admin_email,
-                  admin_password: formData.admin_password,
-                }}
-                errors={errors}
-                onChange={(field, value) => handleInputChange(field as any, value as any)}
-                onPrev={() => setCurrentStep(1)}
-                submitting={isLoading}
-              />
-            )}
+                return (
+                  <div key={index} className="relative z-10 flex flex-col items-center bg-white px-4">
+                    <div
+                      className={`
+                          w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 mb-3
+                          ${isActive ? 'bg-meu-primary text-white shadow-lg shadow-blue-500/30 scale-110' :
+                          isCompleted ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-400'}
+                        `}
+                    >
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <span className={`text-sm font-medium transition-colors duration-300 ${isActive ? 'text-meu-primary' : 'text-gray-400'}`}>
+                      {step.title}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Form Card */}
+            <Card className="p-8 shadow-xl shadow-gray-200/50 border-gray-100 rounded-2xl bg-white overflow-hidden relative">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={currentStep}
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  {currentStep === 0 && (
+                    <BasicStep
+                      data={{
+                        name: formData.name,
+                        email: formData.email,
+                        phone: formData.phone,
+                        address: formData.address,
+                        address_number: formData.address_number,
+                        province: formData.province,
+                        zip_code: formData.zip_code,
+                        city: formData.city,
+                        state: formData.state,
+                        cpf_cnpj: formData.cpf_cnpj,
+                        company_type: formData.company_type,
+                        birth_date: formData.birth_date,
+                        manager_name: formData.manager_name,
+                        manager_phone: formData.manager_phone,
+                        manager_email: formData.manager_email,
+                      }}
+                      states={BRAZILIAN_STATES}
+                      errors={errors}
+                      onChange={(field, value) => handleInputChange(field as any, value)}
+                      onNext={() => { if (validateBasic()) setCurrentStep(1) }}
+                    />
+                  )}
+
+                  {currentStep === 1 && (
+                    <FinancialStep
+                      data={{
+                        franchise_fee: formData.franchise_fee,
+                        royalty_percentage: formData.royalty_percentage,
+                        monthly_revenue: formData.monthly_revenue,
+                      }}
+                      errors={errors}
+                      onChange={(field, value) => handleInputChange(field as any, value)}
+                      onPrev={() => setCurrentStep(0)}
+                      onNext={() => { if (validateFinancial()) setCurrentStep(2) }}
+                    />
+                  )}
+
+                  {currentStep === 2 && (
+                    <ContractAdminStep
+                      data={{
+                        contract_start_date: formData.contract_start_date,
+                        contract_end_date: formData.contract_end_date,
+                        is_active: formData.is_active,
+                        admin_name: formData.admin_name,
+                        admin_email: formData.admin_email,
+                        admin_password: formData.admin_password,
+                      }}
+                      errors={errors}
+                      onChange={(field, value) => handleInputChange(field as any, value as any)}
+                      onPrev={() => setCurrentStep(1)}
+                      submitting={isLoading}
+                    />
+                  )}
+                </motion.div>
+              </AnimatePresence>
             </Card>
           </form>
-        </div>
+        </motion.div>
       </div>
     </FranqueadoraGuard>
   )

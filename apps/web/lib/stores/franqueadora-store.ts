@@ -527,7 +527,8 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
             franchise_fee: safeNumber(academy.franchise_fee),
             credits_per_class: safeNumber(academy.credits_per_class, 1),
             class_duration_minutes: safeNumber(academy.class_duration_minutes, 60),
-            checkin_tolerance: safeNumber(academy.checkin_tolerance, 30)
+            checkin_tolerance: safeNumber(academy.checkin_tolerance, 30),
+            settings: academy.settings || {}
           }))
 
           set({ academies: safeAcademies, isFetchingAcademies: false })

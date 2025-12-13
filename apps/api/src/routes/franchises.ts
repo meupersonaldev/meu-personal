@@ -386,7 +386,8 @@ router.get(
         // Campos de políticas para consumo no dashboard da Franqueadora
         credits_per_class: academy.credits_per_class,
         class_duration_minutes: academy.class_duration_minutes,
-        checkin_tolerance: academy.checkin_tolerance
+        checkin_tolerance: academy.checkin_tolerance,
+        settings: academy.settings || {}
       }))
 
       res.json({ franchises })
@@ -729,9 +730,26 @@ router.put(
         updates
       )
 
+      // Se estiver atualizando settings, fazer merge com os valores existentes
+      let finalUpdates = { ...updates }
+      if (updates.settings) {
+        const { data: currentAcademy } = await supabase
+          .from('academies')
+          .select('settings')
+          .eq('id', id)
+          .single()
+        
+        const currentSettings = (currentAcademy?.settings as Record<string, any>) || {}
+        finalUpdates.settings = {
+          ...currentSettings,
+          ...updates.settings
+        }
+        console.log('[PUT /api/franchises/:id] Settings merged:', finalUpdates.settings)
+      }
+
       const { data, error } = await supabase
         .from('academies')
-        .update(updates)
+        .update(finalUpdates)
         .eq('id', id)
         .select()
         .single()

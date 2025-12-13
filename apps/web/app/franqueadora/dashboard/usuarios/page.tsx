@@ -15,7 +15,6 @@ import {
   Phone,
   ChevronDown,
   Eye,
-  Download,
   RefreshCw,
   CheckCircle,
   XCircle,
@@ -84,19 +83,41 @@ function UsuariosPageContent() {
   })
   const [pagination, setPagination] = useState({
     page: 1,
-    limit: 20,
+    limit: 5,
     total: 0,
     totalPages: 0
   })
   const [usersData, setUsersData] = useState<{ users: User[], pagination: any }>({
     users: [],
-    pagination: { page: 1, limit: 20, total: 0, totalPages: 0 }
+    pagination: { page: 1, limit: 5, total: 0, totalPages: 0 }
   })
   const [userStats, setUserStats] = useState({ total: 0, active: 0, teachers: 0, students: 0 })
 
   // Hydration fix
   const [hydrated, setHydrated] = useState(false)
   useEffect(() => { setHydrated(true) }, [])
+
+  // Responsive Pagination Limit
+  useEffect(() => {
+    const handleResize = () => {
+      const isMobile = window.innerWidth < 768;
+      const newLimit = isMobile ? 5 : 10;
+      setPagination(prev => {
+        if (prev.limit !== newLimit) {
+          return { ...prev, limit: newLimit, page: 1 };
+        }
+        return prev;
+      });
+    };
+
+    // Set initial
+    if (typeof window !== 'undefined') {
+      handleResize();
+    }
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     if (!hydrated) return
@@ -324,12 +345,12 @@ function UsuariosPageContent() {
 
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      
+
       // Para criação, usar o endpoint da franqueadora que envia email
       if (userModalMode === 'create') {
         // Gerar senha temporária aleatória
         const tempPassword = Math.random().toString(36).slice(-8)
-        
+
         const userData = {
           name: formData.name,
           email: formData.email,
@@ -788,35 +809,43 @@ function UsuariosPageContent() {
     <FranqueadoraGuard requiredPermission="canViewDashboard">
       <div className="p-6 lg:p-8">
         {/* Header */}
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-8">
+        {/* Header */}
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-6 lg:mb-8 space-y-4 lg:space-y-0">
           <div>
-            <p className="text-sm uppercase tracking-wide text-gray-500">Usuários</p>
-            <h1 className="text-3xl font-bold text-gray-900">
-              Usuários Cadastrados — {franqueadora?.name || 'Franqueadora'}
+            <div className="flex items-center gap-2 mb-1">
+              <Badge variant="outline" className="text-xs uppercase tracking-wider text-gray-500 border-gray-200">
+                Usuários
+              </Badge>
+              <span className="text-xs text-gray-400">•</span>
+              <span className="text-xs text-gray-500">
+                {usersData.pagination.total} registros
+              </span>
+            </div>
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 tracking-tight">
+              <span className="block md:hidden">Gestão de Usuários</span>
+              <span className="hidden md:block">Usuários Cadastrados — {franqueadora?.name}</span>
             </h1>
-            <p className="text-sm text-gray-600 mt-1">
-              Total de {usersData.pagination.total} usuários encontrados
-            </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-4 lg:mt-0">
+          <div className="flex items-center gap-2 w-full lg:w-auto">
             <Button
               onClick={handleCreateUser}
               size="sm"
-              className="bg-meu-primary hover:bg-meu-primary/90"
+              className="bg-meu-primary hover:bg-meu-primary/90 flex-1 sm:flex-none"
             >
-              <Plus className="h-4 w-4 mr-2" />
-              Novo Usuário
+              <Plus className="h-4 w-4 mr-1.5" />
+              Novo
             </Button>
 
             <Button
               variant="outline"
               size="sm"
               onClick={() => setShowFilters(!showFilters)}
+              className={`flex-shrink-0 px-2 sm:px-3 ${showFilters ? 'bg-gray-50 border-meu-primary text-meu-primary' : ''}`}
+              title="Filtros"
             >
-              <Filter className="h-4 w-4 mr-2" />
-              Filtros
-              <ChevronDown className={`h-4 w-4 ml-2 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+              <Filter className="h-4 w-4 sm:mr-1.5" />
+              <span className="hidden sm:inline">Filtros</span>
             </Button>
 
             <Button
@@ -824,87 +853,90 @@ function UsuariosPageContent() {
               size="sm"
               onClick={fetchUsuarios}
               disabled={loading}
+              className="flex-shrink-0 px-2 sm:px-3"
+              title="Atualizar lista"
             >
-              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-              Atualizar
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              <span className="ml-1.5 hidden sm:inline">Atualizar</span>
             </Button>
 
-            <ExportButton
-              onClick={handleExportUsuarios}
-              disabled={!usersData.pagination.total}
-              loading={exporting}
-            />
+            <div className="flex-shrink-0">
+              <ExportButton
+                onClick={handleExportUsuarios}
+                disabled={!usersData.pagination.total}
+                loading={exporting}
+              />
+            </div>
           </div>
-
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <Card className="p-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
+          <Card className="p-4 md:p-6 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <Users className="h-8 w-8 text-blue-600" />
+              <div className="flex-shrink-0 p-2 bg-blue-50 rounded-lg">
+                <Users className="h-6 w-6 md:h-8 md:w-8 text-blue-600" />
               </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total de Usuários</p>
-                <p className="text-2xl font-bold text-gray-900">{usersData.pagination.total}</p>
+              <div className="ml-3 md:ml-4">
+                <p className="text-xs md:text-sm font-medium text-gray-600">Total</p>
+                <p className="text-xl md:text-2xl font-bold text-gray-900">{usersData.pagination.total}</p>
               </div>
             </div>
           </Card>
 
-          <Card className="p-6">
+          <Card className="p-4 md:p-6 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <UserCheck className="h-8 w-8 text-green-600" />
+              <div className="flex-shrink-0 p-2 bg-green-50 rounded-lg">
+                <UserCheck className="h-6 w-6 md:h-8 md:w-8 text-green-600" />
               </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Usuários Ativos</p>
-                <p className="text-2xl font-bold text-gray-900">{userStats.active}</p>
+              <div className="ml-3 md:ml-4">
+                <p className="text-xs md:text-sm font-medium text-gray-600">Ativos</p>
+                <p className="text-xl md:text-2xl font-bold text-gray-900">{userStats.active}</p>
               </div>
             </div>
           </Card>
 
-          <Card className="p-6">
+          <Card className="p-4 md:p-6 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <BookOpen className="h-8 w-8 text-purple-600" />
+              <div className="flex-shrink-0 p-2 bg-purple-50 rounded-lg">
+                <BookOpen className="h-6 w-6 md:h-8 md:w-8 text-purple-600" />
               </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Professores</p>
-                <p className="text-2xl font-bold text-gray-900">{userStats.teachers}</p>
+              <div className="ml-3 md:ml-4">
+                <p className="text-xs md:text-sm font-medium text-gray-600">Professores</p>
+                <p className="text-xl md:text-2xl font-bold text-gray-900">{userStats.teachers}</p>
               </div>
             </div>
           </Card>
 
-          <Card className="p-6">
+          <Card className="p-4 md:p-6 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <Calendar className="h-8 w-8 text-orange-600" />
+              <div className="flex-shrink-0 p-2 bg-orange-50 rounded-lg">
+                <Calendar className="h-6 w-6 md:h-8 md:w-8 text-orange-600" />
               </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Alunos</p>
-                <p className="text-2xl font-bold text-gray-900">{userStats.students}</p>
+              <div className="ml-3 md:ml-4">
+                <p className="text-xs md:text-sm font-medium text-gray-600">Alunos</p>
+                <p className="text-xl md:text-2xl font-bold text-gray-900">{userStats.students}</p>
               </div>
             </div>
           </Card>
+        </div>
+
+        <div className="mb-6">
+          <div className="relative">
+            <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search className="h-4 w-4 text-gray-400" />
+            </span>
+            <Input
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPagination(prev => ({ ...prev, page: 1 })) }}
+              placeholder="Buscar por nome, email ou CPF..."
+              className="pl-9 bg-white border-gray-200"
+            />
+          </div>
         </div>
 
         {showFilters && (
-          <Card className="p-6 mb-6">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Buscar</label>
-                <div className="relative">
-                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Search className="h-4 w-4 text-gray-400" />
-                  </span>
-                  <Input
-                    value={search}
-                    onChange={(e) => { setSearch(e.target.value); setPagination(prev => ({ ...prev, page: 1 })) }}
-                    placeholder="Nome ou email..."
-                    className="pl-9"
-                  />
-                </div>
-              </div>
+          <Card className="p-4 md:p-6 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de Usuário</label>
@@ -964,28 +996,123 @@ function UsuariosPageContent() {
           </Card>
         )}
 
-        {/* Tabela de Usuários */}
-        <Card className="overflow-hidden">
+        {/* Mobile View - Cards */}
+        <div className="md:hidden space-y-4 mb-6">
+          {loading ? (
+            <div className="text-center py-12">
+              <RefreshCw className="h-8 w-8 animate-spin text-meu-primary mx-auto mb-2" />
+              <p className="text-gray-500">Carregando...</p>
+            </div>
+          ) : usersData.users.length === 0 ? (
+            <div className="text-center py-12 bg-white rounded-lg border border-dashed text-gray-500">
+              Nenhum usuário encontrado.
+            </div>
+          ) : (
+            usersData.users.map((usuario) => (
+              <Card key={usuario.id} className="p-4 border border-gray-100 shadow-sm">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex-shrink-0">
+                      {usuario.avatar_url ? (
+                        <Image
+                          className="h-12 w-12 rounded-full object-cover border border-gray-100"
+                          src={usuario.avatar_url}
+                          alt={usuario.name}
+                          width={48}
+                          height={48}
+                          unoptimized
+                        />
+                      ) : (
+                        <div className="h-12 w-12 rounded-full bg-gray-100 flex items-center justify-center">
+                          <Users className="h-6 w-6 text-gray-400" />
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-gray-900">{usuario.name}</h3>
+                      <p className="text-xs text-gray-500">{usuario.email}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{formatarTelefone(usuario.phone)}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setSelectedUser(usuario)
+                      setShowUserDetails(true)
+                    }}
+                    className="text-gray-400 hover:text-meu-primary p-2"
+                  >
+                    <Eye className="h-5 w-5" />
+                  </button>
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2 text-xs">
+                  <Badge className={getRoleColor(usuario.role)}>
+                    {getRoleLabel(usuario.role)}
+                  </Badge>
+                  <Badge className={getStatusColor(usuario.active)}>
+                    {getStatusLabel(usuario.active)}
+                  </Badge>
+                  {getApprovalStatusBadge(usuario.approval_status, usuario.role)}
+                </div>
+
+                {usuario.origin === 'TEACHER_LEAD' && (
+                  <div className="mt-3 bg-purple-50 p-2 rounded-md border border-purple-100">
+                    <p className="text-xs text-purple-700 flex items-center gap-1">
+                      <Users className="h-3 w-3" />
+                      Lead: <strong>{usuario.teacher_lead_source?.teacher_name || 'Professor'}</strong>
+                    </p>
+                  </div>
+                )}
+
+                <div className="mt-4 pt-4 border-t border-gray-50 flex items-center justify-between">
+                  <div className="flex gap-1">
+                    {usuario.cref_card_url && (
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setSelectedUser(usuario); setShowImageModal(true) }}>
+                        <ImageIcon className="h-4 w-4 text-blue-500" />
+                      </Button>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => handleEditUser(usuario)}>
+                      Editar
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDeleteUser(usuario)}
+                      className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            ))
+          )}
+        </div>
+
+        {/* Desktop View - Table */}
+        <Card className="hidden md:block overflow-hidden border border-gray-100 shadow-sm">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+              <thead className="bg-gray-50/50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                     Usuário
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                     CPF
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                     CREF
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                     Tipo
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                     Status
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
                     Ações
                   </th>
                 </tr>
@@ -1008,13 +1135,13 @@ function UsuariosPageContent() {
                   </tr>
                 ) : (
                   usersData.users.map((usuario) => (
-                    <tr key={usuario.id} className="hover:bg-gray-50">
+                    <tr key={usuario.id} className="hover:bg-gray-50/50 transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="flex-shrink-0 h-10 w-10">
                             {usuario.avatar_url ? (
                               <Image
-                                className="h-10 w-10 rounded-full object-cover"
+                                className="h-10 w-10 rounded-full object-cover border border-gray-100"
                                 src={usuario.avatar_url}
                                 alt={usuario.name}
                                 width={40}
@@ -1022,8 +1149,8 @@ function UsuariosPageContent() {
                                 unoptimized
                               />
                             ) : (
-                              <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
-                                <Users className="h-6 w-6 text-gray-600" />
+                              <div className="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 text-xs font-medium">
+                                {(usuario.name || '').substring(0, 2).toUpperCase()}
                               </div>
                             )}
                           </div>
@@ -1037,10 +1164,10 @@ function UsuariosPageContent() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {formatarCPF(usuario.cpf)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {usuario.cref || '—'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -1049,118 +1176,91 @@ function UsuariosPageContent() {
                             {getRoleLabel(usuario.role)}
                           </Badge>
                           {usuario.origin === 'TEACHER_LEAD' && (
-                            <Badge className="bg-purple-100 text-purple-800 border-purple-200" title={usuario.teacher_lead_source?.teacher_name ? `Carteira de ${usuario.teacher_lead_source.teacher_name}` : 'Lead de Professor'}>
-                              {usuario.teacher_lead_source?.teacher_name
-                                ? `Lead: ${usuario.teacher_lead_source.teacher_name.split(' ')[0]}`
-                                : 'Lead de Professor'}
+                            <Badge className="bg-purple-50 text-purple-700 border-purple-100" title={usuario.teacher_lead_source?.teacher_name ? `Carteira de ${usuario.teacher_lead_source.teacher_name}` : 'Lead de Professor'}>
+                              Lead
                             </Badge>
                           )}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {getApprovalStatusBadge(usuario.approval_status, usuario.role)}
+                        <div className="flex flex-col gap-1">
+                          <Badge className={`w-fit ${getStatusColor(usuario.active)}`}>
+                            {getStatusLabel(usuario.active)}
+                          </Badge>
+                          {getApprovalStatusBadge(usuario.approval_status, usuario.role)}
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="flex items-center justify-end gap-3">
-                          <button
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             onClick={() => {
                               if (!usuario.cref_card_url) return
                               setSelectedUser(usuario)
                               setShowImageModal(true)
                             }}
                             disabled={!usuario.cref_card_url}
-                            className={`transition-colors ${usuario.cref_card_url
-                              ? 'text-blue-600 hover:text-blue-800 cursor-pointer'
-                              : 'text-gray-300 cursor-not-allowed'
-                              }`}
+                            className={`h-8 w-8 ${usuario.cref_card_url ? 'text-blue-600' : 'text-gray-300'}`}
                             title={usuario.cref_card_url ? 'Ver carteirinha CREF' : 'Sem carteirinha CREF'}
                           >
-                            <ImageIcon className="h-5 w-5" />
-                          </button>
-                          <button
-                            onClick={() => {
-                              const isTeacher = usuario.role === 'TEACHER' || usuario.role === 'PROFESSOR'
-                              const canApprove = isTeacher && (usuario.approval_status === 'pending' || usuario.approval_status === 'rejected')
-                              if (!canApprove) return
-                              setSelectedUser(usuario)
-                              setApprovalAction('approve')
-                              setShowApprovalModal(true)
-                            }}
-                            disabled={
-                              (usuario.role !== 'TEACHER' && usuario.role !== 'PROFESSOR') ||
-                              (usuario.approval_status !== 'pending' && usuario.approval_status !== 'rejected')
-                            }
-                            className={`transition-colors ${(usuario.role === 'TEACHER' || usuario.role === 'PROFESSOR') &&
-                              (usuario.approval_status === 'pending' || usuario.approval_status === 'rejected')
-                              ? 'text-green-600 hover:text-green-800 cursor-pointer'
-                              : 'text-gray-300 cursor-not-allowed'
-                              }`}
-                            title={
-                              usuario.role === 'STUDENT' || usuario.role === 'ALUNO'
-                                ? 'Alunos não precisam de aprovação'
-                                : usuario.role !== 'TEACHER' && usuario.role !== 'PROFESSOR'
-                                  ? 'Aprovação apenas para professores'
-                                  : usuario.approval_status === 'approved'
-                                    ? 'Já aprovado'
-                                    : 'Aprovar profissional'
-                            }
-                          >
-                            <CheckCircle className="h-5 w-5" />
-                          </button>
-                          <button
-                            onClick={() => {
-                              const isTeacher = usuario.role === 'TEACHER' || usuario.role === 'PROFESSOR'
-                              const canReject = isTeacher && usuario.approval_status === 'pending'
-                              if (!canReject) return
-                              setSelectedUser(usuario)
-                              setApprovalAction('reject')
-                              setShowApprovalModal(true)
-                            }}
-                            disabled={
-                              (usuario.role !== 'TEACHER' && usuario.role !== 'PROFESSOR') ||
-                              usuario.approval_status !== 'pending'
-                            }
-                            className={`transition-colors ${(usuario.role === 'TEACHER' || usuario.role === 'PROFESSOR') &&
-                              usuario.approval_status === 'pending'
-                              ? 'text-red-600 hover:text-red-800 cursor-pointer'
-                              : 'text-gray-300 cursor-not-allowed'
-                              }`}
-                            title={
-                              usuario.role === 'STUDENT' || usuario.role === 'ALUNO'
-                                ? 'Alunos não precisam de aprovação'
-                                : usuario.role !== 'TEACHER' && usuario.role !== 'PROFESSOR'
-                                  ? 'Reprovação apenas para professores'
-                                  : usuario.approval_status === 'pending'
-                                    ? 'Reprovar profissional'
-                                    : 'Apenas professores pendentes podem ser reprovados'
-                            }
-                          >
-                            <XCircle className="h-5 w-5" />
-                          </button>
-                          <button
+                            <ImageIcon className="h-4 w-4" />
+                          </Button>
+
+                          {/* Approval Actions */}
+                          {(usuario.role === 'TEACHER' || usuario.role === 'PROFESSOR') && (usuario.approval_status === 'pending') && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-green-600 hover:bg-green-50"
+                                onClick={() => { setSelectedUser(usuario); setApprovalAction('approve'); setShowApprovalModal(true) }}
+                                title="Aprovar"
+                              >
+                                <CheckCircle className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-red-600 hover:bg-red-50"
+                                onClick={() => { setSelectedUser(usuario); setApprovalAction('reject'); setShowApprovalModal(true) }}
+                                title="Reprovar"
+                              >
+                                <XCircle className="h-4 w-4" />
+                              </Button>
+                            </>
+                          )}
+
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             onClick={() => {
                               setSelectedUser(usuario)
                               setShowUserDetails(true)
                             }}
-                            className="text-gray-600 hover:text-gray-800 transition-colors"
+                            className="h-8 w-8 text-gray-500 hover:text-gray-900"
                             title="Ver detalhes"
                           >
-                            <Eye className="h-5 w-5" />
-                          </button>
-                          <button
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             onClick={() => handleEditUser(usuario)}
-                            className="text-blue-600 hover:text-blue-800 transition-colors"
-                            title="Editar usuário"
+                            className="h-8 w-8 text-blue-600 hover:text-blue-800 hover:bg-blue-50"
+                            title="Editar"
                           >
-                            <Edit className="h-5 w-5" />
-                          </button>
-                          <button
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             onClick={() => handleDeleteUser(usuario)}
-                            className="text-red-600 hover:text-red-800 transition-colors"
-                            title="Remover usuário"
+                            className="h-8 w-8 text-red-600 hover:text-red-800 hover:bg-red-50"
+                            title="Remover"
                           >
-                            <Trash2 className="h-5 w-5" />
-                          </button>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -1169,11 +1269,13 @@ function UsuariosPageContent() {
               </tbody>
             </table>
           </div>
+        </Card>
 
-          {/* Paginação */}
-          {usersData.pagination.totalPages > 1 && (
-            <div className="bg-gray-50 px-6 py-3 flex items-center justify-between border-t border-gray-200">
-              <div className="flex-1 flex justify-between sm:hidden">
+        {/* Paginação */}
+        {usersData.pagination.totalPages > 1 && (
+          <Card className="mt-4 overflow-hidden border border-gray-100 shadow-sm">
+            <div className="bg-gray-50 px-4 sm:px-6 py-3 flex items-center justify-between">
+              <div className="flex-1 flex items-center justify-between sm:hidden">
                 <Button
                   variant="outline"
                   size="sm"
@@ -1182,6 +1284,9 @@ function UsuariosPageContent() {
                 >
                   Anterior
                 </Button>
+                <div className="text-sm font-medium text-gray-600">
+                  {pagination.page} / {usersData.pagination.totalPages}
+                </div>
                 <Button
                   variant="outline"
                   size="sm"
@@ -1228,29 +1333,45 @@ function UsuariosPageContent() {
                 </div>
               </div>
             </div>
-          )}
-        </Card>
+          </Card>
+        )}
 
         {/* Modal de Detalhes do Usuário */}
         {showUserDetails && selectedUser && (
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-            <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Detalhes do Usuário
-                </h3>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center overflow-y-auto z-50 p-4 pt-10">
+            <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl">
+              {/* Header */}
+              <div className="flex items-center justify-between p-6 border-b border-gray-100">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2.5 rounded-xl ${selectedUser.role === 'TEACHER' || selectedUser.role === 'PROFESSOR' ? 'bg-purple-100' : 'bg-blue-100'}`}>
+                    {selectedUser.role === 'TEACHER' || selectedUser.role === 'PROFESSOR' ? (
+                      <BookOpen className="h-5 w-5 text-purple-600" />
+                    ) : (
+                      <Users className="h-5 w-5 text-blue-600" />
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-meu-primary">
+                      Detalhes do Usuário
+                    </h3>
+                    <p className="text-xs text-gray-500">
+                      Informações completas do cadastro
+                    </p>
+                  </div>
+                </div>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => setShowUserDetails(false)}
+                  className="h-8 w-8 p-0 rounded-full hover:bg-gray-100"
                 >
-                  ✕
+                  <X className="h-4 w-4" />
                 </Button>
               </div>
 
-              <div className="space-y-6">
+              <div className="p-6 space-y-6">
                 {/* Ficha do Usuário - Cabeçalho compacto */}
-                <div className="flex items-center gap-4 p-4 border rounded bg-gray-50">
+                <div className="flex items-center gap-4 p-4 border border-gray-100 rounded-xl bg-gray-50">
                   <div className="h-12 w-12 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center">
                     {selectedUser.avatar_url ? (
                       <Image src={selectedUser.avatar_url} alt={selectedUser.name} width={48} height={48} className="h-12 w-12 object-cover" />
@@ -1624,7 +1745,8 @@ function UsuariosPageContent() {
                 </div>
               </div>
 
-              <div className="flex justify-end mt-6">
+              {/* Footer */}
+              <div className="flex justify-end pt-5 border-t border-gray-100">
                 <Button variant="outline" onClick={() => setShowUserDetails(false)}>
                   Fechar
                 </Button>
@@ -1635,12 +1757,23 @@ function UsuariosPageContent() {
 
         {/* Modal de Alterar Senha */}
         {showPasswordModal && selectedUser && (
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-            <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-1/2 lg:w-1/3 shadow-lg rounded-md bg-white">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Alterar Senha - {selectedUser.name}
-                </h3>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center overflow-y-auto z-50 p-4 pt-10">
+            <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl">
+              {/* Header */}
+              <div className="flex items-center justify-between p-6 border-b border-gray-100">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-blue-100">
+                    <Lock className="h-5 w-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-meu-primary">
+                      Alterar Senha
+                    </h3>
+                    <p className="text-xs text-gray-500">
+                      {selectedUser.name}
+                    </p>
+                  </div>
+                </div>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1648,14 +1781,15 @@ function UsuariosPageContent() {
                     setShowPasswordModal(false)
                     setPasswordData({ newPassword: '', confirmPassword: '' })
                   }}
+                  className="h-8 w-8 p-0 rounded-full hover:bg-gray-100"
                 >
                   <X className="h-4 w-4" />
                 </Button>
               </div>
 
-              <div className="space-y-4">
+              <div className="p-6 space-y-5">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
                     Nova Senha *
                   </label>
                   <Input
@@ -1663,12 +1797,12 @@ function UsuariosPageContent() {
                     value={passwordData.newPassword}
                     onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
                     placeholder="Mínimo 6 caracteres"
-                    className="w-full"
+                    className="h-10 border-gray-200 rounded-lg"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
                     Confirmar Nova Senha *
                   </label>
                   <Input
@@ -1676,45 +1810,46 @@ function UsuariosPageContent() {
                     value={passwordData.confirmPassword}
                     onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
                     placeholder="Digite a senha novamente"
-                    className="w-full"
+                    className="h-10 border-gray-200 rounded-lg"
                   />
                 </div>
 
-                <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                   <p className="text-sm text-blue-800">
                     <strong>Observação:</strong> Como administrador, você pode alterar a senha de qualquer usuário sem precisar da senha atual.
                   </p>
                 </div>
-              </div>
 
-              <div className="flex justify-end gap-3 mt-6">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setShowPasswordModal(false)
-                    setPasswordData({ newPassword: '', confirmPassword: '' })
-                  }}
-                  disabled={passwordLoading}
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  onClick={handleChangePassword}
-                  disabled={passwordLoading || !passwordData.newPassword || !passwordData.confirmPassword}
-                  className="bg-meu-primary hover:bg-meu-primary/90 text-white"
-                >
-                  {passwordLoading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Alterando...
-                    </>
-                  ) : (
-                    <>
-                      <Lock className="h-4 w-4 mr-2" />
-                      Alterar Senha
-                    </>
-                  )}
-                </Button>
+                {/* Footer */}
+                <div className="flex justify-end gap-3 pt-5 border-t border-gray-100">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowPasswordModal(false)
+                      setPasswordData({ newPassword: '', confirmPassword: '' })
+                    }}
+                    disabled={passwordLoading}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    onClick={handleChangePassword}
+                    disabled={passwordLoading || !passwordData.newPassword || !passwordData.confirmPassword}
+                    className="bg-meu-primary hover:bg-meu-primary/90 text-white"
+                  >
+                    {passwordLoading ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                        Alterando...
+                      </>
+                    ) : (
+                      <>
+                        <Lock className="h-4 w-4 mr-2" />
+                        Alterar Senha
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
@@ -1722,31 +1857,47 @@ function UsuariosPageContent() {
 
         {/* Modal de Criação/Edição de Usuário */}
         {showUserModal && (
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-            <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-2/3 xl:w-1/2 shadow-lg rounded-md bg-white">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-semibold text-gray-900">
-                  {userModalMode === 'create' ? 'Criar' : 'Editar'} {formData.role === 'TEACHER' ? 'Professor' : 'Aluno'}
-                </h3>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center overflow-y-auto z-50 p-4 pt-10">
+            <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl">
+              {/* Header */}
+              <div className="flex items-center justify-between p-6 border-b border-gray-100">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2.5 rounded-xl ${formData.role === 'TEACHER' ? 'bg-purple-100' : 'bg-blue-100'}`}>
+                    {formData.role === 'TEACHER' ? (
+                      <BookOpen className={`h-5 w-5 text-purple-600`} />
+                    ) : (
+                      <Users className={`h-5 w-5 text-blue-600`} />
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-meu-primary">
+                      {userModalMode === 'create' ? 'Novo' : 'Editar'} {formData.role === 'TEACHER' ? 'Professor' : 'Aluno'}
+                    </h3>
+                    <p className="text-xs text-gray-500">
+                      {userModalMode === 'create' ? 'Preencha os dados para cadastrar' : 'Atualize as informações do usuário'}
+                    </p>
+                  </div>
+                </div>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => setShowUserModal(false)}
+                  className="h-8 w-8 p-0 rounded-full hover:bg-gray-100"
                 >
-                  <X className="h-5 w-5" />
+                  <X className="h-4 w-4" />
                 </Button>
               </div>
 
-              <form onSubmit={handleSubmitUser} className="space-y-4">
+              <form onSubmit={handleSubmitUser} className="p-6 space-y-5">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
                       Tipo de Usuário *
                     </label>
                     <select
                       value={formData.role}
                       onChange={(e) => setFormData({ ...formData, role: e.target.value as 'STUDENT' | 'TEACHER' })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+                      className="w-full h-10 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-meu-primary/20 focus:border-meu-primary transition-colors"
                       required
                     >
                       <option value="STUDENT">Aluno</option>
@@ -1755,55 +1906,55 @@ function UsuariosPageContent() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
                       Nome Completo *
                     </label>
                     <input
                       type="text"
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+                      className="w-full h-10 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-meu-primary/20 focus:border-meu-primary transition-colors"
                       placeholder="Nome completo"
                       required
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
                       Email *
                     </label>
                     <input
                       type="email"
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+                      className="w-full h-10 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-meu-primary/20 focus:border-meu-primary transition-colors"
                       placeholder="email@exemplo.com"
                       required
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
                       Telefone
                     </label>
                     <input
                       type="tel"
                       value={formData.phone}
                       onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+                      className="w-full h-10 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-meu-primary/20 focus:border-meu-primary transition-colors"
                       placeholder="(00) 00000-0000"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
                       CPF *
                     </label>
                     <input
                       type="text"
                       value={formData.cpf}
                       onChange={handleCPFChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+                      className="w-full h-10 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-meu-primary/20 focus:border-meu-primary transition-colors"
                       placeholder="000.000.000-00"
                       maxLength={14}
                       required
@@ -1812,60 +1963,118 @@ function UsuariosPageContent() {
 
                   {formData.role === 'TEACHER' && (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
                         CREF
                       </label>
                       <input
                         type="text"
                         value={formData.cref}
                         onChange={(e) => setFormData({ ...formData, cref: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+                        className="w-full h-10 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-meu-primary/20 focus:border-meu-primary transition-colors"
                         placeholder="00000-XX/UF"
                       />
                     </div>
                   )}
 
                   <div className="md:col-span-2">
-                    <label className="flex items-center">
+                    <label className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
                       <input
                         type="checkbox"
                         checked={formData.active}
                         onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
                         className="w-4 h-4 text-meu-primary border-gray-300 rounded focus:ring-meu-primary"
                       />
-                      <span className="ml-2 text-sm text-gray-700">
+                      <span className="text-sm font-medium text-gray-700">
                         Usuário ativo
                       </span>
                     </label>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-end gap-3 pt-4 border-t">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setShowUserModal(false)}
-                    disabled={userLoading}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button
-                    type="submit"
-                    disabled={userLoading}
-                    className="bg-meu-primary hover:bg-meu-primary/90"
-                  >
-                    {userLoading ? (
-                      <>
-                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                        {userModalMode === 'create' ? 'Criando...' : 'Salvando...'}
-                      </>
-                    ) : (
-                      <>
-                        <Save className="h-4 w-4 mr-2" />
-                        {userModalMode === 'create' ? 'Criar Usuário' : 'Salvar Alterações'}
-                      </>
-                    )}
-                  </Button>
+                {/* Footer */}
+                <div className="flex flex-col-reverse sm:flex-row items-center justify-between gap-4 pt-6 border-t border-gray-100">
+                  {userModalMode === 'edit' && selectedUser && (
+                    <div className="w-full sm:w-auto flex flex-col sm:flex-row gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          setShowUserModal(false)
+                          setShowPasswordModal(true)
+                        }}
+                        className="w-full sm:w-auto text-blue-600 border-blue-200 hover:bg-blue-50"
+                      >
+                        <KeyRound className="h-4 w-4 mr-2" />
+                        Senha
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={async () => {
+                          setResetPasswordLoading(true)
+                          try {
+                            const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                            const response = await fetch(`${API_URL}/api/users/${selectedUser.id}/reset-password`, {
+                              method: 'POST',
+                              headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`
+                              }
+                            })
+                            const data = await response.json()
+                            if (!response.ok) throw new Error(data.error || 'Erro ao resetar senha')
+                            toast.success(`Email de redefinição enviado para ${data.email || selectedUser.email}`)
+                          } catch (error: any) {
+                            toast.error(error.message || 'Erro ao resetar senha')
+                          } finally {
+                            setResetPasswordLoading(false)
+                          }
+                        }}
+                        disabled={resetPasswordLoading}
+                        className="w-full sm:w-auto text-orange-600 border-orange-200 hover:bg-orange-50"
+                      >
+                        {resetPasswordLoading ? (
+                          <>
+                            <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                            Enviando...
+                          </>
+                        ) : (
+                          <>
+                            <Mail className="h-4 w-4 mr-2" />
+                            Email
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  )}
+                  <div className={`w-full ${userModalMode === 'edit' ? 'sm:w-auto' : 'sm:ml-auto flex justify-end'} flex gap-3`}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setShowUserModal(false)}
+                      disabled={userLoading}
+                      className="flex-1 sm:flex-none"
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={userLoading}
+                      className="flex-1 sm:flex-none bg-meu-primary hover:bg-meu-primary/90"
+                    >
+                      {userLoading ? (
+                        <>
+                          <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                          {userModalMode === 'create' ? 'Criando...' : 'Salvando...'}
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4 mr-2" />
+                          {userModalMode === 'create' ? 'Criar' : 'Salvar'}
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 </div>
               </form>
             </div>
@@ -1874,53 +2083,53 @@ function UsuariosPageContent() {
 
         {/* Modal de Confirmação de Exclusão */}
         {showDeleteModal && userToDelete && (
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-            <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-              <div className="mt-3 text-center">
-                <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center overflow-y-auto z-50 p-4 pt-10">
+            <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl">
+              {/* Header */}
+              <div className="p-6 text-center">
+                <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-xl bg-red-100 mb-4">
                   <Trash2 className="h-6 w-6 text-red-600" />
                 </div>
-                <h3 className="text-lg leading-6 font-medium text-gray-900 mb-2">
+                <h3 className="text-lg font-bold text-gray-900 mb-2">
                   Remover {userToDelete.role === 'TEACHER' || userToDelete.role === 'PROFESSOR' ? 'Professor' : 'Aluno'}
                 </h3>
-                <div className="mt-2 px-7 py-3">
-                  <p className="text-sm text-gray-500">
-                    Tem certeza que deseja remover <strong>{userToDelete.name}</strong>?
-                  </p>
-                  <p className="text-sm text-gray-500 mt-1">
-                    Esta ação não pode ser desfeita.
-                  </p>
-                </div>
-                <div className="flex items-center justify-center gap-3 mt-4">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setShowDeleteModal(false)
-                      setUserToDelete(null)
-                    }}
-                    disabled={deleteLoading}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={confirmDeleteUser}
-                    disabled={deleteLoading}
-                    className="border-red-600 text-red-600 hover:bg-red-50 hover:border-red-700 hover:text-red-700"
-                  >
-                    {deleteLoading ? (
-                      <>
-                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                        Removendo...
-                      </>
-                    ) : (
-                      <>
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Confirmar Remoção
-                      </>
-                    )}
-                  </Button>
-                </div>
+                <p className="text-sm text-gray-500">
+                  Tem certeza que deseja remover <strong>{userToDelete.name}</strong>?
+                </p>
+                <p className="text-sm text-gray-500 mt-1">
+                  Esta ação não pode ser desfeita.
+                </p>
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-center gap-3 p-6 pt-0">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowDeleteModal(false)
+                    setUserToDelete(null)
+                  }}
+                  disabled={deleteLoading}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={confirmDeleteUser}
+                  disabled={deleteLoading}
+                  className="bg-red-600 hover:bg-red-700 text-white"
+                >
+                  {deleteLoading ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      Removendo...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Confirmar Remoção
+                    </>
+                  )}
+                </Button>
               </div>
             </div>
           </div>
