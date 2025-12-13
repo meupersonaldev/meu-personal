@@ -364,7 +364,7 @@ export default function RelatoriosPage() {
     setModal(prev => ({ ...prev, isOpen: false }))
   }
 
-  // Função para exportar PDF apenas com texto (sem html2canvas)
+  // Função para exportar PDF com layout melhorado
   const exportToPDFText = async () => {
     setIsExporting(true)
     
@@ -374,90 +374,255 @@ export default function RelatoriosPage() {
       const pdf = new jsPDF('p', 'mm', 'a4')
       const pageWidth = pdf.internal.pageSize.getWidth()
       const pageHeight = pdf.internal.pageSize.getHeight()
-      let yPosition = 20
+      let yPosition = 25
       
-      // Função para adicionar texto com quebra de linha
-      const addText = (text: string, fontSize: number = 12, isBold: boolean = false) => {
+      // Cores
+      const primaryColor = [0, 44, 78] // #002C4E
+      const grayColor = [107, 114, 128] // #6B7280
+      const greenColor = [5, 150, 105] // #059669
+      
+      // Função para adicionar linha horizontal
+      const addLine = (y: number, color: number[] = [200, 200, 200]) => {
+        pdf.setDrawColor(...color)
+        pdf.setLineWidth(0.5)
+        pdf.line(20, y, pageWidth - 20, y)
+      }
+      
+      // Função para adicionar retângulo colorido
+      const addColorBox = (x: number, y: number, width: number, height: number, color: number[]) => {
+        pdf.setFillColor(...color)
+        pdf.rect(x, y, width, height, 'F')
+      }
+      
+      // Função para verificar nova página
+      const checkNewPage = (neededSpace: number = 15) => {
+        if (yPosition + neededSpace > pageHeight - 25) {
+          pdf.addPage()
+          yPosition = 25
+          return true
+        }
+        return false
+      }
+      
+      // Função para adicionar texto melhorada
+      const addText = (text: string, fontSize: number = 11, isBold: boolean = false, color: number[] = [0, 0, 0], indent: number = 0) => {
         pdf.setFontSize(fontSize)
         pdf.setFont('helvetica', isBold ? 'bold' : 'normal')
+        pdf.setTextColor(...color)
         
-        const lines = pdf.splitTextToSize(text, pageWidth - 40)
+        const lines = pdf.splitTextToSize(text, pageWidth - 40 - indent)
+        checkNewPage(lines.length * fontSize * 0.35 + 5)
         
-        // Verificar se precisa de nova página
-        if (yPosition + (lines.length * fontSize * 0.35) > pageHeight - 20) {
-          pdf.addPage()
-          yPosition = 20
+        pdf.text(lines, 20 + indent, yPosition)
+        yPosition += lines.length * fontSize * 0.35 + (fontSize > 12 ? 8 : 5)
+      }
+      
+      // Função para adicionar seção com header colorido
+      const addSection = (title: string, content: () => void) => {
+        checkNewPage(20)
+        
+        // Header da seção com fundo colorido
+        addColorBox(15, yPosition - 5, pageWidth - 30, 12, [240, 249, 255])
+        addColorBox(15, yPosition - 5, 4, 12, primaryColor)
+        
+        pdf.setFontSize(13)
+        pdf.setFont('helvetica', 'bold')
+        pdf.setTextColor(...primaryColor)
+        pdf.text(title, 25, yPosition + 3)
+        
+        yPosition += 15
+        content()
+        yPosition += 8
+      }
+      
+      // === CABEÇALHO PRINCIPAL ===
+      // Fundo do cabeçalho
+      addColorBox(0, 0, pageWidth, 35, primaryColor)
+      
+      // Título principal
+      pdf.setFontSize(18)
+      pdf.setFont('helvetica', 'bold')
+      pdf.setTextColor(255, 255, 255)
+      pdf.text('RELATÓRIO DETALHADO', pageWidth / 2, 15, { align: 'center' })
+      
+      pdf.setFontSize(14)
+      pdf.setFont('helvetica', 'normal')
+      pdf.text(franqueadora?.name?.toUpperCase() || 'MEU PERSONAL', pageWidth / 2, 25, { align: 'center' })
+      
+      yPosition = 45
+      
+      // Data de geração
+      pdf.setFontSize(9)
+      pdf.setTextColor(...grayColor)
+      pdf.text(`Gerado em: ${format(new Date(), 'dd/MM/yyyy HH:mm', { locale: ptBR })}`, pageWidth - 20, yPosition, { align: 'right' })
+      yPosition += 15
+      
+      // === RESUMO EXECUTIVO ===
+      addSection('📊 RESUMO EXECUTIVO', () => {
+        const stats = [
+          { label: 'Total de Franquias', value: academies.length.toString(), icon: '🏢' },
+          { label: 'Crescimento (12 meses)', value: `+${monthlyData.reduce((acc, m) => acc + m.newFranchises, 0)} franquias`, icon: '📈' },
+          { label: 'Estados Ativos', value: regionStats.length.toString(), icon: '🗺️' },
+          { label: 'Receita Total Mensal', value: `R$ ${(academies.reduce((acc, a) => acc + Number(a.monthly_revenue || 0), 0) / 1000).toFixed(0)}k`, icon: '💰' }
+        ]
+        
+        stats.forEach((stat, index) => {
+          const x = 25 + (index % 2) * 85
+          const y = yPosition + Math.floor(index / 2) * 20
+          
+          // Box para cada estatística
+          addColorBox(x - 5, y - 8, 80, 15, index % 2 === 0 ? [240, 253, 244] : [254, 249, 195])
+          
+          pdf.setFontSize(10)
+          pdf.setFont('helvetica', 'bold')
+          pdf.setTextColor(...primaryColor)
+          pdf.text(`${stat.icon} ${stat.label}`, x, y - 2)
+          
+          pdf.setFontSize(12)
+          pdf.setFont('helvetica', 'bold')
+          pdf.setTextColor(...greenColor)
+          pdf.text(stat.value, x, y + 5)
+        })
+        
+        yPosition += 45
+      })
+      
+      // === EVOLUÇÃO MENSAL ===
+      addSection('📈 EVOLUÇÃO MENSAL - ÚLTIMOS 12 MESES', () => {
+        // Cabeçalho da tabela
+        pdf.setFontSize(9)
+        pdf.setFont('helvetica', 'bold')
+        pdf.setTextColor(...primaryColor)
+        pdf.text('MÊS', 25, yPosition)
+        pdf.text('NOVAS', 80, yPosition)
+        pdf.text('TOTAL', 120, yPosition)
+        pdf.text('CRESCIMENTO', 160, yPosition)
+        
+        addLine(yPosition + 2, primaryColor)
+        yPosition += 8
+        
+        monthlyData.forEach((data, index) => {
+          const bgColor = index % 2 === 0 ? [249, 250, 251] : [255, 255, 255]
+          addColorBox(20, yPosition - 4, pageWidth - 40, 8, bgColor)
+          
+          pdf.setFontSize(9)
+          pdf.setFont('helvetica', 'normal')
+          pdf.setTextColor(0, 0, 0)
+          
+          pdf.text(data.month, 25, yPosition)
+          pdf.text(data.newFranchises.toString(), 85, yPosition, { align: 'center' })
+          pdf.text(data.totalFranchises.toString(), 125, yPosition, { align: 'center' })
+          
+          const growth = index > 0 ? ((data.newFranchises / (monthlyData[index - 1].newFranchises || 1)) * 100 - 100).toFixed(0) : '0'
+          const textColor = data.newFranchises > 0 ? greenColor : grayColor
+          pdf.setTextColor(...textColor)
+          pdf.text(`${growth}%`, 165, yPosition, { align: 'center' })
+          
+          yPosition += 8
+        })
+      })
+      
+      // === DISTRIBUIÇÃO POR ESTADO ===
+      addSection('🗺️ DISTRIBUIÇÃO POR ESTADO', () => {
+        regionStats.slice(0, 10).forEach((region, index) => {
+          const isTop3 = index < 3
+          const bgColor = isTop3 ? [254, 249, 195] : [249, 250, 251]
+          
+          addColorBox(20, yPosition - 4, pageWidth - 40, 12, bgColor)
+          
+          // Posição no ranking
+          pdf.setFontSize(10)
+          pdf.setFont('helvetica', 'bold')
+          pdf.setTextColor(...primaryColor)
+          pdf.text(`${index + 1}º`, 25, yPosition + 2)
+          
+          // Nome do estado
+          pdf.setFont('helvetica', 'bold')
+          pdf.setTextColor(0, 0, 0)
+          pdf.text(region.region, 40, yPosition + 2)
+          
+          // Estatísticas
+          pdf.setFont('helvetica', 'normal')
+          pdf.setFontSize(9)
+          pdf.setTextColor(...grayColor)
+          pdf.text(`${region.count} franquias • ${region.cities} cidades • R$ ${(region.revenue / 1000).toFixed(1)}k/mês`, 40, yPosition + 8)
+          
+          yPosition += 15
+        })
+      })
+      
+      // === LISTA DE FRANQUIAS ===
+      addSection('🏢 FRANQUIAS MAIS RECENTES', () => {
+        const recentAcademies = academies
+          .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+          .slice(0, 15)
+        
+        recentAcademies.forEach((academy, index) => {
+          checkNewPage(12)
+          
+          const bgColor = index % 2 === 0 ? [249, 250, 251] : [255, 255, 255]
+          addColorBox(20, yPosition - 3, pageWidth - 40, 10, bgColor)
+          
+          const openDate = academy.created_at ? format(new Date(academy.created_at), 'dd/MM/yy', { locale: ptBR }) : 'N/A'
+          const revenue = (Number(academy.monthly_revenue || 0) / 1000).toFixed(1)
+          
+          pdf.setFontSize(9)
+          pdf.setFont('helvetica', 'bold')
+          pdf.setTextColor(...primaryColor)
+          pdf.text(`${index + 1}.`, 25, yPosition + 2)
+          
+          pdf.setFont('helvetica', 'bold')
+          pdf.setTextColor(0, 0, 0)
+          pdf.text(academy.name.substring(0, 30), 35, yPosition + 2)
+          
+          pdf.setFont('helvetica', 'normal')
+          pdf.setFontSize(8)
+          pdf.setTextColor(...grayColor)
+          pdf.text(`${academy.city}, ${academy.state} • ${openDate} • R$ ${revenue}k/mês`, 35, yPosition + 7)
+          
+          yPosition += 12
+        })
+        
+        if (academies.length > 15) {
+          pdf.setFontSize(9)
+          pdf.setTextColor(...grayColor)
+          pdf.text(`... e mais ${academies.length - 15} franquias`, 25, yPosition + 5)
         }
+      })
+      
+      // === RODAPÉ ===
+      const totalPages = pdf.getNumberOfPages()
+      for (let i = 1; i <= totalPages; i++) {
+        pdf.setPage(i)
         
-        pdf.text(lines, 20, yPosition)
-        yPosition += lines.length * fontSize * 0.35 + 5
+        // Linha do rodapé
+        addLine(pageHeight - 15, grayColor)
+        
+        // Texto do rodapé
+        pdf.setFontSize(8)
+        pdf.setTextColor(...grayColor)
+        pdf.text('Relatório gerado automaticamente pelo sistema Meu Personal', 20, pageHeight - 8)
+        pdf.text(`Página ${i} de ${totalPages}`, pageWidth - 20, pageHeight - 8, { align: 'right' })
       }
-      
-      // Cabeçalho
-      addText(`RELATÓRIO DETALHADO - ${franqueadora?.name?.toUpperCase() || 'MEU PERSONAL'}`, 16, true)
-      addText(`Gerado em: ${format(new Date(), 'dd/MM/yyyy HH:mm', { locale: ptBR })}`, 10)
-      yPosition += 10
-      
-      // Resumo Executivo
-      addText('RESUMO EXECUTIVO', 14, true)
-      addText(`Total de Franquias: ${academies.length}`, 12)
-      addText(`Crescimento (12 meses): +${monthlyData.reduce((acc, m) => acc + m.newFranchises, 0)} franquias`, 12)
-      addText(`Estados Ativos: ${regionStats.length}`, 12)
-      addText(`Receita Total: R$ ${(academies.reduce((acc, a) => acc + Number(a.monthly_revenue || 0), 0) / 1000).toFixed(0)}k/mês`, 12)
-      yPosition += 10
-      
-      // Evolução Mensal
-      addText('EVOLUÇÃO MENSAL - ÚLTIMOS 12 MESES', 14, true)
-      monthlyData.forEach(data => {
-        addText(`${data.fullMonth}: ${data.newFranchises} novas franquias (Total: ${data.totalFranchises})`, 10)
-      })
-      yPosition += 10
-      
-      // Distribuição por Estado
-      addText('DISTRIBUIÇÃO POR ESTADO', 14, true)
-      regionStats.forEach((region, index) => {
-        addText(`${index + 1}º ${region.region}: ${region.count} franquias, ${region.cities} cidades, R$ ${(region.revenue / 1000).toFixed(1)}k/mês`, 10)
-      })
-      yPosition += 10
-      
-      // Lista de Franquias
-      addText('LISTA COMPLETA DE FRANQUIAS', 14, true)
-      const sortedAcademies = academies
-        .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
-        .slice(0, 20) // Limitar para não ficar muito longo
-      
-      sortedAcademies.forEach((academy, index) => {
-        const openDate = academy.created_at ? format(new Date(academy.created_at), 'dd/MM/yyyy', { locale: ptBR }) : 'N/A'
-        const revenue = (Number(academy.monthly_revenue || 0) / 1000).toFixed(1)
-        addText(`${index + 1}. ${academy.name} - ${academy.city}, ${academy.state} - Aberta: ${openDate} - R$ ${revenue}k/mês`, 9)
-      })
-      
-      if (academies.length > 20) {
-        addText(`... e mais ${academies.length - 20} franquias`, 9)
-      }
-      
-      // Rodapé
-      pdf.setFontSize(8)
-      pdf.text(`Relatório gerado automaticamente pelo sistema Meu Personal`, pageWidth / 2, pageHeight - 10, { align: 'center' })
       
       // Salvar
-      const fileName = `relatorio-texto-${franqueadora?.name?.toLowerCase().replace(/\s+/g, '-') || 'franqueadora'}-${format(new Date(), 'yyyy-MM-dd')}.pdf`
+      const fileName = `relatorio-${franqueadora?.name?.toLowerCase().replace(/\s+/g, '-') || 'franqueadora'}-${format(new Date(), 'yyyy-MM-dd')}.pdf`
       pdf.save(fileName)
       
       setModal({
         isOpen: true,
         type: 'success',
         title: 'PDF Gerado com Sucesso!',
-        message: `Relatório em texto salvo como "${fileName}"`
+        message: `Relatório profissional salvo como "${fileName}"`
       })
       
     } catch (error) {
-      console.error('Erro ao gerar PDF texto:', error)
+      console.error('Erro ao gerar PDF:', error)
       setModal({
         isOpen: true,
         type: 'error',
         title: 'Erro ao Gerar PDF',
-        message: 'Não foi possível gerar o relatório. Use a opção "Imprimir" como alternativa.'
+        message: 'Não foi possível gerar o relatório. Tente novamente em alguns instantes.'
       })
     } finally {
       setIsExporting(false)
@@ -536,26 +701,7 @@ export default function RelatoriosPage() {
 
   return (
     <FranqueadoraGuard requiredPermission="canViewDashboard">
-      <style jsx global>{`
-        @media print {
-          body * {
-            visibility: hidden;
-          }
-          [data-pdf-content], [data-pdf-content] * {
-            visibility: visible;
-          }
-          [data-pdf-content] {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-          }
-          .no-print {
-            display: none !important;
-          }
-        }
-      `}</style>
-      <div className="p-3 sm:p-4 lg:p-8 min-h-screen space-y-6">
+      <dtyle jsx ame="p-3 sm:p-4 lg:p-8 min-h-screen space-y-6">
         <div ref={reportRef} data-pdf-content className="space-y-6 bg-white p-4">
         {/* Header */}
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 no-print">
@@ -573,25 +719,15 @@ export default function RelatoriosPage() {
               <p className="text-gray-500 text-sm">Análise completa do crescimento da rede</p>
             </div>
           </div>
-          <divtonassName="flex gap-2 w-full lg:w-auto">
-            <Button 
-              variant="outline" 
-              className="flex-1 lg:flex-none"
-              onClick={exportToPDFText}
-              disabled={isExporting}
-            >
-              <Download className={`h-4 w-4 mr-2 ${isExporting ? 'animate-spin' : ''}`} />
-              {isExporting ? 'Gerando PDF...' : 'Exportar PDF'}
-            </Button>
-            <Button 
-              variant="ghost" 
-              size="sm"
-              onClick={() => window.print()}
-              className="text-xs"
-            >
-              Imprimir
-            </Button>
-          </div>
+          <But cl 
+            variant="outline" 
+            className="w-full lg:w-auto"
+            onClick={exportToPDFText}
+            disabled={isExporting}
+          >
+            <Download className={`h-4 w-4 mr-2 ${isExporting ? 'animate-spin' : ''}`} />
+            {isExporting ? 'Gerando PDF...' : 'Exportar PDF'}
+          </Button>
         </div>
 
         {/* Resumo Executivo */}
