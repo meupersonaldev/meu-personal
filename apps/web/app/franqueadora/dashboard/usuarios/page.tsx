@@ -341,10 +341,26 @@ function UsuariosPageContent() {
 
   const handleSubmitUser = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    // Validações antes de enviar
+    if (!validarCPF(formData.cpf)) {
+      toast.error('CPF inválido. Verifique os dígitos.')
+      return
+    }
+
+    if (formData.role === 'TEACHER' && formData.cref && !validarCREF(formData.cref)) {
+      toast.error('CREF inválido. Formato esperado: 000000-G/UF')
+      return
+    }
+
     setUserLoading(true)
 
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+
+      // Limpar formatação do CPF e telefone antes de enviar
+      const cpfLimpo = formData.cpf.replace(/\D/g, '')
+      const phoneLimpo = formData.phone.replace(/\D/g, '')
 
       // Para criação, usar o endpoint da franqueadora que envia email
       if (userModalMode === 'create') {
@@ -354,8 +370,8 @@ function UsuariosPageContent() {
         const userData = {
           name: formData.name,
           email: formData.email,
-          phone: formData.phone,
-          cpf: formData.cpf,
+          phone: phoneLimpo,
+          cpf: cpfLimpo,
           password: tempPassword,
           gender: 'PREFER_NOT_TO_SAY',
           role: formData.role,
@@ -529,6 +545,7 @@ function UsuariosPageContent() {
     }
   }
 
+  // Formata CPF para exibição (com pontos e traço)
   const formatarCPF = (cpf?: string) => {
     if (!cpf) return '—'
     const digits = cpf.replace(/\D/g, '')
@@ -536,9 +553,75 @@ function UsuariosPageContent() {
     return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')
   }
 
+  // Formata CPF enquanto digita
+  const formatarCPFInput = (value: string) => {
+    const digits = value.replace(/\D/g, '').slice(0, 11)
+    if (digits.length <= 3) return digits
+    if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`
+    if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`
+    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`
+  }
+
+  // Valida CPF (dígitos verificadores)
+  const validarCPF = (cpf: string): boolean => {
+    const digits = cpf.replace(/\D/g, '')
+    if (digits.length !== 11) return false
+    if (/^(\d)\1+$/.test(digits)) return false // Todos dígitos iguais
+    
+    let sum = 0
+    for (let i = 0; i < 9; i++) sum += parseInt(digits[i]) * (10 - i)
+    let remainder = (sum * 10) % 11
+    if (remainder === 10 || remainder === 11) remainder = 0
+    if (remainder !== parseInt(digits[9])) return false
+    
+    sum = 0
+    for (let i = 0; i < 10; i++) sum += parseInt(digits[i]) * (11 - i)
+    remainder = (sum * 10) % 11
+    if (remainder === 10 || remainder === 11) remainder = 0
+    if (remainder !== parseInt(digits[10])) return false
+    
+    return true
+  }
+
+  // Formata telefone para exibição
   const formatarTelefone = (phone?: string) => {
     if (!phone) return 'Não informado'
-    return phone.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3')
+    const digits = phone.replace(/\D/g, '')
+    if (digits.length === 11) return digits.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3')
+    if (digits.length === 10) return digits.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3')
+    return phone
+  }
+
+  // Formata telefone enquanto digita
+  const formatarTelefoneInput = (value: string) => {
+    const digits = value.replace(/\D/g, '').slice(0, 11)
+    if (digits.length <= 2) return digits
+    if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`
+  }
+
+  // Formata CREF enquanto digita (formato: 000000-G/UF)
+  const formatarCREFInput = (value: string) => {
+    // Remove caracteres especiais exceto letras e números
+    let cleaned = value.toUpperCase().replace(/[^A-Z0-9]/g, '')
+    
+    // Extrai números do início (até 6 dígitos)
+    const numbers = cleaned.replace(/[^0-9]/g, '').slice(0, 6)
+    const letters = cleaned.replace(/[0-9]/g, '').slice(0, 3) // G + UF (ex: G/SP)
+    
+    if (numbers.length === 0) return ''
+    if (numbers.length < 6) return numbers
+    if (letters.length === 0) return `${numbers}-`
+    if (letters.length === 1) return `${numbers}-${letters}/`
+    return `${numbers}-${letters[0]}/${letters.slice(1, 3)}`
+  }
+
+  // Valida formato do CREF
+  const validarCREF = (cref: string): boolean => {
+    if (!cref) return true // CREF é opcional
+    // Formato: 000000-G/UF (6 números, hífen, letra G, barra, 2 letras UF)
+    const regex = /^\d{6}-[A-Z]\/[A-Z]{2}$/
+    return regex.test(cref)
   }
 
   const formatarData = (dateString?: string) => {
@@ -553,8 +636,18 @@ function UsuariosPageContent() {
   }
 
   const handleCPFChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const formatted = formatarCPF(e.target.value)
+    const formatted = formatarCPFInput(e.target.value)
     setFormData({ ...formData, cpf: formatted })
+  }
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatarTelefoneInput(e.target.value)
+    setFormData({ ...formData, phone: formatted })
+  }
+
+  const handleCREFChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatarCREFInput(e.target.value)
+    setFormData({ ...formData, cref: formatted })
   }
 
   const getRoleLabel = (role: string) => {
@@ -1940,9 +2033,10 @@ function UsuariosPageContent() {
                     <input
                       type="tel"
                       value={formData.phone}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      onChange={handlePhoneChange}
                       className="w-full h-10 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-meu-primary/20 focus:border-meu-primary transition-colors"
                       placeholder="(00) 00000-0000"
+                      maxLength={15}
                     />
                   </div>
 
@@ -1954,11 +2048,18 @@ function UsuariosPageContent() {
                       type="text"
                       value={formData.cpf}
                       onChange={handleCPFChange}
-                      className="w-full h-10 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-meu-primary/20 focus:border-meu-primary transition-colors"
+                      className={`w-full h-10 px-3 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-meu-primary/20 focus:border-meu-primary transition-colors ${
+                        formData.cpf && formData.cpf.replace(/\D/g, '').length === 11 && !validarCPF(formData.cpf)
+                          ? 'border-red-300 bg-red-50'
+                          : 'border-gray-200'
+                      }`}
                       placeholder="000.000.000-00"
                       maxLength={14}
                       required
                     />
+                    {formData.cpf && formData.cpf.replace(/\D/g, '').length === 11 && !validarCPF(formData.cpf) && (
+                      <p className="text-xs text-red-500 mt-1">CPF inválido</p>
+                    )}
                   </div>
 
                   {formData.role === 'TEACHER' && (
@@ -1969,10 +2070,18 @@ function UsuariosPageContent() {
                       <input
                         type="text"
                         value={formData.cref}
-                        onChange={(e) => setFormData({ ...formData, cref: e.target.value })}
-                        className="w-full h-10 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-meu-primary/20 focus:border-meu-primary transition-colors"
-                        placeholder="00000-XX/UF"
+                        onChange={handleCREFChange}
+                        className={`w-full h-10 px-3 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-meu-primary/20 focus:border-meu-primary transition-colors ${
+                          formData.cref && formData.cref.length > 0 && !validarCREF(formData.cref)
+                            ? 'border-red-300 bg-red-50'
+                            : 'border-gray-200'
+                        }`}
+                        placeholder="000000-G/SP"
+                        maxLength={12}
                       />
+                      {formData.cref && formData.cref.length > 0 && !validarCREF(formData.cref) && (
+                        <p className="text-xs text-red-500 mt-1">Formato: 000000-G/UF</p>
+                      )}
                     </div>
                   )}
 
