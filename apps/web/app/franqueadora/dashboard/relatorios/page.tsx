@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { AlertModal } from '@/components/ui/alert-modal'
 import { useFranqueadoraStore } from '@/lib/stores/franqueadora-store'
 import FranqueadoraGuard from '@/components/auth/franqueadora-guard'
 import { format, subMonths, startOfMonth, endOfMonth } from 'date-fns'
@@ -29,6 +30,20 @@ export default function RelatoriosPage() {
   // Hydration fix
   const [hydrated, setHydrated] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
+  
+  // Modal states
+  const [modal, setModal] = useState<{
+    isOpen: boolean
+    type: 'success' | 'error'
+    title: string
+    message: string
+  }>({
+    isOpen: false,
+    type: 'success',
+    title: '',
+    message: ''
+  })
+  
   useEffect(() => { setHydrated(true) }, [])
 
   useEffect(() => {
@@ -152,12 +167,31 @@ export default function RelatoriosPage() {
       const fileName = `relatorio-${franqueadora?.name?.toLowerCase().replace(/\s+/g, '-') || 'franqueadora'}-${format(new Date(), 'yyyy-MM-dd')}.pdf`
       pdf.save(fileName)
       
+      // Mostrar sucesso
+      setModal({
+        isOpen: true,
+        type: 'success',
+        title: 'PDF Gerado com Sucesso!',
+        message: `O relatório foi baixado como "${fileName}"`
+      })
+      
     } catch (error) {
       console.error('Erro ao gerar PDF:', error)
-      alert('Erro ao gerar o relatório PDF. Tente novamente.')
+      
+      // Mostrar erro
+      setModal({
+        isOpen: true,
+        type: 'error',
+        title: 'Erro ao Gerar PDF',
+        message: 'Não foi possível gerar o relatório. Verifique sua conexão e tente novamente.'
+      })
     } finally {
       setIsExporting(false)
     }
+  }
+
+  const closeModal = () => {
+    setModal(prev => ({ ...prev, isOpen: false }))
   }
 
   if (!hydrated) {
@@ -381,6 +415,15 @@ export default function RelatoriosPage() {
         </Card>
         </div>
       </div>
+
+      {/* Modal de Alerta */}
+      <AlertModal
+        isOpen={modal.isOpen}
+        onClose={closeModal}
+        type={modal.type}
+        title={modal.title}
+        message={modal.message}
+      />
     </FranqueadoraGuard>
   )
 }
