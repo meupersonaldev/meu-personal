@@ -6,10 +6,12 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
-import { Loader2, Save, MapPin, Building2, MoreVertical, Edit } from 'lucide-react'
+import { Loader2, Save, MapPin, Building2, MoreVertical, Edit, History, Mail, AlertTriangle } from 'lucide-react'
 import FranqueadoraGuard from '@/components/auth/franqueadora-guard'
 import PolicyOverrideDialog from '@/components/policies/PolicyOverrideDialog'
 import PolicyDraftForm from '@/components/policies/PolicyDraftForm'
+import ConflictsAlert from '@/components/policies/ConflictsAlert'
+import RollbackConfirmDialog from '@/components/policies/RollbackConfirmDialog'
 import { format } from 'date-fns'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -60,6 +62,11 @@ function PoliticasPageContent() {
   const [overridesByAcademy, setOverridesByAcademy] = useState<Record<string, string[]>>({})
   const [history, setHistory] = useState<any[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
+  const [hasConflicts, setHasConflicts] = useState(false)
+  const [conflictsCount, setConflictsCount] = useState(0)
+  const [notifyFranchises, setNotifyFranchises] = useState(true)
+  const [rollbackOpen, setRollbackOpen] = useState(false)
+  const [rollbackTarget, setRollbackTarget] = useState<any>(null)
 
   const router = useRouter()
   const pathname = usePathname()
@@ -262,7 +269,10 @@ function PoliticasPageContent() {
         method: 'POST',
         headers,
         credentials: 'include',
-        body: JSON.stringify({ effective_from: effectiveFrom ? new Date(effectiveFrom).toISOString() : undefined })
+        body: JSON.stringify({ 
+          effective_from: effectiveFrom ? new Date(effectiveFrom).toISOString() : undefined,
+          notify_franchises: notifyFranchises
+        })
       })
       if (!res.ok) {
         try {
@@ -273,6 +283,8 @@ function PoliticasPageContent() {
           throw new Error('Falha ao publicar')
         }
       }
+      const publishResult = await res.json()
+      
       // Recarregar política publicada para obter versão/efetivação
       try {
         const pubRes = await fetch(`${API_URL}/api/franchisor/policies`, { credentials: 'include', headers })
@@ -285,7 +297,14 @@ function PoliticasPageContent() {
       } catch {
         setPublished(draft)
       }
+      
       toast.success('Políticas publicadas')
+      if (publishResult.notificationsSent > 0) {
+        toast.info(`${publishResult.notificationsSent} franquia(s) notificada(s) por email`)
+      }
+      
+      // Recarregar histórico
+      setHistory([])
     } catch {
       toast.error('Erro ao publicar políticas')
     } finally {
@@ -406,12 +425,38 @@ function PoliticasPageContent() {
                   </div>
                 </div>
 
+                {/* Alerta de conflitos */}
+                <ConflictsAlert 
+                  token={token} 
+                  apiUrl={API_URL} 
+                  useDraft={true}
+                  onConflictsChange={(has, count) => {
+                    setHasConflicts(has)
+                    setConflictsCount(count)
+                  }}
+                />
+
                 {!loadingDraft && draft && published && (
                   <div className="mb-6 p-4 bg-gray-50 rounded-xl border border-gray-100">
                     <p className="text-sm font-medium text-gray-700 mb-2">Alterações Pendentes:</p>
                     <DraftDiffChips draft={draft} published={published} />
                   </div>
                 )}
+                
+                {/* Checkbox de notificação */}
+                <div className="mb-6 flex items-center gap-3 p-3 bg-blue-50 rounded-lg border border-blue-100">
+                  <input
+                    type="checkbox"
+                    id="notify-franchises"
+                    checked={notifyFranchises}
+                    onChange={(e) => setNotifyFranchises(e.target.checked)}
+                    className="h-4 w-4 text-meu-primary border-gray-300 rounded focus:ring-meu-primary"
+                  />
+                  <label htmlFor="notify-franchises" className="text-sm text-blue-800 cursor-pointer flex items-center gap-2">
+                    <Mail className="h-4 w-4" />
+                    Notificar franquias por email ao publicar
+                  </label>
+                </div>
 
                 <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                   <div className="sm:col-span-2 lg:col-span-1">
@@ -605,15 +650,47 @@ function PoliticasPageContent() {
                 <div className="text-sm text-gray-500 text-center py-6 bg-gray-50 rounded-lg border border-dashed border-gray-200">Nenhum histórico encontrado.</div>
               ) : (
                 <div className="divide-y divide-gray-100 rounded-xl border border-gray-100 overflow-hidden">
-                  {history.map((h: any) => (
-                    <div key={h.id || `${h.version}-${h.effective_from}`} className="flex flex-col sm:flex-row sm:items-center justify-between px-4 py-3 bg-white hover:bg-gray-50/50 transition-colors gap-2 sm:gap-0">
-                      <div className="flex items-center gap-3">
-                        <Badge variant="secondary" className="bg-gray-100 text-gray-700">v{h.version}</Badge>
-                        <span className="text-sm font-medium text-gray-900">Efetiva em: {h.effective_from ? format(new Date(h.effective_from), 'dd/MM/yyyy HH:mm') : 'Imediato'}</span>
+                  {history.map((h: any, idx: number) => {
+                    const isCurrentVersion = idx === 0
+                    return (
+                      <div key={h.id || `${h.version}-${h.effective_from}`} className={`flex flex-col sm:flex-row sm:items-center justify-between px-4 py-3 bg-white hover:bg-gray-50/50 transition-colors gap-2 sm:gap-0 ${isCurrentVersion ? 'bg-green-50/30' : ''}`}>
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <Badge variant="secondary" className={`${isCurrentVersion ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
+                            v{h.version}
+                            {isCurrentVersion && ' (atual)'}
+                          </Badge>
+                          {h.is_rollback && (
+                            <Badge className="bg-amber-100 text-amber-800 border-amber-200">
+                              <History className="h-3 w-3 mr-1" />
+                              Rollback da v{h.rollback_to_version}
+                            </Badge>
+                          )}
+                          <span className="text-sm font-medium text-gray-900">
+                            Efetiva em: {h.effective_from ? format(new Date(h.effective_from), 'dd/MM/yyyy HH:mm') : 'Imediato'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-gray-400">
+                            Criada em: {h.created_at ? format(new Date(h.created_at), 'dd/MM/yyyy HH:mm') : '—'}
+                          </span>
+                          {canEdit && !isCurrentVersion && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setRollbackTarget(h)
+                                setRollbackOpen(true)
+                              }}
+                              className="text-amber-600 border-amber-200 hover:bg-amber-50 h-7 px-2"
+                            >
+                              <History className="h-3.5 w-3.5 mr-1" />
+                              Reverter
+                            </Button>
+                          )}
+                        </div>
                       </div>
-                      <span className="text-xs text-gray-400">Criada em: {h.created_at ? format(new Date(h.created_at), 'dd/MM/yyyy HH:mm') : '—'}</span>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </Card>
@@ -627,6 +704,29 @@ function PoliticasPageContent() {
             token={token || undefined}
             apiUrl={API_URL}
             onSaved={() => { }}
+          />
+        )}
+        
+        {/* Modal de Rollback */}
+        {rollbackTarget && history.length > 0 && (
+          <RollbackConfirmDialog
+            open={rollbackOpen}
+            onOpenChange={setRollbackOpen}
+            targetVersion={rollbackTarget}
+            currentVersion={history[0]}
+            token={token || undefined}
+            apiUrl={API_URL}
+            onSuccess={() => {
+              setHistory([])
+              // Recarregar política publicada
+              const headers: HeadersInit = {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {})
+              }
+              fetch(`${API_URL}/api/franchisor/policies`, { credentials: 'include', headers })
+                .then(r => r.ok ? r.json() : null)
+                .then(json => json?.data && setPublished(json.data))
+            }}
           />
         )}
       </div>

@@ -353,6 +353,7 @@ model Academy {
   academyTimeSlots      AcademyTimeSlot[]
   notifications         Notification[]
   bookingSeries         BookingSeries[]
+  policyOverride        AcademyPolicyOverride?
 
   @@map("academies")
 }
@@ -739,6 +740,10 @@ model FranchisorPolicy {
   comment                           String?
   createdBy                         String?   @map("created_by")
   publishedBy                       String?   @map("published_by")
+  isRollback                        Boolean   @default(false) @map("is_rollback")
+  rollbackFromVersion               Int?      @map("rollback_from_version")
+  rollbackToVersion                 Int?      @map("rollback_to_version")
+  rollbackComment                   String?   @map("rollback_comment")
   createdAt                         DateTime  @default(now()) @map("created_at")
   updatedAt                         DateTime  @default(now()) @map("updated_at")
 
@@ -747,6 +752,17 @@ model FranchisorPolicy {
   @@map("franchisor_policies")
 }
 
+model AcademyPolicyOverride {
+  id        String   @id @default(uuid())
+  academyId String   @unique @map("academy_id")
+  overrides Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  academy   Academy  @relation(fields: [academyId], references: [id], onDelete: Cascade)
+
+  @@map("academy_policy_overrides")
+}
 
 model ApprovalRequest {
   id              String          @id @default(uuid())
