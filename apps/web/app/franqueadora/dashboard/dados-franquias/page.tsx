@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { ExportButton } from '@/components/ui/export-button'
 import FranqueadoraGuard from '@/components/auth/franqueadora-guard'
 import ConfirmDialog from '@/components/ui/confirm-dialog'
 import { toast } from 'sonner'
@@ -89,7 +90,7 @@ export default function DadosFranquiasPage() {
   }
 
   const handleAddFranchise = () => {
-    router.push('/franqueadora/dashboard/add-franchise')
+    router.push('/franqueadora/dashboard/nova-franquia')
   }
 
   const handleViewFranchise = (franchise: Academy) => {
@@ -367,30 +368,63 @@ export default function DadosFranquiasPage() {
     }
   }
 
-  const handleExportData = () => {
+  const handleExportData = async () => {
     try {
-      const csvData = academies.map(academy => ({
-        Nome: academy.name,
-        Email: academy.email,
-        Telefone: academy.phone || '',
-        Cidade: academy.city || '',
-        Estado: academy.state || '',
-        'Receita Mensal': academy.monthly_revenue,
-        'Royalty (%)': academy.royalty_percentage,
-        Status: academy.is_active ? 'Ativa' : 'Inativa',
-        'Data de Criação': new Date(academy.created_at).toLocaleDateString('pt-BR')
-      }))
+      const ExcelJS = await import('exceljs')
+      const workbook = new ExcelJS.Workbook()
+      const worksheet = workbook.addWorksheet('Franquias')
 
-      const csvContent = [
-        Object.keys(csvData[0]).join(','),
-        ...csvData.map(row => Object.values(row).join(','))
-      ].join('\n')
+      // Definir colunas
+      worksheet.columns = [
+        { header: 'Nome', key: 'nome', width: 30 },
+        { header: 'Email', key: 'email', width: 30 },
+        { header: 'Telefone', key: 'telefone', width: 18 },
+        { header: 'Cidade', key: 'cidade', width: 20 },
+        { header: 'Estado', key: 'estado', width: 10 },
+        { header: 'Receita Mensal', key: 'receita', width: 18 },
+        { header: 'Royalty (%)', key: 'royalty', width: 12 },
+        { header: 'Status', key: 'status', width: 12 },
+        { header: 'Data de Criação', key: 'criacao', width: 15 }
+      ]
 
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      // Estilizar header
+      worksheet.getRow(1).font = { bold: true }
+      worksheet.getRow(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF0F172A' }
+      }
+      worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } }
+
+      // Adicionar dados
+      academies.forEach(academy => {
+        worksheet.addRow({
+          nome: academy.name,
+          email: academy.email,
+          telefone: academy.phone || '',
+          cidade: academy.city || '',
+          estado: academy.state || '',
+          receita: academy.monthly_revenue,
+          royalty: academy.royalty_percentage,
+          status: academy.is_active ? 'Ativa' : 'Inativa',
+          criacao: new Date(academy.created_at).toLocaleDateString('pt-BR')
+        })
+      })
+
+      // Formatar coluna de receita como moeda
+      worksheet.getColumn('receita').numFmt = '"R$"#,##0.00'
+
+      // Gerar buffer e download
+      const buffer = await workbook.xlsx.writeBuffer()
+      const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      })
       const link = document.createElement('a')
-      link.href = URL.createObjectURL(blob)
-      link.download = `franquias_${new Date().toISOString().split('T')[0]}.csv`
+      const url = URL.createObjectURL(blob)
+      link.href = url
+      link.download = `franquias_${new Date().toISOString().split('T')[0]}.xlsx`
       link.click()
+      URL.revokeObjectURL(url)
 
       toast.success('Dados exportados com sucesso!')
     } catch (error) {
@@ -510,10 +544,7 @@ export default function DadosFranquiasPage() {
             </div>
           </div>
           <div className="flex flex-col sm:flex-row gap-3">
-            <Button variant="outline" onClick={handleExportData} className="w-full sm:w-auto">
-              <Download className="h-4 w-4 mr-2" />
-              Exportar CSV
-            </Button>
+            <ExportButton onClick={handleExportData} className="w-full sm:w-auto" />
             <Button
               className="bg-meu-primary hover:bg-meu-primary-dark text-white shadow-lg shadow-meu-primary/20 w-full sm:w-auto"
               onClick={handleAddFranchise}

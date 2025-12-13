@@ -85,7 +85,7 @@ export default function FranqueadoraSidebar({ isMobile = false, onNavigate }: Fr
           icon: Building,
           subItems: [
             { label: 'Visão Geral', href: '/franqueadora/dashboard/dados-franquias', icon: BarChart3 },
-            { label: 'Adicionar Nova', href: '/franqueadora/dashboard/add-franchise', icon: Building }
+            { label: 'Adicionar Nova', href: '/franqueadora/dashboard/nova-franquia', icon: Building }
           ]
         },
         {

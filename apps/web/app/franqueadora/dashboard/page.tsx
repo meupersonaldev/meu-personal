@@ -8,11 +8,8 @@ import {
   BarChart3,
   MapPin,
   Activity,
-  ArrowUpRight,
   TrendingUp,
-  Users,
-  Wallet,
-  PieChart
+  Wallet
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { useFranqueadoraStore } from '@/lib/stores/franqueadora-store'
@@ -289,10 +286,6 @@ export default function FranqueadoraDashboard() {
             <div className="w-full sm:w-auto">
               <FranqueadoraNotificationsDropdown />
             </div>
-            <Button size="lg" className="w-full sm:w-auto bg-meu-primary hover:bg-meu-primary-dark text-white shadow-lg shadow-meu-primary/20 transition-all hover:scale-105 active:scale-95">
-              <PieChart className="h-4 w-4 mr-2" />
-              Relatório Mensal
-            </Button>
           </div>
         </div>
 

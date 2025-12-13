@@ -32,6 +32,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { ExportButton } from '@/components/ui/export-button'
 import { useFranqueadoraStore, User, UsersResponse } from '@/lib/stores/franqueadora-store'
 import { toast } from 'sonner'
 import FranqueadoraGuard from '@/components/auth/franqueadora-guard'
@@ -828,15 +829,11 @@ function UsuariosPageContent() {
               Atualizar
             </Button>
 
-            <Button
-              variant="outline"
-              size="sm"
+            <ExportButton
               onClick={handleExportUsuarios}
-              disabled={!usersData.pagination.total || exporting}
-            >
-              <Download className={`h-4 w-4 mr-2 ${exporting ? 'animate-spin' : ''}`} />
-              {exporting ? 'Exportando...' : 'Exportar'}
-            </Button>
+              disabled={!usersData.pagination.total}
+              loading={exporting}
+            />
           </div>
 
         </div>

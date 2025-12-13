@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { ExportButton } from '@/components/ui/export-button'
 import { cn } from '@/lib/utils'
 import {
   Table,
@@ -411,14 +412,12 @@ export default function FranchiseLeadsPage() {
               Gerencie e acompanhe os interessados em abrir uma nova franquia.
             </p>
           </div>
-          <Button
+          <ExportButton
             onClick={handleExportLeads}
-            disabled={!total || exporting}
-            className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white shadow-sm shadow-green-600/20"
-          >
-            <Download className={`h-4 w-4 mr-2 ${exporting ? 'animate-spin' : ''}`} />
-            {exporting ? 'Exportando...' : 'Exportar Excel'}
-          </Button>
+            disabled={!total}
+            loading={exporting}
+            className="w-full sm:w-auto"
+          />
         </div>
 
         {/* Filters */}

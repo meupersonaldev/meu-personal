@@ -55,6 +55,7 @@ export default function AddFranchisePage() {
   const [currentStep, setCurrentStep] = useState(0)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
+
   const [formData, setFormData] = useState<FranchiseFormData>({
     name: '',
     email: '',
@@ -167,6 +168,7 @@ export default function AddFranchisePage() {
     return Object.keys(e).length === 0
   }
 
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
@@ -258,31 +260,29 @@ export default function AddFranchisePage() {
     router.push('/franqueadora/dashboard')
   }
 
+
   return (
     <FranqueadoraGuard requiredPermission="canCreateFranchise">
-      <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto pb-20">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
-          <div className="flex items-center space-x-4">
+      <div className="min-h-screen py-8 px-4">
+        <div className="max-w-3xl mx-auto">
+          {/* Header */}
+          <div className="text-center mb-8 relative">
             <Button
               variant="ghost"
               size="sm"
               onClick={handleCancel}
-              className="text-gray-500 hover:text-meu-primary -ml-2 h-10 w-10 rounded-full"
+              className="absolute left-0 top-0 text-gray-500 hover:text-meu-primary h-10 w-10 rounded-full"
             >
-              <ArrowLeft className="h-6 w-6" />
+              <ArrowLeft className="h-5 w-5" />
             </Button>
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-meu-primary tracking-tight">Nova Franquia</h1>
-              <p className="text-sm text-gray-500">Preencha os dados abaixo para cadastrar uma unidade.</p>
-            </div>
+            <h1 className="text-2xl font-bold text-meu-primary">Nova Franquia</h1>
+            <p className="text-sm text-gray-500 mt-1">Preencha os dados abaixo para cadastrar uma unidade.</p>
           </div>
-        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-8">
-          <WizardStepper steps={["Básico", "Financeiro", "Contrato & Admin"]} current={currentStep} />
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <WizardStepper steps={["Básico", "Financeiro", "Contrato & Admin"]} current={currentStep} />
 
-          <Card className="p-6">
+            <Card className="p-6 sm:p-8">
             {currentStep === 0 && (
               <BasicStep
                 data={{
@@ -339,8 +339,9 @@ export default function AddFranchisePage() {
                 submitting={isLoading}
               />
             )}
-          </Card>
-        </form>
+            </Card>
+          </form>
+        </div>
       </div>
     </FranqueadoraGuard>
   )
