@@ -364,6 +364,106 @@ export default function RelatoriosPage() {
     setModal(prev => ({ ...prev, isOpen: false }))
   }
 
+  // Função para exportar PDF apenas com texto (sem html2canvas)
+  const exportToPDFText = async () => {
+    setIsExporting(true)
+    
+    try {
+      const { default: jsPDF } = await import('jspdf')
+      
+      const pdf = new jsPDF('p', 'mm', 'a4')
+      const pageWidth = pdf.internal.pageSize.getWidth()
+      const pageHeight = pdf.internal.pageSize.getHeight()
+      let yPosition = 20
+      
+      // Função para adicionar texto com quebra de linha
+      const addText = (text: string, fontSize: number = 12, isBold: boolean = false) => {
+        pdf.setFontSize(fontSize)
+        pdf.setFont('helvetica', isBold ? 'bold' : 'normal')
+        
+        const lines = pdf.splitTextToSize(text, pageWidth - 40)
+        
+        // Verificar se precisa de nova página
+        if (yPosition + (lines.length * fontSize * 0.35) > pageHeight - 20) {
+          pdf.addPage()
+          yPosition = 20
+        }
+        
+        pdf.text(lines, 20, yPosition)
+        yPosition += lines.length * fontSize * 0.35 + 5
+      }
+      
+      // Cabeçalho
+      addText(`RELATÓRIO DETALHADO - ${franqueadora?.name?.toUpperCase() || 'MEU PERSONAL'}`, 16, true)
+      addText(`Gerado em: ${format(new Date(), 'dd/MM/yyyy HH:mm', { locale: ptBR })}`, 10)
+      yPosition += 10
+      
+      // Resumo Executivo
+      addText('RESUMO EXECUTIVO', 14, true)
+      addText(`Total de Franquias: ${academies.length}`, 12)
+      addText(`Crescimento (12 meses): +${monthlyData.reduce((acc, m) => acc + m.newFranchises, 0)} franquias`, 12)
+      addText(`Estados Ativos: ${regionStats.length}`, 12)
+      addText(`Receita Total: R$ ${(academies.reduce((acc, a) => acc + Number(a.monthly_revenue || 0), 0) / 1000).toFixed(0)}k/mês`, 12)
+      yPosition += 10
+      
+      // Evolução Mensal
+      addText('EVOLUÇÃO MENSAL - ÚLTIMOS 12 MESES', 14, true)
+      monthlyData.forEach(data => {
+        addText(`${data.fullMonth}: ${data.newFranchises} novas franquias (Total: ${data.totalFranchises})`, 10)
+      })
+      yPosition += 10
+      
+      // Distribuição por Estado
+      addText('DISTRIBUIÇÃO POR ESTADO', 14, true)
+      regionStats.forEach((region, index) => {
+        addText(`${index + 1}º ${region.region}: ${region.count} franquias, ${region.cities} cidades, R$ ${(region.revenue / 1000).toFixed(1)}k/mês`, 10)
+      })
+      yPosition += 10
+      
+      // Lista de Franquias
+      addText('LISTA COMPLETA DE FRANQUIAS', 14, true)
+      const sortedAcademies = academies
+        .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+        .slice(0, 20) // Limitar para não ficar muito longo
+      
+      sortedAcademies.forEach((academy, index) => {
+        const openDate = academy.created_at ? format(new Date(academy.created_at), 'dd/MM/yyyy', { locale: ptBR }) : 'N/A'
+        const revenue = (Number(academy.monthly_revenue || 0) / 1000).toFixed(1)
+        addText(`${index + 1}. ${academy.name} - ${academy.city}, ${academy.state} - Aberta: ${openDate} - R$ ${revenue}k/mês`, 9)
+      })
+      
+      if (academies.length > 20) {
+        addText(`... e mais ${academies.length - 20} franquias`, 9)
+      }
+      
+      // Rodapé
+      pdf.setFontSize(8)
+      pdf.text(`Relatório gerado automaticamente pelo sistema Meu Personal`, pageWidth / 2, pageHeight - 10, { align: 'center' })
+      
+      // Salvar
+      const fileName = `relatorio-texto-${franqueadora?.name?.toLowerCase().replace(/\s+/g, '-') || 'franqueadora'}-${format(new Date(), 'yyyy-MM-dd')}.pdf`
+      pdf.save(fileName)
+      
+      setModal({
+        isOpen: true,
+        type: 'success',
+        title: 'PDF Gerado com Sucesso!',
+        message: `Relatório em texto salvo como "${fileName}"`
+      })
+      
+    } catch (error) {
+      console.error('Erro ao gerar PDF texto:', error)
+      setModal({
+        isOpen: true,
+        type: 'error',
+        title: 'Erro ao Gerar PDF',
+        message: 'Não foi possível gerar o relatório. Use a opção "Imprimir" como alternativa.'
+      })
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   // Função de fallback mais simples para casos de erro CSS
   const exportToPDFSimple = async () => {
     if (!reportRef.current) return
@@ -436,10 +536,29 @@ export default function RelatoriosPage() {
 
   return (
     <FranqueadoraGuard requiredPermission="canViewDashboard">
+      <style jsx global>{`
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          [data-pdf-content], [data-pdf-content] * {
+            visibility: visible;
+          }
+          [data-pdf-content] {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+          }
+          .no-print {
+            display: none !important;
+          }
+        }
+      `}</style>
       <div className="p-3 sm:p-4 lg:p-8 min-h-screen space-y-6">
         <div ref={reportRef} data-pdf-content className="space-y-6 bg-white p-4">
         {/* Header */}
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 no-print">
           <div className="flex items-center gap-4">
             <Button 
               variant="ghost" 
@@ -454,15 +573,25 @@ export default function RelatoriosPage() {
               <p className="text-gray-500 text-sm">Análise completa do crescimento da rede</p>
             </div>
           </div>
-          <Button 
-            variant="outline" 
-            className="w-full lg:w-auto"
-            onClick={exportToPDF}
-            disabled={isExporting}
-          >
-            <Download className={`h-4 w-4 mr-2 ${isExporting ? 'animate-spin' : ''}`} />
-            {isExporting ? 'Gerando PDF...' : 'Exportar PDF'}
-          </Button>
+          <divtonassName="flex gap-2 w-full lg:w-auto">
+            <Button 
+              variant="outline" 
+              className="flex-1 lg:flex-none"
+              onClick={exportToPDFText}
+              disabled={isExporting}
+            >
+              <Download className={`h-4 w-4 mr-2 ${isExporting ? 'animate-spin' : ''}`} />
+              {isExporting ? 'Gerando PDF...' : 'Exportar PDF'}
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={() => window.print()}
+              className="text-xs"
+            >
+              Imprimir
+            </Button>
+          </div>
         </div>
 
         {/* Resumo Executivo */}
