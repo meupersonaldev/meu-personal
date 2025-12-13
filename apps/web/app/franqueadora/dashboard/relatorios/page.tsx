@@ -182,11 +182,21 @@ export default function RelatoriosPage() {
             const elementsWithProblematicClasses = clonedElement.querySelectorAll('*')
             elementsWithProblematicClasses.forEach(el => {
               // Remover classes que podem ter cores lab(), oklch(), etc.
-              if (el.className) {
+              if (el.className && typeof el.className === 'string') {
                 el.className = el.className
                   .split(' ')
                   .filter(cls => !cls.includes('animate') && !cls.includes('transition'))
                   .join(' ')
+              } else if (el.classList && el.classList.length > 0) {
+                // Usar classList se className não for string
+                const classesToRemove = []
+                for (let i = 0; i < el.classList.length; i++) {
+                  const cls = el.classList[i]
+                  if (cls.includes('animate') || cls.includes('transition')) {
+                    classesToRemove.push(cls)
+                  }
+                }
+                classesToRemove.forEach(cls => el.classList.remove(cls))
               }
               
               // Forçar cores básicas para evitar problemas
