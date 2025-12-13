@@ -125,34 +125,109 @@ router.get('/:id',
  * POST /api/email-logs/webhook/resend
  * Resend webhook endpoint for delivery status updates
  * 
- * This endpoint should be configured in Resend dashboard:
- * https://resend.com/webhooks
+ * Configure in Resend dashboard: https://resend.com/webhooks
+ * Webhook URL: https://your-api-domain.com/api/email-logs/webhook/resend
+ * 
+ * Events to subscribe:
+ * - email.sent
+ * - email.delivered
+ * - email.opened
+ * - email.clicked
+ * - email.bounced
+ * - email.complained
+ * - email.delivery_delayed
+ * 
+ * Environment variables needed:
+ * - RESEND_API_KEY: Your Resend API key
+ * - RESEND_WEBHOOK_SECRET: (optional) Webhook signing secret for verification
+ * - RESEND_FROM_EMAIL: Verified sender email (e.g., noreply@yourdomain.com)
+ * - RESEND_FROM_NAME: Sender name (e.g., "Meu Personal")
  */
 router.post('/webhook/resend',
   asyncErrorHandler(async (req, res) => {
-    // Verify webhook signature (optional but recommended)
-    const signature = req.headers['svix-signature']
     const webhookSecret = process.env.RESEND_WEBHOOK_SECRET
-
-    // If webhook secret is configured, verify signature
-    if (webhookSecret && signature) {
-      // TODO: Implement signature verification
-      // For now, we'll process all webhooks
-      console.log('[EMAIL-LOGS] Webhook signature present, verification not implemented yet')
+    
+    // Verify webhook signature if secret is configured
+    if (webhookSecret) {
+      const svixId = req.headers['svix-id'] as string
+      const svixTimestamp = req.headers['svix-timestamp'] as string
+      const svixSignature = req.headers['svix-signature'] as string
+      
+      if (!svixId || !svixTimestamp || !svixSignature) {
+        console.warn('[EMAIL-LOGS] Missing Svix headers for webhook verification')
+        // Continue processing but log warning
+      } else {
+        // Verify timestamp is recent (within 5 minutes)
+        const timestamp = parseInt(svixTimestamp, 10)
+        const now = Math.floor(Date.now() / 1000)
+        if (Math.abs(now - timestamp) > 300) {
+          console.warn('[EMAIL-LOGS] Webhook timestamp too old, possible replay attack')
+          return res.status(400).json({ error: 'Timestamp too old' })
+        }
+        
+        // TODO: Full signature verification with crypto
+        // For production, implement HMAC-SHA256 verification
+        console.log('[EMAIL-LOGS] Webhook headers present, timestamp valid')
+      }
     }
 
     const event = req.body
 
-    console.log('[EMAIL-LOGS] Received Resend webhook:', event.type)
+    if (!event || !event.type) {
+      console.warn('[EMAIL-LOGS] Invalid webhook payload')
+      return res.status(400).json({ error: 'Invalid payload' })
+    }
+
+    console.log('[EMAIL-LOGS] Received Resend webhook:', event.type, event.data?.email_id || '')
 
     try {
       await emailUnifiedService.processResendWebhook(event)
       return res.json({ received: true })
     } catch (error: any) {
       console.error('[EMAIL-LOGS] Webhook processing error:', error.message)
-      // Still return 200 to prevent Resend from retrying
+      // Return 200 to prevent Resend from retrying failed webhooks
       return res.json({ received: true, error: error.message })
     }
+  })
+)
+
+/**
+ * GET /api/email-logs/provider/status
+ * Check email provider configuration status
+ */
+router.get('/provider/status',
+  requireAuth,
+  requireRole(['SUPER_ADMIN']),
+  asyncErrorHandler(async (req, res) => {
+    const providerInfo = emailUnifiedService.getActiveProvider()
+    
+    const resendConfigured = !!process.env.RESEND_API_KEY
+    const smtpConfigured = !!(
+      process.env.SMTP_HOST &&
+      process.env.SMTP_PORT &&
+      process.env.SMTP_USER &&
+      process.env.SMTP_PASS
+    )
+    
+    return res.json({
+      success: true,
+      data: {
+        activeProvider: providerInfo.provider,
+        configured: providerInfo.configured,
+        providers: {
+          resend: {
+            configured: resendConfigured,
+            features: ['delivery_tracking', 'open_tracking', 'click_tracking', 'bounce_detection', 'spam_complaints'],
+            webhookUrl: resendConfigured ? `${process.env.API_URL || 'https://api.meupersonalfranquia.com.br'}/api/email-logs/webhook/resend` : null
+          },
+          smtp: {
+            configured: smtpConfigured,
+            features: ['basic_sending'],
+            note: 'SMTP não suporta rastreamento de abertura/clique'
+          }
+        }
+      }
+    })
   })
 )
 

@@ -84,7 +84,9 @@ const templateNames: Record<string, string> = {
   'student-linked': 'Aluno Vinculado',
   'teacher-approved': 'Professor Aprovado',
   'teacher-rejected': 'Professor Rejeitado',
-  'password-reset': 'Redefinição de Senha'
+  'password-reset': 'Redefinição de Senha',
+  'policy-published': 'Política Publicada',
+  'policy-rollback': 'Rollback de Política'
 }
 
 export default function EmailHistoryPage() {
@@ -230,6 +232,29 @@ export default function EmailHistoryPage() {
             Atualizar Dados
           </Button>
         </div>
+
+        {/* Provider Info Banner */}
+        {stats && (
+          <div className={cn(
+            "rounded-lg p-4 flex items-center gap-3 border",
+            stats.provider === 'resend' 
+              ? "bg-emerald-50 border-emerald-200" 
+              : "bg-amber-50 border-amber-200"
+          )}>
+            <Info className={cn("h-5 w-5 shrink-0", stats.provider === 'resend' ? "text-emerald-600" : "text-amber-600")} />
+            <div className="flex-1">
+              {stats.provider === 'resend' ? (
+                <p className="text-sm text-emerald-800">
+                  <span className="font-medium">Resend ativo</span> — Rastreamento completo habilitado (entrega, abertura, cliques, bounces)
+                </p>
+              ) : (
+                <p className="text-sm text-amber-800">
+                  <span className="font-medium">SMTP ativo</span> — Apenas envio básico. Configure o Resend para rastrear aberturas e cliques.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Stats Cards */}
         {stats && (
