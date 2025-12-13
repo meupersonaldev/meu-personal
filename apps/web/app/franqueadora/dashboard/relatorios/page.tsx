@@ -172,64 +172,108 @@ export default function RelatoriosPage() {
                  element.tagName === 'STYLE'
         },
         onclone: (clonedDoc) => {
-          // Limpar estilos problemáticos no documento clonado
-          const clonedElement = clonedDoc.querySelector('[data-pdf-content]')
-          if (clonedElement) {
-            clonedElement.style.display = 'block'
-            clonedElement.style.visibility = 'visible'
+          try {
+            // Remover TODOS os estilos existentes para evitar problemas
+            const existingStyles = clonedDoc.querySelectorAll('style, link[rel="stylesheet"]')
+            existingStyles.forEach(style => style.remove())
             
-            // Remover classes que podem ter cores CSS modernas
-            const elementsWithProblematicClasses = clonedElement.querySelectorAll('*')
-            elementsWithProblematicClasses.forEach(el => {
-              // Remover classes que podem ter cores lab(), oklch(), etc.
-              if (el.className && typeof el.className === 'string') {
-                el.className = el.className
-                  .split(' ')
-                  .filter(cls => !cls.includes('animate') && !cls.includes('transition'))
-                  .join(' ')
-              } else if (el.classList && el.classList.length > 0) {
-                // Usar classList se className não for string
-                const classesToRemove = []
-                for (let i = 0; i < el.classList.length; i++) {
-                  const cls = el.classList[i]
-                  if (cls.includes('animate') || cls.includes('transition')) {
-                    classesToRemove.push(cls)
-                  }
-                }
-                classesToRemove.forEach(cls => el.classList.remove(cls))
-              }
+            // Limpar estilos problemáticos no documento clonado
+            const clonedElement = clonedDoc.querySelector('[data-pdf-content]')
+            if (clonedElement) {
+              clonedElement.style.display = 'block'
+              clonedElement.style.visibility = 'visible'
               
-              // Forçar cores básicas para evitar problemas
-              const computedStyle = window.getComputedStyle(el)
-              if (computedStyle.color && (computedStyle.color.includes('lab') || computedStyle.color.includes('oklch'))) {
-                el.style.color = '#000000'
-              }
-              if (computedStyle.backgroundColor && (computedStyle.backgroundColor.includes('lab') || computedStyle.backgroundColor.includes('oklch'))) {
-                el.style.backgroundColor = '#ffffff'
-              }
-            })
-          }
-          
-          // Adicionar CSS para sobrescrever cores problemáticas
-          const style = clonedDoc.createElement('style')
-          style.textContent = `
-            * {
-              color: inherit !important;
-              background-color: inherit !important;
+              // Remover TODAS as classes CSS para evitar problemas
+              const allElements = clonedElement.querySelectorAll('*')
+              allElements.forEach(el => {
+                // Limpar completamente as classes
+                if (el.classList) {
+                  el.className = ''
+                }
+                
+                // Aplicar estilos inline básicos diretamente
+                el.style.cssText = ''
+                
+                // Definir estilos básicos baseados no tipo de elemento
+                if (el.tagName === 'H1') {
+                  el.style.fontSize = '24px'
+                  el.style.fontWeight = 'bold'
+                  el.style.color = '#002C4E'
+                  el.style.marginBottom = '16px'
+                } else if (el.tagName === 'H2') {
+                  el.style.fontSize = '20px'
+                  el.style.fontWeight = 'bold'
+                  el.style.color = '#002C4E'
+                  el.style.marginBottom = '12px'
+                } else if (el.tagName === 'H3') {
+                  el.style.fontSize = '18px'
+                  el.style.fontWeight = 'bold'
+                  el.style.color = '#111827'
+                  el.style.marginBottom = '8px'
+                } else if (el.tagName === 'P') {
+                  el.style.fontSize = '14px'
+                  el.style.color = '#374151'
+                  el.style.marginBottom = '8px'
+                } else if (el.tagName === 'TD' || el.tagName === 'TH') {
+                  el.style.padding = '8px'
+                  el.style.borderBottom = '1px solid #e5e7eb'
+                  el.style.fontSize = '12px'
+                  el.style.color = '#374151'
+                } else if (el.tagName === 'TABLE') {
+                  el.style.width = '100%'
+                  el.style.borderCollapse = 'collapse'
+                } else {
+                  el.style.color = '#374151'
+                }
+                
+                // Garantir fundo branco para cards
+                if (el.getAttribute('data-card') || el.classList?.contains('card')) {
+                  el.style.backgroundColor = '#ffffff'
+                  el.style.border = '1px solid #e5e7eb'
+                  el.style.borderRadius = '8px'
+                  el.style.padding = '16px'
+                  el.style.marginBottom = '16px'
+                }
+              })
             }
-            .text-meu-primary { color: #002C4E !important; }
-            .bg-meu-primary { background-color: #002C4E !important; }
-            .text-green-600 { color: #059669 !important; }
-            .bg-green-100 { background-color: #dcfce7 !important; }
-            .text-red-600 { color: #dc2626 !important; }
-            .bg-red-100 { background-color: #fee2e2 !important; }
-            .text-gray-900 { color: #111827 !important; }
-            .text-gray-600 { color: #4b5563 !important; }
-            .text-gray-500 { color: #6b7280 !important; }
-            .bg-gray-50 { background-color: #f9fafb !important; }
-            .bg-white { background-color: #ffffff !important; }
-          `
-          clonedDoc.head.appendChild(style)
+            
+            // Adicionar CSS ultra-básico e seguro
+            const style = clonedDoc.createElement('style')
+            style.textContent = `
+              * {
+                box-sizing: border-box;
+                font-family: Arial, sans-serif !important;
+              }
+              body {
+                margin: 0;
+                padding: 20px;
+                background-color: #ffffff !important;
+                color: #000000 !important;
+              }
+              .space-y-6 > * + * {
+                margin-top: 24px;
+              }
+              .grid {
+                display: grid;
+                gap: 16px;
+              }
+              .grid-cols-4 {
+                grid-template-columns: repeat(4, 1fr);
+              }
+              .flex {
+                display: flex;
+              }
+              .items-center {
+                align-items: center;
+              }
+              .justify-between {
+                justify-content: space-between;
+              }
+            `
+            clonedDoc.head.appendChild(style)
+          } catch (error) {
+            console.warn('Erro ao limpar estilos:', error)
+          }
         }
       })
       
@@ -423,7 +467,7 @@ export default function RelatoriosPage() {
 
         {/* Resumo Executivo */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="border-gray-200">
+          <Card className="border-gray-200" data-card>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -477,7 +521,7 @@ export default function RelatoriosPage() {
         </div>
 
         {/* Gráfico de Crescimento Detalhado */}
-        <Card className="border-gray-200">
+        <Card className="border-gray-200" data-card>
           <CardHeader>
             <CardTitle className="text-lg font-bold text-gray-900">Evolução Mensal - Últimos 12 Meses</CardTitle>
             <CardDescription>Novas franquias abertas por mês e total acumulado</CardDescription>
@@ -520,7 +564,7 @@ export default function RelatoriosPage() {
         </Card>
 
         {/* Análise por Região */}
-        <Card className="border-gray-200">
+        <Card className="border-gray-200" data-card>
           <CardHeader>
             <CardTitle className="text-lg font-bold text-gray-900">Distribuição por Estado</CardTitle>
             <CardDescription>Concentração de franquias por região</CardDescription>
@@ -557,7 +601,7 @@ export default function RelatoriosPage() {
         </Card>
 
         {/* Lista Completa de Franquias */}
-        <Card className="border-gray-200">
+        <Card className="border-gray-200" data-card>
           <CardHeader>
             <CardTitle className="text-lg font-bold text-gray-900">Todas as Franquias</CardTitle>
             <CardDescription>Lista completa ordenada por data de abertura</CardDescription>
