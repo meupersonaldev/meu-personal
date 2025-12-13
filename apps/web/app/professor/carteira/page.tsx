@@ -52,6 +52,8 @@ interface FinancialSummary {
   totalHoursGiven: number
   totalHoursBought: number
   averageTicket: number
+  availableHours: number
+  pendingHours: number
 }
 
 export default function ProfessorCarteira() {
@@ -65,7 +67,9 @@ export default function ProfessorCarteira() {
     projectedRevenue: 0,
     totalHoursGiven: 0,
     totalHoursBought: 0,
-    averageTicket: 0
+    averageTicket: 0,
+    availableHours: 0,
+    pendingHours: 0
   })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -100,6 +104,7 @@ export default function ProfessorCarteira() {
         const statsResponse = await fetch(`${API_URL}/api/teachers/${user.id}/stats`, { headers })
         const statsData = await statsResponse.json()
         const hourlyRate = statsData.hourly_rate || 0
+        const hourBalance = statsData.hour_balance || { available_hours: 0, pending_hours: 0 }
 
         // 2. Buscar Transações de Horas (Compras e Consumo Academia)
         const txResponse = await fetch(`${API_URL}/api/teachers/${user.id}/transactions`, { headers })
@@ -273,7 +278,9 @@ export default function ProfessorCarteira() {
           projectedRevenue,
           totalHoursGiven,
           totalHoursBought,
-          averageTicket: completedClassesCount > 0 ? totalRevenue / completedClassesCount : 0
+          averageTicket: completedClassesCount > 0 ? totalRevenue / completedClassesCount : 0,
+          availableHours: hourBalance.available_hours || 0,
+          pendingHours: hourBalance.pending_hours || 0
         })
 
       } catch (err) {
@@ -378,9 +385,6 @@ export default function ProfessorCarteira() {
   if (loading) return <ProfessorLayout><div className="h-96 flex items-center justify-center"><Loader2 className="animate-spin h-8 w-8 text-blue-600" /></div></ProfessorLayout>
 
   if (isNotApproved) return <ProfessorLayout><div className="p-6"><ApprovalBanner approvalStatus={approvalStatus} userName={user?.name} /><ApprovalBlock approvalStatus={approvalStatus} title="Financeiro Bloqueado" message="Aguarde aprovação." fullPage /></div></ProfessorLayout>
-
-  // Derived state for display
-  const hoursBalance = summary.totalHoursBought - summary.totalHoursGiven
 
   return (
     <ProfessorLayout>
@@ -650,12 +654,28 @@ export default function ProfessorCarteira() {
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-indigo-100 uppercase tracking-wider">Saldo de Horas</CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">{formatHours(hoursBalance)}</div>
-                <p className="text-indigo-200 text-sm mt-1 flex items-center gap-1">
-                  <Wallet className="h-3 w-3" />
-                  Disponíveis para uso
-                </p>
+              <CardContent className="space-y-3">
+                <div>
+                  <div className="text-3xl font-bold">{formatHours(summary.availableHours)}</div>
+                  <p className="text-indigo-200 text-sm flex items-center gap-1">
+                    <Wallet className="h-3 w-3" />
+                    Disponíveis para uso
+                  </p>
+                </div>
+                {summary.pendingHours > 0 && (
+                  <div className="pt-2 border-t border-indigo-500/30">
+                    <div className="flex items-center justify-between">
+                      <span className="text-indigo-200 text-sm flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        Pendentes
+                      </span>
+                      <span className="text-lg font-semibold text-amber-300">{formatHours(summary.pendingHours)}</span>
+                    </div>
+                    <p className="text-indigo-300/70 text-xs mt-1">
+                      Liberadas após conclusão das aulas
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
