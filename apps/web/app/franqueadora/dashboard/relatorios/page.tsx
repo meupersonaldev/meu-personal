@@ -119,247 +119,6 @@ export default function RelatoriosPage() {
 
   const regionStats = getRegionStats()
 
-  // Função para exportar PDF
-  const exportToPDF = async () => {
-    if (!reportRef.current) {
-      setModal({
-        isOpen: true,
-        type: 'error',
-        title: 'Erro ao Gerar PDF',
-        message: 'Conteúdo do relatório não encontrado. Recarregue a página e tente novamente.'
-      })
-      return
-    }
-    
-    setIsExporting(true)
-    
-    try {
-      // Importar bibliotecas dinamicamente
-      console.log('Importando bibliotecas...')
-      
-      const jsPDFModule = await import('jspdf').catch(err => {
-        console.error('Erro ao importar jsPDF:', err)
-        throw new Error('Falha ao carregar biblioteca jsPDF')
-      })
-      
-      const html2canvasModule = await import('html2canvas').catch(err => {
-        console.error('Erro ao importar html2canvas:', err)
-        throw new Error('Falha ao carregar biblioteca html2canvas')
-      })
-      
-      const jsPDF = jsPDFModule.default
-      const html2canvas = html2canvasModule.default
-      
-      if (!jsPDF || !html2canvas) {
-        throw new Error('Bibliotecas não carregaram corretamente')
-      }
-      
-      console.log('Bibliotecas carregadas, gerando canvas...')
-      
-      // Configurar o canvas com configurações mais simples
-      const canvas = await html2canvas(reportRef.current, {
-        scale: 1.2,
-        useCORS: true,
-        allowTaint: false,
-        backgroundColor: '#ffffff',
-        logging: false,
-        removeContainer: true,
-        imageTimeout: 15000,
-        ignoreElements: (element) => {
-          // Ignorar elementos que podem causar problemas
-          return element.classList?.contains('animate-spin') || 
-                 element.tagName === 'SCRIPT' ||
-                 element.tagName === 'STYLE'
-        },
-        onclone: (clonedDoc) => {
-          try {
-            // Remover TODOS os estilos existentes para evitar problemas
-            const existingStyles = clonedDoc.querySelectorAll('style, link[rel="stylesheet"]')
-            existingStyles.forEach(style => style.remove())
-            
-            // Limpar estilos problemáticos no documento clonado
-            const clonedElement = clonedDoc.querySelector('[data-pdf-content]')
-            if (clonedElement) {
-              clonedElement.style.display = 'block'
-              clonedElement.style.visibility = 'visible'
-              
-              // Remover TODAS as classes CSS para evitar problemas
-              const allElements = clonedElement.querySelectorAll('*')
-              allElements.forEach(el => {
-                // Limpar completamente as classes
-                if (el.classList) {
-                  el.className = ''
-                }
-                
-                // Aplicar estilos inline básicos diretamente
-                el.style.cssText = ''
-                
-                // Definir estilos básicos baseados no tipo de elemento
-                if (el.tagName === 'H1') {
-                  el.style.fontSize = '24px'
-                  el.style.fontWeight = 'bold'
-                  el.style.color = '#002C4E'
-                  el.style.marginBottom = '16px'
-                } else if (el.tagName === 'H2') {
-                  el.style.fontSize = '20px'
-                  el.style.fontWeight = 'bold'
-                  el.style.color = '#002C4E'
-                  el.style.marginBottom = '12px'
-                } else if (el.tagName === 'H3') {
-                  el.style.fontSize = '18px'
-                  el.style.fontWeight = 'bold'
-                  el.style.color = '#111827'
-                  el.style.marginBottom = '8px'
-                } else if (el.tagName === 'P') {
-                  el.style.fontSize = '14px'
-                  el.style.color = '#374151'
-                  el.style.marginBottom = '8px'
-                } else if (el.tagName === 'TD' || el.tagName === 'TH') {
-                  el.style.padding = '8px'
-                  el.style.borderBottom = '1px solid #e5e7eb'
-                  el.style.fontSize = '12px'
-                  el.style.color = '#374151'
-                } else if (el.tagName === 'TABLE') {
-                  el.style.width = '100%'
-                  el.style.borderCollapse = 'collapse'
-                } else {
-                  el.style.color = '#374151'
-                }
-                
-                // Garantir fundo branco para cards
-                if (el.getAttribute('data-card') || el.classList?.contains('card')) {
-                  el.style.backgroundColor = '#ffffff'
-                  el.style.border = '1px solid #e5e7eb'
-                  el.style.borderRadius = '8px'
-                  el.style.padding = '16px'
-                  el.style.marginBottom = '16px'
-                }
-              })
-            }
-            
-            // Adicionar CSS ultra-básico e seguro
-            const style = clonedDoc.createElement('style')
-            style.textContent = `
-              * {
-                box-sizing: border-box;
-                font-family: Arial, sans-serif !important;
-              }
-              body {
-                margin: 0;
-                padding: 20px;
-                background-color: #ffffff !important;
-                color: #000000 !important;
-              }
-              .space-y-6 > * + * {
-                margin-top: 24px;
-              }
-              .grid {
-                display: grid;
-                gap: 16px;
-              }
-              .grid-cols-4 {
-                grid-template-columns: repeat(4, 1fr);
-              }
-              .flex {
-                display: flex;
-              }
-              .items-center {
-                align-items: center;
-              }
-              .justify-between {
-                justify-content: space-between;
-              }
-            `
-            clonedDoc.head.appendChild(style)
-          } catch (error) {
-            console.warn('Erro ao limpar estilos:', error)
-          }
-        }
-      })
-      
-      console.log('Canvas gerado, criando PDF...')
-      
-      const imgData = canvas.toDataURL('image/png', 0.95)
-      const pdf = new jsPDF('p', 'mm', 'a4')
-      
-      // Calcular dimensões
-      const pdfWidth = pdf.internal.pageSize.getWidth()
-      const pdfHeight = pdf.internal.pageSize.getHeight()
-      const canvasAspectRatio = canvas.height / canvas.width
-      
-      // Calcular tamanho da imagem mantendo proporção
-      let imgWidth = pdfWidth - 20 // margem de 10mm de cada lado
-      let imgHeight = imgWidth * canvasAspectRatio
-      
-      // Se a altura for maior que a página, ajustar
-      if (imgHeight > pdfHeight - 40) {
-        imgHeight = pdfHeight - 40
-        imgWidth = imgHeight / canvasAspectRatio
-      }
-      
-      const imgX = (pdfWidth - imgWidth) / 2
-      const imgY = 20
-      
-      // Adicionar cabeçalho
-      pdf.setFontSize(16)
-      pdf.setFont('helvetica', 'bold')
-      pdf.text(`Relatório Detalhado - ${franqueadora?.name || 'Meu Personal'}`, pdfWidth / 2, 15, { align: 'center' })
-      
-      // Adicionar imagem
-      pdf.addImage(imgData, 'PNG', imgX, imgY, imgWidth, imgHeight)
-      
-      // Adicionar rodapé
-      pdf.setFontSize(8)
-      pdf.setFont('helvetica', 'normal')
-      pdf.text(`Gerado em: ${format(new Date(), 'dd/MM/yyyy HH:mm', { locale: ptBR })}`, pdfWidth / 2, pdfHeight - 5, { align: 'center' })
-      
-      // Salvar o PDF
-      const fileName = `relatorio-${franqueadora?.name?.toLowerCase().replace(/\s+/g, '-') || 'franqueadora'}-${format(new Date(), 'yyyy-MM-dd')}.pdf`
-      
-      console.log('Salvando PDF:', fileName)
-      pdf.save(fileName)
-      
-      // Mostrar sucesso
-      setModal({
-        isOpen: true,
-        type: 'success',
-        title: 'PDF Gerado com Sucesso!',
-        message: `O relatório "${fileName}" foi baixado com sucesso.`
-      })
-      
-    } catch (error: any) {
-      console.error('Erro detalhado ao gerar PDF:', error)
-      
-      let errorMessage = 'Não foi possível gerar o relatório.'
-      
-      if (error.message?.includes('color function') || error.message?.includes('lab') || error.message?.includes('oklch')) {
-        errorMessage = 'Erro de compatibilidade com estilos CSS. Tentando novamente com configurações simplificadas...'
-        
-        // Tentar novamente com configurações mais básicas
-        setTimeout(() => {
-          exportToPDFSimple()
-        }, 1000)
-        return
-      } else if (error.message?.includes('html2canvas')) {
-        errorMessage = 'Erro ao capturar o conteúdo da página. Tente recarregar a página.'
-      } else if (error.message?.includes('jsPDF')) {
-        errorMessage = 'Erro ao gerar o arquivo PDF. Verifique se há espaço suficiente no disco.'
-      } else if (error.message?.includes('network') || error.message?.includes('fetch')) {
-        errorMessage = 'Erro de conexão. Verifique sua internet e tente novamente.'
-      }
-      
-      // Mostrar erro
-      setModal({
-        isOpen: true,
-        type: 'error',
-        title: 'Erro ao Gerar PDF',
-        message: errorMessage
-      })
-    } finally {
-      setIsExporting(false)
-    }
-  }
-
   const closeModal = () => {
     setModal(prev => ({ ...prev, isOpen: false }))
   }
@@ -458,12 +217,12 @@ export default function RelatoriosPage() {
       yPosition += 15
       
       // === RESUMO EXECUTIVO ===
-      addSection('📊 RESUMO EXECUTIVO', () => {
+      addSection('RESUMO EXECUTIVO', () => {
         const stats = [
-          { label: 'Total de Franquias', value: academies.length.toString(), icon: '🏢' },
-          { label: 'Crescimento (12 meses)', value: `+${monthlyData.reduce((acc, m) => acc + m.newFranchises, 0)} franquias`, icon: '📈' },
-          { label: 'Estados Ativos', value: regionStats.length.toString(), icon: '🗺️' },
-          { label: 'Receita Total Mensal', value: `R$ ${(academies.reduce((acc, a) => acc + Number(a.monthly_revenue || 0), 0) / 1000).toFixed(0)}k`, icon: '💰' }
+          { label: 'Total de Franquias', value: academies.length.toString() },
+          { label: 'Crescimento (12 meses)', value: `+${monthlyData.reduce((acc, m) => acc + m.newFranchises, 0)} franquias` },
+          { label: 'Estados Ativos', value: regionStats.length.toString() },
+          { label: 'Receita Total Mensal', value: `R$ ${(academies.reduce((acc, a) => acc + Number(a.monthly_revenue || 0), 0) / 1000).toFixed(0)}k` }
         ]
         
         stats.forEach((stat, index) => {
@@ -476,7 +235,7 @@ export default function RelatoriosPage() {
           pdf.setFontSize(10)
           pdf.setFont('helvetica', 'bold')
           pdf.setTextColor(...primaryColor)
-          pdf.text(`${stat.icon} ${stat.label}`, x, y - 2)
+          pdf.text(stat.label, x, y - 2)
           
           pdf.setFontSize(12)
           pdf.setFont('helvetica', 'bold')
@@ -488,7 +247,7 @@ export default function RelatoriosPage() {
       })
       
       // === EVOLUÇÃO MENSAL ===
-      addSection('📈 EVOLUÇÃO MENSAL - ÚLTIMOS 12 MESES', () => {
+      addSection('EVOLUCAO MENSAL - ULTIMOS 12 MESES', () => {
         // Cabeçalho da tabela
         pdf.setFontSize(9)
         pdf.setFont('helvetica', 'bold')
@@ -523,7 +282,7 @@ export default function RelatoriosPage() {
       })
       
       // === DISTRIBUIÇÃO POR ESTADO ===
-      addSection('🗺️ DISTRIBUIÇÃO POR ESTADO', () => {
+      addSection('DISTRIBUICAO POR ESTADO', () => {
         regionStats.slice(0, 10).forEach((region, index) => {
           const isTop3 = index < 3
           const bgColor = isTop3 ? [254, 249, 195] : [249, 250, 251]
@@ -552,7 +311,7 @@ export default function RelatoriosPage() {
       })
       
       // === LISTA DE FRANQUIAS ===
-      addSection('🏢 FRANQUIAS MAIS RECENTES', () => {
+      addSection('FRANQUIAS MAIS RECENTES', () => {
         const recentAcademies = academies
           .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
           .slice(0, 15)
@@ -629,68 +388,6 @@ export default function RelatoriosPage() {
     }
   }
 
-  // Função de fallback mais simples para casos de erro CSS
-  const exportToPDFSimple = async () => {
-    if (!reportRef.current) return
-    
-    try {
-      const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
-        import('jspdf'),
-        import('html2canvas')
-      ])
-      
-      // Configuração muito básica para evitar problemas CSS
-      const canvas = await html2canvas(reportRef.current, {
-        scale: 1,
-        useCORS: false,
-        allowTaint: true,
-        backgroundColor: '#ffffff',
-        logging: false,
-        width: 800,
-        height: 1200,
-        onclone: (clonedDoc) => {
-          // Aplicar estilos inline básicos
-          const style = clonedDoc.createElement('style')
-          style.textContent = `
-            * { 
-              color: #000 !important; 
-              background-color: transparent !important;
-              font-family: Arial, sans-serif !important;
-            }
-            .bg-white { background-color: #fff !important; }
-          `
-          clonedDoc.head.appendChild(style)
-        }
-      })
-      
-      const pdf = new jsPDF('p', 'mm', 'a4')
-      const imgData = canvas.toDataURL('image/png')
-      
-      pdf.addImage(imgData, 'PNG', 10, 10, 190, 270)
-      
-      const fileName = `relatorio-simples-${format(new Date(), 'yyyy-MM-dd')}.pdf`
-      pdf.save(fileName)
-      
-      setModal({
-        isOpen: true,
-        type: 'success',
-        title: 'PDF Gerado!',
-        message: `Relatório salvo como "${fileName}" (versão simplificada)`
-      })
-      
-    } catch (error) {
-      console.error('Erro na versão simplificada:', error)
-      setModal({
-        isOpen: true,
-        type: 'error',
-        title: 'Erro ao Gerar PDF',
-        message: 'Não foi possível gerar o relatório mesmo com configurações simplificadas. Tente usar a função de impressão do navegador (Ctrl+P).'
-      })
-    } finally {
-      setIsExporting(false)
-    }
-  }
-
   if (!hydrated) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -701,7 +398,7 @@ export default function RelatoriosPage() {
 
   return (
     <FranqueadoraGuard requiredPermission="canViewDashboard">
-      <dtyle jsx ame="p-3 sm:p-4 lg:p-8 min-h-screen space-y-6">
+      <div className="p-3 sm:p-4 lg:p-8 min-h-screen space-y-6">
         <div ref={reportRef} data-pdf-content className="space-y-6 bg-white p-4">
         {/* Header */}
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 no-print">
@@ -719,7 +416,7 @@ export default function RelatoriosPage() {
               <p className="text-gray-500 text-sm">Análise completa do crescimento da rede</p>
             </div>
           </div>
-          <But cl 
+          <Button 
             variant="outline" 
             className="w-full lg:w-auto"
             onClick={exportToPDFText}
@@ -744,7 +441,7 @@ export default function RelatoriosPage() {
             </CardContent>
           </Card>
 
-          <Card className="border-gray-200">
+          <Card className="border-gray-200" data-card>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -758,7 +455,7 @@ export default function RelatoriosPage() {
             </CardContent>
           </Card>
 
-          <Card className="border-gray-200">
+          <Card className="border-gray-200" data-card>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -770,7 +467,7 @@ export default function RelatoriosPage() {
             </CardContent>
           </Card>
 
-          <Card className="border-gray-200">
+          <Card className="border-gray-200" data-card>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -911,7 +608,6 @@ export default function RelatoriosPage() {
           </CardContent>
         </Card>
         </div>
-      </div>
 
       {/* Modal de Alerta */}
       <AlertModal
@@ -921,6 +617,7 @@ export default function RelatoriosPage() {
         title={modal.title}
         message={modal.message}
       />
+      </div>
     </FranqueadoraGuard>
   )
 }
