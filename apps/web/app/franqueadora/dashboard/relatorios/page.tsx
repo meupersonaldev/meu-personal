@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft,
@@ -23,10 +23,12 @@ import { cn } from '@/lib/utils'
 
 export default function RelatoriosPage() {
   const router = useRouter()
-  const { academies, analytics, isAuthenticated, fetchAcademies, fetchAnalytics } = useFranqueadoraStore()
+  const { academies, analytics, isAuthenticated, fetchAcademies, fetchAnalytics, franqueadora } = useFranqueadoraStore()
+  const reportRef = useRef<HTMLDivElement>(null)
   
   // Hydration fix
   const [hydrated, setHydrated] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
   useEffect(() => { setHydrated(true) }, [])
 
   useEffect(() => {
@@ -102,6 +104,62 @@ export default function RelatoriosPage() {
 
   const regionStats = getRegionStats()
 
+  // Função para exportar PDF
+  const exportToPDF = async () => {
+    if (!reportRef.current) return
+    
+    setIsExporting(true)
+    
+    try {
+      const { default: jsPDF } = await import('jspdf')
+      const { default: html2canvas } = await import('html2canvas')
+      
+      // Configurar o canvas para melhor qualidade
+      const canvas = await html2canvas(reportRef.current, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        width: reportRef.current.scrollWidth,
+        height: reportRef.current.scrollHeight
+      })
+      
+      const imgData = canvas.toDataURL('image/png')
+      const pdf = new jsPDF('p', 'mm', 'a4')
+      
+      // Calcular dimensões para caber na página A4
+      const pdfWidth = pdf.internal.pageSize.getWidth()
+      const pdfHeight = pdf.internal.pageSize.getHeight()
+      const imgWidth = canvas.width
+      const imgHeight = canvas.height
+      const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight)
+      const imgX = (pdfWidth - imgWidth * ratio) / 2
+      const imgY = 10
+      
+      // Adicionar cabeçalho
+      pdf.setFontSize(16)
+      pdf.setFont('helvetica', 'bold')
+      pdf.text(`Relatório Detalhado - ${franqueadora?.name || 'Meu Personal'}`, pdfWidth / 2, 20, { align: 'center' })
+      
+      pdf.setFontSize(10)
+      pdf.setFont('helvetica', 'normal')
+      pdf.text(`Gerado em: ${format(new Date(), 'dd/MM/yyyy HH:mm', { locale: ptBR })}`, pdfWidth / 2, 28, { align: 'center' })
+      
+      // Adicionar imagem do relatório
+      pdf.addImage(imgData, 'PNG', imgX, 35, imgWidth * ratio, imgHeight * ratio)
+      
+      // Salvar o PDF
+      const fileName = `relatorio-${franqueadora?.name?.toLowerCase().replace(/\s+/g, '-') || 'franqueadora'}-${format(new Date(), 'yyyy-MM-dd')}.pdf`
+      pdf.save(fileName)
+      
+    } catch (error) {
+      console.error('Erro ao gerar PDF:', error)
+      alert('Erro ao gerar o relatório PDF. Tente novamente.')
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   if (!hydrated) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -113,6 +171,7 @@ export default function RelatoriosPage() {
   return (
     <FranqueadoraGuard requiredPermission="canViewDashboard">
       <div className="p-3 sm:p-4 lg:p-8 min-h-screen space-y-6">
+        <div ref={reportRef} className="space-y-6 bg-white">
         {/* Header */}
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div className="flex items-center gap-4">
@@ -129,9 +188,14 @@ export default function RelatoriosPage() {
               <p className="text-gray-500 text-sm">Análise completa do crescimento da rede</p>
             </div>
           </div>
-          <Button variant="outline" className="w-full lg:w-auto">
-            <Download className="h-4 w-4 mr-2" />
-            Exportar PDF
+          <Button 
+            variant="outline" 
+            className="w-full lg:w-auto"
+            onClick={exportToPDF}
+            disabled={isExporting}
+          >
+            <Download className={`h-4 w-4 mr-2 ${isExporting ? 'animate-spin' : ''}`} />
+            {isExporting ? 'Gerando PDF...' : 'Exportar PDF'}
           </Button>
         </div>
 
@@ -315,6 +379,7 @@ export default function RelatoriosPage() {
             </div>
           </CardContent>
         </Card>
+        </div>
       </div>
     </FranqueadoraGuard>
   )
