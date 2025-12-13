@@ -141,7 +141,12 @@ export default function FranqueadoraDashboard() {
                     <h3 className="text-lg font-bold text-meu-primary">Crescimento da Rede</h3>
                     <p className="text-xs sm:text-sm text-gray-500">Evolução do número de franquias nos últimos 6 meses</p>
                   </div>
-                  <Button variant="outline" size="sm" className="text-xs border-gray-200 text-gray-600 hover:text-meu-primary hover:border-meu-primary transition-colors w-full sm:w-auto">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="text-xs border-gray-200 text-gray-600 hover:text-meu-primary hover:border-meu-primary transition-colors w-full sm:w-auto"
+                    onClick={() => router.push('/franqueadora/dashboard/relatorios')}
+                  >
                     Relatório Detalhado
                   </Button>
                 </div>
@@ -249,7 +254,11 @@ export default function FranqueadoraDashboard() {
                   )}
                 </div>
 
-                <Button variant="ghost" className="w-full mt-4 sm:mt-6 text-[10px] sm:text-xs font-medium text-gray-400 hover:text-meu-primary hover:bg-meu-primary/5 uppercase tracking-wider">
+                <Button 
+                  variant="ghost" 
+                  className="w-full mt-4 sm:mt-6 text-[10px] sm:text-xs font-medium text-gray-400 hover:text-meu-primary hover:bg-meu-primary/5 uppercase tracking-wider"
+                  onClick={() => router.push('/franqueadora/dashboard/relatorios')}
+                >
                   Ver Ranking Completo
                 </Button>
               </Card>
