@@ -753,19 +753,21 @@ router.get('/:id/history', requireAuth, async (req, res) => {
     // Buscar alunos do professor com hourly_rate (apenas fidelizados - is_portfolio=true)
     const { data: students } = await supabase
       .from('teacher_students')
-      .select('id, email, hourly_rate, user_id, is_portfolio')
+      .select('id, email, hourly_rate, user_id, is_portfolio, portfolio_since')
       .eq('teacher_id', id)
       .eq('is_portfolio', true) // Apenas alunos fidelizados são "particulares"
 
     // Criar mapa de hourly_rate por user_id
     const studentRateMap = new Map<string, number>()
     const studentEmailMap = new Map<string, string>()
+    const studentPortfolioSinceMap = new Map<string, Date | null>()
 
     if (students) {
       for (const student of students) {
         // Se tem user_id, usar diretamente
         if (student.user_id) {
           studentRateMap.set(student.user_id, student.hourly_rate || 0)
+          studentPortfolioSinceMap.set(student.user_id, student.portfolio_since ? new Date(student.portfolio_since) : null)
           if (student.email) {
             studentEmailMap.set(student.user_id, student.email)
           }
@@ -779,6 +781,7 @@ router.get('/:id/history', requireAuth, async (req, res) => {
 
           if (user) {
             studentRateMap.set(user.id, student.hourly_rate || 0)
+            studentPortfolioSinceMap.set(user.id, student.portfolio_since ? new Date(student.portfolio_since) : null)
             studentEmailMap.set(user.id, student.email)
           }
         }
@@ -800,7 +803,9 @@ router.get('/:id/history', requireAuth, async (req, res) => {
         student_id,
         academy_id,
         franchise_id,
-        series_id
+        series_id,
+        source,
+        created_at
       `
       )
       .eq('teacher_id', id)
@@ -906,6 +911,17 @@ router.get('/:id/history', requireAuth, async (req, res) => {
 
     // Set de IDs de alunos particulares (da tabela teacher_students)
     const privateStudentIds = new Set(studentRateMap.keys())
+    
+    // Função helper para verificar se um booking é particular baseado no histórico
+    // Compara a DATA DA AULA com a data de fidelização do aluno
+    // Aulas que acontecem DEPOIS da fidelização são particulares
+    const isBookingPrivate = (booking: any): boolean => {
+      if (!booking.student_id || !privateStudentIds.has(booking.student_id)) return false
+      const portfolioSince = studentPortfolioSinceMap.get(booking.student_id)
+      if (!portfolioSince) return true // Se não tem data, considera particular (fallback)
+      const bookingDate = new Date(booking.start_at || booking.date)
+      return bookingDate >= portfolioSince
+    }
 
     // Filtrar por tipo
     let filteredBookings = normalizedBookings
@@ -982,8 +998,8 @@ router.get('/:id/history', requireAuth, async (req, res) => {
         const entry = earningsByStudent.get(studentId)!
         entry.total_classes++
         entry.completed_classes++
-        // Só adiciona earnings se for aula particular (tem hourly_rate)
-        if (privateStudentIds.has(studentId) && studentRate > 0) {
+        // Só adiciona earnings se for aula particular (baseado no histórico de fidelização)
+        if (isBookingPrivate(b) && studentRate > 0) {
           entry.total_earnings += studentRate
         }
       })
@@ -1011,10 +1027,10 @@ router.get('/:id/history', requireAuth, async (req, res) => {
       0
     )
 
-    // Calcular horas de plataforma a partir dos bookings (alunos que NÃO são particulares)
-    // Apenas aulas completadas de clientes da plataforma
+    // Calcular horas de plataforma a partir dos bookings
+    // Aulas da plataforma = booking criado ANTES da fidelização ou aluno não fidelizado
     const platformBookings = completedBookings.filter(
-      (b: any) => !b.student_id || !privateStudentIds.has(b.student_id)
+      (b: any) => !isBookingPrivate(b)
     )
     const platformHoursFromBookings = platformBookings.reduce(
       (sum: number, b: any) => {
@@ -1030,9 +1046,9 @@ router.get('/:id/history', requireAuth, async (req, res) => {
     const totalEarnings = academyEarnings + privateEarnings
 
     // Calcular média de valor/hora das últimas aulas realizadas com carteira (particulares)
-    // Só calcula se realmente houver aulas particulares completadas
+    // Aulas particulares = booking criado DEPOIS da fidelização
     const privateCompletedBookings = completedBookings.filter(
-      (b: any) => b.student_id && privateStudentIds.has(b.student_id)
+      (b: any) => isBookingPrivate(b)
     )
 
     let averageHourlyRate = 0
@@ -1098,7 +1114,7 @@ router.get('/:id/history', requireAuth, async (req, res) => {
       )
 
       const monthPrivateEarnings = monthBookings
-        .filter((b: any) => b.student_id)
+        .filter((b: any) => isBookingPrivate(b))
         .reduce((sum: number, b: any) => {
           const studentRate = studentRateMap.get(b.student_id) || 0
           return sum + studentRate
@@ -1122,12 +1138,12 @@ router.get('/:id/history', requireAuth, async (req, res) => {
 
     // Buscar status de fidelização dos alunos (para mostrar botão de solicitar)
     const allStudentIds = [...new Set(filteredBookings.map((b: any) => b.student_id).filter(Boolean))]
-    let studentFidelizationMap = new Map<string, { is_portfolio: boolean; connection_status: string | null }>()
+    let studentFidelizationMap = new Map<string, { is_portfolio: boolean; connection_status: string | null; source: string | null; portfolio_since: string | null }>()
     
     if (allStudentIds.length > 0) {
       const { data: teacherStudents } = await supabase
         .from('teacher_students')
-        .select('user_id, is_portfolio, connection_status')
+        .select('user_id, is_portfolio, connection_status, source, portfolio_since')
         .eq('teacher_id', id)
         .in('user_id', allStudentIds)
       
@@ -1135,7 +1151,9 @@ router.get('/:id/history', requireAuth, async (req, res) => {
         teacherStudents.forEach((ts: any) => {
           studentFidelizationMap.set(ts.user_id, {
             is_portfolio: ts.is_portfolio || false,
-            connection_status: ts.connection_status || null
+            connection_status: ts.connection_status || null,
+            source: ts.source || null,
+            portfolio_since: ts.portfolio_since || null
           })
         })
       }
@@ -1143,6 +1161,11 @@ router.get('/:id/history', requireAuth, async (req, res) => {
 
     const allBookings = filteredBookings.map((b: any) => {
       const fidelization = b.student_id ? studentFidelizationMap.get(b.student_id) : null
+      
+      // Usar a função helper para determinar se é particular
+      // Compara data de criação do booking com data de fidelização
+      const isPrivate = isBookingPrivate(b)
+      
       return {
         id: b.id,
         date: b.date,
@@ -1158,14 +1181,8 @@ router.get('/:id/history', requireAuth, async (req, res) => {
         academy_name: b.academies?.name || null,
         academy_id: b.academy_id,
         series_id: b.series_id || null,
-        earnings:
-          b.student_id && privateStudentIds.has(b.student_id)
-            ? studentRateMap.get(b.student_id) || 0
-            : 0,
-        type:
-          b.student_id && privateStudentIds.has(b.student_id)
-            ? 'private'
-            : 'academy',
+        earnings: isPrivate ? studentRateMap.get(b.student_id) || 0 : 0,
+        type: isPrivate ? 'private' : 'academy',
         // Informações de fidelização
         is_portfolio: fidelization?.is_portfolio || false,
         connection_status: fidelization?.connection_status || null

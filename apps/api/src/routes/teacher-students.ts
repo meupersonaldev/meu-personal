@@ -634,6 +634,7 @@ router.patch('/requests/:requestId/respond', requireAuth, async (req, res) => {
     // Se rejeitado, manter is_portfolio = false
     if (status === 'APPROVED') {
       updateData.is_portfolio = true
+      updateData.portfolio_since = new Date().toISOString() // Registrar data da fidelização
 
       // Buscar dados completos do usuário para preencher o registro
       const { data: userData } = await supabase
