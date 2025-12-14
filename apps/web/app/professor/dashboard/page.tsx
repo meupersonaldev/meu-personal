@@ -202,11 +202,17 @@ export default function ProfessorDashboardPage() {
       )
 
       if (response.ok) {
-        toast.success('Aluno fidelizado! Agora está na sua carteira.')
+        const data = await response.json()
+        if (data.status === 'PENDING') {
+          toast.success('Solicitação enviada! Aguardando aprovação do aluno.')
+        } else {
+          toast.success('Aluno fidelizado! Agora está na sua carteira.')
+        }
         // Remover da lista de plataforma
         setPlatformStudents(prev => prev.filter(s => s.id !== studentId))
       } else {
-        toast.error('Erro ao fidelizar aluno')
+        const errorData = await response.json().catch(() => ({}))
+        toast.error(errorData.error || 'Erro ao solicitar fidelização')
       }
     } catch (error) {
       toast.error('Erro ao processar requisição')
@@ -761,11 +767,11 @@ export default function ProfessorDashboardPage() {
                         Alunos da Plataforma
                       </h3>
                       <p className="text-sm text-gray-500 mt-1">
-                        Alunos que agendaram com você. Fidelizar para adicionar à sua carteira.
+                        Alunos que fizeram aulas com você. Solicite fidelização para adicionar à sua carteira.
                       </p>
                     </div>
                     <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-100">
-                      {platformStudents.length} aguardando
+                      {platformStudents.length} disponíveis
                     </Badge>
                   </div>
 
@@ -792,7 +798,7 @@ export default function ProfessorDashboardPage() {
                               ) : (
                                 <>
                                   <UserPlus className="h-3 w-3 mr-1" />
-                                  Fidelizar
+                                  Solicitar
                                 </>
                               )}
                             </Button>

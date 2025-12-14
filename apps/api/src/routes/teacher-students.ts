@@ -483,7 +483,8 @@ router.delete(
   }
 )
 
-// PATCH /api/teachers/:teacherId/students/:studentId/portfolio - Fidelizar aluno na carteira
+// PATCH /api/teachers/:teacherId/students/:studentId/portfolio - Solicitar fidelização do aluno
+// Agora cria uma solicitação pendente que o aluno precisa aceitar
 router.patch(
   '/:teacherId/students/:studentId/portfolio',
   requireAuth,
@@ -508,56 +509,70 @@ router.patch(
         return res.status(404).json({ error: 'Aluno não encontrado' })
       }
 
-      // Se está fidelizando, buscar dados completos do usuário no sistema
-      let updateData: any = {
-        is_portfolio: is_portfolio === true,
-        updated_at: new Date().toISOString()
-      }
+      // Se está solicitando fidelização (is_portfolio = true)
+      if (is_portfolio) {
+        // Verificar se já está fidelizado
+        if (currentStudent.is_portfolio === true && currentStudent.connection_status === 'APPROVED') {
+          return res.status(400).json({ error: 'Aluno já está fidelizado' })
+        }
 
-      if (is_portfolio && currentStudent.user_id) {
-        // Buscar dados do usuário na tabela users
-        const { data: userData } = await supabase
-          .from('users')
-          .select('name, email, phone, cpf, gender, birth_date')
-          .eq('id', currentStudent.user_id)
+        // Verificar se já tem solicitação pendente
+        if (currentStudent.connection_status === 'PENDING') {
+          return res.status(400).json({ error: 'Já existe uma solicitação pendente para este aluno' })
+        }
+
+        // Criar solicitação pendente (aluno precisa aceitar)
+        let updateData: any = {
+          connection_status: 'PENDING',
+          updated_at: new Date().toISOString()
+        }
+
+        // Adicionar campos opcionais do request
+        if (hourly_rate !== undefined) {
+          updateData.hourly_rate = hourly_rate || null
+        }
+        if (notes !== undefined) {
+          updateData.notes = notes || null
+        }
+
+        const { data, error } = await supabase
+          .from('teacher_students')
+          .update(updateData)
+          .eq('id', studentId)
+          .eq('teacher_id', teacherId)
+          .select()
           .single()
 
-        if (userData) {
-          // Atualizar com dados do sistema (se não tiver já preenchido)
-          updateData = {
-            ...updateData,
-            name: currentStudent.name || userData.name,
-            email: currentStudent.email || userData.email,
-            phone: currentStudent.phone || userData.phone,
-            cpf: currentStudent.cpf || userData.cpf,
-            gender: currentStudent.gender || userData.gender,
-            birth_date: currentStudent.birth_date || userData.birth_date
-          }
-        }
+        if (error) throw error
+
+        // TODO: Enviar notificação para o aluno sobre a solicitação
+
+        res.json({
+          message: 'Solicitação de fidelização enviada! Aguardando aprovação do aluno.',
+          status: 'PENDING',
+          student: data
+        })
+      } else {
+        // Removendo da carteira (desfidelizando)
+        const { data, error } = await supabase
+          .from('teacher_students')
+          .update({
+            is_portfolio: false,
+            connection_status: 'APPROVED', // Mantém aprovado mas não é mais da carteira
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', studentId)
+          .eq('teacher_id', teacherId)
+          .select()
+          .single()
+
+        if (error) throw error
+
+        res.json({
+          message: 'Aluno removido da carteira',
+          student: data
+        })
       }
-
-      // Adicionar campos opcionais do request
-      if (hourly_rate !== undefined) {
-        updateData.hourly_rate = hourly_rate || null
-      }
-      if (notes !== undefined) {
-        updateData.notes = notes || null
-      }
-
-      const { data, error } = await supabase
-        .from('teacher_students')
-        .update(updateData)
-        .eq('id', studentId)
-        .eq('teacher_id', teacherId)
-        .select()
-        .single()
-
-      if (error) throw error
-
-      res.json({
-        message: is_portfolio ? 'Aluno fidelizado com sucesso!' : 'Aluno removido da carteira',
-        student: data
-      })
     } catch (error: any) {
       console.error('Error updating portfolio status:', error)
       res.status(500).json({ error: error.message })
@@ -565,7 +580,7 @@ router.patch(
   }
 )
 
-// PATCH /api/teachers/requests/:requestId/respond - Aceitar/Rejeitar vínculo (Pelo Aluno)
+// PATCH /api/teachers/requests/:requestId/respond - Aceitar/Rejeitar solicitação de fidelização (Pelo Aluno)
 router.patch('/requests/:requestId/respond', requireAuth, async (req, res) => {
   try {
     const { requestId } = req.params
@@ -592,13 +607,38 @@ router.patch('/requests/:requestId/respond', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Solicitação já processada' })
     }
 
+    // Preparar dados de atualização
+    const updateData: any = {
+      connection_status: status,
+      updated_at: new Date().toISOString()
+    }
+
+    // Se aprovado, fidelizar o aluno (is_portfolio = true)
+    // Se rejeitado, manter is_portfolio = false
+    if (status === 'APPROVED') {
+      updateData.is_portfolio = true
+
+      // Buscar dados completos do usuário para preencher o registro
+      const { data: userData } = await supabase
+        .from('users')
+        .select('name, email, phone, cpf, gender, birth_date')
+        .eq('id', userId)
+        .single()
+
+      if (userData) {
+        updateData.name = request.name || userData.name
+        updateData.email = request.email || userData.email
+        updateData.phone = request.phone || userData.phone
+        updateData.cpf = request.cpf || userData.cpf
+        updateData.gender = request.gender || userData.gender
+        updateData.birth_date = request.birth_date || userData.birth_date
+      }
+    }
+
     // Atualizar status
     const { data: updated, error: updateError } = await supabase
       .from('teacher_students')
-      .update({
-        connection_status: status,
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', requestId)
       .select()
       .single()
@@ -606,15 +646,23 @@ router.patch('/requests/:requestId/respond', requireAuth, async (req, res) => {
     if (updateError) throw updateError
 
     // Notificar o professor da decisão
-    const { onConnectionRequestResponded } = await import('../lib/events')
-    await onConnectionRequestResponded(
-      request.teacher_id,
-      userId,
-      request.name,
-      status
-    )
+    try {
+      const { onConnectionRequestResponded } = await import('../lib/events')
+      await onConnectionRequestResponded(
+        request.teacher_id,
+        userId,
+        request.name,
+        status
+      )
+    } catch (notifyError) {
+      console.error('Erro ao notificar professor:', notifyError)
+    }
 
-    res.json({ message: 'Solicitação atualizada com sucesso', data: updated })
+    const message = status === 'APPROVED' 
+      ? 'Solicitação aceita! Você agora faz parte da carteira deste professor.'
+      : 'Solicitação recusada.'
+
+    res.json({ message, data: updated })
   } catch (error: any) {
     console.error('Error responding to request:', error)
     res.status(500).json({ error: error.message })

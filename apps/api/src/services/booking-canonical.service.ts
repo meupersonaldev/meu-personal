@@ -1118,6 +1118,52 @@ class BookingCanonicalService {
       }
     }
 
+    // Remover vínculo teacher_students se aluno for da plataforma (não fidelizado)
+    // Alunos da carteira (is_portfolio=true) mantêm o vínculo mesmo após cancelamento
+    if (hasStudent && booking.student_id && booking.teacher_id) {
+      try {
+        // Verificar se o vínculo existe e se é aluno da plataforma (não fidelizado)
+        const { data: link } = await supabase
+          .from('teacher_students')
+          .select('id, is_portfolio, source')
+          .eq('teacher_id', booking.teacher_id)
+          .eq('user_id', booking.student_id)
+          .maybeSingle();
+
+        if (link && link.is_portfolio === false) {
+          // Verificar se o aluno tem outros bookings ativos com este professor
+          const { data: otherBookings } = await supabase
+            .from('bookings')
+            .select('id')
+            .eq('teacher_id', booking.teacher_id)
+            .eq('student_id', booking.student_id)
+            .in('status_canonical', ['PAID', 'RESERVED', 'CONFIRMED'])
+            .neq('id', bookingId)
+            .limit(1);
+
+          // Se não tem outros bookings ativos, remover o vínculo
+          if (!otherBookings || otherBookings.length === 0) {
+            const { error: deleteError } = await supabase
+              .from('teacher_students')
+              .delete()
+              .eq('id', link.id);
+
+            if (deleteError) {
+              console.error(`[cancelBooking] Erro ao remover vínculo teacher_students:`, deleteError);
+            } else {
+              console.log(`[cancelBooking] ✅ Vínculo removido: teacher=${booking.teacher_id}, student=${booking.student_id} (aluno da plataforma sem bookings ativos)`);
+            }
+          } else {
+            console.log(`[cancelBooking] Vínculo mantido: aluno ainda tem ${otherBookings.length} booking(s) ativo(s) com este professor`);
+          }
+        } else if (link && link.is_portfolio === true) {
+          console.log(`[cancelBooking] Vínculo mantido: aluno é da carteira do professor (fidelizado)`);
+        }
+      } catch (error) {
+        console.error(`[cancelBooking] Erro ao verificar/remover vínculo:`, error);
+      }
+    }
+
     return updatedBooking;
   }
 

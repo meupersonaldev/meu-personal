@@ -648,52 +648,65 @@ router.get('/:id/stats', async (req, res) => {
 })
 
 // GET /api/students/:id/teachers - Listar professores vinculados ao aluno (para Meus Professores)
+// Inclui professores fidelizados (is_portfolio=true, connection_status=APPROVED) e solicitações pendentes
 router.get('/:id/teachers', async (req, res) => {
   try {
     const { id } = req.params
 
     console.log('🔍 [Meus Professores] Buscando professores para aluno:', id)
 
-    // Buscar vínculos aprovados
-    const { data: links, error } = await supabase
+    // Buscar vínculos aprovados E fidelizados (carteira do professor)
+    const { data: approvedLinks, error: approvedError } = await supabase
       .from('teacher_students')
-      .select('teacher_id, hourly_rate, hide_free_class, created_at, user_id, connection_status')
+      .select('id, teacher_id, hourly_rate, hide_free_class, created_at, user_id, connection_status, is_portfolio')
       .eq('user_id', id)
       .eq('connection_status', 'APPROVED')
+      .eq('is_portfolio', true)
 
-    console.log('🔍 [Meus Professores] Links encontrados:', links?.length || 0, links)
+    // Buscar solicitações pendentes de fidelização
+    const { data: pendingLinks, error: pendingError } = await supabase
+      .from('teacher_students')
+      .select('id, teacher_id, hourly_rate, hide_free_class, created_at, user_id, connection_status, is_portfolio')
+      .eq('user_id', id)
+      .eq('connection_status', 'PENDING')
 
-    if (error) {
-      console.error('❌ [Meus Professores] Erro na query:', error)
-      throw error
+    if (approvedError) {
+      console.error('❌ [Meus Professores] Erro na query approved:', approvedError)
+      throw approvedError
     }
 
-    if (!links || links.length === 0) {
-      return res.json({ teachers: [] })
+    if (pendingError) {
+      console.error('❌ [Meus Professores] Erro na query pending:', pendingError)
+    }
+
+    const allLinks = [...(approvedLinks || []), ...(pendingLinks || [])]
+    console.log('🔍 [Meus Professores] Links encontrados:', allLinks.length, { approved: approvedLinks?.length, pending: pendingLinks?.length })
+
+    if (allLinks.length === 0) {
+      return res.json({ teachers: [], pendingRequests: [] })
     }
 
     // Buscar dados dos professores
-    const teacherIds = links.map(l => l.teacher_id)
+    const teacherIds = [...new Set(allLinks.map(l => l.teacher_id))]
     console.log('🔍 [Meus Professores] Teacher IDs:', teacherIds)
 
     const { data: teachers, error: teacherError } = await supabase
       .from('users')
-      .select('id, name, email, avatar_url')
+      .select('id, name, email, avatar_url, phone')
       .in('id', teacherIds)
 
-    console.log('🔍 [Meus Professores] Teachers found:', teachers?.length || 0, teachers)
     if (teacherError) {
       console.error('❌ [Meus Professores] Erro ao buscar teachers:', teacherError)
     }
 
-    // Combinar dados
-    const result = links.map(link => {
+    // Separar professores aprovados e solicitações pendentes
+    const approvedTeachers = (approvedLinks || []).map(link => {
       const teacher = teachers?.find(t => t.id === link.teacher_id)
-      console.log('🔍 [Meus Professores] Matching teacher_id:', link.teacher_id, '-> found:', teacher?.name)
       return {
         id: link.teacher_id,
         name: teacher?.name || 'Professor',
         email: teacher?.email,
+        phone: teacher?.phone,
         photo_url: teacher?.avatar_url,
         hourly_rate: link.hourly_rate,
         hide_free_class: link.hide_free_class,
@@ -701,7 +714,24 @@ router.get('/:id/teachers', async (req, res) => {
       }
     })
 
-    res.json({ teachers: result })
+    const pendingRequests = (pendingLinks || []).map(link => {
+      const teacher = teachers?.find(t => t.id === link.teacher_id)
+      return {
+        request_id: link.id,
+        teacher_id: link.teacher_id,
+        name: teacher?.name || 'Professor',
+        email: teacher?.email,
+        phone: teacher?.phone,
+        photo_url: teacher?.avatar_url,
+        hourly_rate: link.hourly_rate,
+        requested_at: link.created_at
+      }
+    })
+
+    res.json({ 
+      teachers: approvedTeachers,
+      pendingRequests: pendingRequests
+    })
   } catch (error) {
     console.error('Erro ao buscar professores do aluno:', error)
     res.status(500).json({ error: 'Erro interno do servidor' })
