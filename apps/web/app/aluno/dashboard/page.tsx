@@ -1056,11 +1056,22 @@ export default function AulasPage() {
       return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Cancelada</Badge>
     }
 
-    if (booking.is_reserved) {
+    // RESERVED sem series_id = aguardando confirmação do professor (aluno da carteira)
+    if (status === 'RESERVED' && !booking.series_id) {
+      return (
+        <Badge variant="secondary" className="bg-violet-100 text-violet-800 hover:bg-violet-200">
+          <Clock className="h-3 w-3 mr-1" />
+          Aguardando Professor
+        </Badge>
+      )
+    }
+
+    // RESERVED com series_id = série aguardando crédito do aluno
+    if (booking.is_reserved || status === 'RESERVED') {
       return (
         <Badge variant="secondary" className="bg-amber-100 text-amber-800 hover:bg-amber-200">
           <Clock className="h-3 w-3 mr-1" />
-          Reservada
+          Aguardando Crédito
         </Badge>
       )
     }
@@ -1514,14 +1525,27 @@ export default function AulasPage() {
                 </>
               )}
 
-              {/* Aviso sobre reservas */}
-              {bookings.some(b => b.is_reserved) && (
+              {/* Aviso sobre reservas aguardando crédito do aluno */}
+              {bookings.some(b => b.is_reserved && b.series_id) && (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 flex gap-3">
                   <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0" />
                   <div className="text-sm text-amber-900">
                     <p className="font-semibold mb-1">Atenção às reservas</p>
                     <p className="leading-relaxed opacity-90">
                       Aulas reservadas precisam de crédito até 7 dias antes. Sem crédito, elas serão canceladas automaticamente pelo sistema.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Aviso sobre aulas aguardando confirmação do professor */}
+              {bookings.some(b => (b.status_canonical || b.status) === 'RESERVED' && !b.series_id) && (
+                <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 flex gap-3">
+                  <Clock className="h-5 w-5 text-violet-600 flex-shrink-0" />
+                  <div className="text-sm text-violet-900">
+                    <p className="font-semibold mb-1">Aguardando confirmação</p>
+                    <p className="leading-relaxed opacity-90">
+                      Você tem aulas aguardando confirmação do seu professor. Ele precisa ter créditos disponíveis para confirmar a aula.
                     </p>
                   </div>
                 </div>

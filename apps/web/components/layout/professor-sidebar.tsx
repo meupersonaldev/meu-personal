@@ -38,7 +38,7 @@ export default function ProfessorSidebar({
   const getInitialExpandedSections = useCallback(() => {
     const sections: string[] = []
     if (pathname.startsWith('/professor/agenda')) sections.push('agenda')
-    if (pathname.startsWith('/professor/carteira') || pathname.startsWith('/professor/comprar-horas')) {
+    if (pathname.startsWith('/professor/carteira') || pathname.startsWith('/professor/comprar')) {
       sections.push('financeiro')
     }
     return sections

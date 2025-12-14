@@ -79,8 +79,8 @@ export const PROFESSOR_NAV_ITEMS: ProfessorNavItem[] = [
         icon: Wallet
       },
       {
-        label: 'Comprar Horas',
-        href: '/professor/comprar-horas',
+        label: 'Comprar Créditos',
+        href: '/professor/comprar',
         icon: CreditCard
       }
     ]

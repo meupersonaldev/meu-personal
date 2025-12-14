@@ -753,7 +753,7 @@ export default function ProfessorDashboardPage() {
                                                           toast.error('Você não tem créditos suficientes. Compre mais créditos para confirmar esta aula.', {
                                                             action: {
                                                               label: 'Comprar',
-                                                              onClick: () => window.location.href = '/professor/comprar-horas'
+                                                              onClick: () => window.location.href = '/professor/comprar'
                                                             }
                                                           })
                                                         } else {
@@ -774,7 +774,7 @@ export default function ProfessorDashboardPage() {
                                                     toast.error('Você não tem créditos suficientes para confirmar esta aula.', {
                                                       action: {
                                                         label: 'Comprar Créditos',
-                                                        onClick: () => window.location.href = '/professor/comprar-horas'
+                                                        onClick: () => window.location.href = '/professor/comprar'
                                                       }
                                                     })
                                                   }}

@@ -162,7 +162,7 @@ export default function ProfessorPagamentoPage() {
 
           // Redirecionar para página de compra após 1 segundo
           setTimeout(() => {
-            router.push('/professor/comprar-horas')
+            router.push('/professor/comprar')
           }, 1000)
         } else if (intent?.status === 'FAILED' || intent?.status === 'CANCELED') {
           console.log('❌ Pagamento falhou ou foi cancelado')
@@ -296,7 +296,7 @@ export default function ProfessorPagamentoPage() {
                   <Button
                     onClick={() => {
                       setPolling(false)
-                      router.push('/professor/comprar-horas')
+                      router.push('/professor/comprar')
                     }}
                     variant="ghost"
                     className="w-full"

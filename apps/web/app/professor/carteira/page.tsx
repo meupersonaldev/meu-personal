@@ -793,7 +793,7 @@ export default function ProfessorCarteira() {
                 <CardContent className="p-6">
                   <h3 className="font-bold text-lg mb-2">Maximize seus ganhos</h3>
                   <p className="text-gray-400 text-sm mb-4">Compre pacotes maiores de horas para reduzir seu custo operacional e aumentar sua margem de lucro.</p>
-                  <Button onClick={() => window.location.href = '/professor/comprar-horas'} className="w-full bg-white text-gray-900 hover:bg-gray-100 font-bold">
+                  <Button onClick={() => window.location.href = '/professor/comprar'} className="w-full bg-white text-gray-900 hover:bg-gray-100 font-bold">
                     Comprar Horas
                   </Button>
                 </CardContent>

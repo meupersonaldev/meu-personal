@@ -867,7 +867,7 @@ export default function AgendaPage() {
                                   toast.error('Você não tem créditos suficientes. Compre mais créditos.', {
                                     action: {
                                       label: 'Comprar',
-                                      onClick: () => window.location.href = '/professor/comprar-horas'
+                                      onClick: () => window.location.href = '/professor/comprar'
                                     }
                                   })
                                 } else {
@@ -884,7 +884,7 @@ export default function AgendaPage() {
                         </Button>
                       ) : (
                         <Button
-                          onClick={() => window.location.href = '/professor/comprar-horas'}
+                          onClick={() => window.location.href = '/professor/comprar'}
                           className="w-full bg-red-600 hover:bg-red-700 text-white font-bold h-10 rounded-xl"
                         >
                           Comprar Créditos
