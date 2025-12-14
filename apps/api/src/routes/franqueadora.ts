@@ -14,6 +14,7 @@ import { auditSensitiveOperation } from '../middleware/audit'
 import { resolveDefaultFranqueadoraId } from '../services/franqueadora-contacts.service'
 import { auditService } from '../services/audit.service'
 import { cacheService } from '../services/cache.service'
+import { asaasService } from '../services/asaas.service'
 import { FRANQUEADORA_CONTACTS_SELECT, FRANQUEADORA_CONTACTS_USER_FIELDS } from '../dto/franqueadora-contacts'
 
 const router = Router()
@@ -148,17 +149,17 @@ router.get('/contacts',
     let usersQuery = supabase
       .from('users')
       .select(FRANQUEADORA_CONTACTS_USER_FIELDS, { count: 'exact' })
-      .in('role', ['STUDENT', 'TEACHER'])
-      .eq('is_active', true); // Por padrão, buscar apenas usuários ativos
+      .in('role', ['STUDENT', 'TEACHER']);
+
+    // Aplicar filtro de is_active apenas se especificado
+    // Se não especificado, traz todos (ativos e inativos)
+    if (typeof userActive === 'boolean') {
+      usersQuery = usersQuery.eq('is_active', userActive);
+    }
 
     // Aplicar filtros de usuário
     if (roleFilter && ['STUDENT', 'TEACHER'].includes(roleFilter)) {
       usersQuery = usersQuery.eq('role', roleFilter);
-    }
-
-    // Se userActive for explicitamente false, buscar inativos
-    if (typeof userActive === 'boolean' && !userActive) {
-      usersQuery = usersQuery.eq('is_active', false);
     }
 
     if (search) {
@@ -862,6 +863,16 @@ router.get('/academies/:id/stats', requireAuth, requireRole(['SUPER_ADMIN']), re
     // Fallback para consultas separadas se RPC não estiver disponível
     console.warn('RPC get_academy_stats não disponível, usando fallback')
 
+    // Buscar a unit vinculada à academy (via academy_legacy_id)
+    const { data: linkedUnit } = await supabase
+      .from('units')
+      .select('id')
+      .eq('academy_legacy_id', id)
+      .eq('is_active', true)
+      .maybeSingle()
+
+    const linkedUnitId = linkedUnit?.id
+
     // Buscar IDs dos professores da academia para buscar bookings
     const { data: academyTeachers } = await supabase
       .from('academy_teachers')
@@ -877,6 +888,7 @@ router.get('/academies/:id/stats', requireAuth, requireRole(['SUPER_ADMIN']), re
       bookingsByAcademyId,
       bookingsByFranchiseId,
       bookingsByUnitId,
+      bookingsByLinkedUnitId,
       bookingsByTeachers
     ] = await Promise.all([
       // Contagem de professores
@@ -903,11 +915,19 @@ router.get('/academies/:id/stats', requireAuth, requireRole(['SUPER_ADMIN']), re
         .select('id, status_canonical')
         .eq('franchise_id', id),
 
-      // Bookings por unit_id
+      // Bookings por unit_id (usando o ID da academy diretamente)
       supabase
         .from('bookings')
         .select('id, status_canonical')
         .eq('unit_id', id),
+
+      // Bookings por unit_id vinculada (via academy_legacy_id)
+      linkedUnitId
+        ? supabase
+          .from('bookings')
+          .select('id, status_canonical')
+          .eq('unit_id', linkedUnitId)
+        : Promise.resolve({ data: [], error: null, count: 0 }),
 
       // Bookings por professores (se houver professores)
       teacherIds.length > 0
@@ -936,6 +956,9 @@ router.get('/academies/:id/stats', requireAuth, requireRole(['SUPER_ADMIN']), re
     addBookings(bookingsByAcademyId.data || [])
     addBookings(bookingsByFranchiseId.data || [])
     addBookings(bookingsByUnitId.data || [])
+    if (linkedUnitId) {
+      addBookings(bookingsByLinkedUnitId.data || [])
+    }
     if (teacherIds.length > 0) {
       addBookings(bookingsByTeachers.data || [])
     }
@@ -944,8 +967,22 @@ router.get('/academies/:id/stats', requireAuth, requireRole(['SUPER_ADMIN']), re
     const completedBookings = allBookings.filter(b => b.status_canonical === 'DONE').length
     const cancelledBookings = allBookings.filter(b => b.status_canonical === 'CANCELED').length
 
-    // Buscar créditos e planos ativos
-    const [creditsResult, plansResult, activeTeachersResult] = await Promise.all([
+    // Buscar créditos, planos ativos e dados adicionais
+    const now = new Date()
+    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+    const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString()
+    const today = now.toISOString().split('T')[0]
+
+    const [
+      creditsResult, 
+      plansResult, 
+      activeTeachersResult,
+      checkinsResult,
+      profHoursResult,
+      pendingBookingsResult,
+      recurringSeriesResult,
+      recentNotificationsResult
+    ] = await Promise.all([
       // Créditos disponíveis (soma de todos os créditos dos alunos da academia)
       supabase
         .from('academy_students')
@@ -963,19 +1000,71 @@ router.get('/academies/:id/stats', requireAuth, requireRole(['SUPER_ADMIN']), re
         .from('academy_teachers')
         .select('*', { count: 'exact', head: true })
         .eq('academy_id', id)
-        .eq('status', 'active')
+        .eq('status', 'active'),
+      // Check-ins do mês
+      supabase
+        .from('checkins')
+        .select('id, created_at', { count: 'exact' })
+        .eq('academy_id', id)
+        .gte('created_at', firstDayOfMonth)
+        .lte('created_at', lastDayOfMonth),
+      // Horas disponíveis dos professores (sistema novo)
+      linkedUnitId 
+        ? supabase
+            .from('prof_hour_balance')
+            .select('available_hours, locked_hours')
+            .or(`unit_id.eq.${linkedUnitId},unit_id.is.null`)
+            .eq('franqueadora_id', req.franqueadoraAdmin.franqueadora_id)
+        : Promise.resolve({ data: [], error: null }),
+      // Agendamentos pendentes (próximos 7 dias)
+      supabase
+        .from('bookings')
+        .select('id', { count: 'exact', head: true })
+        .or(`academy_id.eq.${id},franchise_id.eq.${id}${linkedUnitId ? `,unit_id.eq.${linkedUnitId}` : ''}`)
+        .eq('status_canonical', 'SCHEDULED')
+        .gte('date', today),
+      // Séries de agendamentos recorrentes ativas
+      supabase
+        .from('booking_series')
+        .select('id', { count: 'exact', head: true })
+        .eq('academy_id', id)
+        .eq('is_active', true),
+      // Notificações recentes (últimos 7 dias)
+      supabase
+        .from('notifications')
+        .select('id', { count: 'exact', head: true })
+        .eq('academy_id', id)
+        .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
     ])
 
-    // Buscar créditos dos alunos
+    // Buscar créditos dos alunos de múltiplas fontes
     const activeStudentIds = (creditsResult.data || []).map(s => s.student_id).filter(Boolean)
     let creditsBalance = 0
-    if (activeStudentIds.length > 0) {
+    
+    // 1. Buscar da tabela student_class_balance (sistema novo)
+    const { data: classBalances } = await supabase
+      .from('student_class_balance')
+      .select('total_purchased, total_consumed, locked_qty')
+      .or(linkedUnitId 
+        ? `unit_id.eq.${id},unit_id.eq.${linkedUnitId},unit_id.is.null`
+        : `unit_id.eq.${id},unit_id.is.null`)
+      .eq('franqueadora_id', req.franqueadoraAdmin.franqueadora_id)
+
+    const balanceFromNewSystem = (classBalances || []).reduce((sum, b) => {
+      const available = (b.total_purchased || 0) - (b.total_consumed || 0) - (b.locked_qty || 0)
+      return sum + Math.max(0, available)
+    }, 0)
+
+    // 2. Buscar da tabela users.credits (sistema legado) se não houver dados no novo
+    if (balanceFromNewSystem === 0 && activeStudentIds.length > 0) {
       const { data: studentCredits } = await supabase
         .from('users')
         .select('credits')
         .in('id', activeStudentIds)
 
       creditsBalance = (studentCredits || []).reduce((sum, u) => sum + (u.credits || 0), 0)
+    } else {
+      creditsBalance = balanceFromNewSystem
     }
 
     console.log(`[ACADEMY STATS] Academy ${id}:`, {
@@ -985,9 +1074,12 @@ router.get('/academies/:id/stats', requireAuth, requireRole(['SUPER_ADMIN']), re
       bookingsByAcademyId: bookingsByAcademyId.data?.length || 0,
       bookingsByFranchiseId: bookingsByFranchiseId.data?.length || 0,
       bookingsByUnitId: bookingsByUnitId.data?.length || 0,
+      bookingsByLinkedUnitId: linkedUnitId ? bookingsByLinkedUnitId.data?.length || 0 : 0,
       bookingsByTeachers: teacherIds.length > 0 ? bookingsByTeachers.data?.length || 0 : 0,
       teacherIds: teacherIds.length,
+      linkedUnitId,
       creditsBalance,
+      balanceFromNewSystem,
       plansActive: plansResult.count || 0
     })
 
@@ -998,22 +1090,44 @@ router.get('/academies/:id/stats', requireAuth, requireRole(['SUPER_ADMIN']), re
     const activeStudents = allStudents.filter(s => s.status === 'active').length
     const activeTeachers = activeTeachersResult.count || totalTeachers
 
+    // Calcular horas dos professores
+    const profHoursData = profHoursResult.data || []
+    const totalProfHours = profHoursData.reduce((sum, h) => sum + (h.available_hours || 0), 0)
+    const lockedProfHours = profHoursData.reduce((sum, h) => sum + (h.locked_hours || 0), 0)
+
+    // Check-ins do mês
+    const monthlyCheckins = checkinsResult.count || 0
+
     const finalStats = {
       academy: {
         id: academy.id,
         name: academy.name,
         monthlyRevenue: academy.monthly_revenue || 0
       },
+      // Usuários
       totalStudents,
       activeStudents,
       totalTeachers,
       activeTeachers,
+      // Agendamentos
       totalBookings,
       completedBookings,
       cancelledBookings,
+      pendingBookings: pendingBookingsResult.count || 0,
       completionRate: totalBookings > 0 ? (completedBookings / totalBookings * 100).toFixed(1) : 0,
+      // Financeiro
+      monthlyRevenue: academy.monthly_revenue || 0,
       creditsBalance,
       plansActive: plansResult.count || 0,
+      // Horas dos professores
+      totalProfHours,
+      lockedProfHours,
+      availableProfHours: Math.max(0, totalProfHours - lockedProfHours),
+      // Atividade
+      monthlyCheckins,
+      recurringSeriesActive: recurringSeriesResult.count || 0,
+      recentNotifications: recentNotificationsResult.count || 0,
+      // Metadata
       lastUpdated: new Date().toISOString()
     }
 
@@ -1035,6 +1149,7 @@ router.get('/academies/:id/stats', requireAuth, requireRole(['SUPER_ADMIN']), re
       monthlyRevenue: academy.monthly_revenue || 0
     },
     ...stats,
+    monthlyRevenue: stats.monthlyRevenue || academy.monthly_revenue || 0,
     lastUpdated: new Date().toISOString()
   }
 
@@ -1046,6 +1161,261 @@ router.get('/academies/:id/stats', requireAuth, requireRole(['SUPER_ADMIN']), re
     data: finalStats,
     cached: false
   })
+}))
+
+// GET /api/franqueadora/finance - Dados financeiros do Asaas (saldo, extrato, pagamentos)
+router.get('/finance', requireAuth, requireRole(['SUPER_ADMIN']), requireFranqueadoraAdmin, asyncErrorHandler(async (req, res) => {
+  if (!req.franqueadoraAdmin?.franqueadora_id) {
+    return res.status(400).json({
+      success: false,
+      error: 'NO_FRANQUEADORA_CONTEXT',
+      message: 'Contexto da franqueadora não encontrado'
+    })
+  }
+
+  const queryParams = (req.query || {}) as Record<string, string | undefined>
+  const { startDate, endDate } = queryParams
+
+  // Cache por 5 minutos
+  const cacheKey = `franqueadora_finance_${req.franqueadoraAdmin.franqueadora_id}_${startDate || 'all'}_${endDate || 'all'}`
+  const cacheTime = 5 * 60 * 1000
+
+  const cachedData = await cacheService.get(cacheKey)
+  if (cachedData) {
+    return res.json({
+      success: true,
+      data: cachedData,
+      cached: true
+    })
+  }
+
+  try {
+    // Buscar dados em paralelo
+    const [balanceResult, paymentsResult] = await Promise.all([
+      asaasService.getBalance(),
+      asaasService.getPaymentsSummary({
+        startDate: startDate || undefined,
+        endDate: endDate || undefined
+      })
+    ])
+
+    // Buscar receita do mês atual do banco de dados (pagamentos confirmados)
+    const now = new Date()
+    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
+    const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]
+
+    const { data: monthlyPayments } = await supabase
+      .from('payment_intents')
+      .select('amount_cents, status')
+      .eq('franqueadora_id', req.franqueadoraAdmin.franqueadora_id)
+      .gte('created_at', firstDayOfMonth)
+      .lte('created_at', lastDayOfMonth)
+      .eq('status', 'PAID')
+
+    const monthlyRevenue = (monthlyPayments || [])
+      .reduce((sum, p) => sum + ((p.amount_cents || 0) / 100), 0)
+
+    // Buscar total de pagamentos pendentes
+    const { data: pendingPayments } = await supabase
+      .from('payment_intents')
+      .select('amount_cents')
+      .eq('franqueadora_id', req.franqueadoraAdmin.franqueadora_id)
+      .eq('status', 'PENDING')
+
+    const totalPendingFromDb = (pendingPayments || [])
+      .reduce((sum, p) => sum + ((p.amount_cents || 0) / 100), 0)
+
+    // Buscar totais all-time (todos os pagamentos)
+    const { data: allTimePayments } = await supabase
+      .from('payment_intents')
+      .select('amount_cents, status')
+      .eq('franqueadora_id', req.franqueadoraAdmin.franqueadora_id)
+
+    const allTimePaid = (allTimePayments || [])
+      .filter(p => p.status === 'PAID')
+      .reduce((sum, p) => sum + ((p.amount_cents || 0) / 100), 0)
+
+    const allTimePending = (allTimePayments || [])
+      .filter(p => p.status === 'PENDING')
+      .reduce((sum, p) => sum + ((p.amount_cents || 0) / 100), 0)
+
+    const financeData = {
+      // Dados do Asaas
+      asaas: {
+        balance: balanceResult.success ? balanceResult.data : null,
+        payments: paymentsResult.success ? paymentsResult.data : null,
+        connected: balanceResult.success
+      },
+      // Dados do banco de dados
+      database: {
+        monthlyRevenue,
+        pendingPayments: totalPendingFromDb,
+        allTimePaid,
+        allTimePending,
+        period: {
+          start: firstDayOfMonth,
+          end: lastDayOfMonth
+        }
+      },
+      // Resumo consolidado
+      summary: {
+        availableBalance: balanceResult.success ? balanceResult.data?.balance || 0 : 0,
+        pendingBalance: balanceResult.success ? balanceResult.data?.pendingBalance || 0 : totalPendingFromDb || allTimePending,
+        monthlyRevenue: paymentsResult.success ? paymentsResult.data?.totalReceived || monthlyRevenue : monthlyRevenue || allTimePaid,
+        overduePayments: paymentsResult.success ? paymentsResult.data?.totalOverdue || 0 : 0,
+        totalReceived: allTimePaid,
+        totalPending: allTimePending
+      },
+      lastUpdated: new Date().toISOString()
+    }
+
+    // Salvar em cache
+    await cacheService.set(cacheKey, financeData, cacheTime)
+
+    return res.json({
+      success: true,
+      data: financeData,
+      cached: false
+    })
+  } catch (error: any) {
+    console.error('[FRANQUEADORA] Erro ao buscar dados financeiros:', error)
+    return res.status(500).json({
+      success: false,
+      error: 'FINANCE_ERROR',
+      message: error.message || 'Erro ao buscar dados financeiros'
+    })
+  }
+}))
+
+// GET /api/franqueadora/academies/:id/finance - Dados financeiros de uma franquia específica
+router.get('/academies/:id/finance', requireAuth, requireRole(['SUPER_ADMIN']), requireFranqueadoraAdmin, asyncErrorHandler(async (req, res) => {
+  const { id } = req.params
+  
+  if (!req.franqueadoraAdmin?.franqueadora_id) {
+    return res.status(400).json({
+      success: false,
+      error: 'NO_FRANQUEADORA_CONTEXT',
+      message: 'Contexto da franqueadora não encontrado'
+    })
+  }
+
+  // Verificar se a academia pertence à franqueadora
+  const { data: academy, error: academyErr } = await supabase
+    .from('academies')
+    .select('id, name, franqueadora_id, asaas_account_id, asaas_wallet_id, monthly_revenue, franchise_fee, royalty_percentage')
+    .eq('id', id)
+    .single()
+
+  if (academyErr || !academy) {
+    return res.status(404).json({
+      success: false,
+      error: 'ACADEMY_NOT_FOUND',
+      message: 'Academia não encontrada'
+    })
+  }
+
+  if (academy.franqueadora_id !== req.franqueadoraAdmin.franqueadora_id) {
+    return res.status(403).json({
+      success: false,
+      error: 'INSUFFICIENT_PERMISSIONS',
+      message: 'Você não tem permissão para acessar esta academia'
+    })
+  }
+
+  // Cache por 5 minutos
+  const cacheKey = `academy_finance_${id}`
+  const cacheTime = 5 * 60 * 1000
+
+  const cachedData = await cacheService.get(cacheKey)
+  if (cachedData) {
+    return res.json({
+      success: true,
+      data: cachedData,
+      cached: true
+    })
+  }
+
+  try {
+    // Buscar pagamentos da academia no banco de dados
+    const now = new Date()
+    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
+    const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]
+
+    // Buscar a unit correspondente à academy (via academy_legacy_id)
+    const { data: linkedUnit } = await supabase
+      .from('units')
+      .select('id')
+      .eq('academy_legacy_id', id)
+      .eq('is_active', true)
+      .maybeSingle()
+
+    const unitId = linkedUnit?.id
+
+    // Buscar pagamentos específicos da academia
+    // Considera: unit_id = academy.id OU unit_id = linked_unit.id OU pagamentos sem unit_id
+    const { data: academyPayments } = await supabase
+      .from('payment_intents')
+      .select('amount_cents, status, created_at, unit_id')
+      .eq('franqueadora_id', req.franqueadoraAdmin.franqueadora_id)
+      .gte('created_at', firstDayOfMonth)
+      .lte('created_at', lastDayOfMonth)
+
+    // Filtrar pagamentos que pertencem a esta academia específica
+    const filteredPayments = (academyPayments || []).filter(p => 
+      p.unit_id === id || // ID da academy diretamente
+      (unitId && p.unit_id === unitId) || // ID da unit vinculada
+      p.unit_id === null // Pagamentos sem unit_id por compatibilidade
+    )
+
+    const monthlyRevenue = filteredPayments
+      .filter(p => p.status === 'PAID')
+      .reduce((sum, p) => sum + ((p.amount_cents || 0) / 100), 0)
+
+    const pendingRevenue = filteredPayments
+      .filter(p => p.status === 'PENDING')
+      .reduce((sum, p) => sum + ((p.amount_cents || 0) / 100), 0)
+
+    // Calcular royalty
+    const royaltyAmount = monthlyRevenue * ((academy.royalty_percentage || 0) / 100)
+    const netRevenue = monthlyRevenue - royaltyAmount
+
+    const financeData = {
+      academy: {
+        id: academy.id,
+        name: academy.name,
+        asaasConnected: !!academy.asaas_account_id
+      },
+      revenue: {
+        monthly: monthlyRevenue,
+        pending: pendingRevenue,
+        royalty: royaltyAmount,
+        net: netRevenue,
+        royaltyPercentage: academy.royalty_percentage || 0,
+        franchiseFee: academy.franchise_fee || 0
+      },
+      period: {
+        start: firstDayOfMonth,
+        end: lastDayOfMonth
+      },
+      lastUpdated: new Date().toISOString()
+    }
+
+    // Salvar em cache
+    await cacheService.set(cacheKey, financeData, cacheTime)
+
+    return res.json({
+      success: true,
+      data: financeData,
+      cached: false
+    })
+  } catch (error: any) {
+    console.error('[FRANQUEADORA] Erro ao buscar dados financeiros da academia:', error)
+    return res.status(500).json({
+      success: false,
+      error: 'FINANCE_ERROR',
+      message: error.message || 'Erro ao buscar dados financeiros'
+    })
+  }
 }))
 
 // GET /api/franqueadora/users - Listar todos os usuários com informações detalhadas

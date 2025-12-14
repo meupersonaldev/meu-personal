@@ -2097,9 +2097,16 @@ function UsuariosPageContent() {
                         onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
                         className="w-4 h-4 text-meu-primary border-gray-300 rounded focus:ring-meu-primary"
                       />
-                      <span className="text-sm font-medium text-gray-700">
-                        Usuário ativo
-                      </span>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium text-gray-700">
+                          Usuário ativo
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {formData.active 
+                            ? 'Usuário pode fazer login e usar o sistema' 
+                            : 'Usuário bloqueado - não consegue fazer login'}
+                        </span>
+                      </div>
                     </label>
                   </div>
                 </div>

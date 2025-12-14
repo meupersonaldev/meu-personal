@@ -1245,6 +1245,176 @@ export class AsaasService {
       }
     }
   }
+
+  /**
+   * Obter saldo financeiro da conta Asaas
+   * Retorna saldo disponível, a receber e bloqueado
+   */
+  async getBalance() {
+    try {
+      this.validateApiKey()
+
+      const startedAt = Date.now()
+      const response = await this.withRetry(() => this.api.get('/finance/balance'))
+      const duration = Date.now() - startedAt
+      
+      console.log('[ASAAS] Saldo obtido:', { 
+        method: 'GET', 
+        path: '/finance/balance', 
+        status: response.status, 
+        ms: duration 
+      })
+
+      return {
+        success: true,
+        data: {
+          balance: response.data?.balance || 0, // Saldo disponível para saque
+          pendingBalance: response.data?.pendingBalance || 0, // Saldo a receber (aguardando compensação)
+          blockedBalance: response.data?.blockedBalance || 0, // Saldo bloqueado
+          totalBalance: (response.data?.balance || 0) + (response.data?.pendingBalance || 0) // Total
+        }
+      }
+    } catch (error: any) {
+      const asaasError = error.response?.data || error.message
+      console.error('[ASAAS] Erro ao buscar saldo:', { 
+        path: '/finance/balance', 
+        status: error?.response?.status, 
+        respostaAsaas: asaasError 
+      })
+      return {
+        success: false,
+        error: asaasError?.errors?.[0]?.description || error.message || 'Erro ao buscar saldo'
+      }
+    }
+  }
+
+  /**
+   * Obter extrato financeiro da conta Asaas
+   * Retorna transações do período especificado
+   */
+  async getFinancialStatement(filters?: {
+    startDate?: string // YYYY-MM-DD
+    endDate?: string // YYYY-MM-DD
+    offset?: number
+    limit?: number
+  }) {
+    try {
+      this.validateApiKey()
+
+      const params = new URLSearchParams()
+      if (filters?.startDate) params.append('startDate', filters.startDate)
+      if (filters?.endDate) params.append('endDate', filters.endDate)
+      if (filters?.offset) params.append('offset', String(filters.offset))
+      if (filters?.limit) params.append('limit', String(filters.limit || 50))
+
+      const startedAt = Date.now()
+      const response = await this.withRetry(() => 
+        this.api.get(`/financialTransactions?${params.toString()}`)
+      )
+      const duration = Date.now() - startedAt
+      
+      console.log('[ASAAS] Extrato obtido:', { 
+        method: 'GET', 
+        path: '/financialTransactions', 
+        status: response.status, 
+        ms: duration,
+        totalCount: response.data?.totalCount || 0
+      })
+
+      return {
+        success: true,
+        data: {
+          transactions: response.data?.data || [],
+          totalCount: response.data?.totalCount || 0,
+          hasMore: response.data?.hasMore || false
+        }
+      }
+    } catch (error: any) {
+      const asaasError = error.response?.data || error.message
+      console.error('[ASAAS] Erro ao buscar extrato:', { 
+        path: '/financialTransactions', 
+        status: error?.response?.status, 
+        respostaAsaas: asaasError 
+      })
+      return {
+        success: false,
+        error: asaasError?.errors?.[0]?.description || error.message || 'Erro ao buscar extrato'
+      }
+    }
+  }
+
+  /**
+   * Obter resumo de pagamentos recebidos no período
+   */
+  async getPaymentsSummary(filters?: {
+    startDate?: string // YYYY-MM-DD
+    endDate?: string // YYYY-MM-DD
+    status?: 'RECEIVED' | 'CONFIRMED' | 'PENDING' | 'OVERDUE'
+  }) {
+    try {
+      this.validateApiKey()
+
+      const params = new URLSearchParams()
+      if (filters?.startDate) params.append('dateCreated[ge]', filters.startDate)
+      if (filters?.endDate) params.append('dateCreated[le]', filters.endDate)
+      if (filters?.status) params.append('status', filters.status)
+      params.append('limit', '100')
+
+      const startedAt = Date.now()
+      const response = await this.withRetry(() => 
+        this.api.get(`/payments?${params.toString()}`)
+      )
+      const duration = Date.now() - startedAt
+
+      const payments = response.data?.data || []
+      
+      // Calcular totais
+      const totalReceived = payments
+        .filter((p: any) => p.status === 'RECEIVED' || p.status === 'CONFIRMED')
+        .reduce((sum: number, p: any) => sum + (p.value || 0), 0)
+      
+      const totalPending = payments
+        .filter((p: any) => p.status === 'PENDING')
+        .reduce((sum: number, p: any) => sum + (p.value || 0), 0)
+
+      const totalOverdue = payments
+        .filter((p: any) => p.status === 'OVERDUE')
+        .reduce((sum: number, p: any) => sum + (p.value || 0), 0)
+
+      console.log('[ASAAS] Resumo de pagamentos:', { 
+        method: 'GET', 
+        path: '/payments', 
+        status: response.status, 
+        ms: duration,
+        totalPayments: payments.length,
+        totalReceived,
+        totalPending,
+        totalOverdue
+      })
+
+      return {
+        success: true,
+        data: {
+          totalReceived,
+          totalPending,
+          totalOverdue,
+          paymentsCount: payments.length,
+          payments
+        }
+      }
+    } catch (error: any) {
+      const asaasError = error.response?.data || error.message
+      console.error('[ASAAS] Erro ao buscar resumo de pagamentos:', { 
+        path: '/payments', 
+        status: error?.response?.status, 
+        respostaAsaas: asaasError 
+      })
+      return {
+        success: false,
+        error: asaasError?.errors?.[0]?.description || error.message || 'Erro ao buscar resumo'
+      }
+    }
+  }
 }
 
 export const asaasService = new AsaasService()

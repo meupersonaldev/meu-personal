@@ -206,7 +206,7 @@ router.put('/:id', requireAuth, async (req, res) => {
     if (email !== undefined) updates.email = email
     if (phone !== undefined) updates.phone = phone
     if (gender !== undefined) updates.gender = gender
-    if (active !== undefined) updates.active = active
+    if (active !== undefined) updates.is_active = active
 
     // Campos que apenas admins podem alterar
     if (isAdmin) {

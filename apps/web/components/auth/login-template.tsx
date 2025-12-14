@@ -69,9 +69,22 @@ function LoginTemplateContent({ expectedRole, defaultRedirect, copy, backgroundI
     setIsLoading(true)
 
     try {
-      const success = await login(formData.email, formData.password)
+      const result = await login(formData.email, formData.password)
 
-      if (!success) {
+      // Verificar se retornou objeto de erro ou boolean
+      if (typeof result === 'object' && result !== null && 'success' in result) {
+        // Novo formato: { success: false, error: string, code?: string }
+        if (!result.success) {
+          // Mensagem específica para usuário inativo
+          if (result.code === 'USER_INACTIVE') {
+            toast.error(result.error || 'Sua conta está desativada. Entre em contato com a administração.')
+          } else {
+            toast.error(result.error || (copy.invalidCredentialsMessage ?? 'Email ou senha incorretos'))
+          }
+          return
+        }
+      } else if (!result) {
+        // Formato antigo: boolean false
         toast.error(copy.invalidCredentialsMessage ?? 'Email ou senha incorretos')
         return
       }

@@ -17,28 +17,28 @@ interface DocFile {
 // Lista estática de documentos
 const docs: DocFile[] = [
     {
-        slug: 'manual_franqueadora',
-        title: 'Manual da Franqueadora',
-        description: 'Guia completo para gestão da rede, franquias, usuários, créditos e políticas globais.',
-        icon: 'franqueadora'
-    },
-    {
         slug: 'manual_franquia',
         title: 'Manual da Franquia',
-        description: 'Instruções para gestão da unidade, professores, alunos e agenda local.',
+        description: 'Guia completo para gestão da sua unidade: professores, alunos, agenda, vendas, check-in e financeiro.',
         icon: 'franquia'
     },
     {
         slug: 'manual_professor',
         title: 'Manual do Professor',
-        description: 'Como gerenciar sua agenda, disponibilidade, alunos e acompanhar seus ganhos.',
+        description: 'Como configurar disponibilidade, gerenciar agenda, realizar aulas, acompanhar alunos e sacar ganhos.',
         icon: 'professor'
     },
     {
         slug: 'manual_aluno',
         title: 'Manual do Aluno',
-        description: 'Guia para agendamento de aulas, compra de créditos, check-in e uso do sistema.',
+        description: 'Guia para criar conta, comprar créditos, agendar aulas, fazer check-in e acompanhar seu histórico.',
         icon: 'aluno'
+    },
+    {
+        slug: 'manual_franqueadora',
+        title: 'Manual da Franqueadora',
+        description: 'Gestão da rede: franquias, usuários, leads, políticas, comunicações e visão consolidada.',
+        icon: 'franqueadora'
     }
 ]
 

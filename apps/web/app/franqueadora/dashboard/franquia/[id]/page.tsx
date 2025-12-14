@@ -25,14 +25,15 @@ import {
   CheckCircle,
   XCircle,
   Edit,
-  Save,
   X,
   Settings,
   Coins,
-  ChevronRight
+  Save,
+  Clock,
+  Repeat
 } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
-import { useFranqueadoraStore, type Academy, type AcademyStats } from '@/lib/stores/franqueadora-store'
+import { useFranqueadoraStore, type Academy, type AcademyStats, type AcademyFinance } from '@/lib/stores/franqueadora-store'
 import FranqueadoraGuard from '@/components/auth/franqueadora-guard'
 
 interface EditingFranchise extends Partial<Academy> {
@@ -44,9 +45,10 @@ export default function FranquiaDetailsPage() {
   const params = useParams()
   const franchiseId = params.id as string
 
-  const { academies, fetchAcademies, fetchAcademyStats, updateAcademy, isLoading } = useFranqueadoraStore()
+  const { academies, fetchAcademies, fetchAcademyStats, fetchAcademyFinance, updateAcademy, isLoading } = useFranqueadoraStore()
   const [franchise, setFranchise] = useState<Academy | null>(null)
   const [stats, setStats] = useState<AcademyStats | null>(null)
+  const [finance, setFinance] = useState<AcademyFinance | null>(null)
   const [loadingStats, setLoadingStats] = useState(true)
   const [editingFranchise, setEditingFranchise] = useState<EditingFranchise | null>(null)
   const [isSaving, setIsSaving] = useState(false)
@@ -84,10 +86,23 @@ export default function FranquiaDetailsPage() {
 
     setLoadingStats(true)
     try {
-      const realStats = await fetchAcademyStats(franchiseId)
+      // Buscar stats e dados financeiros em paralelo
+      const [realStats, financeData] = await Promise.all([
+        fetchAcademyStats(franchiseId),
+        fetchAcademyFinance(franchiseId)
+      ])
 
       if (realStats) {
-        setStats(realStats)
+        // Se tiver dados financeiros do Asaas, usar a receita mensal de lá
+        if (financeData?.revenue?.monthly) {
+          setStats({
+            ...realStats,
+            monthlyRevenue: financeData.revenue.monthly
+          })
+        } else {
+          setStats(realStats)
+        }
+        setFinance(financeData)
       } else {
         toast.error('Erro ao carregar dados da franquia')
       }
@@ -96,7 +111,7 @@ export default function FranquiaDetailsPage() {
     } finally {
       setLoadingStats(false)
     }
-  }, [franchiseId, fetchAcademyStats])
+  }, [franchiseId, fetchAcademyStats, fetchAcademyFinance])
 
   useEffect(() => {
     if (academies.length > 0 && franchiseId) {
@@ -446,35 +461,99 @@ export default function FranquiaDetailsPage() {
               </Card>
             </div>
 
+            {/* KPIs Secundários - Novos dados */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <Card className="p-5 border-orange-100 bg-orange-50/30">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 rounded-xl bg-orange-100 text-orange-600"><CalendarCheck className="h-6 w-6" /></div>
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-orange-500/80 tracking-wider">Check-ins (Mês)</p>
+                    <p className="text-2xl font-bold text-orange-900">{stats.monthlyCheckins ?? 0}</p>
+                  </div>
+                </div>
+              </Card>
+              <Card className="p-5 border-indigo-100 bg-indigo-50/30">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 rounded-xl bg-indigo-100 text-indigo-600"><Clock className="h-6 w-6" /></div>
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-indigo-500/80 tracking-wider">Horas Professores</p>
+                    <p className="text-2xl font-bold text-indigo-900">{stats.availableProfHours ?? 0}h</p>
+                    <p className="text-xs text-indigo-600 font-medium">{stats.lockedProfHours ?? 0}h reservadas</p>
+                  </div>
+                </div>
+              </Card>
+              <Card className="p-5 border-amber-100 bg-amber-50/30">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 rounded-xl bg-amber-100 text-amber-600"><Calendar className="h-6 w-6" /></div>
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-amber-500/80 tracking-wider">Agend. Pendentes</p>
+                    <p className="text-2xl font-bold text-amber-900">{stats.pendingBookings ?? 0}</p>
+                  </div>
+                </div>
+              </Card>
+              <Card className="p-5 border-teal-100 bg-teal-50/30">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 rounded-xl bg-teal-100 text-teal-600"><Repeat className="h-6 w-6" /></div>
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-teal-500/80 tracking-wider">Séries Recorrentes</p>
+                    <p className="text-2xl font-bold text-teal-900">{stats.recurringSeriesActive ?? 0}</p>
+                    <p className="text-xs text-teal-600 font-medium">ativas</p>
+                  </div>
+                </div>
+              </Card>
+            </div>
+
             {/* Financeiro */}
             <Card className="shadow-sm border-gray-200">
               <CardHeader className="pb-3 border-b border-gray-100 bg-gray-50/50">
                 <CardTitle className="text-base font-bold text-gray-800 flex items-center gap-2">
                   <TrendingUp className="h-5 w-5 text-meu-primary" />
                   Informações Financeiras
+                  {finance?.academy?.asaasConnected && (
+                    <Badge className="bg-green-100 text-green-700 text-[10px]">Asaas Conectado</Badge>
+                  )}
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-5">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 text-center">
                     <p className="text-[10px] uppercase font-bold text-blue-500 tracking-wider mb-1">Taxa de Franquia</p>
-                    <p className="text-xl lg:text-2xl font-bold text-blue-900">{formatCurrency(franchise.franchise_fee)}</p>
+                    <p className="text-xl lg:text-2xl font-bold text-blue-900">{formatCurrency(finance?.revenue?.franchiseFee || franchise.franchise_fee)}</p>
                   </div>
                   <div className="bg-green-50 p-4 rounded-xl border border-green-100 text-center">
-                    <p className="text-[10px] uppercase font-bold text-green-500 tracking-wider mb-1">Royalty Mensal</p>
+                    <p className="text-[10px] uppercase font-bold text-green-500 tracking-wider mb-1">Receita Mensal</p>
                     <p className="text-xl lg:text-2xl font-bold text-green-900">
-                      {formatCurrency((stats.monthlyRevenue || 0) * ((franchise.royalty_percentage || 0) / 100))}
+                      {formatCurrency(finance?.revenue?.monthly || stats.monthlyRevenue || 0)}
                     </p>
-                    <p className="text-[10px] text-green-600 mt-1">{franchise.royalty_percentage}% da receita</p>
+                    {finance?.period && (
+                      <p className="text-[10px] text-green-600 mt-1">
+                        {new Date(finance.period.start).toLocaleDateString('pt-BR', { month: 'short' })} - {new Date(finance.period.end).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })}
+                      </p>
+                    )}
+                  </div>
+                  <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 text-center">
+                    <p className="text-[10px] uppercase font-bold text-amber-500 tracking-wider mb-1">Royalty Mensal</p>
+                    <p className="text-xl lg:text-2xl font-bold text-amber-900">
+                      {formatCurrency(finance?.revenue?.royalty || ((stats.monthlyRevenue || 0) * ((franchise.royalty_percentage || 0) / 100)))}
+                    </p>
+                    <p className="text-[10px] text-amber-600 mt-1">{finance?.revenue?.royaltyPercentage || franchise.royalty_percentage}% da receita</p>
                   </div>
                   <div className="bg-purple-50 p-4 rounded-xl border border-purple-100 text-center">
                     <p className="text-[10px] uppercase font-bold text-purple-500 tracking-wider mb-1">Receita Líquida</p>
                     <p className="text-xl lg:text-2xl font-bold text-purple-900">
-                      {formatCurrency((stats.monthlyRevenue || 0) * (1 - (franchise.royalty_percentage || 0) / 100))}
+                      {formatCurrency(finance?.revenue?.net || ((stats.monthlyRevenue || 0) * (1 - (franchise.royalty_percentage || 0) / 100)))}
                     </p>
                     <p className="text-[10px] text-purple-600 mt-1">Após royalty</p>
                   </div>
                 </div>
+                {finance?.revenue?.pending && finance.revenue.pending > 0 && (
+                  <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <p className="text-sm text-yellow-800 flex items-center gap-2">
+                      <AlertCircle className="h-4 w-4" />
+                      <span><strong>{formatCurrency(finance.revenue.pending)}</strong> em pagamentos pendentes</span>
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
 

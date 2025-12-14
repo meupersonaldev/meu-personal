@@ -8,13 +8,10 @@ import { useTeacherApproval } from '@/hooks/use-teacher-approval'
 import { ApprovalBanner } from '@/components/teacher/approval-banner'
 import { ApprovalBlock } from '@/components/teacher/approval-block'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
-  CreditCard,
   DollarSign,
   TrendingUp,
-  TrendingDown,
   Loader2,
   AlertCircle,
   Calendar,
@@ -24,7 +21,6 @@ import {
   ArrowDownRight,
   Filter,
   Download,
-  PieChart,
   History,
   X,
   Check,
@@ -72,7 +68,6 @@ export default function ProfessorCarteira() {
     pendingHours: 0
   })
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [filterTab, setFilterTab] = useState<'all' | 'income' | 'expense'>('all')
   const [showFilterModal, setShowFilterModal] = useState(false)
   const [dateFilter, setDateFilter] = useState<{ start: string; end: string }>({
@@ -274,13 +269,9 @@ export default function ProfessorCarteira() {
 
         // Usar dados do history summary para valores mais precisos
         // private_earnings = faturamento de aulas particulares (já concluídas)
-        // academy_hours = horas de aulas da plataforma
-        const privateEarnings = historySummary.private_earnings || 0
-        const academyHours = historySummary.academy_hours || 0
-        
-        // Faturamento total = aulas particulares (dinheiro) + aulas plataforma não geram receita direta
+        // Faturamento total = aulas particulares (dinheiro) - aulas plataforma não geram receita direta
         // O professor já pagou pelas horas, então aulas da plataforma são "uso" do que ele comprou
-        const finalTotalRevenue = privateEarnings
+        const finalTotalRevenue = historySummary.private_earnings || 0
         const finalTotalHoursGiven = (historySummary.total_classes || 0)
 
         // Ordenar
@@ -300,8 +291,8 @@ export default function ProfessorCarteira() {
         })
 
       } catch (err) {
-        console.error(err)
-        setError('Falha ao carregar dados financeiros')
+        console.error('Falha ao carregar dados financeiros:', err)
+        showToast('Falha ao carregar dados financeiros', 'error')
       } finally {
         setLoading(false)
       }

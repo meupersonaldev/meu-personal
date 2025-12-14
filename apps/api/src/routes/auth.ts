@@ -120,17 +120,25 @@ router.post('/login', auditAuthEvent('LOGIN'), async (req, res) => {
     const { email, password } = loginSchema.parse(req.body)
 
     // Buscar usuário no Supabase (inclui campos de senha)
+    // Não filtrar por is_active aqui para poder dar mensagem específica
     const { data: users, error: userError } = await supabase
       .from('users')
       .select(
         'id, name, email, phone, role, credits, avatar_url, is_active, password_hash, password, approval_status'
       )
       .eq('email', email)
-      .eq('is_active', true)
       .single()
 
     if (userError || !users) {
       return res.status(401).json({ message: 'Email ou senha incorretos' })
+    }
+
+    // Verificar se usuário está ativo ANTES de verificar senha
+    if (!users.is_active) {
+      return res.status(403).json({ 
+        message: 'Sua conta está desativada. Entre em contato com a administração para mais informações.',
+        code: 'USER_INACTIVE'
+      })
     }
 
     // Verificar senha com suporte a migração gradual
@@ -586,11 +594,18 @@ router.get('/me', async (req, res) => {
       .from('users')
       .select('*')
       .eq('id', decoded.userId)
-      .eq('is_active', true)
       .single()
 
     if (error || !user) {
       return res.status(401).json({ message: 'Usuário não encontrado' })
+    }
+
+    // Verificar se usuário está ativo
+    if (!user.is_active) {
+      return res.status(403).json({ 
+        message: 'Sua conta está desativada. Entre em contato com a administração para mais informações.',
+        code: 'USER_INACTIVE'
+      })
     }
 
     res.json({

@@ -492,5 +492,70 @@ export const emailUnifiedService = {
     const provider = getProvider()
     const configured = provider === 'resend' ? isResendConfigured() : isSmtpConfigured()
     return { provider, configured }
+  },
+
+  /**
+   * Delete a single email log by ID
+   */
+  async deleteEmailLog(id: string): Promise<boolean> {
+    const { error } = await supabase
+      .from('email_logs')
+      .delete()
+      .eq('id', id)
+
+    if (error) {
+      console.error('[EMAIL-UNIFIED] Error deleting email log:', error)
+      return false
+    }
+
+    return true
+  },
+
+  /**
+   * Delete multiple email logs by IDs
+   */
+  async deleteEmailLogs(ids: string[]): Promise<{ deleted: number; failed: number }> {
+    const { error, count } = await supabase
+      .from('email_logs')
+      .delete()
+      .in('id', ids)
+
+    if (error) {
+      console.error('[EMAIL-UNIFIED] Error deleting email logs:', error)
+      return { deleted: 0, failed: ids.length }
+    }
+
+    return { deleted: count || ids.length, failed: 0 }
+  },
+
+  /**
+   * Delete all email logs (with optional filters)
+   */
+  async deleteAllEmailLogs(options?: {
+    status?: EmailStatus
+    olderThan?: string // ISO date string
+  }): Promise<number> {
+    let query = supabase.from('email_logs').delete()
+
+    if (options?.status) {
+      query = query.eq('status', options.status)
+    }
+    if (options?.olderThan) {
+      query = query.lt('created_at', options.olderThan)
+    }
+
+    // Se não houver filtros, exigir pelo menos um para evitar delete acidental de tudo
+    if (!options?.status && !options?.olderThan) {
+      throw new Error('Pelo menos um filtro é necessário para deletar logs em massa')
+    }
+
+    const { error, count } = await query
+
+    if (error) {
+      console.error('[EMAIL-UNIFIED] Error deleting all email logs:', error)
+      throw new Error('Erro ao deletar logs de email')
+    }
+
+    return count || 0
   }
 }

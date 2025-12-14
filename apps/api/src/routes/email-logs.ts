@@ -122,6 +122,81 @@ router.get('/:id',
 )
 
 /**
+ * DELETE /api/email-logs/:id
+ * Delete a single email log
+ */
+router.delete('/:id',
+  requireAuth,
+  requireRole(['SUPER_ADMIN']),
+  requireFranqueadoraAdmin,
+  asyncErrorHandler(async (req, res) => {
+    const { id } = req.params
+
+    const log = await emailUnifiedService.getEmailLogById(id)
+    if (!log) {
+      return res.status(404).json({
+        success: false,
+        error: 'NOT_FOUND',
+        message: 'Log de email não encontrado'
+      })
+    }
+
+    const deleted = await emailUnifiedService.deleteEmailLog(id)
+
+    if (!deleted) {
+      return res.status(500).json({
+        success: false,
+        error: 'DELETE_FAILED',
+        message: 'Erro ao deletar log de email'
+      })
+    }
+
+    return res.json({
+      success: true,
+      message: 'Log deletado com sucesso'
+    })
+  })
+)
+
+/**
+ * DELETE /api/email-logs/bulk
+ * Delete multiple email logs by IDs
+ */
+router.delete('/bulk',
+  requireAuth,
+  requireRole(['SUPER_ADMIN']),
+  requireFranqueadoraAdmin,
+  asyncErrorHandler(async (req, res) => {
+    const { ids } = req.body
+
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'INVALID_IDS',
+        message: 'Lista de IDs inválida'
+      })
+    }
+
+    if (ids.length > 100) {
+      return res.status(400).json({
+        success: false,
+        error: 'TOO_MANY_IDS',
+        message: 'Máximo de 100 logs por vez'
+      })
+    }
+
+    const result = await emailUnifiedService.deleteEmailLogs(ids)
+
+    return res.json({
+      success: true,
+      deleted: result.deleted,
+      failed: result.failed,
+      message: `${result.deleted} log(s) deletado(s)`
+    })
+  })
+)
+
+/**
  * POST /api/email-logs/webhook/resend
  * Resend webhook endpoint for delivery status updates
  * 

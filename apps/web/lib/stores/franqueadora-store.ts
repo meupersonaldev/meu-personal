@@ -279,16 +279,86 @@ export interface ConsolidatedAnalytics {
 }
 
 export interface AcademyStats {
+  // Usuários
   totalStudents: number
   activeStudents: number
   totalTeachers: number
   activeTeachers: number
+  // Agendamentos
   totalBookings: number
   completedBookings: number
   cancelledBookings: number
+  pendingBookings?: number
+  // Financeiro
   monthlyRevenue: number
   creditsBalance: number
   plansActive: number
+  // Horas dos professores
+  totalProfHours?: number
+  lockedProfHours?: number
+  availableProfHours?: number
+  // Atividade
+  monthlyCheckins?: number
+  recurringSeriesActive?: number
+  recentNotifications?: number
+}
+
+export interface AcademyFinance {
+  academy: {
+    id: string
+    name: string
+    asaasConnected: boolean
+  }
+  revenue: {
+    monthly: number
+    pending: number
+    royalty: number
+    net: number
+    royaltyPercentage: number
+    franchiseFee: number
+  }
+  period: {
+    start: string
+    end: string
+  }
+  lastUpdated: string
+}
+
+export interface FranqueadoraFinance {
+  asaas: {
+    balance: {
+      balance: number
+      pendingBalance: number
+      blockedBalance: number
+      totalBalance: number
+    } | null
+    payments: {
+      totalReceived: number
+      totalPending: number
+      totalOverdue: number
+      paymentsCount: number
+    } | null
+    connected: boolean
+  }
+  database: {
+    monthlyRevenue: number
+    pendingPayments: number
+    allTimePaid: number
+    allTimePending: number
+    period: {
+      start: string
+      end: string
+    }
+  }
+  summary: {
+    availableBalance: number
+    pendingBalance: number
+    monthlyRevenue: number
+    overduePayments: number
+    totalReceived: number
+    totalPending: number
+  }
+  lastUpdated: string
 }
 
 interface FranqueadoraState {
@@ -323,6 +393,8 @@ interface FranqueadoraState {
   updateAcademy: (id: string, updates: Partial<Academy>) => Promise<boolean>
   deleteAcademy: (id: string) => Promise<boolean>
   fetchAcademyStats: (academyId: string) => Promise<AcademyStats | null>
+  fetchAcademyFinance: (academyId: string) => Promise<AcademyFinance | null>
+  fetchFranqueadoraFinance: () => Promise<FranqueadoraFinance | null>
 
   // Packages
   fetchPackages: () => Promise<void>
@@ -684,6 +756,58 @@ export const useFranqueadoraStore = create<FranqueadoraState>()(
           }
           const response = await resp.json()
           return response.data as AcademyStats
+        } catch {
+          return null
+        }
+      },
+
+      fetchAcademyFinance: async (academyId) => {
+        try {
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const token = get().token
+          const franqueadoraId = await get().ensureFranqueadoraId()
+          const url = franqueadoraId
+            ? `${API_URL}/api/franqueadora/academies/${academyId}/finance?franqueadora_id=${encodeURIComponent(franqueadoraId)}`
+            : `${API_URL}/api/franqueadora/academies/${academyId}/finance`
+          const resp = await fetch(url, {
+            credentials: 'include',
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          })
+          if (!resp.ok) {
+            if ((resp.status === 401 || resp.status === 403) && get().isAuthenticated) {
+              try { const { toast } = await import('sonner'); toast.error('Sem permissão para ver dados financeiros.') } catch { }
+              return null
+            }
+            throw new Error('Failed to fetch academy finance')
+          }
+          const response = await resp.json()
+          return response.data as AcademyFinance
+        } catch {
+          return null
+        }
+      },
+
+      fetchFranqueadoraFinance: async () => {
+        try {
+          const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const token = get().token
+          const franqueadoraId = await get().ensureFranqueadoraId()
+          const url = franqueadoraId
+            ? `${API_URL}/api/franqueadora/finance?franqueadora_id=${encodeURIComponent(franqueadoraId)}`
+            : `${API_URL}/api/franqueadora/finance`
+          const resp = await fetch(url, {
+            credentials: 'include',
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          })
+          if (!resp.ok) {
+            if ((resp.status === 401 || resp.status === 403) && get().isAuthenticated) {
+              try { const { toast } = await import('sonner'); toast.error('Sem permissão para ver dados financeiros.') } catch { }
+              return null
+            }
+            throw new Error('Failed to fetch franqueadora finance')
+          }
+          const response = await resp.json()
+          return response.data as FranqueadoraFinance
         } catch {
           return null
         }

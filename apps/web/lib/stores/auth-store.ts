@@ -19,12 +19,18 @@ export interface User {
   gender?: 'MALE' | 'FEMALE' | 'NON_BINARY' | 'OTHER' | 'PREFER_NOT_TO_SAY'
 }
 
+interface LoginResult {
+  success: boolean
+  error?: string
+  code?: string
+}
+
 interface AuthState {
   user: User | null
   token: string | null
   isAuthenticated: boolean
   isLoading: boolean
-  login: (email: string, password: string) => Promise<boolean>
+  login: (email: string, password: string) => Promise<boolean | LoginResult>
   register: (userData: {
     name: string
     email: string
@@ -140,7 +146,8 @@ export const useAuthStore = create<AuthState>()(
           const data = await response.json()
 
           if (!response.ok) {
-            return false
+            // Retornar objeto com erro para mensagens específicas (ex: usuário inativo)
+            return { success: false, error: data.message || 'Erro no login', code: data.code }
           }
 
           // Atualizar estado com os dados do usuário

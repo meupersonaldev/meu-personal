@@ -17,7 +17,8 @@ import {
   ChevronRight,
   ArrowLeft,
   Info,
-  Calendar
+  Calendar,
+  Trash2
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -109,6 +110,10 @@ export default function EmailHistoryPage() {
   const [templateFilter, setTemplateFilter] = useState<string>('all')
   const [searchEmail, setSearchEmail] = useState('')
 
+  // Selection for bulk delete
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [isDeleting, setIsDeleting] = useState(false)
+
   // Hydration fix
   const [hydrated, setHydrated] = useState(false)
   useEffect(() => { setHydrated(true) }, [])
@@ -189,6 +194,85 @@ export default function EmailHistoryPage() {
     e.preventDefault()
     setPage(1)
     fetchLogs()
+  }
+
+  // Delete single log
+  const handleDelete = async (id: string) => {
+    if (!confirm('Tem certeza que deseja deletar este log?')) return
+    
+    setIsDeleting(true)
+    try {
+      const response = await fetch(`${API_URL}/api/email-logs/${id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined
+      })
+      
+      if (response.ok) {
+        setLogs(prev => prev.filter(log => log.id !== id))
+        setSelectedIds(prev => {
+          const next = new Set(prev)
+          next.delete(id)
+          return next
+        })
+        fetchStats()
+      }
+    } catch (err) {
+      console.error('Error deleting log:', err)
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  // Delete selected logs
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return
+    if (!confirm(`Tem certeza que deseja deletar ${selectedIds.size} log(s)?`)) return
+    
+    setIsDeleting(true)
+    try {
+      const response = await fetch(`${API_URL}/api/email-logs/bulk`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ ids: Array.from(selectedIds) })
+      })
+      
+      if (response.ok) {
+        setLogs(prev => prev.filter(log => !selectedIds.has(log.id)))
+        setSelectedIds(new Set())
+        fetchStats()
+      }
+    } catch (err) {
+      console.error('Error deleting logs:', err)
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  // Toggle selection
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  // Select all on current page
+  const toggleSelectAll = () => {
+    if (selectedIds.size === logs.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(logs.map(log => log.id)))
+    }
   }
 
   const formatDate = (date?: string) => {
@@ -341,6 +425,19 @@ export default function EmailHistoryPage() {
                   ))}
                 </SelectContent>
               </Select>
+
+              {selectedIds.size > 0 && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleBulkDelete}
+                  disabled={isDeleting}
+                  className="h-10 whitespace-nowrap"
+                >
+                  <Trash2 className="h-4 w-4 mr-1" />
+                  Deletar ({selectedIds.size})
+                </Button>
+              )}
             </div>
           </div>
 
@@ -350,18 +447,37 @@ export default function EmailHistoryPage() {
               {logs.map((log) => {
                 const statusInfo = statusConfig[log.status]
                 return (
-                  <div key={log.id} className="p-4">
+                  <div key={log.id} className={cn("p-4", selectedIds.has(log.id) && "bg-blue-50/50")}>
                     <div className="flex items-start justify-between mb-2">
-                      <div className="flex flex-col">
-                        <span className="font-bold text-gray-900 text-sm truncate max-w-[200px]">{log.recipient_email}</span>
-                        {log.recipient_name && <span className="text-xs text-gray-500">{log.recipient_name}</span>}
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(log.id)}
+                          onChange={() => toggleSelect(log.id)}
+                          className="rounded border-gray-300"
+                        />
+                        <div className="flex flex-col">
+                          <span className="font-bold text-gray-900 text-sm truncate max-w-[180px]">{log.recipient_email}</span>
+                          {log.recipient_name && <span className="text-xs text-gray-500">{log.recipient_name}</span>}
+                        </div>
                       </div>
-                      <span className={cn("px-2 py-0.5 rounded text-[10px] uppercase font-bold border", statusInfo.className)}>
-                        {statusInfo.label}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className={cn("px-2 py-0.5 rounded text-[10px] uppercase font-bold border", statusInfo.className)}>
+                          {statusInfo.label}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDelete(log.id)}
+                          disabled={isDeleting}
+                          className="h-7 w-7 p-0 text-gray-400 hover:text-red-500"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </div>
 
-                    <div className="mb-3">
+                    <div className="mb-3 ml-6">
                       <p className="text-xs text-gray-600 line-clamp-1">{log.subject}</p>
                       {log.template_slug && (
                         <span className="inline-block mt-1 px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded text-[10px]">
@@ -370,7 +486,7 @@ export default function EmailHistoryPage() {
                       )}
                     </div>
 
-                    <div className="flex items-center justify-between text-[11px] text-gray-400">
+                    <div className="flex items-center justify-between text-[11px] text-gray-400 ml-6">
                       <span className="flex items-center gap-1"><Calendar className="h-3 w-3" /> {log.created_at ? formatDistanceToNow(new Date(log.created_at), { addSuffix: true, locale: ptBR }) : ''}</span>
                       {log.opened_at && <span className="text-emerald-600 font-medium">Aberto {formatDate(log.opened_at)}</span>}
                     </div>
@@ -384,11 +500,20 @@ export default function EmailHistoryPage() {
               <table className="w-full text-sm text-left">
                 <thead className="bg-gray-50 text-gray-500 font-medium border-b border-gray-100">
                   <tr>
+                    <th className="px-4 py-3 w-10">
+                      <input
+                        type="checkbox"
+                        checked={logs.length > 0 && selectedIds.size === logs.length}
+                        onChange={toggleSelectAll}
+                        className="rounded border-gray-300"
+                      />
+                    </th>
                     <th className="px-4 py-3">Destinatário</th>
                     <th className="px-4 py-3">Assunto / Template</th>
                     <th className="px-4 py-3">Status</th>
                     <th className="px-4 py-3 text-right">Eventos</th>
                     <th className="px-4 py-3 text-right">Enviado</th>
+                    <th className="px-4 py-3 w-10"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -396,7 +521,15 @@ export default function EmailHistoryPage() {
                     const statusInfo = statusConfig[log.status]
                     const StatusIcon = statusInfo.icon
                     return (
-                      <tr key={log.id} className="hover:bg-gray-50/50 transition-colors">
+                      <tr key={log.id} className={cn("hover:bg-gray-50/50 transition-colors", selectedIds.has(log.id) && "bg-blue-50/50")}>
+                        <td className="px-4 py-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(log.id)}
+                            onChange={() => toggleSelect(log.id)}
+                            className="rounded border-gray-300"
+                          />
+                        </td>
                         <td className="px-4 py-3">
                           <div className="font-medium text-gray-900">{log.recipient_email}</div>
                           {log.recipient_name && <div className="text-xs text-gray-500">{log.recipient_name}</div>}
@@ -420,6 +553,17 @@ export default function EmailHistoryPage() {
                         </td>
                         <td className="px-4 py-3 text-right text-gray-500 text-xs">
                           <div title={formatDate(log.created_at)}>{formatDistanceToNow(new Date(log.created_at), { addSuffix: true, locale: ptBR })}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDelete(log.id)}
+                            disabled={isDeleting}
+                            className="h-8 w-8 p-0 text-gray-400 hover:text-red-500"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </td>
                       </tr>
                     )
