@@ -2056,6 +2056,129 @@ const checkinSchema = z.object({
   method: z.enum(['QRCODE', 'MANUAL']).default('MANUAL')
 })
 
+// POST /api/bookings/:id/fake-checkin - Fake check-in para testes em desenvolvimento
+// APENAS para ambiente de desenvolvimento (localhost)
+router.post(
+  '/:id/fake-checkin',
+  requireAuth,
+  asyncErrorHandler(async (req, res) => {
+    const { id } = req.params
+    const user = req.user
+
+    // Verificar se é ambiente de desenvolvimento
+    const isDev = process.env.NODE_ENV !== 'production'
+    if (!isDev) {
+      return res.status(403).json({
+        success: false,
+        error: 'Fake check-in disponível apenas em ambiente de desenvolvimento',
+        code: 'NOT_ALLOWED_IN_PRODUCTION'
+      })
+    }
+
+    // Buscar booking
+    const { data: booking, error: getError } = await supabase
+      .from('bookings')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (getError || !booking) {
+      return res.status(404).json({
+        success: false,
+        error: 'Agendamento não encontrado',
+        code: 'NOT_FOUND'
+      })
+    }
+
+    // Verificar se é PAID
+    if (booking.status_canonical !== 'PAID') {
+      return res.status(400).json({
+        success: false,
+        error: `Status inválido para check-in. Status atual: ${booking.status_canonical}`,
+        code: 'INVALID_STATUS'
+      })
+    }
+
+    // Atualizar booking para DONE
+    const now = new Date()
+    const { data: updatedBooking, error: updateError } = await supabase
+      .from('bookings')
+      .update({
+        status: 'COMPLETED',
+        status_canonical: 'DONE',
+        updated_at: now.toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (updateError) {
+      return res.status(500).json({
+        success: false,
+        error: 'Erro ao atualizar booking',
+        code: 'UPDATE_ERROR'
+      })
+    }
+
+    // Registrar check-in fake
+    await supabase.from('checkins').insert({
+      academy_id: booking.franchise_id,
+      teacher_id: booking.teacher_id,
+      booking_id: booking.id,
+      status: 'COMPLETED',
+      reason: 'FAKE_CHECKIN_DEV',
+      method: 'MANUAL',
+      created_at: now.toISOString()
+    })
+
+    // Liberar hora do professor (unlock bonus hours)
+    try {
+      // Buscar franqueadora_id da academia
+      const { data: academy } = await supabase
+        .from('academies')
+        .select('franqueadora_id')
+        .eq('id', booking.franchise_id)
+        .single()
+
+      if (academy?.franqueadora_id) {
+        const { balanceService } = await import('../services/balance.service')
+        await balanceService.unlockProfessorBonusHours(
+          booking.teacher_id,
+          academy.franqueadora_id,
+          1,
+          id,
+          {
+            source: 'SYSTEM',
+            metaJson: {
+              booking_id: id,
+              reason: 'fake_checkin_dev'
+            }
+          }
+        )
+      }
+    } catch (e) {
+      console.warn('[fake-checkin] Erro ao liberar hora do professor:', e)
+    }
+
+    console.log(`🧪 [FAKE CHECKIN] Booking ${id} marcado como DONE (dev only)`)
+
+    res.json({
+      success: true,
+      message: '🧪 Fake Check-in realizado! (apenas para testes)',
+      booking: {
+        id: updatedBooking.id,
+        status_canonical: updatedBooking.status_canonical,
+        date: updatedBooking.date,
+        duration: updatedBooking.duration
+      },
+      credits: {
+        hours_credited: 1,
+        new_balance: 0 // Não calculamos o balance real no fake
+      }
+    })
+  })
+)
+
 // POST /api/bookings/:id/checkin - Perform check-in for a booking
 // Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 2.1, 2.2, 4.1, 4.2
 router.post(

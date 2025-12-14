@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
-import { CheckCircle, Loader2 } from 'lucide-react'
+import { CheckCircle, Loader2, Zap } from 'lucide-react'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { toast } from 'sonner'
 
@@ -57,7 +57,17 @@ export function CheckinButton({
   className = ''
 }: CheckinButtonProps) {
   const [isLoading, setIsLoading] = useState(false)
+  const [isFakeLoading, setIsFakeLoading] = useState(false)
+  const [isLocalhost, setIsLocalhost] = useState(false)
   const { token } = useAuthStore()
+
+  // Verificar se está em localhost (apenas client-side)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const hostname = window.location.hostname
+      setIsLocalhost(hostname === 'localhost' || hostname === '127.0.0.1')
+    }
+  }, [])
 
   // Check if check-in is allowed based on time window
   const now = new Date()
@@ -106,6 +116,42 @@ export function CheckinButton({
     }
   }
 
+  // Fake check-in para testes em localhost
+  const handleFakeCheckin = async () => {
+    if (!token) return
+
+    setIsFakeLoading(true)
+
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const response = await fetch(`${API_URL}/api/bookings/${bookingId}/fake-checkin`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        }
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        const errorMessage = data.error || 'Erro ao realizar fake check-in'
+        toast.error(errorMessage)
+        onError?.(errorMessage)
+        return
+      }
+
+      toast.success('🧪 Fake Check-in realizado! (apenas para testes)')
+      onSuccess?.(data as CheckinResult)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao realizar fake check-in'
+      toast.error(errorMessage)
+      onError?.(errorMessage)
+    } finally {
+      setIsFakeLoading(false)
+    }
+  }
+
   // Get button styling based on variant
   const getButtonClasses = () => {
     const baseClasses = 'w-full h-8 rounded-lg font-bold shadow-sm transition-all active:scale-[0.98] text-xs'
@@ -128,25 +174,46 @@ export function CheckinButton({
     return ''
   }
 
+  // Mostrar fake check-in apenas em localhost e para bookings PAID
+  const showFakeCheckin = isLocalhost && isPaid
+
   return (
-    <Button
-      onClick={handleCheckin}
-      disabled={isDisabled}
-      className={`${getButtonClasses()} ${className}`}
-      title={getDisabledTitle()}
-    >
-      {isLoading ? (
-        <>
-          <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
-          Processando...
-        </>
-      ) : (
-        <>
-          <CheckCircle className="w-3 h-3 mr-1.5" />
-          Check-in
-        </>
+    <div className={`flex gap-1 ${className}`}>
+      <Button
+        onClick={handleCheckin}
+        disabled={isDisabled}
+        className={getButtonClasses()}
+        title={getDisabledTitle()}
+      >
+        {isLoading ? (
+          <>
+            <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
+            Processando...
+          </>
+        ) : (
+          <>
+            <CheckCircle className="w-3 h-3 mr-1.5" />
+            Check-in
+          </>
+        )}
+      </Button>
+
+      {/* Fake Check-in - apenas em localhost para testes */}
+      {showFakeCheckin && (
+        <Button
+          onClick={handleFakeCheckin}
+          disabled={isFakeLoading}
+          className="h-8 px-2 rounded-lg bg-purple-500 hover:bg-purple-600 text-white text-xs font-bold"
+          title="🧪 Fake Check-in (apenas dev)"
+        >
+          {isFakeLoading ? (
+            <Loader2 className="w-3 h-3 animate-spin" />
+          ) : (
+            <Zap className="w-3 h-3" />
+          )}
+        </Button>
       )}
-    </Button>
+    </div>
   )
 }
 

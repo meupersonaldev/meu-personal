@@ -482,12 +482,12 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
         .eq('professor_id', id)
         .in('type', ['CONSUME']),
 
-      // Alunos do professor (para pegar hourly_rate)
-      // Precisamos buscar também o user_id correspondente
+      // Alunos do professor (para pegar hourly_rate) - apenas fidelizados
       supabase
         .from('teacher_students')
-        .select('id, email, hourly_rate')
-        .eq('teacher_id', id),
+        .select('id, email, hourly_rate, user_id, is_portfolio')
+        .eq('teacher_id', id)
+        .eq('is_portfolio', true),
 
       // Saldo de horas do professor (para locked_hours = horas pendentes)
       supabase
@@ -504,11 +504,14 @@ router.get('/:id/stats', requireAuth, async (req, res) => {
     const students = studentsData.data || []
     const hourBalances = hourBalanceData.data || []
 
-    // Criar mapa de hourly_rate por user_id (buscar user_id pelo email)
+    // Criar mapa de hourly_rate por user_id (apenas alunos fidelizados)
     const studentRateMap = new Map<string, number>()
     for (const student of students) {
-      if (student.email && student.hourly_rate) {
-        // Buscar user_id pelo email
+      // Se tem user_id, usar diretamente
+      if (student.user_id && student.hourly_rate) {
+        studentRateMap.set(student.user_id, student.hourly_rate)
+      } else if (student.email && student.hourly_rate) {
+        // Fallback: buscar user_id pelo email
         const { data: user } = await supabase
           .from('users')
           .select('id')
@@ -747,11 +750,12 @@ router.get('/:id/history', requireAuth, async (req, res) => {
       .eq('user_id', id)
       .single()
 
-    // Buscar alunos do professor com hourly_rate
+    // Buscar alunos do professor com hourly_rate (apenas fidelizados - is_portfolio=true)
     const { data: students } = await supabase
       .from('teacher_students')
-      .select('id, email, hourly_rate')
+      .select('id, email, hourly_rate, user_id, is_portfolio')
       .eq('teacher_id', id)
+      .eq('is_portfolio', true) // Apenas alunos fidelizados são "particulares"
 
     // Criar mapa de hourly_rate por user_id
     const studentRateMap = new Map<string, number>()
@@ -759,7 +763,14 @@ router.get('/:id/history', requireAuth, async (req, res) => {
 
     if (students) {
       for (const student of students) {
-        if (student.email) {
+        // Se tem user_id, usar diretamente
+        if (student.user_id) {
+          studentRateMap.set(student.user_id, student.hourly_rate || 0)
+          if (student.email) {
+            studentEmailMap.set(student.user_id, student.email)
+          }
+        } else if (student.email) {
+          // Fallback: buscar por email
           const { data: user } = await supabase
             .from('users')
             .select('id, name')
