@@ -497,16 +497,33 @@ router.patch(
         return
       }
 
-      // Buscar o registro atual
-      const { data: currentStudent } = await supabase
+      // Buscar o registro atual (studentId pode ser o id do registro OU o user_id do aluno)
+      let currentStudent = null
+      
+      // Primeiro tenta buscar pelo id do registro
+      const { data: byId } = await supabase
         .from('teacher_students')
         .select('*')
         .eq('id', studentId)
         .eq('teacher_id', teacherId)
         .single()
+      
+      if (byId) {
+        currentStudent = byId
+      } else {
+        // Se não encontrou, tenta buscar pelo user_id
+        const { data: byUserId } = await supabase
+          .from('teacher_students')
+          .select('*')
+          .eq('user_id', studentId)
+          .eq('teacher_id', teacherId)
+          .single()
+        
+        currentStudent = byUserId
+      }
 
       if (!currentStudent) {
-        return res.status(404).json({ error: 'Aluno não encontrado' })
+        return res.status(404).json({ error: 'Aluno não encontrado na lista de alunos do professor' })
       }
 
       // Se está solicitando fidelização (is_portfolio = true)
@@ -538,7 +555,7 @@ router.patch(
         const { data, error } = await supabase
           .from('teacher_students')
           .update(updateData)
-          .eq('id', studentId)
+          .eq('id', currentStudent.id)
           .eq('teacher_id', teacherId)
           .select()
           .single()
@@ -561,7 +578,7 @@ router.patch(
             connection_status: 'APPROVED', // Mantém aprovado mas não é mais da carteira
             updated_at: new Date().toISOString()
           })
-          .eq('id', studentId)
+          .eq('id', currentStudent.id)
           .eq('teacher_id', teacherId)
           .select()
           .single()

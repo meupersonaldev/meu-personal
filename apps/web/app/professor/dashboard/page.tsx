@@ -38,6 +38,7 @@ import {
   Filter,
   Building2,
   CheckCircle,
+  Check,
   Phone,
   UserPlus,
   Globe,
@@ -71,6 +72,8 @@ interface Booking {
   academy_id: string | null
   earnings: number
   type: 'private' | 'academy'
+  is_portfolio?: boolean
+  connection_status?: string | null
 }
 
 interface HistoryData {
@@ -208,8 +211,8 @@ export default function ProfessorDashboardPage() {
         } else {
           toast.success('Aluno fidelizado! Agora está na sua carteira.')
         }
-        // Remover da lista de plataforma
-        setPlatformStudents(prev => prev.filter(s => s.id !== studentId))
+        // Recarregar dados para atualizar o status no histórico
+        loadData()
       } else {
         const errorData = await response.json().catch(() => ({}))
         toast.error(errorData.error || 'Erro ao solicitar fidelização')
@@ -500,7 +503,7 @@ export default function ProfessorDashboardPage() {
                         </div>
                         <div className="flex items-baseline gap-2">
                           <h3 className="text-2xl font-bold text-white">
-                            {hourBalance.available_hours} <span className="text-sm font-normal text-white/60">disponíveis</span>
+                            {Math.max(0, hourBalance.available_hours - hourBalance.pending_hours)} <span className="text-sm font-normal text-white/60">disponíveis</span>
                           </h3>
                         </div>
                         {hourBalance.pending_hours > 0 && (
@@ -641,9 +644,8 @@ export default function ProfessorDashboardPage() {
                                   {/* Header Gradient - Compact */}
                                   <div className={`h-14 w-full bg-gradient-to-r ${booking.type === 'private'
                                     ? 'from-amber-400 to-orange-400'
-                                    : 'from-[#002C4E] to-[#005F8C]' // Brand Blue gradient
+                                    : 'from-[#002C4E] to-[#005F8C]'
                                     } px-4 py-2.5 flex justify-center items-center relative`}>
-                                    {/* Decorative Pattern/Overlay */}
                                     <div className="absolute inset-0 bg-white/5 opacity-50" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '16px 16px' }}></div>
 
                                     <div className="relative z-10 flex flex-col items-center bg-black/10 backdrop-blur-sm rounded px-3 py-1 text-white border border-white/10 shadow-sm">
@@ -663,7 +665,6 @@ export default function ProfessorDashboardPage() {
                                   {/* Body - Compact */}
                                   <div className="px-4 pb-4">
                                     <div className="flex justify-between items-end -mt-5 mb-3 px-1">
-                                      {/* Floating Avatar - Smaller */}
                                       <Avatar className="h-12 w-12 border-4 border-white shadow-md ring-1 ring-gray-50/50">
                                         <AvatarImage src={booking.student_avatar || undefined} className="object-cover" />
                                         <AvatarFallback className={`font-bold text-base ${booking.type === 'private' ? 'bg-amber-50 text-amber-600' : 'bg-slate-50 text-slate-600'
@@ -672,7 +673,6 @@ export default function ProfessorDashboardPage() {
                                         </AvatarFallback>
                                       </Avatar>
 
-                                      {/* Price/Credits Tag */}
                                       <div className="bg-white px-2.5 py-0.5 rounded-full shadow-sm border border-gray-100 text-[11px] font-bold text-gray-700 flex items-center gap-1 mb-1">
                                         {booking.type === 'private' ? (
                                           <>
@@ -702,7 +702,7 @@ export default function ProfessorDashboardPage() {
                                       </div>
                                     </div>
 
-                                    {/* Actions - Compact & Explicit Cancel */}
+                                    {/* Actions */}
                                     <div className="flex items-center gap-2">
                                       <div className="flex-1">
                                         <CheckinButton
@@ -710,19 +710,10 @@ export default function ProfessorDashboardPage() {
                                           bookingDate={new Date(booking.date)}
                                           status={booking.status_canonical || booking.status}
                                           variant={booking.type === 'private' ? 'private' : 'platform'}
-                                          onSuccess={(result: CheckinResult) => {
-                                            // Update balance immediately after successful check-in
-                                            setHourBalance(prev => ({
-                                              ...prev,
-                                              available_hours: result.credits.new_balance
-                                            }))
-                                            // Reload data to refresh booking list
-                                            loadData()
-                                          }}
+                                          onSuccess={() => loadData()}
                                         />
                                       </div>
 
-                                      {/* QR Code button for PAID bookings - Requirements 5.1 */}
                                       {(booking.status_canonical === 'PAID' || booking.status === 'PAID') && booking.academy_id && (
                                         <QRCodeGenerator
                                           bookingId={booking.id}
@@ -756,59 +747,6 @@ export default function ProfessorDashboardPage() {
                 }
                 return null
               })()}
-
-              {/* Alunos da Plataforma (não fidelizados) */}
-              {platformStudents.length > 0 && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-xl font-bold text-[#002C4E] flex items-center gap-2">
-                        <Globe className="w-5 h-5 text-blue-500" />
-                        Alunos da Plataforma
-                      </h3>
-                      <p className="text-sm text-gray-500 mt-1">
-                        Alunos que fizeram aulas com você. Solicite fidelização para adicionar à sua carteira.
-                      </p>
-                    </div>
-                    <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-100">
-                      {platformStudents.length} disponíveis
-                    </Badge>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {platformStudents.map((student) => (
-                      <Card key={student.id} className="border border-blue-100 bg-blue-50/30 hover:bg-blue-50/50 transition-colors">
-                        <CardContent className="p-4">
-                          <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold">
-                              {student.name.charAt(0).toUpperCase()}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-semibold text-gray-900 truncate">{student.name}</p>
-                              <p className="text-xs text-gray-500 truncate">{student.email}</p>
-                            </div>
-                            <Button
-                              size="sm"
-                              onClick={() => handleFidelizar(student.id)}
-                              disabled={fidelizingId === student.id}
-                              className="bg-[#002C4E] hover:bg-[#003f70] text-white h-8 px-3"
-                            >
-                              {fidelizingId === student.id ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : (
-                                <>
-                                  <UserPlus className="h-3 w-3 mr-1" />
-                                  Solicitar
-                                </>
-                              )}
-                            </Button>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               {/* Histórico / Análise (Antigo Análise de Aulas Passadas) */}
               <div className="space-y-6">
@@ -1007,6 +945,7 @@ export default function ProfessorDashboardPage() {
                                 <th className="text-left py-4 px-6 text-xs font-bold text-gray-600 uppercase tracking-wider">Tipo</th>
                                 <th className="text-right py-4 px-6 text-xs font-bold text-gray-600 uppercase tracking-wider">Ganho</th>
                                 <th className="text-left py-4 px-6 text-xs font-bold text-gray-600 uppercase tracking-wider">Status</th>
+                                <th className="text-left py-4 px-6 text-xs font-bold text-gray-600 uppercase tracking-wider">Ações</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
@@ -1117,6 +1056,44 @@ export default function ProfessorDashboardPage() {
                                             ? 'Cancelada'
                                             : booking.status}
                                       </Badge>
+                                    </td>
+                                    <td className="py-4 px-6">
+                                      {/* Botão de Fidelização - só aparece para aulas concluídas de alunos da plataforma */}
+                                      {(booking.status === 'COMPLETED' || booking.status === 'DONE') && 
+                                       booking.student_id && 
+                                       !booking.is_portfolio && (
+                                        booking.connection_status === 'PENDING' ? (
+                                          <Badge className="bg-amber-50 text-amber-700 border-amber-100">
+                                            Aguardando
+                                          </Badge>
+                                        ) : booking.connection_status === 'REJECTED' ? (
+                                          <Badge className="bg-red-50 text-red-700 border-red-100">
+                                            Recusado
+                                          </Badge>
+                                        ) : (
+                                          <Button
+                                            size="sm"
+                                            onClick={() => handleFidelizar(booking.student_id!)}
+                                            disabled={fidelizingId === booking.student_id}
+                                            className="bg-[#002C4E] hover:bg-[#003f70] text-white h-7 px-2 text-xs"
+                                          >
+                                            {fidelizingId === booking.student_id ? (
+                                              <Loader2 className="h-3 w-3 animate-spin" />
+                                            ) : (
+                                              <>
+                                                <UserPlus className="h-3 w-3 mr-1" />
+                                                Fidelizar
+                                              </>
+                                            )}
+                                          </Button>
+                                        )
+                                      )}
+                                      {booking.is_portfolio && (
+                                        <Badge className="bg-green-50 text-green-700 border-green-100">
+                                          <Check className="h-3 w-3 mr-1" />
+                                          Fidelizado
+                                        </Badge>
+                                      )}
                                     </td>
                                   </tr>
                                 )

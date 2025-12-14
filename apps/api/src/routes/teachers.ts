@@ -1119,28 +1119,55 @@ router.get('/:id/history', requireAuth, async (req, res) => {
     const limitNum = parseInt(limit as string, 10) || 10
     const offset = (pageNum - 1) * limitNum
 
-    const allBookings = filteredBookings.map((b: any) => ({
-      id: b.id,
-      date: b.date,
-      duration: b.duration,
-      status: b._status,
-      credits_cost: b.credits_cost,
-      student_name: b.users?.name || null,
-      student_email: b.users?.email || null,
-      student_phone: b.users?.phone || null,
-      student_avatar: b.users?.avatar_url || null,
-      student_id: b.student_id,
-      academy_name: b.academies?.name || null,
-      academy_id: b.academy_id,
-      earnings:
-        b.student_id && privateStudentIds.has(b.student_id)
-          ? studentRateMap.get(b.student_id) || 0
-          : 0,
-      type:
-        b.student_id && privateStudentIds.has(b.student_id)
-          ? 'private'
-          : 'academy'
-    }))
+    // Buscar status de fidelização dos alunos (para mostrar botão de solicitar)
+    const allStudentIds = [...new Set(filteredBookings.map((b: any) => b.student_id).filter(Boolean))]
+    let studentFidelizationMap = new Map<string, { is_portfolio: boolean; connection_status: string | null }>()
+    
+    if (allStudentIds.length > 0) {
+      const { data: teacherStudents } = await supabase
+        .from('teacher_students')
+        .select('user_id, is_portfolio, connection_status')
+        .eq('teacher_id', id)
+        .in('user_id', allStudentIds)
+      
+      if (teacherStudents) {
+        teacherStudents.forEach((ts: any) => {
+          studentFidelizationMap.set(ts.user_id, {
+            is_portfolio: ts.is_portfolio || false,
+            connection_status: ts.connection_status || null
+          })
+        })
+      }
+    }
+
+    const allBookings = filteredBookings.map((b: any) => {
+      const fidelization = b.student_id ? studentFidelizationMap.get(b.student_id) : null
+      return {
+        id: b.id,
+        date: b.date,
+        duration: b.duration,
+        status: b._status,
+        credits_cost: b.credits_cost,
+        student_name: b.users?.name || null,
+        student_email: b.users?.email || null,
+        student_phone: b.users?.phone || null,
+        student_avatar: b.users?.avatar_url || null,
+        student_id: b.student_id,
+        academy_name: b.academies?.name || null,
+        academy_id: b.academy_id,
+        earnings:
+          b.student_id && privateStudentIds.has(b.student_id)
+            ? studentRateMap.get(b.student_id) || 0
+            : 0,
+        type:
+          b.student_id && privateStudentIds.has(b.student_id)
+            ? 'private'
+            : 'academy',
+        // Informações de fidelização
+        is_portfolio: fidelization?.is_portfolio || false,
+        connection_status: fidelization?.connection_status || null
+      }
+    })
 
     const totalBookings = allBookings.length
     const totalPages = Math.ceil(totalBookings / limitNum)

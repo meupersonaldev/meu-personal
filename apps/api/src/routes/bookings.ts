@@ -2090,6 +2090,25 @@ router.post(
       })
     }
 
+    // Verificar se já foi concluído (idempotência)
+    if (booking.status_canonical === 'DONE' || booking.status_canonical === 'COMPLETED') {
+      return res.status(200).json({
+        success: true,
+        message: '🧪 Booking já foi concluído anteriormente',
+        booking: {
+          id: booking.id,
+          status_canonical: booking.status_canonical,
+          date: booking.date,
+          duration: booking.duration
+        },
+        credits: {
+          hours_credited: 0,
+          new_balance: 0
+        },
+        already_completed: true
+      })
+    }
+
     // Verificar se é PAID
     if (booking.status_canonical !== 'PAID') {
       return res.status(400).json({
@@ -2102,7 +2121,11 @@ router.post(
     // Simular que a aula foi dada: mover data para o passado (1 hora atrás)
     const now = new Date()
     const pastDate = new Date(now.getTime() - 60 * 60 * 1000) // 1 hora atrás
-    const pastDateISO = pastDate.toISOString()
+    
+    // O campo 'date' é do tipo DATE (apenas YYYY-MM-DD), não timestamp
+    // Usar a data de hoje para que apareça no histórico
+    const pastDateStr = pastDate.toISOString().split('T')[0] // YYYY-MM-DD
+    const pastDateTimeISO = pastDate.toISOString() // Full ISO para start_at
 
     // Atualizar booking para DONE com data no passado
     const { data: updatedBooking, error: updateError } = await supabase
@@ -2110,8 +2133,8 @@ router.post(
       .update({
         status: 'COMPLETED',
         status_canonical: 'DONE',
-        date: pastDateISO,
-        start_at: pastDateISO,
+        date: pastDateStr, // DATE field: YYYY-MM-DD
+        start_at: pastDateTimeISO, // TIMESTAMP field: full ISO
         updated_at: now.toISOString()
       })
       .eq('id', id)
@@ -2134,7 +2157,7 @@ router.post(
       status: 'COMPLETED',
       reason: 'FAKE_CHECKIN_DEV',
       method: 'MANUAL',
-      created_at: pastDateISO
+      created_at: pastDateTimeISO
     })
 
     // Liberar hora do professor (unlock bonus hours)

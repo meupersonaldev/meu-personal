@@ -248,6 +248,9 @@ export default function AulasPage() {
 
   // Estados para primeira aula grátis
   const [firstClassUsed, setFirstClassUsed] = useState(true) // Default true para não mostrar banner até carregar
+
+  // Estados para solicitações de fidelização pendentes
+  const [pendingRequests, setPendingRequests] = useState<number>(0)
   const [linkedTeachers, setLinkedTeachers] = useState<{ id: string; hide_free_class?: boolean }[]>([])
   const [firstClassLoading, setFirstClassLoading] = useState(true)
 
@@ -484,7 +487,7 @@ export default function AulasPage() {
           setFirstClassUsed(userData.user?.first_class_used || false)
         }
 
-        // Buscar professores vinculados
+        // Buscar professores vinculados e solicitações pendentes
         const teachersResponse = await fetch(`${API_URL}/api/students/${user.id}/teachers`, {
           headers: { Authorization: `Bearer ${token}` }
         })
@@ -492,6 +495,8 @@ export default function AulasPage() {
         if (teachersResponse.ok) {
           const data = await teachersResponse.json()
           setLinkedTeachers(data.teachers || [])
+          // Contar solicitações pendentes de fidelização
+          setPendingRequests((data.pendingRequests || []).length)
         }
       } catch (error) {
         console.error('Erro ao buscar dados de primeira aula:', error)
@@ -1167,6 +1172,36 @@ export default function AulasPage() {
             </div>
           </div>
         )
+      )}
+
+      {/* Banner de Solicitações de Fidelização Pendentes */}
+      {pendingRequests > 0 && (
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 p-6 shadow-xl">
+          <div className="absolute -top-10 -right-10 h-32 w-32 rounded-full bg-white/10 blur-2xl" />
+          <div className="absolute -bottom-10 -left-10 h-32 w-32 rounded-full bg-white/10 blur-2xl" />
+
+          <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm">
+                <User className="h-8 w-8 text-white" />
+              </div>
+              <div>
+                <h3 className="text-xl md:text-2xl font-bold text-white">
+                  {pendingRequests === 1 ? 'Você tem 1 solicitação de fidelização!' : `Você tem ${pendingRequests} solicitações de fidelização!`}
+                </h3>
+                <p className="text-white/90 text-sm md:text-base mt-1">
+                  Um professor quer adicionar você à carteira dele. Aceite para ter aulas particulares com desconto!
+                </p>
+              </div>
+            </div>
+            <Button
+              onClick={() => router.push('/aluno/meus-professores')}
+              className="bg-white text-purple-600 hover:bg-white/90 font-bold px-6 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all whitespace-nowrap"
+            >
+              Ver Solicitações
+            </Button>
+          </div>
+        </div>
       )}
 
       <Tabs defaultValue="aulas" className="w-full space-y-6">
