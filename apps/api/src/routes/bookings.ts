@@ -2099,13 +2099,19 @@ router.post(
       })
     }
 
-    // Atualizar booking para DONE
+    // Simular que a aula foi dada: mover data para o passado (1 hora atrás)
     const now = new Date()
+    const pastDate = new Date(now.getTime() - 60 * 60 * 1000) // 1 hora atrás
+    const pastDateISO = pastDate.toISOString()
+
+    // Atualizar booking para DONE com data no passado
     const { data: updatedBooking, error: updateError } = await supabase
       .from('bookings')
       .update({
         status: 'COMPLETED',
         status_canonical: 'DONE',
+        date: pastDateISO,
+        start_at: pastDateISO,
         updated_at: now.toISOString()
       })
       .eq('id', id)
@@ -2128,7 +2134,7 @@ router.post(
       status: 'COMPLETED',
       reason: 'FAKE_CHECKIN_DEV',
       method: 'MANUAL',
-      created_at: now.toISOString()
+      created_at: pastDateISO
     })
 
     // Liberar hora do professor (unlock bonus hours)
