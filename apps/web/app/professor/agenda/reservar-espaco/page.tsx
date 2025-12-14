@@ -110,7 +110,7 @@ export default function ReservarHorarioPage() {
   })
   const [selectedHorario, setSelectedHorario] = useState<string>('')
   const [expandedStep, setExpandedStep] = useState<number>(1) // Controla qual step está expandido
-  
+
   // Estado para saldo de horas do professor
   const [professorHours, setProfessorHours] = useState<number | null>(null)
   const [loadingHours, setLoadingHours] = useState(true)
@@ -215,7 +215,7 @@ export default function ReservarHorarioPage() {
 
         // Buscar alunos do professor
         await fetchStudents()
-        
+
         // Buscar saldo de horas do professor
         try {
           const hoursRes = await authFetch(`${API_URL}/api/teachers/${user.id}/hours`)
@@ -382,7 +382,7 @@ export default function ReservarHorarioPage() {
       // Criar como horário local de São Paulo
       const [year, month, day] = selectedData.split('-').map(Number)
       const [hours, minutes] = horario.split(':').map(Number)
-      
+
       // Criar data local (o navegador vai usar o fuso local)
       const bookingDate = new Date(year, month - 1, day, hours, minutes, 0)
 
@@ -493,53 +493,53 @@ export default function ReservarHorarioPage() {
 
   return (
     <ProfessorLayout>
-      <div className="space-y-6">
+      <div className="p-4 md:p-8 space-y-6 max-w-[1600px] mx-auto font-sans">
         {/* Premium Header */}
-        <div className="relative overflow-hidden bg-gradient-to-br from-[#002C4E] via-[#003d6b] to-[#004d7a] rounded-b-[2.5rem] md:rounded-b-[3rem] px-6 py-8 md:px-8 md:py-10 md:-mx-8">
-          {/* Decorative shapes */}
-          <div className="absolute top-0 right-0 w-64 h-64 bg-[#27DFFF]/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4"></div>
-          <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full blur-2xl translate-y-1/2 -translate-x-1/4"></div>
+        <div className="relative overflow-hidden bg-[#002C4E] rounded-3xl p-6 md:p-8 text-white shadow-2xl shadow-blue-900/20 mb-8">
+          <div className="absolute top-0 right-0 p-32 bg-[#27DFFF]/10 rounded-full -mr-16 -mt-16 blur-3xl opacity-50"></div>
+          <div className="absolute bottom-0 left-0 p-24 bg-blue-500/10 rounded-full -ml-12 -mb-12 blur-2xl"></div>
 
-          <div className="relative z-10 max-w-7xl mx-auto">
-            {/* Back button */}
+          <div className="relative z-10">
+            {/* Back button - Alinhado parecido com o breadcrumb visual */}
             <Button
               variant="ghost"
               size="sm"
               onClick={() => router.push('/professor/agenda')}
-              className="text-white/80 hover:text-white hover:bg-white/10 mb-4 -ml-2"
+              className="text-white/60 hover:text-white hover:bg-white/10 mb-6 pl-0 hover:pl-2 transition-all"
             >
               <ChevronLeft className="h-4 w-4 mr-1" />
               Voltar à Agenda
             </Button>
 
-            <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
-              <div>
-                <h1 className="text-2xl md:text-3xl font-bold text-white flex items-center gap-3">
-                  <div className="p-2.5 bg-white/10 backdrop-blur-sm rounded-xl">
+            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
+              <div className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-white/10 backdrop-blur-md rounded-xl border border-white/10 shadow-inner">
                     <Calendar className="h-6 w-6 text-[#27DFFF]" />
                   </div>
-                  Reservar Horário
-                </h1>
-                <p className="text-white/70 mt-2 text-sm md:text-base max-w-xl">
+                  <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold tracking-tight text-white">
+                    Reservar Horário
+                  </h1>
+                </div>
+                <p className="text-blue-100/80 text-base md:text-lg font-light max-w-xl leading-relaxed pl-1">
                   Reserve horários para seus alunos de forma rápida e fácil.
-                  Selecione a unidade, o aluno e o horário desejado.
                 </p>
               </div>
 
-              {/* Stats Badge */}
-              <div className="flex items-center gap-3 bg-white/10 backdrop-blur-sm px-4 py-3 rounded-xl border border-white/10">
-                <div className="p-1.5 bg-[#27DFFF]/20 rounded-lg">
-                  <Users className="h-4 w-4 text-[#27DFFF]" />
+              {/* Stats Badge - Estilo KPI Mini Card da Agenda mas único */}
+              <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/5 min-w-[140px]">
+                <div className="flex items-center gap-2 mb-1">
+                  <Users className="h-3 w-3 text-[#27DFFF]" />
+                  <p className="text-blue-200 text-xs font-semibold uppercase tracking-wider">Seus Alunos</p>
                 </div>
-                <div>
-                  <p className="text-xs text-white/60 font-medium uppercase tracking-wider">Seus Alunos</p>
-                  <p className="text-lg font-bold text-white leading-none">{students.length}</p>
-                </div>
+                <p className="text-2xl font-bold text-white">
+                  {students.length}
+                </p>
               </div>
             </div>
 
-            {/* Progress Steps (Integrated) */}
-            <div className="grid grid-cols-4 gap-2 mt-8 max-w-2xl px-1">
+            {/* Progress Steps (Compacto e integrado ao fundo) */}
+            <div className="hidden md:grid grid-cols-4 gap-4 mt-8 pt-8 border-t border-white/10">
               {['Unidade', 'Aluno', 'Data', 'Horário'].map((label, i) => {
                 const step = i + 1
                 const isActive = (step === 1 && selectedFranchise) ||
@@ -547,7 +547,7 @@ export default function ReservarHorarioPage() {
                   (step === 3 && selectedData) ||
                   (step === 4 && selectedHorario)
 
-                // Logic to determine if "current" step (the one we are working on)
+                // Logic to determine if "current" step
                 let isCurrent = false
                 if (step === 1 && !selectedFranchise) isCurrent = true
                 else if (step === 2 && selectedFranchise && !selectedStudent) isCurrent = true
@@ -555,9 +555,17 @@ export default function ReservarHorarioPage() {
                 else if (step === 4 && selectedData && !selectedHorario) isCurrent = true
 
                 return (
-                  <div key={i} className="flex flex-col gap-2">
-                    <div className={`h-1 rounded-full transition-all duration-300 ${isActive ? 'bg-[#27DFFF]' : isCurrent ? 'bg-white/40' : 'bg-white/10'}`}></div>
-                    <span className={`text-[10px] md:text-xs font-medium transition-colors text-center md:text-left ${isActive ? 'text-[#27DFFF]' : isCurrent ? 'text-white' : 'text-white/40'}`}>{label}</span>
+                  <div key={i} className="flex items-center gap-3 group">
+                    <div className={`
+                      w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-500
+                      ${isActive ? 'bg-[#27DFFF] text-[#002C4E] shadow-[0_0_15px_rgba(39,223,255,0.4)]' :
+                        isCurrent ? 'bg-white text-[#002C4E] scale-110 shadow-lg' : 'bg-white/10 text-white/40 border border-white/10'}
+                    `}>
+                      {i + 1}
+                    </div>
+                    <span className={`text-sm font-medium transition-colors duration-300 ${isActive || isCurrent ? 'text-white' : 'text-white/40'}`}>
+                      {label}
+                    </span>
                   </div>
                 )
               })}
@@ -565,10 +573,10 @@ export default function ReservarHorarioPage() {
           </div>
         </div>
 
-        <div className="px-4 md:px-6 max-w-7xl mx-auto pb-20">
+        <div className="px-0 max-w-full pb-12">
           {/* Aviso de saldo insuficiente */}
           {!loadingHours && professorHours !== null && professorHours <= 0 && (
-            <Card className="mb-6 border-0 shadow-lg bg-gradient-to-r from-red-50 to-orange-50 border-l-4 border-l-red-500">
+            <Card className="mb-6 border-0 shadow-lg bg-gradient-to-r from-red-50 to-orange-50 border-l-4 border-l-red-500 rounded-2xl overflow-hidden">
               <CardContent className="p-6">
                 <div className="flex items-start gap-4">
                   <div className="p-3 bg-red-100 rounded-xl">
@@ -577,12 +585,12 @@ export default function ReservarHorarioPage() {
                   <div className="flex-1">
                     <h3 className="text-lg font-bold text-red-900 mb-1">Saldo de Horas Insuficiente</h3>
                     <p className="text-red-700 mb-4">
-                      Você não possui horas disponíveis para agendar aulas para seus alunos. 
+                      Você não possui horas disponíveis para agendar aulas para seus alunos.
                       Compre um pacote de horas para continuar.
                     </p>
                     <Button
                       onClick={() => router.push('/professor/carteira')}
-                      className="bg-red-600 hover:bg-red-700 text-white"
+                      className="bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-900/10"
                     >
                       <CreditCard className="h-4 w-4 mr-2" />
                       Comprar Horas
@@ -596,35 +604,37 @@ export default function ReservarHorarioPage() {
           {/* Saldo de horas disponível */}
           {!loadingHours && professorHours !== null && professorHours > 0 && (
             <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-xl flex items-center gap-3">
-              <CheckCircle className="h-5 w-5 text-green-600" />
+              <div className="p-1 bg-green-100 rounded-full">
+                <CheckCircle className="h-4 w-4 text-green-600" />
+              </div>
               <span className="text-green-800 font-medium">
                 Você tem <strong>{professorHours}</strong> hora(s) disponível(is) para agendar
               </span>
             </div>
           )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
             {/* Conteúdo Principal */}
-            <div className="lg:col-span-2 space-y-6">
+            <div className="xl:col-span-2 space-y-6">
 
               {/* Passo 1: Seleção de Unidade */}
               <Card className="rounded-2xl border-0 shadow-lg hover:shadow-xl transition-all duration-300 animate-in slide-in-from-bottom-4 fade-in">
                 <CardHeader
-                  className="bg-gradient-to-r from-gray-50 to-white border-b border-gray-100 p-6"
+                  className="bg-gradient-to-r from-gray-50 to-white border-b border-gray-100 p-4 md:p-6"
                 >
-                  <CardTitle className="flex items-center justify-between text-lg">
-                    <div className="flex items-center gap-4">
-                      <div className={`p-2.5 rounded-xl bg-[#002C4E]/10`}>
-                        <MapPin className={`h-5 w-5 text-[#002C4E]`} />
+                  <CardTitle className="flex items-center justify-between text-base md:text-lg">
+                    <div className="flex items-center gap-3 md:gap-4">
+                      <div className={`p-2 md:p-2.5 rounded-xl bg-[#002C4E]/10`}>
+                        <MapPin className={`h-4 w-4 md:h-5 md:w-5 text-[#002C4E]`} />
                       </div>
                       <div>
                         <span className="block text-gray-900 font-bold">Passo 1: Unidade</span>
-                        <span className="text-sm font-medium text-gray-500 mt-0.5">Escolha onde será a aula</span>
+                        <span className="text-xs md:text-sm font-medium text-gray-500 mt-0.5">Escolha onde será a aula</span>
                       </div>
                     </div>
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-6 pt-6 p-6 bg-white">
+                <CardContent className="space-y-6 pt-6 p-4 md:p-6 bg-white">
                   <div>
                     <label className="block text-xs font-semibold text-gray-600 uppercase mb-1.5 ml-1">
                       Unidade
@@ -669,21 +679,21 @@ export default function ReservarHorarioPage() {
               {selectedFranchise && (
                 <Card className="rounded-2xl border-0 shadow-lg hover:shadow-xl transition-all duration-300 animate-in slide-in-from-bottom-4 fade-in">
                   <CardHeader
-                    className="bg-gradient-to-r from-gray-50 to-white border-b border-gray-100 p-6"
+                    className="bg-gradient-to-r from-gray-50 to-white border-b border-gray-100 p-4 md:p-6"
                   >
-                    <CardTitle className="flex items-center justify-between text-lg">
-                      <div className="flex items-center gap-4">
-                        <div className={`p-2.5 rounded-xl bg-[#002C4E]/10`}>
-                          <Users className={`h-5 w-5 text-[#002C4E]`} />
+                    <CardTitle className="flex items-center justify-between text-base md:text-lg">
+                      <div className="flex items-center gap-3 md:gap-4">
+                        <div className={`p-2 md:p-2.5 rounded-xl bg-[#002C4E]/10`}>
+                          <Users className={`h-4 w-4 md:h-5 md:w-5 text-[#002C4E]`} />
                         </div>
                         <div>
                           <span className="block text-gray-900 font-bold">Passo 2: Aluno</span>
-                          <span className="text-sm font-medium text-gray-500 mt-0.5">Escolha para quem será a aula</span>
+                          <span className="text-xs md:text-sm font-medium text-gray-500 mt-0.5">Escolha para quem será a aula</span>
                         </div>
                       </div>
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-6 pt-6 p-6 bg-white">
+                  <CardContent className="space-y-6 pt-6 p-4 md:p-6 bg-white">
                     <div>
                       <label className="block text-xs font-semibold text-gray-600 uppercase mb-1.5 ml-1">
                         Aluno
@@ -787,7 +797,7 @@ export default function ReservarHorarioPage() {
                             Nenhum horário livre para esta data.
                           </div>
                         ) : (
-                          <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
+                          <div className="grid grid-cols-3 sm:grid-cols-4 xl:grid-cols-5 gap-2">
                             {availableSlots.map((slot) => (
                               <Button
                                 key={slot.time}
@@ -912,7 +922,7 @@ export default function ReservarHorarioPage() {
                             </div>
                           </div>
                         )}
-                        
+
                         {selectedHorario && selectedStudent && selectedData ? (
                           <Button
                             onClick={() => handleReservarHorario(selectedHorario)}

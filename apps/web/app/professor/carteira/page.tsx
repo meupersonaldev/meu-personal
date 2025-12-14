@@ -134,8 +134,8 @@ export default function ProfessorCarteira() {
             const purchaseAmount = tx.meta_json?.amount || tx.meta_json?.price
 
             if (tx.type === 'PURCHASE') {
-              // Despesa
-              const amount = purchaseAmount || ((tx.hours || 0) * hourlyRate) // Fallback
+              // Despesa - Compra de horas
+              const amount = purchaseAmount || ((tx.hours || 0) * hourlyRate)
               totalExpenses += Number(amount)
               totalHoursBought += Number(tx.hours || 0)
 
@@ -149,9 +149,7 @@ export default function ProfessorCarteira() {
                 status: 'COMPLETED'
               })
             } else if (tx.type === 'CONSUME') {
-              // Receita da Academia (Aula dada pelo sistema)
-              const amount = (tx.hours || 0) * hourlyRate
-              totalRevenue += Number(amount)
+              // Aula da plataforma - mostra HORAS, não dinheiro
               totalHoursGiven += Number(tx.hours || 0)
               completedClassesCount++
 
@@ -159,41 +157,39 @@ export default function ProfessorCarteira() {
                 id: tx.id,
                 type: 'CONSUME',
                 hours: tx.hours,
-                amount: Number(amount),
+                amount: 0, // Plataforma = horas, não dinheiro
                 created_at: tx.created_at,
-                description: 'Aula via Academia (Banco de Horas)',
+                description: 'Aula Plataforma (hora consumida)',
                 status: 'COMPLETED'
               })
             } else if (tx.type === 'BONUS_LOCK') {
-              // Hora pendente de aula agendada por aluno
+              // Hora travada - aula agendada (informativo)
               processedTransactions.push({
                 id: tx.id,
                 type: 'BONUS_LOCK',
                 hours: tx.hours,
-                amount: 0, // Ainda não é receita
+                amount: 0,
                 created_at: tx.created_at,
                 description: tx.booking?.student_name
-                  ? `Aula agendada - ${tx.booking.student_name}`
-                  : 'Aula agendada por aluno (pendente)',
+                  ? `Hora travada - ${tx.booking.student_name}`
+                  : 'Hora travada (aula agendada)',
                 studentName: tx.booking?.student_name,
                 status: 'PENDING'
               })
             } else if (tx.type === 'BONUS_UNLOCK') {
-              // Hora liberada após aula concluída
-              const amount = (tx.hours || 0) * hourlyRate
-              totalRevenue += Number(amount)
+              // Hora liberada após aula concluída - mostra HORAS
               totalHoursGiven += Number(tx.hours || 0)
 
               processedTransactions.push({
                 id: tx.id,
                 type: 'BONUS_UNLOCK',
                 hours: tx.hours,
-                amount: Number(amount),
+                amount: 0, // Plataforma = horas, não dinheiro
                 created_at: tx.created_at,
                 description: tx.meta_json?.reason === 'late_cancellation_compensation'
-                  ? 'Compensação (aluno cancelou após prazo)'
+                  ? 'Compensação (cancelamento tardio)'
                   : tx.booking?.student_name
-                    ? `Aula concluída - ${tx.booking.student_name}`
+                    ? `Hora liberada - ${tx.booking.student_name}`
                     : 'Hora liberada (aula concluída)',
                 studentName: tx.booking?.student_name,
                 status: 'COMPLETED'
@@ -864,49 +860,67 @@ export default function ProfessorCarteira() {
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {filteredTransactions.map((tx) => {
-                          const isIncome = tx.amount > 0 // Money In
                           const isPurchase = tx.type === 'PURCHASE'
                           const isPending = tx.type === 'BONUS_LOCK'
                           const isCanceled = tx.type === 'REVOKE'
                           const isRefund = tx.type === 'REFUND'
+                          const isPrivateClass = tx.type === 'PRIVATE_CLASS'
+                          const isPlatformClass = tx.type === 'CONSUME' || tx.type === 'BONUS_UNLOCK'
+                          const hasMoneyValue = tx.amount !== 0
 
-                          // Logic for visual signs:
-                          // Money: Income = Green (+), Expense = Red (-) or Black
-                          // Hours: Purchase = Green (+), Consumed/Class = Red (-), Refund = Blue (+)
-                          // Pending: Amber (waiting)
+                          // Cores e sinais
+                          // Horas: compra/reembolso = +verde, consumo = -vermelho, pendente = amarelo
+                          const hoursSign = isPurchase || isRefund ? '+' : isPending ? '⏳' : isPlatformClass ? '-' : ''
+                          const hoursColor = isPending ? 'text-amber-500' : 
+                                            isCanceled ? 'text-gray-400 line-through' : 
+                                            isRefund ? 'text-blue-600' : 
+                                            isPurchase ? 'text-green-600' : 
+                                            isPlatformClass ? 'text-blue-600' : 'text-gray-600'
 
-                          const hoursSign = isPurchase || tx.type === 'BONUS_LOCK' || tx.type === 'BONUS_UNLOCK' || isRefund ? '+' : '-'
-                          const hoursColor = isPending ? 'text-amber-500' : isCanceled ? 'text-gray-400 line-through' : isRefund ? 'text-blue-600' : isPurchase || tx.type === 'BONUS_UNLOCK' ? 'text-green-600' : 'text-red-500'
+                          // Dinheiro: só mostra se tiver valor (particular ou compra)
+                          const moneyColor = tx.amount > 0 ? 'text-green-600' : tx.amount < 0 ? 'text-red-600' : 'text-gray-400'
 
-                          const moneySign = isIncome ? '+' : ''
-                          const moneyColor = isPending ? 'text-amber-500' : isIncome ? 'text-green-600' : 'text-gray-900'
+                          // Ícone baseado no tipo
+                          const getIcon = () => {
+                            if (isPending) return <Clock className="h-5 w-5" />
+                            if (isCanceled) return <X className="h-5 w-5" />
+                            if (isRefund) return <ArrowUpRight className="h-5 w-5" />
+                            if (isPurchase) return <ArrowDownRight className="h-5 w-5" />
+                            if (isPrivateClass) return <DollarSign className="h-5 w-5" />
+                            if (isPlatformClass) return <Clock className="h-5 w-5" />
+                            return <History className="h-5 w-5" />
+                          }
+
+                          const getIconBg = () => {
+                            if (isPending) return "bg-amber-100 text-amber-600"
+                            if (isCanceled) return "bg-gray-100 text-gray-400"
+                            if (isRefund) return "bg-blue-100 text-blue-600"
+                            if (isPurchase) return "bg-red-100 text-red-600"
+                            if (isPrivateClass) return "bg-green-100 text-green-600"
+                            if (isPlatformClass) return "bg-blue-100 text-blue-600"
+                            return "bg-gray-100 text-gray-600"
+                          }
+
+                          const getTypeLabel = () => {
+                            if (isPrivateClass) return 'Particular (R$)'
+                            if (isPurchase) return 'Compra de Horas'
+                            if (isPending) return 'Hora Travada'
+                            if (isPlatformClass) return 'Plataforma (hora)'
+                            if (isCanceled) return 'Cancelado'
+                            if (isRefund) return 'Reembolso'
+                            return 'Transação'
+                          }
 
                           return (
                             <tr key={tx.id} className="hover:bg-gray-50/50 transition-colors">
                               <td className="px-6 py-4">
                                 <div className="flex items-center gap-3">
-                                  <div className={cn("p-2 rounded-lg",
-                                    isPending ? "bg-amber-100 text-amber-600" :
-                                      isCanceled ? "bg-gray-100 text-gray-400" :
-                                        isRefund ? "bg-blue-100 text-blue-600" :
-                                          isIncome ? "bg-green-100 text-green-600" : "bg-red-100 text-red-600"
-                                  )}>
-                                    {isPending ? <Clock className="h-5 w-5" /> :
-                                      isCanceled ? <ArrowDownRight className="h-5 w-5" /> :
-                                        isRefund ? <ArrowUpRight className="h-5 w-5" /> :
-                                          isIncome ? <ArrowUpRight className="h-5 w-5" /> : <ArrowDownRight className="h-5 w-5" />}
+                                  <div className={cn("p-2 rounded-lg", getIconBg())}>
+                                    {getIcon()}
                                   </div>
                                   <div>
                                     <p className="font-medium text-gray-900">{tx.description}</p>
-                                    <p className="text-xs text-gray-500">
-                                      {tx.type === 'PRIVATE_CLASS' ? 'Aula Particular' :
-                                        tx.type === 'PURCHASE' ? 'Recarga' :
-                                          tx.type === 'BONUS_LOCK' ? 'Pendente' :
-                                            tx.type === 'BONUS_UNLOCK' ? 'Aula Plataforma' :
-                                              tx.type === 'REVOKE' ? 'Cancelado' :
-                                                tx.type === 'REFUND' ? 'Reembolso' :
-                                                  'Aula Academia'}
-                                    </p>
+                                    <p className="text-xs text-gray-500">{getTypeLabel()}</p>
                                   </div>
                                 </div>
                               </td>
@@ -927,9 +941,13 @@ export default function ProfessorCarteira() {
                                 )}
                               </td>
                               <td className="px-6 py-4 text-right">
-                                <span className={cn("font-bold", moneyColor)}>
-                                  {moneySign}{formatCurrency(tx.amount)}
-                                </span>
+                                {hasMoneyValue ? (
+                                  <span className={cn("font-bold", moneyColor)}>
+                                    {tx.amount > 0 ? '+' : ''}{formatCurrency(tx.amount)}
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400">-</span>
+                                )}
                               </td>
                             </tr>
                           )
