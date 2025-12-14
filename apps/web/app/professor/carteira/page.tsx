@@ -110,10 +110,9 @@ export default function ProfessorCarteira() {
         const txResponse = await fetch(`${API_URL}/api/teachers/${user.id}/transactions`, { headers })
         const txData = await txResponse.json()
 
-        // 3. Buscar Agendamentos (Aulas Particulares e Projeções)
-        const bookingsResponse = await fetch(`${API_URL}/api/bookings?teacher_id=${user.id}`, { headers })
-        const bookingsData = await bookingsResponse.json()
-        const allBookings = bookingsData.bookings || []
+        // 3. Buscar Histórico de Aulas (com valores corretos por aluno)
+        const historyResponse = await fetch(`${API_URL}/api/teachers/${user.id}/history`, { headers })
+        const historyData = await historyResponse.json()
 
         // --- Processamento dos Dados ---
 
@@ -126,8 +125,12 @@ export default function ProfessorCarteira() {
 
         const processedTransactions: Transaction[] = []
 
-          // Processar Transações de Horas
-          ; (txData.transactions || []).forEach((tx: any) => {
+        // Usar dados do history para faturamento correto
+        const historySummary = historyData.summary || {}
+        const historyBookings = historyData.bookings || []
+
+        // Processar Transações de Horas
+        ;(txData.transactions || []).forEach((tx: any) => {
             const purchaseAmount = tx.meta_json?.amount || tx.meta_json?.price
 
             if (tx.type === 'PURCHASE') {
@@ -226,59 +229,76 @@ export default function ProfessorCarteira() {
             }
           })
 
-        // Processar Agendamentos (Aulas Particulares & Projeções)
+        // Processar Aulas do Histórico (com valores corretos)
         const now = new Date()
-        const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
         const nextMonthEnd = new Date(now.getFullYear(), now.getMonth() + 2, 0)
 
-        allBookings.forEach((b: any) => {
-          const isCompleted = b.status === 'COMPLETED' || b.status === 'DONE'
-          const isPrivate = !!b.student_id // Tem aluno vinculado
+        historyBookings.forEach((b: any) => {
+          const isCompleted = b.status === 'COMPLETED' || b.status === 'DONE' || b.status_canonical === 'DONE'
+          const isPrivate = b.type === 'private'
           const bookingDate = new Date(b.date)
 
-          // Se for aula particular completa, é receita extra (não vem do banco de horas da academia)
+          // Aulas particulares concluídas (faturamento real)
           if (isCompleted && isPrivate) {
-            const amount = b.hourlyRate || 0
-            const finalAmount = amount > 0 ? amount : hourlyRate
-
-            // Evitar duplicar se o sistema ja criou transaction de CONSUME para essa aula
-            // Geralmente para student_id != null é aula particular, então add.
-            processedTransactions.push({
-              id: `booking-${b.id}`,
-              type: 'PRIVATE_CLASS',
-              hours: b.duration / 60,
-              amount: finalAmount,
-              created_at: b.date,
-              description: `Aula Particular - ${b.studentName || 'Aluno'}`,
-              studentName: b.studentName,
-              status: 'COMPLETED'
-            })
-            totalRevenue += finalAmount
-            completedClassesCount++
-            totalHoursGiven += (b.duration / 60)
+            const amount = b.earnings || 0 // earnings já vem calculado do backend
+            
+            if (amount > 0) {
+              processedTransactions.push({
+                id: `booking-${b.id}`,
+                type: 'PRIVATE_CLASS',
+                hours: (b.duration || 60) / 60,
+                amount: amount,
+                created_at: b.date,
+                description: `Aula Particular - ${b.student_name || 'Aluno'}`,
+                studentName: b.student_name,
+                status: 'COMPLETED'
+              })
+              totalRevenue += amount
+              completedClassesCount++
+              totalHoursGiven += ((b.duration || 60) / 60)
+            }
           }
 
-          // Projeção (Aulas futuras confirmadas)
-          if ((b.status === 'PENDING' || b.status === 'RESERVED' || b.status === 'CONFIRMED') && bookingDate > now) {
-            const estimatedValue = b.hourlyRate || hourlyRate
-            if (bookingDate <= nextMonthEnd) {
+          // Aulas da plataforma concluídas (contabiliza horas, não dinheiro direto)
+          if (isCompleted && !isPrivate) {
+            totalHoursGiven += ((b.duration || 60) / 60)
+            completedClassesCount++
+          }
+
+          // Projeção (Aulas futuras confirmadas - particulares)
+          const isPending = b.status === 'PENDING' || b.status === 'RESERVED' || b.status === 'CONFIRMED' || 
+                           b.status_canonical === 'RESERVED' || b.status_canonical === 'PAID'
+          if (isPending && isPrivate && bookingDate > now) {
+            const estimatedValue = b.earnings || 0
+            if (bookingDate <= nextMonthEnd && estimatedValue > 0) {
               projectedRevenue += estimatedValue
             }
           }
         })
+
+        // Usar dados do history summary para valores mais precisos
+        // private_earnings = faturamento de aulas particulares (já concluídas)
+        // academy_hours = horas de aulas da plataforma
+        const privateEarnings = historySummary.private_earnings || 0
+        const academyHours = historySummary.academy_hours || 0
+        
+        // Faturamento total = aulas particulares (dinheiro) + aulas plataforma não geram receita direta
+        // O professor já pagou pelas horas, então aulas da plataforma são "uso" do que ele comprou
+        const finalTotalRevenue = privateEarnings
+        const finalTotalHoursGiven = (historySummary.total_classes || 0)
 
         // Ordenar
         processedTransactions.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
         setTransactions(processedTransactions)
         setSummary({
-          totalRevenue,
+          totalRevenue: finalTotalRevenue,
           totalExpenses,
-          netIncome: totalRevenue - totalExpenses,
+          netIncome: finalTotalRevenue - totalExpenses,
           projectedRevenue,
-          totalHoursGiven,
+          totalHoursGiven: finalTotalHoursGiven,
           totalHoursBought,
-          averageTicket: completedClassesCount > 0 ? totalRevenue / completedClassesCount : 0,
+          averageTicket: finalTotalHoursGiven > 0 ? finalTotalRevenue / finalTotalHoursGiven : 0,
           availableHours: hourBalance.available_hours || 0,
           pendingHours: hourBalance.pending_hours || 0
         })
@@ -681,27 +701,33 @@ export default function ProfessorCarteira() {
 
             <Card className="border-0 shadow-md">
               <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
-                <CardTitle className="text-sm font-medium text-gray-500 uppercase">Faturamento Total</CardTitle>
+                <CardTitle className="text-sm font-medium text-gray-500 uppercase">Faturado (Particulares)</CardTitle>
                 <div className="p-2 bg-green-100 rounded-full">
                   <TrendingUp className="h-4 w-4 text-green-600" />
                 </div>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-gray-900">{formatCurrency(summary.totalRevenue)}</div>
-                <p className="text-xs text-gray-400 mt-1">Total de receitas geradas</p>
+                <p className="text-xs text-gray-400 mt-1">Aulas particulares concluídas</p>
+                {summary.projectedRevenue > 0 && (
+                  <p className="text-xs text-amber-600 mt-2 flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    {formatCurrency(summary.projectedRevenue)} a receber (agendadas)
+                  </p>
+                )}
               </CardContent>
             </Card>
 
             <Card className="border-0 shadow-md">
               <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
-                <CardTitle className="text-sm font-medium text-gray-500 uppercase">Faturamento em Horas</CardTitle>
+                <CardTitle className="text-sm font-medium text-gray-500 uppercase">Aulas Realizadas</CardTitle>
                 <div className="p-2 bg-blue-100 rounded-full">
                   <History className="h-4 w-4 text-blue-600" />
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-gray-900">{formatHours(summary.totalHoursGiven)}</div>
-                <p className="text-xs text-gray-400 mt-1">Total de aulas ministradas</p>
+                <div className="text-2xl font-bold text-gray-900">{summary.totalHoursGiven}</div>
+                <p className="text-xs text-gray-400 mt-1">Total de aulas concluídas</p>
               </CardContent>
             </Card>
           </div>
