@@ -390,14 +390,17 @@ export default function ComprarHorasPage() {
                           </div>
 
                           <div className="mb-8">
+                            {/* Valor por hora em destaque */}
                             <div className="flex items-baseline gap-1">
-                              <span className="text-sm text-gray-400 font-medium">R$</span>
-                              <span className="text-4xl font-bold text-gray-900 tracking-tight">{pkg.price.toFixed(2).split('.')[0]}</span>
-                              <span className="text-xl font-bold text-gray-500">,{pkg.price.toFixed(2).split('.')[1]}</span>
+                              <span className="text-sm text-meu-primary font-bold">R$</span>
+                              <span className="text-4xl font-bold text-meu-primary tracking-tight">{(pkg.price / pkg.hours_included).toFixed(2).split('.')[0]}</span>
+                              <span className="text-xl font-bold text-meu-primary/70">,{(pkg.price / pkg.hours_included).toFixed(2).split('.')[1]}</span>
+                              <span className="text-sm text-meu-primary font-medium ml-1">/ hora</span>
                             </div>
+                            {/* Preço total menor */}
                             <div className="flex items-center gap-2 mt-2">
-                              <span className="text-xs font-medium text-meu-primary bg-blue-50 px-2 py-0.5 rounded">
-                                R$ {(pkg.price / pkg.hours_included).toFixed(2)} / hora
+                              <span className="text-sm text-gray-500">
+                                Total: <span className="font-semibold text-gray-700">R$ {pkg.price.toFixed(2)}</span>
                               </span>
                             </div>
                           </div>
