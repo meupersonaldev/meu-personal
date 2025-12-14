@@ -83,8 +83,8 @@ export default function ConfirmDialog({
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
-      <Card className={`w-full max-w-md ${bgColor} ${borderColor} border-2`}>
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <Card className={`relative z-10 w-full max-w-md ${bgColor} ${borderColor} border-2 shadow-2xl`}>
         <div className="p-6">
           {/* Header */}
           <div className="flex items-center mb-4">
