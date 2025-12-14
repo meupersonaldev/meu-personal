@@ -1990,12 +1990,16 @@ function UsuariosPageContent() {
                     <select
                       value={formData.role}
                       onChange={(e) => setFormData({ ...formData, role: e.target.value as 'STUDENT' | 'TEACHER' })}
-                      className="w-full h-10 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-meu-primary/20 focus:border-meu-primary transition-colors"
+                      className={`w-full h-10 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-meu-primary/20 focus:border-meu-primary transition-colors ${userModalMode === 'edit' ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                       required
+                      disabled={userModalMode === 'edit'}
                     >
                       <option value="STUDENT">Aluno</option>
                       <option value="TEACHER">Professor</option>
                     </select>
+                    {userModalMode === 'edit' && (
+                      <p className="text-xs text-gray-500 mt-1">O tipo de usuário não pode ser alterado após a criação</p>
+                    )}
                   </div>
 
                   <div>
