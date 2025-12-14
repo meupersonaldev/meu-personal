@@ -936,6 +936,50 @@ class BalanceService {
     return { balance: updatedBalance, transaction };
   }
 
+  /**
+   * Consome horas DISPONÍVEIS do professor (para aulas de alunos fidelizados/carteira)
+   * O professor paga a hora para a unidade, e o aluno paga o professor diretamente
+   */
+  async consumeProfessorAvailableHours(
+    professorId: string,
+    franqueadoraId: string,
+    hours: number,
+    bookingId: string,
+    options: ProfessorTransactionOptions = {}
+  ): Promise<{ balance: ProfHourBalance; transaction: HourTransaction }> {
+    const balance = await this.ensureProfessorBalance(professorId, franqueadoraId);
+
+    // Verificar se tem horas disponíveis suficientes
+    const available = balance.available_hours - balance.locked_hours;
+    if (available < hours) {
+      throw new Error(`Saldo insuficiente. Disponível: ${available}, Necessário: ${hours}`);
+    }
+
+    const transaction = await this.createHourTransaction(
+      professorId,
+      franqueadoraId,
+      'CONSUME',
+      hours,
+      {
+        ...options,
+        source: options.source ?? 'PROFESSOR',
+        bookingId,
+        metaJson: {
+          ...options.metaJson,
+          booking_id: bookingId,
+          type: 'portfolio_student'
+        }
+      }
+    );
+
+    // Deduzir de available_hours (não de locked_hours)
+    const updatedBalance = await this.updateProfessorBalance(professorId, franqueadoraId, {
+      available_hours: Math.max(0, balance.available_hours - hours)
+    });
+
+    return { balance: updatedBalance, transaction };
+  }
+
   // ---------------------------------------------------------------------------
   // Scheduler helpers
   async getTransactionsToUnlock(): Promise<StudentClassTransaction[]> {
@@ -964,6 +1008,60 @@ class BalanceService {
 
     if (error) throw error;
     return (data || []) as HourTransaction[];
+  }
+
+  /**
+   * Sincroniza o saldo do professor baseado nos bookings ativos
+   * locked_hours = quantidade de bookings PAID de alunos da plataforma (não fidelizados)
+   * available_hours permanece inalterado (baseado em compras e aulas concluídas)
+   */
+  async syncProfessorLockedHours(professorId: string, franqueadoraId: string): Promise<ProfHourBalance> {
+    // Buscar bookings PAID do professor que são de alunos da plataforma (não fidelizados)
+    const { data: activeBookings, error: bookingsError } = await supabase
+      .from('bookings')
+      .select(`
+        id,
+        student_id,
+        teacher_students!inner(is_portfolio)
+      `)
+      .eq('teacher_id', professorId)
+      .eq('status_canonical', 'PAID')
+      .not('student_id', 'is', null);
+
+    if (bookingsError) {
+      console.error('[syncProfessorLockedHours] Erro ao buscar bookings:', bookingsError);
+      throw bookingsError;
+    }
+
+    // Contar apenas bookings de alunos da plataforma (is_portfolio = false ou null)
+    // Para alunos fidelizados, a hora já foi consumida, não travada
+    let lockedCount = 0;
+    
+    if (activeBookings) {
+      for (const booking of activeBookings) {
+        // Verificar se é aluno da plataforma
+        const { data: link } = await supabase
+          .from('teacher_students')
+          .select('is_portfolio')
+          .eq('teacher_id', professorId)
+          .eq('user_id', booking.student_id)
+          .single();
+
+        // Se não é fidelizado (is_portfolio = false ou não existe), conta como locked
+        if (!link || link.is_portfolio !== true) {
+          lockedCount++;
+        }
+      }
+    }
+
+    // Atualizar locked_hours
+    const balance = await this.ensureProfessorBalance(professorId, franqueadoraId);
+    const updatedBalance = await this.updateProfessorBalance(professorId, franqueadoraId, {
+      locked_hours: lockedCount
+    });
+
+    console.log(`[syncProfessorLockedHours] Professor ${professorId}: locked_hours = ${lockedCount}`);
+    return updatedBalance;
   }
 }
 

@@ -74,6 +74,7 @@ interface Booking {
   type: 'private' | 'academy'
   is_portfolio?: boolean
   connection_status?: string | null
+  series_id?: string | null
 }
 
 interface HistoryData {
@@ -703,33 +704,114 @@ export default function ProfessorDashboardPage() {
                                     </div>
 
                                     {/* Actions */}
-                                    <div className="flex items-center gap-2">
-                                      <div className="flex-1">
-                                        <CheckinButton
-                                          bookingId={booking.id}
-                                          bookingDate={new Date(booking.date)}
-                                          status={booking.status_canonical || booking.status}
-                                          variant={booking.type === 'private' ? 'private' : 'platform'}
-                                          onSuccess={() => loadData()}
-                                        />
-                                      </div>
-
-                                      {(booking.status_canonical === 'PAID' || booking.status === 'PAID') && booking.academy_id && (
-                                        <QRCodeGenerator
-                                          bookingId={booking.id}
-                                          academyId={booking.academy_id}
-                                          studentName={booking.student_name || undefined}
-                                          bookingDate={booking.date}
-                                        />
+                                    <div className="flex flex-col gap-1.5">
+                                      {/* Mensagem de status para RESERVED */}
+                                      {(booking.status_canonical === 'RESERVED' || booking.status === 'PENDING') && (
+                                        <div className={`text-[10px] px-2 py-1 rounded-md text-center ${
+                                          booking.series_id 
+                                            ? 'bg-amber-50 text-amber-700' 
+                                            : (hourBalance.available_hours - hourBalance.pending_hours) >= 1
+                                              ? 'bg-violet-50 text-violet-700'
+                                              : 'bg-red-50 text-red-700'
+                                        }`}>
+                                          {booking.series_id 
+                                            ? '⏳ Aguardando crédito do aluno' 
+                                            : (hourBalance.available_hours - hourBalance.pending_hours) >= 1
+                                              ? '⏳ Confirme para usar seu crédito'
+                                              : '⚠️ Compre créditos para confirmar'}
+                                        </div>
                                       )}
+                                      <div className="flex items-center gap-2">
+                                        <div className="flex-1">
+                                          {(booking.status_canonical === 'RESERVED' || booking.status === 'PENDING') ? (
+                                            booking.series_id ? (
+                                              // Série recorrente - aguardando crédito do aluno (não tem ação do professor)
+                                              <div className="w-full h-8 rounded-lg font-bold text-xs bg-amber-100 text-amber-700 flex items-center justify-center">
+                                                Reservado
+                                              </div>
+                                            ) : (
+                                              // Aluno fidelizado - professor precisa confirmar (só se tiver crédito)
+                                              (hourBalance.available_hours - hourBalance.pending_hours) >= 1 ? (
+                                                <Button
+                                                  onClick={async () => {
+                                                    try {
+                                                      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                                                      const res = await fetch(`${API_URL}/api/bookings/${booking.id}`, {
+                                                        method: 'PATCH',
+                                                        headers: {
+                                                          'Content-Type': 'application/json',
+                                                          'Authorization': `Bearer ${token}`
+                                                        },
+                                                        body: JSON.stringify({ status: 'PAID' })
+                                                      })
+                                                      if (res.ok) {
+                                                        toast.success('Aula confirmada com sucesso!')
+                                                        loadData()
+                                                      } else {
+                                                        const data = await res.json()
+                                                        if (data.error?.includes('Saldo de horas insuficiente')) {
+                                                          toast.error('Você não tem créditos suficientes. Compre mais créditos para confirmar esta aula.', {
+                                                            action: {
+                                                              label: 'Comprar',
+                                                              onClick: () => window.location.href = '/professor/comprar-horas'
+                                                            }
+                                                          })
+                                                        } else {
+                                                          toast.error(data.error || 'Erro ao confirmar aula')
+                                                        }
+                                                      }
+                                                    } catch {
+                                                      toast.error('Erro ao confirmar aula')
+                                                    }
+                                                  }}
+                                                  className="w-full h-8 rounded-lg font-bold text-xs bg-violet-500 hover:bg-violet-600 text-white"
+                                                >
+                                                  ✓ Confirmar Aula
+                                                </Button>
+                                              ) : (
+                                                <Button
+                                                  onClick={() => {
+                                                    toast.error('Você não tem créditos suficientes para confirmar esta aula.', {
+                                                      action: {
+                                                        label: 'Comprar Créditos',
+                                                        onClick: () => window.location.href = '/professor/comprar-horas'
+                                                      }
+                                                    })
+                                                  }}
+                                                  className="w-full h-8 rounded-lg font-bold text-xs bg-gray-300 text-gray-600 cursor-not-allowed"
+                                                >
+                                                  Sem Créditos
+                                                </Button>
+                                              )
+                                            )
+                                          ) : (
+                                            <CheckinButton
+                                              bookingId={booking.id}
+                                              bookingDate={new Date(booking.date)}
+                                              status={booking.status_canonical || booking.status}
+                                              variant={booking.type === 'private' ? 'private' : 'platform'}
+                                              onSuccess={() => loadData()}
+                                            />
+                                          )}
+                                        </div>
 
-                                      <Button
-                                        variant="ghost"
-                                        onClick={() => handleCancelClick(booking)}
-                                        className="h-8 px-2.5 rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 font-medium text-[10px] transition-colors"
-                                      >
-                                        Cancelar
-                                      </Button>
+                                        {(booking.status_canonical === 'PAID' || booking.status === 'PAID') && booking.academy_id && (
+                                          <QRCodeGenerator
+                                            bookingId={booking.id}
+                                            academyId={booking.academy_id}
+                                            studentName={booking.student_name || undefined}
+                                            bookingDate={booking.date}
+                                          />
+                                        )}
+
+                                        <Button
+                                          variant="ghost"
+                                          onClick={() => handleCancelClick(booking)}
+                                          className="h-8 px-2.5 rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 font-medium text-[10px] transition-colors"
+                                        >
+                                          Cancelar
+                                        </Button>
+                                      </div>
                                     </div>
                                   </div>
                                 </div>

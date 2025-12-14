@@ -216,12 +216,25 @@ class BookingCanonicalService {
     // Verificar saldo do aluno (pular se for professor vinculado)
     const franqueadoraId = await fetchFranqueadoraIdFromAcademy(existingBooking.franchise_id);
 
+    // Flag para indicar se o booking será confirmado ou ficará como solicitado
+    let professorHasCredit = true;
+
     if (!params.skipBalance) {
+      // Aluno da plataforma: verificar saldo do aluno
       const studentBalance = await balanceService.getStudentBalance(params.studentId, franqueadoraId);
       const availableClasses = getAvailableClasses(studentBalance);
 
       if (availableClasses < 1) {
         throw new Error('Saldo insuficiente de aulas');
+      }
+    } else {
+      // Aluno fidelizado: verificar saldo do PROFESSOR
+      const professorBalance = await balanceService.getProfessorBalance(existingBooking.teacher_id, franqueadoraId);
+      const availableHours = getAvailableHours(professorBalance);
+
+      if (availableHours < 1) {
+        professorHasCredit = false;
+        console.log(`[updateBookingToStudent] Professor ${existingBooking.teacher_id} sem crédito - booking ficará como SOLICITADO`);
       }
     }
 
@@ -241,12 +254,18 @@ class BookingCanonicalService {
     const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
     const cancellableUntil = new Date(bookingStartAt.getTime() - FOUR_HOURS_MS);
 
+    // Determinar status baseado no crédito do professor (para alunos fidelizados)
+    // Se professor tem crédito: PAID (confirmado)
+    // Se professor não tem crédito: RESERVED (solicitado - aguardando confirmação manual)
+    const bookingStatus = (params.skipBalance && !professorHasCredit) ? 'RESERVED' : 'PAID';
+    const legacyStatus = (params.skipBalance && !professorHasCredit) ? 'PENDING' : 'CONFIRMED';
+
     // Atualizar o booking existente
     const updateData: any = {
       source: params.source,
       student_id: params.studentId,
-      status: 'CONFIRMED',
-      status_canonical: 'PAID',
+      status: legacyStatus,
+      status_canonical: bookingStatus,
       cancellable_until: cancellableUntil.toISOString(),
       student_notes: params.studentNotes,
       professor_notes: params.professorNotes || existingBooking.professor_notes,
@@ -286,29 +305,56 @@ class BookingCanonicalService {
       await this.syncUserCredits(params.studentId, franqueadoraId);
     }
 
-    // Professor recebe as horas TRAVADAS (visíveis mas não utilizáveis)
-    // Serão liberadas quando a aula for marcada como COMPLETED/DONE
+    // Fluxo de horas do professor depende se é aluno fidelizado ou não
     if (existingBooking.teacher_id) {
       try {
-        await balanceService.lockProfessorBonusHours(
-          existingBooking.teacher_id,
-          franqueadoraId,
-          1,
-          updatedBooking.id,
-          null, // unlock_at = null, liberado via completeBooking
-          {
-            unitId: null,
-            source: 'SYSTEM',
-            metaJson: {
-              booking_id: updatedBooking.id,
-              origin: 'student_booking_reward',
-              student_id: params.studentId
+        if (params.skipBalance && professorHasCredit) {
+          // ALUNO FIDELIZADO COM CRÉDITO: Professor PAGA a hora (consome do saldo DISPONÍVEL dele)
+          // O aluno paga o professor diretamente, fora da plataforma
+          await balanceService.consumeProfessorAvailableHours(
+            existingBooking.teacher_id,
+            franqueadoraId,
+            1,
+            updatedBooking.id,
+            {
+              unitId: null,
+              source: 'PROFESSOR',
+              metaJson: {
+                booking_id: updatedBooking.id,
+                origin: 'portfolio_student_booking',
+                student_id: params.studentId,
+                reason: 'Aula para aluno da carteira'
+              }
             }
-          }
-        );
-        console.log(`[updateBookingToStudent] ✅ Hora bônus travada para professor ${existingBooking.teacher_id}`);
+          );
+          console.log(`[updateBookingToStudent] ✅ Hora CONSUMIDA do saldo disponível do professor ${existingBooking.teacher_id} (aluno fidelizado)`);
+        } else if (params.skipBalance && !professorHasCredit) {
+          // ALUNO FIDELIZADO SEM CRÉDITO: Booking fica como SOLICITADO
+          // Professor precisa comprar créditos e confirmar manualmente
+          console.log(`[updateBookingToStudent] ⏳ Booking SOLICITADO - professor ${existingBooking.teacher_id} sem crédito`);
+        } else {
+          // ALUNO DA PLATAFORMA: Professor recebe hora bônus TRAVADA
+          // Será liberada quando a aula for concluída
+          await balanceService.lockProfessorBonusHours(
+            existingBooking.teacher_id,
+            franqueadoraId,
+            1,
+            updatedBooking.id,
+            null, // unlock_at = null, liberado via completeBooking
+            {
+              unitId: null,
+              source: 'SYSTEM',
+              metaJson: {
+                booking_id: updatedBooking.id,
+                origin: 'student_booking_reward',
+                student_id: params.studentId
+              }
+            }
+          );
+          console.log(`[updateBookingToStudent] ✅ Hora bônus travada para professor ${existingBooking.teacher_id}`);
+        }
       } catch (bonusError) {
-        console.error(`[updateBookingToStudent] ❌ Erro ao travar hora bônus:`, bonusError);
+        console.error(`[updateBookingToStudent] ❌ Erro ao processar hora do professor:`, bonusError);
         // Não impedir o agendamento se falhar
       }
 
@@ -880,6 +926,22 @@ class BookingCanonicalService {
     // Verificar quem fez o agendamento (source) para aplicar política de cancelamento
     const hasStudent = Boolean(booking.student_id);
 
+    // Verificar se é aluno fidelizado (carteira)
+    let isPortfolioStudent = false;
+    if (hasStudent && booking.student_id && booking.teacher_id) {
+      const { data: link } = await supabase
+        .from('teacher_students')
+        .select('id, is_portfolio')
+        .eq('teacher_id', booking.teacher_id)
+        .eq('user_id', booking.student_id)
+        .single();
+
+      if (link?.is_portfolio === true) {
+        isPortfolioStudent = true;
+        console.log(`[cancelBooking] Aluno fidelizado detectado`);
+      }
+    }
+
     if (hasStudent && booking.source === 'ALUNO') {
       // VALIDAÇÃO DE POLÍTICAS: Verificar regras de cancelamento
       const bookingStartAt = new Date(booking.start_at || booking.date);
@@ -913,7 +975,47 @@ class BookingCanonicalService {
         freeCancel
       });
 
-      if (freeCancel) {
+      if (isPortfolioStudent) {
+        // ALUNO FIDELIZADO: Professor já consumiu hora do saldo dele no agendamento (se estava PAID)
+        // Se estava RESERVED, não houve consumo de hora
+        if (booking.status_canonical === 'PAID') {
+          // Devolver a hora ao professor (REFUND)
+          console.log('[CANCEL BOOKING] Aluno fidelizado (PAID) - devolvendo hora ao professor');
+          try {
+            const profBalance = await balanceService.getProfessorBalance(booking.teacher_id, franqueadoraId);
+            await balanceService.updateProfessorBalance(
+              booking.teacher_id,
+              franqueadoraId,
+              {
+                available_hours: profBalance.available_hours + 1
+              }
+            );
+            await balanceService.createHourTransaction(
+              booking.teacher_id,
+              franqueadoraId,
+              'REFUND',
+              1,
+              {
+                unitId: null,
+                source: 'SYSTEM',
+                bookingId: bookingId,
+                metaJson: {
+                  booking_id: bookingId,
+                  actor: userId,
+                  reason: 'portfolio_student_cancelled_refund'
+                }
+              }
+            );
+            console.log(`[CANCEL BOOKING] ✅ Hora devolvida ao professor ${booking.teacher_id} (aluno fidelizado cancelou)`);
+          } catch (error) {
+            console.error(`[CANCEL BOOKING] ❌ Erro ao devolver hora ao professor:`, error);
+          }
+        } else {
+          // Booking estava RESERVED - não houve consumo de hora, nada a devolver
+          console.log(`[CANCEL BOOKING] Aluno fidelizado (RESERVED) - nenhuma hora a devolver`);
+        }
+      } else if (freeCancel) {
+        // ALUNO DA PLATAFORMA - Cancelamento dentro do prazo
         try {
           console.log('[CANCEL BOOKING] ✅ Cancelamento dentro do prazo - estornando crédito');
 
@@ -1010,6 +1112,7 @@ class BookingCanonicalService {
           }
         );
       } else {
+        // ALUNO DA PLATAFORMA - Cancelamento após o prazo
         console.log('[CANCEL BOOKING] ⚠️ Cancelamento após o prazo - professor recebe a hora como compensação');
         // Cancelamento após 4h: aluno não recebe estorno
         // Professor recebe a hora como compensação (liberar de locked para available)
@@ -1164,6 +1267,15 @@ class BookingCanonicalService {
       }
     }
 
+    // Sincronizar locked_hours do professor baseado nos bookings ativos
+    if (booking.teacher_id) {
+      try {
+        await balanceService.syncProfessorLockedHours(booking.teacher_id, franqueadoraId);
+      } catch (syncError) {
+        console.error(`[cancelBooking] Erro ao sincronizar locked_hours:`, syncError);
+      }
+    }
+
     return updatedBooking;
   }
 
@@ -1182,14 +1294,58 @@ class BookingCanonicalService {
       return booking;
     }
 
-    // Confirmação não altera saldos: 
-    // - Em aluno-led, o professor já recebeu 1h no agendamento e o aluno só consome em DONE ou late-cancel.
-    // - Em professor-led, a hora foi debitada na criação e o aluno não consome aqui.
+    // Verificar se é aluno fidelizado (carteira)
+    let isPortfolioStudent = false;
+    if (booking.student_id && booking.teacher_id) {
+      const { data: link } = await supabase
+        .from('teacher_students')
+        .select('id, is_portfolio')
+        .eq('teacher_id', booking.teacher_id)
+        .eq('user_id', booking.student_id)
+        .single();
+
+      if (link?.is_portfolio === true) {
+        isPortfolioStudent = true;
+      }
+    }
+
+    // Se for aluno fidelizado e booking estava RESERVED, consumir hora do professor agora
+    if (isPortfolioStudent && booking.status_canonical === 'RESERVED') {
+      const franqueadoraId = await fetchFranqueadoraIdFromAcademy(booking.franchise_id);
+      
+      // Verificar se professor tem crédito
+      const professorBalance = await balanceService.getProfessorBalance(booking.teacher_id, franqueadoraId);
+      const availableHours = getAvailableHours(professorBalance);
+
+      if (availableHours < 1) {
+        throw new Error('Saldo de horas insuficiente. Compre mais créditos para confirmar este agendamento.');
+      }
+
+      // Consumir hora do professor
+      await balanceService.consumeProfessorAvailableHours(
+        booking.teacher_id,
+        franqueadoraId,
+        1,
+        bookingId,
+        {
+          unitId: null,
+          source: 'PROFESSOR',
+          metaJson: {
+            booking_id: bookingId,
+            origin: 'portfolio_student_booking_confirmed',
+            student_id: booking.student_id,
+            reason: 'Confirmação manual de aula para aluno da carteira'
+          }
+        }
+      );
+      console.log(`[confirmBooking] ✅ Hora consumida do professor ${booking.teacher_id} (confirmação manual de aluno fidelizado)`);
+    }
 
     const now = new Date();
     const { data: updatedBooking, error: updateError } = await supabase
       .from('bookings')
       .update({
+        status: 'CONFIRMED',
         status_canonical: 'PAID',
         updated_at: now.toISOString()
       })
@@ -1218,20 +1374,22 @@ class BookingCanonicalService {
     // Usar franchise_id (academyId) ao invés de unit_id
     const franqueadoraId = await fetchFranqueadoraIdFromAcademy(booking.franchise_id);
 
-    // Verificar se o aluno e professor estão vinculados (carteira)
+    // Verificar se o aluno e professor estão vinculados (carteira/fidelizado)
     // Se estiverem, NÃO consumir créditos na conclusão (pois já foi "pago" externamente ou pulado no agendamento)
     let isLinkedTeacher = false;
+    let isPortfolioStudent = false;
     if (booking.student_id && booking.teacher_id) {
       const { data: link } = await supabase
         .from('teacher_students')
-        .select('id')
+        .select('id, is_portfolio')
         .eq('teacher_id', booking.teacher_id)
-        .eq('student_id', booking.student_id)
+        .eq('user_id', booking.student_id)
         .single();
 
       if (link) {
         console.log(`[completeBooking] Professor ${booking.teacher_id} e Aluno ${booking.student_id} vinculados. Pulando consumo de crédito.`);
         isLinkedTeacher = true;
+        isPortfolioStudent = link.is_portfolio === true;
       }
     }
 
@@ -1259,7 +1417,9 @@ class BookingCanonicalService {
 
     // Observação: para agendamentos aluno-led, o professor recebeu horas TRAVADAS no agendamento.
     // Agora que a aula foi concluída, liberamos as horas para uso.
-    if (booking.source === 'ALUNO' && booking.teacher_id) {
+    // EXCEÇÃO: Para alunos fidelizados (is_portfolio=true), as horas já foram CONSUMIDAS no agendamento,
+    // então não há horas travadas para liberar.
+    if (booking.source === 'ALUNO' && booking.teacher_id && !isPortfolioStudent) {
       try {
         console.log(`[completeBooking] Liberando hora bônus do professor ${booking.teacher_id}`);
         await balanceService.unlockProfessorBonusHours(
@@ -1281,6 +1441,8 @@ class BookingCanonicalService {
         console.error(`[completeBooking] ❌ Erro ao liberar hora bônus do professor:`, error);
         // Não impedir a conclusão do booking
       }
+    } else if (isPortfolioStudent) {
+      console.log(`[completeBooking] Aluno fidelizado - horas já foram consumidas no agendamento, nada a liberar`);
     }
     // Para agendamentos professor-led, a hora foi consumida na criação do booking.
 

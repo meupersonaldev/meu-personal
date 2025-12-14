@@ -799,7 +799,8 @@ router.get('/:id/history', requireAuth, async (req, res) => {
         credits_cost,
         student_id,
         academy_id,
-        franchise_id
+        franchise_id,
+        series_id
       `
       )
       .eq('teacher_id', id)
@@ -1147,6 +1148,7 @@ router.get('/:id/history', requireAuth, async (req, res) => {
         date: b.date,
         duration: b.duration,
         status: b._status,
+        status_canonical: b.status_canonical,
         credits_cost: b.credits_cost,
         student_name: b.users?.name || null,
         student_email: b.users?.email || null,
@@ -1155,6 +1157,7 @@ router.get('/:id/history', requireAuth, async (req, res) => {
         student_id: b.student_id,
         academy_name: b.academies?.name || null,
         academy_id: b.academy_id,
+        series_id: b.series_id || null,
         earnings:
           b.student_id && privateStudentIds.has(b.student_id)
             ? studentRateMap.get(b.student_id) || 0

@@ -2161,7 +2161,24 @@ router.post(
     })
 
     // Liberar hora do professor (unlock bonus hours)
+    // EXCEÇÃO: Para alunos fidelizados, as horas já foram CONSUMIDAS no agendamento
     try {
+      // Verificar se é aluno fidelizado (carteira)
+      let isPortfolioStudent = false
+      if (booking.student_id && booking.teacher_id) {
+        const { data: link } = await supabase
+          .from('teacher_students')
+          .select('id, is_portfolio')
+          .eq('teacher_id', booking.teacher_id)
+          .eq('user_id', booking.student_id)
+          .single()
+
+        if (link?.is_portfolio === true) {
+          isPortfolioStudent = true
+          console.log(`[fake-checkin] Aluno fidelizado - horas já foram consumidas no agendamento`)
+        }
+      }
+
       // Buscar franqueadora_id da academia
       const { data: academy } = await supabase
         .from('academies')
@@ -2169,7 +2186,7 @@ router.post(
         .eq('id', booking.franchise_id)
         .single()
 
-      if (academy?.franqueadora_id) {
+      if (academy?.franqueadora_id && !isPortfolioStudent) {
         const { balanceService } = await import('../services/balance.service')
         await balanceService.unlockProfessorBonusHours(
           booking.teacher_id,
@@ -2379,22 +2396,42 @@ router.post(
       // Import balance service
       const { balanceService } = await import('../services/balance.service')
 
+      // Verificar se é aluno fidelizado (carteira)
+      // Para alunos fidelizados, as horas já foram CONSUMIDAS no agendamento, não travadas
+      let isPortfolioStudent = false
+      if (booking.student_id && booking.teacher_id) {
+        const { data: link } = await supabase
+          .from('teacher_students')
+          .select('id, is_portfolio')
+          .eq('teacher_id', booking.teacher_id)
+          .eq('user_id', booking.student_id)
+          .single()
+
+        if (link?.is_portfolio === true) {
+          isPortfolioStudent = true
+          console.log(`[checkin] Aluno fidelizado - horas já foram consumidas no agendamento`)
+        }
+      }
+
       // Unlock bonus hours that were locked when booking was created
       // This converts locked_hours to available_hours
-      await balanceService.unlockProfessorBonusHours(
-        booking.teacher_id,
-        franqueadoraId,
-        hoursToCredit,
-        booking.id,
-        {
-          source: 'SYSTEM',
-          metaJson: {
-            booking_id: booking.id,
-            origin: method === 'QRCODE' ? 'checkin_qrcode' : 'checkin_manual',
-            student_id: booking.student_id
+      // EXCEÇÃO: Para alunos fidelizados, não há horas travadas para liberar
+      if (!isPortfolioStudent) {
+        await balanceService.unlockProfessorBonusHours(
+          booking.teacher_id,
+          franqueadoraId,
+          hoursToCredit,
+          booking.id,
+          {
+            source: 'SYSTEM',
+            metaJson: {
+              booking_id: booking.id,
+              origin: method === 'QRCODE' ? 'checkin_qrcode' : 'checkin_manual',
+              student_id: booking.student_id
+            }
           }
-        }
-      )
+        )
+      }
 
       // Get updated balance
       const updatedBalance = await balanceService.getProfessorBalance(

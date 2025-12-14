@@ -52,6 +52,7 @@ export default function AgendaPage() {
   const [bookings, setBookings] = useState<Booking[]>([])
   const [loading, setLoading] = useState(false)
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
+  const [hourBalance, setHourBalance] = useState<{ available_hours: number; pending_hours: number }>({ available_hours: 0, pending_hours: 0 })
 
   // Função auxiliar para fazer fetch autenticado
   const authFetch = useCallback(async (url: string, options: RequestInit = {}) => {
@@ -113,6 +114,22 @@ export default function AgendaPage() {
         setBookings(filtered)
       } else {
         console.error('[Agenda DEBUG] Erro na resposta:', res.status, res.statusText)
+      }
+
+      // Buscar saldo de horas do professor
+      try {
+        const statsRes = await authFetch(`/api/teachers/${user.id}/stats`)
+        if (statsRes.ok) {
+          const statsData = await statsRes.json()
+          if (statsData.hour_balance) {
+            setHourBalance({
+              available_hours: statsData.hour_balance.available_hours || 0,
+              pending_hours: statsData.hour_balance.pending_hours || 0
+            })
+          }
+        }
+      } catch (statsErr) {
+        console.error('[Agenda] Erro ao buscar stats:', statsErr)
       }
     } catch (err) {
       console.error('[Agenda DEBUG] Erro ao carregar agenda:', err)
@@ -260,12 +277,22 @@ export default function AgendaPage() {
   // Novas cores de status (Premium)
   // Lógica:
   // - Confirmado (PAID): Aula confirmada com créditos debitados
-  // - Reservado (RESERVED): Série recorrente onde o ALUNO não tem crédito ainda
-  // - Solicitação (is_reserved=true + status não é RESERVED): Aluno da carteira solicitou aula mas PROFESSOR não tem crédito
+  // - Reservado (RESERVED + series_id): Série recorrente onde o ALUNO não tem crédito ainda
+  // - Aguardando Crédito (RESERVED sem series_id): Aluno da carteira agendou mas PROFESSOR não tem crédito
   function getStatusStyle(booking: Booking) {
-    // Solicitação: aluno da carteira solicitou aula mas PROFESSOR não tem crédito para agendar
-    // is_reserved=true indica que é uma solicitação pendente de crédito do professor
-    // MAS se o status for RESERVED, é uma série pendente de crédito do aluno (não solicitação)
+    // RESERVED sem series_id = aluno da carteira agendou mas professor não tem crédito
+    if (booking.status === 'RESERVED' && !booking.series_id) {
+      return {
+        bg: 'bg-violet-50',
+        text: 'text-violet-700',
+        label: 'Aguardando Crédito',
+        icon: '⏳',
+        accent: 'border-l-violet-500',
+        border: 'border-violet-200'
+      }
+    }
+
+    // is_reserved=true (flag legado) também indica solicitação
     if (booking.is_reserved && booking.status !== 'RESERVED') {
       return {
         bg: 'bg-violet-50',
@@ -441,9 +468,9 @@ export default function AgendaPage() {
               </p>
             </div>
             <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/5">
-              <p className="text-blue-200 text-xs font-semibold uppercase tracking-wider mb-1">Solicitações (Semana)</p>
+              <p className="text-blue-200 text-xs font-semibold uppercase tracking-wider mb-1">Aguardando Crédito</p>
               <p className="text-2xl font-bold text-violet-300">
-                {bookings.filter(b => b.is_reserved === true && b.status !== 'RESERVED').length}
+                {bookings.filter(b => (b.status === 'RESERVED' && !b.series_id) || (b.is_reserved === true && b.status !== 'RESERVED')).length}
               </p>
             </div>
           </div>
@@ -488,7 +515,7 @@ export default function AgendaPage() {
             {[
               { color: 'bg-emerald-500', label: 'Confirmado', desc: 'Aula confirmada com créditos', border: 'border-emerald-100', bg: 'bg-emerald-50/50' },
               { color: 'bg-yellow-500', label: 'Reservado', desc: 'Série pendente de crédito do aluno', border: 'border-yellow-100', bg: 'bg-yellow-50/50' },
-              { color: 'bg-violet-500', label: 'Solicitação', desc: 'Aluno solicitou, você precisa de crédito', border: 'border-violet-100', bg: 'bg-violet-50/50' },
+              { color: 'bg-violet-500', label: 'Aguardando', desc: 'Você precisa comprar crédito', border: 'border-violet-100', bg: 'bg-violet-50/50' },
               { color: 'bg-red-500', label: 'Cancelado', desc: 'Aula cancelada', border: 'border-red-100', bg: 'bg-red-50/50' }
             ].map((item, i) => (
               <div key={i} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${item.border} ${item.bg} transition-all hover:shadow-sm`}>
@@ -804,7 +831,69 @@ export default function AgendaPage() {
                     </div>
                   </div>
 
-                  {selectedBooking.status === 'RESERVED' && (
+                  {selectedBooking.status === 'RESERVED' && !selectedBooking.series_id && (
+                    <div className={`p-4 rounded-xl border ${(hourBalance.available_hours - hourBalance.pending_hours) >= 1 ? 'bg-violet-50 border-violet-100' : 'bg-red-50 border-red-100'}`}>
+                      <div className="flex items-start gap-3 mb-4">
+                        <div className={`p-2 rounded-full mt-0.5 ${(hourBalance.available_hours - hourBalance.pending_hours) >= 1 ? 'bg-violet-100' : 'bg-red-100'}`}>
+                          <Clock className={`h-4 w-4 ${(hourBalance.available_hours - hourBalance.pending_hours) >= 1 ? 'text-violet-600' : 'text-red-600'}`} />
+                        </div>
+                        <div>
+                          <h4 className={`text-sm font-bold ${(hourBalance.available_hours - hourBalance.pending_hours) >= 1 ? 'text-violet-800' : 'text-red-800'}`}>
+                            {(hourBalance.available_hours - hourBalance.pending_hours) >= 1 ? 'Confirme para usar seu crédito' : 'Você não tem créditos'}
+                          </h4>
+                          <p className={`text-xs leading-relaxed mt-1 ${(hourBalance.available_hours - hourBalance.pending_hours) >= 1 ? 'text-violet-700' : 'text-red-700'}`}>
+                            {(hourBalance.available_hours - hourBalance.pending_hours) >= 1 
+                              ? 'Um aluno da sua carteira solicitou esta aula. Confirme para usar 1 crédito.'
+                              : 'Compre créditos para confirmar esta aula do seu aluno.'}
+                          </p>
+                        </div>
+                      </div>
+                      {(hourBalance.available_hours - hourBalance.pending_hours) >= 1 ? (
+                        <Button
+                          onClick={async () => {
+                            try {
+                              const res = await authFetch(`/api/bookings/${selectedBooking.id}`, {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ status: 'PAID' })
+                              })
+                              if (res.ok) {
+                                toast.success('Aula confirmada com sucesso!')
+                                setSelectedBooking(null)
+                                fetchBookings()
+                              } else {
+                                const data = await res.json()
+                                if (data.error?.includes('Saldo de horas insuficiente')) {
+                                  toast.error('Você não tem créditos suficientes. Compre mais créditos.', {
+                                    action: {
+                                      label: 'Comprar',
+                                      onClick: () => window.location.href = '/professor/comprar-horas'
+                                    }
+                                  })
+                                } else {
+                                  toast.error(data.error || 'Erro ao confirmar aula')
+                                }
+                              }
+                            } catch {
+                              toast.error('Erro ao confirmar aula')
+                            }
+                          }}
+                          className="w-full bg-violet-600 hover:bg-violet-700 text-white font-bold h-10 rounded-xl"
+                        >
+                          ✓ Confirmar Aula
+                        </Button>
+                      ) : (
+                        <Button
+                          onClick={() => window.location.href = '/professor/comprar-horas'}
+                          className="w-full bg-red-600 hover:bg-red-700 text-white font-bold h-10 rounded-xl"
+                        >
+                          Comprar Créditos
+                        </Button>
+                      )}
+                    </div>
+                  )}
+
+                  {selectedBooking.status === 'RESERVED' && selectedBooking.series_id && (
                     <div className="p-4 bg-amber-50 rounded-xl border border-amber-100 flex items-start gap-3">
                       <div className="p-2 bg-amber-100 rounded-full mt-0.5">
                         <Clock className="h-4 w-4 text-amber-600" />
