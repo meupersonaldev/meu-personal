@@ -32,13 +32,7 @@ import {
   Calendar,
   DollarSign,
   User,
-  FileText,
-  CreditCard,
-  Gift,
-  ChevronLeft,
-  ChevronRight,
-  UserPlus,
-  Globe
+  CreditCard
 } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { toast } from 'sonner'
@@ -100,21 +94,6 @@ export default function AlunosPage() {
     studentName: ''
   })
 
-  // Portfolio modal state
-  const [portfolioModal, setPortfolioModal] = useState<{
-    isOpen: boolean
-    student: Student | null
-    hourlyRate: string
-    notes: string
-    loading: boolean
-  }>({
-    isOpen: false,
-    student: null,
-    hourlyRate: '',
-    notes: '',
-    loading: false
-  })
-
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 8
@@ -145,7 +124,9 @@ export default function AlunosPage() {
 
       if (response.ok) {
         const data = await response.json()
-        setStudents(data.students || [])
+        // Filtrar apenas alunos da carteira (fidelizados)
+        const portfolioStudents = (data.students || []).filter((s: Student) => s.is_portfolio === true)
+        setStudents(portfolioStudents)
       }
     } catch (error) {
       toast.error('Erro ao carregar alunos')
@@ -341,66 +322,6 @@ export default function AlunosPage() {
     }
   }
 
-  const openPortfolioModal = (student: Student) => {
-    setPortfolioModal({
-      isOpen: true,
-      student,
-      hourlyRate: student.hourly_rate?.toString() || '',
-      notes: student.notes || '',
-      loading: false
-    })
-  }
-
-  const closePortfolioModal = () => {
-    setPortfolioModal({
-      isOpen: false,
-      student: null,
-      hourlyRate: '',
-      notes: '',
-      loading: false
-    })
-  }
-
-  const handleFidelizar = async () => {
-    if (!portfolioModal.student) return
-
-    setPortfolioModal(prev => ({ ...prev, loading: true }))
-
-    try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {})
-      }
-
-      const response = await fetch(
-        `${API_URL}/api/teachers/${user?.id}/students/${portfolioModal.student.id}/portfolio`,
-        {
-          method: 'PATCH',
-          headers,
-          credentials: 'include',
-          body: JSON.stringify({
-            is_portfolio: true,
-            hourly_rate: portfolioModal.hourlyRate ? parseFloat(portfolioModal.hourlyRate) : null,
-            notes: portfolioModal.notes || null
-          })
-        }
-      )
-
-      if (response.ok) {
-        toast.success('Aluno fidelizado com sucesso!')
-        fetchStudents()
-        closePortfolioModal()
-      } else {
-        toast.error('Erro ao fidelizar aluno')
-      }
-    } catch (error) {
-      toast.error('Erro ao processar requisição')
-    } finally {
-      setPortfolioModal(prev => ({ ...prev, loading: false }))
-    }
-  }
-
   const filteredStudents = students.filter(student =>
     student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     student.email.toLowerCase().includes(searchTerm.toLowerCase())
@@ -465,42 +386,26 @@ export default function AlunosPage() {
             </div>
 
             {/* Stats e Busca */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-              {/* Card Carteira */}
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
+              {/* Card Total */}
               <Card className="bg-[#002C4E] text-white border-none shadow-meu relative overflow-hidden group">
                 <div className="absolute top-0 right-0 p-16 bg-[#27DFFF]/10 rounded-full -mr-8 -mt-8 blur-xl transition-all group-hover:bg-[#27DFFF]/20"></div>
-                <CardContent className="p-5 relative z-10">
-                  <div className="flex items-center justify-between mb-3">
+                <CardContent className="p-6 relative z-10">
+                  <div className="flex items-center justify-between mb-4">
                     <div className="p-2 bg-white/10 rounded-lg backdrop-blur-sm">
-                      <Users className="h-4 w-4 text-[#27DFFF]" />
+                      <Users className="h-5 w-5 text-[#27DFFF]" />
                     </div>
-                    <span className="text-[10px] font-medium text-white/60 bg-white/10 px-2 py-0.5 rounded-full">Carteira</span>
+                    <span className="text-xs font-medium text-white/60 bg-white/10 px-2 py-1 rounded-full">Carteira</span>
                   </div>
                   <div>
-                    <h2 className="text-3xl font-bold text-white mb-0.5">{students.filter(s => s.is_portfolio).length}</h2>
-                    <p className="text-white/60 text-xs font-medium">Alunos Fidelizados</p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Card Plataforma */}
-              <Card className="bg-white border-none shadow-meu relative overflow-hidden group">
-                <CardContent className="p-5 relative z-10">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="p-2 bg-blue-50 rounded-lg">
-                      <Globe className="h-4 w-4 text-blue-500" />
-                    </div>
-                    <span className="text-[10px] font-medium text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">Plataforma</span>
-                  </div>
-                  <div>
-                    <h2 className="text-3xl font-bold text-gray-800 mb-0.5">{students.filter(s => s.source === 'PLATFORM' && !s.is_portfolio).length}</h2>
-                    <p className="text-gray-500 text-xs font-medium">Aguardando Fidelização</p>
+                    <h2 className="text-4xl font-bold text-white mb-1">{students.length}</h2>
+                    <p className="text-white/60 text-sm font-medium">Alunos Particulares</p>
                   </div>
                 </CardContent>
               </Card>
 
               {/* Search Bar Container */}
-              <div className="md:col-span-2">
+              <div className="lg:col-span-3">
                 <Card className="h-full border-none shadow-meu bg-white flex flex-col justify-center">
                   <CardContent className="p-6">
                     <div className="relative group">
@@ -582,34 +487,15 @@ export default function AlunosPage() {
                               </div>
                             </td>
                             <td className="py-4 px-6">
-                              <div className="flex flex-col gap-1">
-                                {student.connection_status === 'PENDING' ? (
-                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-50 text-yellow-700 border border-yellow-100 w-fit">
-                                    Pendente
-                                  </span>
-                                ) : student.is_portfolio ? (
-                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-100 w-fit">
-                                    Na Carteira
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100 w-fit">
-                                    <Globe className="h-3 w-3 mr-1" />
-                                    Plataforma
-                                  </span>
-                                )}
-                                {student.source === 'PLATFORM' && !student.is_portfolio && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      openPortfolioModal(student)
-                                    }}
-                                    className="text-[10px] font-medium text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1"
-                                  >
-                                    <UserPlus className="h-3 w-3" />
-                                    Fidelizar
-                                  </button>
-                                )}
-                              </div>
+                              {student.connection_status === 'PENDING' ? (
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-50 text-yellow-700 border border-yellow-100">
+                                  Pendente
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-100">
+                                  Ativo
+                                </span>
+                              )}
                             </td>
                             <td className="py-4 px-6">
                               {student.hourly_rate ? (
@@ -1127,114 +1013,6 @@ export default function AlunosPage() {
               type="danger"
             />
 
-            {/* Modal de Fidelização */}
-            {portfolioModal.isOpen && portfolioModal.student && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center">
-                <div
-                  className="fixed inset-0 bg-black/60 backdrop-blur-sm"
-                  onClick={closePortfolioModal}
-                />
-                <Card className="relative z-10 w-[95vw] max-w-md border-none shadow-2xl bg-white rounded-2xl overflow-hidden">
-                  {/* Header */}
-                  <div className="p-5 bg-[#002C4E] text-white relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-24 bg-[#27DFFF]/10 rounded-full -mr-12 -mt-12 blur-2xl"></div>
-                    <div className="relative z-10 flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center backdrop-blur-sm">
-                        <UserPlus className="h-5 w-5 text-[#27DFFF]" />
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-bold text-white">Fidelizar Aluno</h3>
-                        <p className="text-white/70 text-xs mt-0.5">Adicionar à sua carteira</p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={closePortfolioModal}
-                      className="absolute top-4 right-4 p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
-                    >
-                      <X className="h-4 w-4 text-white" />
-                    </button>
-                  </div>
-
-                  {/* Content */}
-                  <CardContent className="p-5 space-y-5">
-                    {/* Info do Aluno */}
-                    <div className="flex items-center gap-4 p-4 bg-blue-50 rounded-xl border border-blue-100">
-                      <div className="h-12 w-12 rounded-full bg-[#002C4E] text-white flex items-center justify-center text-lg font-bold">
-                        {portfolioModal.student.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <p className="font-bold text-[#002C4E]">{portfolioModal.student.name}</p>
-                        <p className="text-sm text-gray-500">{portfolioModal.student.email}</p>
-                        {portfolioModal.student.phone && (
-                          <p className="text-xs text-gray-400">{portfolioModal.student.phone}</p>
-                        )}
-                      </div>
-                    </div>
-
-                    <p className="text-sm text-gray-600">
-                      Ao fidelizar, este aluno será adicionado à sua carteira pessoal. 
-                      Você poderá definir um valor/hora personalizado e acompanhar o histórico.
-                    </p>
-
-                    {/* Valor/Hora */}
-                    <div>
-                      <label className="block text-[10px] font-bold text-gray-500 mb-1.5 uppercase tracking-wider">
-                        Valor por Hora (opcional)
-                      </label>
-                      <div className="relative">
-                        <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={portfolioModal.hourlyRate}
-                          onChange={(e) => setPortfolioModal(prev => ({ ...prev, hourlyRate: e.target.value }))}
-                          className="w-full pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#002C4E]/20 focus:border-[#002C4E] focus:bg-white transition-all outline-none text-sm font-medium"
-                          placeholder="Ex: 150.00"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Observações */}
-                    <div>
-                      <label className="block text-[10px] font-bold text-gray-500 mb-1.5 uppercase tracking-wider">
-                        Observações (opcional)
-                      </label>
-                      <textarea
-                        value={portfolioModal.notes}
-                        onChange={(e) => setPortfolioModal(prev => ({ ...prev, notes: e.target.value }))}
-                        className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#002C4E]/20 focus:border-[#002C4E] focus:bg-white transition-all outline-none text-sm font-medium resize-none"
-                        placeholder="Anotações sobre o aluno..."
-                        rows={3}
-                      />
-                    </div>
-
-                    {/* Botões */}
-                    <div className="flex gap-3 pt-2">
-                      <Button
-                        onClick={closePortfolioModal}
-                        variant="outline"
-                        className="flex-1 h-11 rounded-xl font-medium border-gray-200"
-                        disabled={portfolioModal.loading}
-                      >
-                        Cancelar
-                      </Button>
-                      <Button
-                        onClick={handleFidelizar}
-                        className="flex-1 h-11 rounded-xl font-medium bg-[#002C4E] hover:bg-[#003f70] text-white"
-                        disabled={portfolioModal.loading}
-                      >
-                        {portfolioModal.loading ? (
-                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        ) : (
-                          <UserPlus className="h-4 w-4 mr-2" />
-                        )}
-                        Fidelizar
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
           </>
         )}
       </div>

@@ -1,7 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
-import Link from 'next/link'
+import { useState, useEffect } from 'react'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -35,18 +34,15 @@ import {
   DollarSign,
   Loader2,
   AlertCircle,
-  MapPin,
-  ArrowRight,
   TrendingUp,
   Filter,
   Building2,
   CheckCircle,
-  User,
-  Wallet,
-  Mail,
   Phone,
-  Trash2,
-
+  UserPlus,
+  Globe,
+  Mail,
+  Wallet,
   ChevronLeft,
   ChevronRight
 } from 'lucide-react'
@@ -134,6 +130,16 @@ export default function ProfessorDashboardPage() {
   const [academyList, setAcademyList] = useState<{ id: string; name: string }[]>([])
   const [hourBalance, setHourBalance] = useState<{ available_hours: number; pending_hours: number }>({ available_hours: 0, pending_hours: 0 })
 
+  // Alunos da plataforma (não fidelizados)
+  const [platformStudents, setPlatformStudents] = useState<Array<{
+    id: string
+    name: string
+    email: string
+    phone?: string
+    user_id?: string
+  }>>([])
+  const [fidelizingId, setFidelizingId] = useState<string | null>(null)
+
   // Paginação (apenas para histórico)
 
 
@@ -174,6 +180,38 @@ export default function ProfessorDashboardPage() {
       setIsLoading(false)
     } finally {
       setIsCancelling(false)
+    }
+  }
+
+  const handleFidelizar = async (studentId: string) => {
+    if (!token || !user?.id) return
+    setFidelizingId(studentId)
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const response = await fetch(
+        `${API_URL}/api/teachers/${user.id}/students/${studentId}/portfolio`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          credentials: 'include',
+          body: JSON.stringify({ is_portfolio: true })
+        }
+      )
+
+      if (response.ok) {
+        toast.success('Aluno fidelizado! Agora está na sua carteira.')
+        // Remover da lista de plataforma
+        setPlatformStudents(prev => prev.filter(s => s.id !== studentId))
+      } else {
+        toast.error('Erro ao fidelizar aluno')
+      }
+    } catch (error) {
+      toast.error('Erro ao processar requisição')
+    } finally {
+      setFidelizingId(null)
     }
   }
 
@@ -240,6 +278,29 @@ export default function ProfessorDashboardPage() {
         }
       } catch (statsErr) {
         console.error('Erro ao buscar stats:', statsErr)
+      }
+
+      // Buscar alunos da plataforma (não fidelizados)
+      try {
+        const studentsResponse = await fetch(
+          `${API_URL}/api/teachers/${user.id}/students`,
+          {
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`
+            }
+          }
+        )
+        if (studentsResponse.ok) {
+          const studentsData = await studentsResponse.json()
+          const platformOnly = (studentsData.students || []).filter(
+            (s: any) => s.source === 'PLATFORM' && !s.is_portfolio
+          )
+          setPlatformStudents(platformOnly)
+        }
+      } catch (studentsErr) {
+        console.error('Erro ao buscar alunos da plataforma:', studentsErr)
       }
 
       // Extrair lista única de alunos para o dropdown (apenas na primeira carga)
@@ -689,6 +750,59 @@ export default function ProfessorDashboardPage() {
                 }
                 return null
               })()}
+
+              {/* Alunos da Plataforma (não fidelizados) */}
+              {platformStudents.length > 0 && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-xl font-bold text-[#002C4E] flex items-center gap-2">
+                        <Globe className="w-5 h-5 text-blue-500" />
+                        Alunos da Plataforma
+                      </h3>
+                      <p className="text-sm text-gray-500 mt-1">
+                        Alunos que agendaram com você. Fidelizar para adicionar à sua carteira.
+                      </p>
+                    </div>
+                    <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-100">
+                      {platformStudents.length} aguardando
+                    </Badge>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {platformStudents.map((student) => (
+                      <Card key={student.id} className="border border-blue-100 bg-blue-50/30 hover:bg-blue-50/50 transition-colors">
+                        <CardContent className="p-4">
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold">
+                              {student.name.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-gray-900 truncate">{student.name}</p>
+                              <p className="text-xs text-gray-500 truncate">{student.email}</p>
+                            </div>
+                            <Button
+                              size="sm"
+                              onClick={() => handleFidelizar(student.id)}
+                              disabled={fidelizingId === student.id}
+                              className="bg-[#002C4E] hover:bg-[#003f70] text-white h-8 px-3"
+                            >
+                              {fidelizingId === student.id ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <>
+                                  <UserPlus className="h-3 w-3 mr-1" />
+                                  Fidelizar
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Histórico / Análise (Antigo Análise de Aulas Passadas) */}
               <div className="space-y-6">
