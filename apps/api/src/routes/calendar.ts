@@ -43,7 +43,7 @@ router.get('/events', async (req, res) => {
       `)
       .eq('franchise_id', academy_id)
       .not('student_id', 'is', null) // Apenas agendamentos com aluno
-      .in('status_canonical', ['CONFIRMED', 'DONE', 'CANCELED', 'COMPLETED', 'CANCELLED']) // Apenas status visíveis para franquia
+      .in('status_canonical', ['PAID', 'DONE', 'CANCELED']) // Apenas status visíveis para franquia (PAID=confirmado, DONE=concluído, CANCELED=cancelado)
       .gte('date', `${start_date}T00:00:00Z`)
       .lte('date', `${end_date}T23:59:59Z`)
       .order('date', { ascending: true })
@@ -201,17 +201,21 @@ router.get('/availability', async (req, res) => {
   }
 })
 
-// Helper function
+// Helper function - usa valores do enum booking_status_enum: RESERVED, PAID, CANCELED, DONE
 function getEventColor(status: string): string {
   switch (status) {
+    case 'PAID':
     case 'CONFIRMED':
-      return '#10B981' // green
+      return '#10B981' // green - confirmado/pago
+    case 'DONE':
     case 'COMPLETED':
-      return '#3B82F6' // blue
+      return '#3B82F6' // blue - concluído
+    case 'CANCELED':
     case 'CANCELLED':
-      return '#EF4444' // red
+      return '#EF4444' // red - cancelado
+    case 'RESERVED':
     case 'PENDING':
-      return '#F59E0B' // yellow
+      return '#F59E0B' // yellow - reservado/pendente
     default:
       return '#6B7280' // gray
   }
