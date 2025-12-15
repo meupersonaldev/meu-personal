@@ -182,25 +182,26 @@ export async function requireFranqueadoraAdmin(req: Request, res: Response, next
         }
       } else if (canonicalRole === 'FRANCHISE_ADMIN') {
         // Para admin de franquia, buscar a franqueadora através da franquia
+        // NOTA: A tabela franchise_admins usa 'academy_id', não 'franchise_id'
         console.log(`[AUTH] FRANCHISE_ADMIN - buscando franchise_admins para userId: ${userId}`)
         try {
           const { data: franchiseAdmin, error: faError } = await supabase
             .from('franchise_admins')
-            .select('franchise_id')
+            .select('academy_id')
             .eq('user_id', userId)
             .single()
           
           console.log(`[AUTH] franchise_admins result:`, { franchiseAdmin, error: faError?.message })
           
-          if (franchiseAdmin?.franchise_id) {
-            franchiseId = franchiseAdmin.franchise_id
-            console.log(`[AUTH] FRANCHISE_ADMIN - franchise_id: ${franchiseId}`)
+          if (franchiseAdmin?.academy_id) {
+            franchiseId = franchiseAdmin.academy_id
+            console.log(`[AUTH] FRANCHISE_ADMIN - academy_id: ${franchiseId}`)
             
             // Buscar a franqueadora da franquia
             const { data: academy, error: acError } = await supabase
               .from('academies')
               .select('franqueadora_id')
-              .eq('id', franchiseAdmin.franchise_id)
+              .eq('id', franchiseAdmin.academy_id)
               .single()
             
             console.log(`[AUTH] academies result:`, { academy, error: acError?.message })

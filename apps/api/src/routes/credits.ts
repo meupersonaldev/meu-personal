@@ -64,10 +64,10 @@ async function checkCreditReleaseEnabled(
 
     // Para admin de franquia, verificar se a funcionalidade está habilitada
     if (canonicalRole === 'FRANCHISE_ADMIN') {
-      // Buscar a franquia do admin
+      // Buscar a franquia do admin (usa academy_id, não franchise_id)
       const { data: franchiseAdmin, error: adminError } = await supabase
         .from('franchise_admins')
-        .select('franchise_id')
+        .select('academy_id')
         .eq('user_id', user.userId)
         .single();
 
@@ -82,7 +82,7 @@ async function checkCreditReleaseEnabled(
       const { data: academy, error: academyError } = await supabase
         .from('academies')
         .select('settings')
-        .eq('id', franchiseAdmin.franchise_id)
+        .eq('id', franchiseAdmin.academy_id)
         .single();
 
       if (academyError || !academy) {
@@ -101,7 +101,7 @@ async function checkCreditReleaseEnabled(
       }
 
       // Adicionar franchise_id ao request para uso posterior
-      (req as any).franchiseId = franchiseAdmin.franchise_id;
+      (req as any).franchiseId = franchiseAdmin.academy_id;
     }
 
     return next();
@@ -203,12 +203,12 @@ async function getAdminFranchiseScope(
   if (canonicalRole === 'FRANCHISE_ADMIN') {
     const { data: franchiseAdmin } = await supabase
       .from('franchise_admins')
-      .select('franchise_id')
+      .select('academy_id')
       .eq('user_id', user.userId)
       .single();
 
     if (franchiseAdmin) {
-      return { franchiseIds: [franchiseAdmin.franchise_id], franqueadoraId };
+      return { franchiseIds: [franchiseAdmin.academy_id], franqueadoraId };
     }
   }
 
@@ -485,8 +485,123 @@ router.get(
   '/history',
   requireAuth,
   requireRole(['FRANQUEADORA', 'FRANQUIA', 'ADMIN', 'SUPER_ADMIN']),
-  requireFranqueadoraAdmin,
-  // Não usa checkCreditReleaseEnabled - histórico sempre visível para auditoria
+  // Middleware inline para obter franqueadora/franchise sem bloquear
+  async (req, res, next) => {
+    try {
+      const userId = req.user?.userId;
+      const canonicalRole = req.user?.canonicalRole;
+      
+      console.log(`[CREDITS/HISTORY] userId: ${userId}, role: ${canonicalRole}`);
+      
+      let franqueadoraId: string | null = null;
+      let franchiseId: string | null = null;
+      
+      // Tentar obter franqueadora de várias formas
+      // 1. franqueadora_admins
+      const { data: faData } = await supabase
+        .from('franqueadora_admins')
+        .select('franqueadora_id')
+        .eq('user_id', userId)
+        .single();
+      
+      if (faData?.franqueadora_id) {
+        franqueadoraId = faData.franqueadora_id;
+        console.log(`[CREDITS/HISTORY] Via franqueadora_admins: ${franqueadoraId}`);
+      }
+      
+      // 2. franchise_admins -> academies (usa academy_id, não franchise_id)
+      if (!franqueadoraId) {
+        const { data: franchiseAdmin } = await supabase
+          .from('franchise_admins')
+          .select('academy_id')
+          .eq('user_id', userId)
+          .single();
+        
+        if (franchiseAdmin?.academy_id) {
+          franchiseId = franchiseAdmin.academy_id;
+          const { data: academy } = await supabase
+            .from('academies')
+            .select('franqueadora_id')
+            .eq('id', franchiseAdmin.academy_id)
+            .single();
+          
+          if (academy?.franqueadora_id) {
+            franqueadoraId = academy.franqueadora_id;
+            console.log(`[CREDITS/HISTORY] Via franchise_admins: franqueadora=${franqueadoraId}, franchise=${franchiseId}`);
+          }
+        }
+      }
+      
+      // 3. users.academy_id -> academies
+      if (!franqueadoraId) {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('academy_id')
+          .eq('id', userId)
+          .single();
+        
+        if (userData?.academy_id) {
+          franchiseId = userData.academy_id;
+          const { data: academy } = await supabase
+            .from('academies')
+            .select('franqueadora_id')
+            .eq('id', userData.academy_id)
+            .single();
+          
+          if (academy?.franqueadora_id) {
+            franqueadoraId = academy.franqueadora_id;
+            console.log(`[CREDITS/HISTORY] Via users.academy_id: franqueadora=${franqueadoraId}, franchise=${franchiseId}`);
+          }
+        }
+      }
+      
+      // 4. users.franchisor_id (para FRANCHISOR)
+      if (!franqueadoraId && canonicalRole === 'FRANCHISOR') {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('franchisor_id')
+          .eq('id', userId)
+          .single();
+        
+        if (userData?.franchisor_id) {
+          franqueadoraId = userData.franchisor_id;
+          console.log(`[CREDITS/HISTORY] Via users.franchisor_id: ${franqueadoraId}`);
+        }
+      }
+      
+      // 5. Para SUPER_ADMIN, buscar primeira franqueadora ativa
+      if (!franqueadoraId && (canonicalRole === 'SUPER_ADMIN' || canonicalRole === 'ADMIN')) {
+        const { data: defaultFranqueadora } = await supabase
+          .from('franqueadora')
+          .select('id')
+          .eq('is_active', true)
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .single();
+        
+        if (defaultFranqueadora?.id) {
+          franqueadoraId = defaultFranqueadora.id;
+          console.log(`[CREDITS/HISTORY] Via default franqueadora: ${franqueadoraId}`);
+        }
+      }
+      
+      // Armazenar no request
+      if (franqueadoraId) {
+        req.franqueadoraAdmin = { franqueadora_id: franqueadoraId };
+      }
+      if (franchiseId) {
+        (req as any).franchiseId = franchiseId;
+      }
+      
+      console.log(`[CREDITS/HISTORY] Final: franqueadora=${franqueadoraId}, franchise=${franchiseId}`);
+      
+      // Não bloquear - permitir acesso mesmo sem franqueadora (retornará lista vazia)
+      next();
+    } catch (err) {
+      console.error('[CREDITS/HISTORY] Erro no middleware:', err);
+      next(); // Continuar mesmo com erro
+    }
+  },
   asyncErrorHandler(async (req, res) => {
     const parseResult = historyFiltersSchema.safeParse(req.query);
     if (!parseResult.success) {
@@ -500,6 +615,19 @@ router.get(
     const filters = parseResult.data;
     const franqueadoraId = req.franqueadoraAdmin?.franqueadora_id;
     const adminFranchiseId = (req as any).franchiseId;
+
+    console.log(`[CREDITS/HISTORY] Handler: franqueadora=${franqueadoraId}, franchise=${adminFranchiseId}`);
+
+    // Se não tem franqueadora, retornar lista vazia
+    if (!franqueadoraId) {
+      console.log('[CREDITS/HISTORY] Sem franqueadora, retornando lista vazia');
+      return res.json({
+        grants: [],
+        total: 0,
+        page: filters.page || 1,
+        totalPages: 0
+      });
+    }
 
     // Aplicar escopo de franquia (Requirements: 5.5)
     const historyFilters: any = {
