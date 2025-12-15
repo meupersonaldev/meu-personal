@@ -66,7 +66,7 @@ export default function MeusProfessoresPage() {
 
             if (userResponse.ok) {
                 const userData = await userResponse.json()
-                setFirstClassUsed(userData.first_class_used || false)
+                setFirstClassUsed(userData.user?.first_class_used || false)
             }
         } catch (error) {
             console.error('Erro ao buscar professores:', error)
