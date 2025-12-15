@@ -11,7 +11,6 @@ import { Calendar, dateFnsLocalizer, View } from 'react-big-calendar'
 import { format, parse, startOfWeek, getDay, startOfMonth, endOfMonth } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { toast } from 'sonner'
-import { utcToLocal, getLocalTimeFromUtc } from '@/lib/timezone-utils'
 import 'react-big-calendar/lib/css/react-big-calendar.css'
 import './calendar-custom.css'
 
@@ -133,6 +132,9 @@ export default function AgendaAcademiaPage() {
   const filteredEvents = statusFilter === 'all'
     ? events
     : events.filter(e => e.status === statusFilter)
+  
+  // Debug: verificar filtro
+  console.log('[Agenda] Filtro:', { statusFilter, totalEvents: events.length, filteredCount: filteredEvents.length, eventStatuses: events.map(e => e.status) })
 
   const getStatusBadge = (status: string) => {
     switch (status) {

@@ -9,6 +9,7 @@ router.get('/', async (req, res) => {
   try {
     const { academy_id } = req.query
 
+    console.log(`[students] ========================================`)
     console.log(`[students] Buscando alunos para academia ${academy_id || 'todas'}`)
 
     // 1. Buscar alunos vinculados explicitamente via academy_students
@@ -37,11 +38,7 @@ router.get('/', async (req, res) => {
             credits_remaining,
             start_date,
             end_date,
-            student_plans (
-              name,
-              price,
-              credits_included
-            )
+            plan_id
           )
         `)
         .eq('role', 'STUDENT')
@@ -78,11 +75,7 @@ router.get('/', async (req, res) => {
             credits_remaining,
             start_date,
             end_date,
-            student_plans (
-              name,
-              price,
-              credits_included
-            )
+            plan_id
           )
         `)
         .eq('role', 'STUDENT')
@@ -141,11 +134,7 @@ router.get('/', async (req, res) => {
                 credits_remaining,
                 start_date,
                 end_date,
-                student_plans (
-                  name,
-                  price,
-                  credits_included
-                )
+                plan_id
               )
             `)
             .eq('role', 'STUDENT')
@@ -169,6 +158,8 @@ router.get('/', async (req, res) => {
     ]
 
     console.log(`[students] Total: ${linkedStudents.length} vinculados + ${studentsWithBookings.length} com bookings = ${allStudents.length} únicos`)
+    console.log(`[students] Retornando ${allStudents.length} alunos`)
+    console.log(`[students] ========================================`)
 
     res.json(allStudents)
   } catch (error) {

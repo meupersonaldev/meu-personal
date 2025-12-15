@@ -75,11 +75,6 @@ router.get('/events', async (req, res) => {
         ? new Date(booking.end_at) 
         : new Date(startDate.getTime() + (booking.duration || 60) * 60 * 1000)
       
-      // Log para debug
-      if (!booking.start_at) {
-        console.log(`[calendar/events] Booking ${booking.id} sem start_at, usando date: ${booking.date}`)
-      }
-      
       const student = booking.student as any
       const teacher = booking.teacher as any
 
