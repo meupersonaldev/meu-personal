@@ -133,6 +133,10 @@ export async function requireFranqueadoraAdmin(req: Request, res: Response, next
 
     // Tentar mapear franqueadora do admin
     const userId = req.user.userId
+    const canonicalRole = req.user.canonicalRole || canonicalizeRole(req.user.role)
+    
+    console.log(`[AUTH] requireFranqueadoraAdmin - userId: ${userId}, role: ${req.user.role}, canonicalRole: ${canonicalRole}`)
+    
     // 1) Tabela preferida: franqueadora_admins
     let franqueadoraId: string | null = null
     let franchiseId: string | null = null
@@ -145,10 +149,10 @@ export async function requireFranqueadoraAdmin(req: Request, res: Response, next
         .single()
       if (!error && data?.franqueadora_id) {
         franqueadoraId = data.franqueadora_id
+        console.log(`[AUTH] Encontrado em franqueadora_admins: ${franqueadoraId}`)
       }
     } catch {}
 
-    const canonicalRole = req.user.canonicalRole || canonicalizeRole(req.user.role)
     const elevated = canonicalRole === 'SUPER_ADMIN' || canonicalRole === 'ADMIN'
 
     const rawFranqueadoraId = (req.query as Record<string, unknown> | undefined)?.franqueadora_id
@@ -167,9 +171,10 @@ export async function requireFranqueadoraAdmin(req: Request, res: Response, next
           const franchisorId = userRow?.franchisor_id
           if (franchisorId && (!queryFranqueadoraId || queryFranqueadoraId === franchisorId)) {
             franqueadoraId = franchisorId
+            console.log(`[AUTH] FRANCHISOR - franqueadora_id: ${franqueadoraId}`)
           }
         } catch (err) {
-          console.warn('Não foi possível determinar franqueadora do usuário:', err)
+          console.warn('[AUTH] Não foi possível determinar franqueadora do usuário:', err)
         }
         if (!franqueadoraId && queryFranqueadoraId) {
           // Fallback: permitir acesso com o identificador informado na query
@@ -177,24 +182,32 @@ export async function requireFranqueadoraAdmin(req: Request, res: Response, next
         }
       } else if (canonicalRole === 'FRANCHISE_ADMIN') {
         // Para admin de franquia, buscar a franqueadora através da franquia
+        console.log(`[AUTH] FRANCHISE_ADMIN - buscando franchise_admins para userId: ${userId}`)
         try {
-          const { data: franchiseAdmin } = await supabase
+          const { data: franchiseAdmin, error: faError } = await supabase
             .from('franchise_admins')
             .select('franchise_id')
             .eq('user_id', userId)
             .single()
           
+          console.log(`[AUTH] franchise_admins result:`, { franchiseAdmin, error: faError?.message })
+          
           if (franchiseAdmin?.franchise_id) {
             franchiseId = franchiseAdmin.franchise_id
+            console.log(`[AUTH] FRANCHISE_ADMIN - franchise_id: ${franchiseId}`)
+            
             // Buscar a franqueadora da franquia
-            const { data: academy } = await supabase
+            const { data: academy, error: acError } = await supabase
               .from('academies')
               .select('franqueadora_id')
               .eq('id', franchiseAdmin.franchise_id)
               .single()
             
+            console.log(`[AUTH] academies result:`, { academy, error: acError?.message })
+            
             if (academy?.franqueadora_id) {
               franqueadoraId = academy.franqueadora_id
+              console.log(`[AUTH] FRANCHISE_ADMIN - franqueadora_id: ${franqueadoraId}`)
             }
           }
         } catch (err) {
@@ -225,7 +238,30 @@ export async function requireFranqueadoraAdmin(req: Request, res: Response, next
       }
     }
 
+    // Se for FRANCHISE_ADMIN e não encontrou na tabela franchise_admins, tentar buscar pela academy
+    if (!franqueadoraId && canonicalRole === 'FRANCHISE_ADMIN') {
+      console.log(`[AUTH] FRANCHISE_ADMIN sem franqueadora - tentando buscar pela academy do usuário`)
+      try {
+        // Buscar academias onde o usuário é admin (pode estar em academy_admins ou outra tabela)
+        const { data: userAcademies } = await supabase
+          .from('academies')
+          .select('id, franqueadora_id')
+          .or(`owner_id.eq.${userId}`)
+          .limit(1)
+          .single()
+        
+        if (userAcademies?.franqueadora_id) {
+          franqueadoraId = userAcademies.franqueadora_id
+          franchiseId = userAcademies.id
+          console.log(`[AUTH] FRANCHISE_ADMIN encontrado como owner - franqueadora_id: ${franqueadoraId}, franchise_id: ${franchiseId}`)
+        }
+      } catch (err) {
+        console.warn('[AUTH] Erro ao buscar academy do FRANCHISE_ADMIN:', err)
+      }
+    }
+
     if (!franqueadoraId && !elevated) {
+      console.warn(`[AUTH] Acesso negado - userId: ${userId}, role: ${canonicalRole}, franqueadoraId: ${franqueadoraId}`)
       return res.status(403).json({ message: 'Forbidden' })
     }
 
@@ -242,8 +278,10 @@ export async function requireFranqueadoraAdmin(req: Request, res: Response, next
       (req as any).franchiseId = franchiseId
     }
     
+    console.log(`[AUTH] requireFranqueadoraAdmin OK - franqueadoraId: ${franqueadoraId}, franchiseId: ${franchiseId}`)
     return next()
   } catch (err) {
+    console.error('[AUTH] Erro em requireFranqueadoraAdmin:', err)
     return res.status(403).json({ message: 'Forbidden' })
   }
 }
