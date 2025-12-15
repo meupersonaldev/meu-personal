@@ -248,13 +248,14 @@ router.get('/:id', async (req, res) => {
   }
 })
 
-// POST /api/students - Criar novo aluno
+// POST /api/students - Criar novo aluno (com envio de email e senha)
 router.post('/', async (req, res) => {
   try {
     const {
       name,
       email,
       phone,
+      cpf,
       academy_id,
       plan_id,
       avatar_url,
@@ -281,17 +282,36 @@ router.post('/', async (req, res) => {
       })
     }
 
-    // Criar usuário
+    // Gerar senha temporária
+    const tempPassword = Math.random().toString(36).slice(-8)
+    
+    // Hash da senha
+    const bcrypt = await import('bcryptjs')
+    const passwordHash = await bcrypt.default.hash(tempPassword, 10)
+
+    // Buscar dados da academia para o email
+    const { data: academy } = await supabase
+      .from('academies')
+      .select('name, franqueadora_id')
+      .eq('id', academy_id)
+      .single()
+
+    // Criar usuário com senha
     const { data: user, error: userError } = await supabase
       .from('users')
       .insert({
         name,
         email,
         phone,
+        cpf: cpf || null,
         role: 'STUDENT',
         avatar_url,
         credits: credits ?? 0,
-        is_active: true
+        is_active: true,
+        password_hash: passwordHash,
+        approval_status: 'approved',
+        academy_id: academy_id,
+        franchisor_id: academy?.franqueadora_id || null
       })
       .select()
       .single()
@@ -302,7 +322,7 @@ router.post('/', async (req, res) => {
     }
 
     // Associar com academia
-    const { data: academyStudent, error: academyError } = await supabase
+    const { error: academyError } = await supabase
       .from('academy_students')
       .insert({
         student_id: user.id,
@@ -348,7 +368,39 @@ router.post('/', async (req, res) => {
       return res.status(500).json({ error: 'Aluno criado, mas erro ao buscar dados' })
     }
 
-    res.status(201).json(fullStudent)
+    // Enviar email de boas-vindas com senha temporária
+    let emailSent = false
+    try {
+      const { getWelcomeStudentCreatedEmail } = await import('../services/email-templates')
+      const { emailService } = await import('../services/email.service')
+
+      console.log('[students] Enviando email de boas-vindas para:', email)
+
+      const loginUrl = 'https://meupersonalfranquia.com.br/aluno/login'
+      const academyName = academy?.name || 'Academia'
+
+      // getWelcomeStudentCreatedEmail(name, email, password, loginUrl)
+      const htmlEmail = await getWelcomeStudentCreatedEmail(name, email, tempPassword, loginUrl)
+
+      await emailService.sendEmail({
+        to: email,
+        subject: `Bem-vindo ao Meu Personal - ${academyName}`,
+        html: htmlEmail,
+        text: `Olá ${name}! Sua conta foi criada. Email: ${email}, Senha temporária: ${tempPassword}. Acesse: ${loginUrl}`
+      })
+
+      emailSent = true
+      console.log('[students] Email de boas-vindas enviado com sucesso')
+    } catch (emailError) {
+      console.error('[students] Erro ao enviar email:', emailError)
+      // Não falhar a criação se o email falhar
+    }
+
+    res.status(201).json({
+      ...fullStudent,
+      emailSent,
+      temporaryPassword: emailSent ? undefined : tempPassword // Só retorna senha se email falhou
+    })
   } catch (error) {
     console.error('Erro ao processar requisição:', error)
     res.status(500).json({ error: 'Erro interno do servidor' })

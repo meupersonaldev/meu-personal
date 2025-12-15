@@ -10,8 +10,6 @@ import { Label } from '@/components/ui/label'
 import {
   Search,
   Plus,
-  Filter,
-  Eye,
   Edit,
   Trash2,
   Users,
@@ -23,41 +21,8 @@ import {
 import { useFranquiaStore } from '@/lib/stores/franquia-store'
 import { toast } from 'sonner'
 
-interface Student {
-  id: string
-  name: string
-  email: string
-  phone?: string
-  avatar_url?: string
-  is_active: boolean
-  created_at: string
-  academy_students: Array<{
-    id: string
-    academy_id: string
-    status: string
-    join_date: string
-    academies: {
-      name: string
-      city: string
-      state: string
-    }
-  }>
-  student_subscriptions: Array<{
-    id: string
-    status: string
-    credits_remaining: number
-    start_date: string
-    end_date: string
-    student_plans: {
-      name: string
-      price: number
-      credits_included: number
-    }
-  }>
-}
-
 export default function AlunosPage() {
-  const { students, fetchStudents, setAcademy, addStudent, updateStudent, deleteStudent } = useFranquiaStore()
+  const { students, fetchStudents, addStudent, updateStudent, deleteStudent } = useFranquiaStore()
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
@@ -75,6 +40,7 @@ export default function AlunosPage() {
     name: '',
     email: '',
     phone: '',
+    cpf: '',
     avatar_url: ''
   })
   const [createLoading, setCreateLoading] = useState(false)
@@ -114,6 +80,7 @@ export default function AlunosPage() {
       name: student.name,
       email: student.email,
       phone: student.phone || '',
+      cpf: student.cpf || '',
       avatar_url: student.avatar_url || ''
     })
     setShowEditModal(true)
@@ -135,7 +102,7 @@ export default function AlunosPage() {
       if (success) {
         setShowEditModal(false)
         setSelectedStudent(null)
-        setFormData({ name: '', email: '', phone: '', avatar_url: '' })
+        setFormData({ name: '', email: '', phone: '', cpf: '', avatar_url: '' })
         toast.success('Aluno atualizado com sucesso!')
       } else {
         toast.error('Erro ao atualizar aluno')
@@ -177,25 +144,37 @@ export default function AlunosPage() {
         name: formData.name,
         email: formData.email,
         phone: formData.phone || '',
+        cpf: formData.cpf || '',
         credits: 0,
         status: 'active' as const,
         join_date: new Date().toISOString(),
         last_activity: new Date().toISOString()
       }
 
-      const success = await addStudent(studentData)
+      const result = await addStudent(studentData) as any
 
-      if (success) {
+      if (result?.success || result === true) {
         setShowCreateModal(false)
         setFormData({
           name: '',
           email: '',
           phone: '',
+          cpf: '',
           avatar_url: ''
         })
-        toast.success('Aluno criado com sucesso!')
+        
+        // Feedback sobre o email
+        if (result?.emailSent) {
+          toast.success(`Aluno criado com sucesso! Email enviado para ${formData.email}`)
+        } else if (result?.temporaryPassword) {
+          toast.warning(`Aluno criado, mas não foi possível enviar o email. Senha temporária: ${result.temporaryPassword}`, {
+            duration: 10000
+          })
+        } else {
+          toast.success('Aluno criado com sucesso!')
+        }
       } else {
-        toast.error('Erro ao criar aluno')
+        toast.error(result?.error || 'Erro ao criar aluno')
       }
     } catch (error) {
       toast.error('Erro ao criar aluno')
@@ -440,8 +419,23 @@ export default function AlunosPage() {
                   id="phone"
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  placeholder="(00) 00000-0000"
                 />
               </div>
+
+              <div>
+                <Label htmlFor="cpf">CPF</Label>
+                <Input
+                  id="cpf"
+                  value={formData.cpf}
+                  onChange={(e) => setFormData({ ...formData, cpf: e.target.value })}
+                  placeholder="000.000.000-00"
+                />
+              </div>
+
+              <p className="text-xs text-gray-500 bg-blue-50 p-3 rounded-lg">
+                📧 O aluno receberá um email com as credenciais de acesso ao sistema.
+              </p>
 
               <div className="flex justify-end space-x-2 pt-4">
                 <Button

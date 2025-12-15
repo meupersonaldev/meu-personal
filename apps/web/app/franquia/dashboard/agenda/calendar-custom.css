@@ -115,3 +115,11 @@
   background-color: #27DFFF;
   height: 2px;
 }
+
+
+/* Reset space-y para elementos que não devem ser afetados */
+.rbc-calendar,
+.rbc-calendar * {
+  --tw-space-y-reverse: 0 !important;
+  margin-top: revert;
+}

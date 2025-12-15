@@ -216,7 +216,7 @@ interface FranquiaState {
   
   // Students
   fetchStudents: () => Promise<void>
-  addStudent: (studentData: Omit<Student, 'id' | 'join_date'>) => Promise<boolean>
+  addStudent: (studentData: Omit<Student, 'id' | 'join_date'>) => Promise<boolean | { success: boolean; emailSent?: boolean; temporaryPassword?: string; error?: string }>
   updateStudent: (id: string, updates: Partial<Student>) => Promise<boolean>
   deleteStudent: (id: string) => Promise<boolean>
   
@@ -648,16 +648,30 @@ export const useFranquiaStore = create<FranquiaState>()(
               name: studentData.name,
               email: studentData.email,
               phone: studentData.phone,
+              cpf: (studentData as any).cpf,
               academy_id: academy.id,
               plan_id: studentData.plan_id,
               credits: studentData.credits
             })
           })
-          if (!resp.ok) return false
+          
+          const data = await resp.json().catch(() => ({}))
+          
+          if (!resp.ok) {
+            // Retornar objeto com erro para o frontend tratar
+            return { success: false, error: data.error || 'Erro ao criar aluno' }
+          }
+          
           await get().fetchStudents()
-          return true
+          
+          // Retornar dados do email para feedback
+          return { 
+            success: true, 
+            emailSent: data.emailSent,
+            temporaryPassword: data.temporaryPassword
+          }
         } catch (error) {
-          return false
+          return { success: false, error: 'Erro ao criar aluno' }
         }
       },
 
