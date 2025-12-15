@@ -822,6 +822,7 @@ router.delete('/:id', requireAuth, async (req, res) => {
 
     // 8. Notificações e auditoria
     await supabase.from('notifications').delete().eq('user_id', id)
+    await supabase.from('notifications').delete().eq('actor_id', id)
     await supabase.from('audit_logs').delete().eq('actor_user_id', id)
 
     // 9. Requisições de aprovação
