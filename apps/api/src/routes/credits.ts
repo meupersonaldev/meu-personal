@@ -477,13 +477,16 @@ router.get(
  * GET /api/admin/credits/history
  * Retorna histórico de liberações com filtros
  * Requirements: 5.1, 5.2, 5.3, 5.4, 5.5
+ * 
+ * Nota: O histórico é visível mesmo se a funcionalidade de liberação estiver desabilitada
+ * para permitir auditoria de liberações anteriores.
  */
 router.get(
   '/history',
   requireAuth,
   requireRole(['FRANQUEADORA', 'FRANQUIA', 'ADMIN', 'SUPER_ADMIN']),
   requireFranqueadoraAdmin,
-  checkCreditReleaseEnabled,
+  // Não usa checkCreditReleaseEnabled - histórico sempre visível para auditoria
   asyncErrorHandler(async (req, res) => {
     const parseResult = historyFiltersSchema.safeParse(req.query);
     if (!parseResult.success) {

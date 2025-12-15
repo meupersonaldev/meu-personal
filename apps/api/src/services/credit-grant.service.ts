@@ -100,60 +100,84 @@ class CreditGrantService {
 
     const offset = (page - 1) * limit;
 
-    // Build query for data
-    let query = supabase
-      .from('credit_grants')
-      .select('*', { count: 'exact' })
-      .order('created_at', { ascending: false });
+    try {
+      // Build query for data
+      let query = supabase
+        .from('credit_grants')
+        .select('*', { count: 'exact' })
+        .order('created_at', { ascending: false });
 
-    // Apply filters
-    if (franqueadoraId) {
-      query = query.eq('franqueadora_id', franqueadoraId);
+      // Apply filters
+      if (franqueadoraId) {
+        query = query.eq('franqueadora_id', franqueadoraId);
+      }
+
+      if (franchiseId) {
+        query = query.eq('franchise_id', franchiseId);
+      }
+
+      if (startDate) {
+        query = query.gte('created_at', startDate);
+      }
+
+      if (endDate) {
+        query = query.lte('created_at', endDate);
+      }
+
+      if (recipientEmail) {
+        query = query.ilike('recipient_email', `%${recipientEmail}%`);
+      }
+
+      if (creditType) {
+        query = query.eq('credit_type', creditType);
+      }
+
+      if (grantedBy) {
+        query = query.ilike('granted_by_email', `%${grantedBy}%`);
+      }
+
+      // Apply pagination
+      query = query.range(offset, offset + limit - 1);
+
+      const { data, error, count } = await query;
+
+      if (error) {
+        // Se a tabela não existir, retornar lista vazia em vez de erro
+        if (error.code === '42P01' || error.message?.includes('does not exist')) {
+          console.warn('⚠️ Tabela credit_grants não existe. Execute a migration: apps/api/migrations/20251209_create_credit_grants.sql');
+          return {
+            grants: [],
+            total: 0,
+            page,
+            totalPages: 0
+          };
+        }
+        console.error('❌ Erro ao buscar histórico de liberações:', error);
+        throw new Error(`Erro ao buscar histórico: ${error.message}`);
+      }
+
+      const total = count ?? 0;
+      const totalPages = Math.ceil(total / limit);
+
+      return {
+        grants: (data || []) as CreditGrant[],
+        total,
+        page,
+        totalPages
+      };
+    } catch (err: any) {
+      // Capturar erros de tabela inexistente
+      if (err.message?.includes('does not exist') || err.code === '42P01') {
+        console.warn('⚠️ Tabela credit_grants não existe. Execute a migration.');
+        return {
+          grants: [],
+          total: 0,
+          page,
+          totalPages: 0
+        };
+      }
+      throw err;
     }
-
-    if (franchiseId) {
-      query = query.eq('franchise_id', franchiseId);
-    }
-
-    if (startDate) {
-      query = query.gte('created_at', startDate);
-    }
-
-    if (endDate) {
-      query = query.lte('created_at', endDate);
-    }
-
-    if (recipientEmail) {
-      query = query.ilike('recipient_email', `%${recipientEmail}%`);
-    }
-
-    if (creditType) {
-      query = query.eq('credit_type', creditType);
-    }
-
-    if (grantedBy) {
-      query = query.ilike('granted_by_email', `%${grantedBy}%`);
-    }
-
-    // Apply pagination
-    query = query.range(offset, offset + limit - 1);
-
-    const { data, error, count } = await query;
-
-    if (error) {
-      console.error('❌ Erro ao buscar histórico de liberações:', error);
-      throw new Error(`Erro ao buscar histórico: ${error.message}`);
-    }
-
-    const total = count ?? 0;
-    const totalPages = Math.ceil(total / limit);
-
-    return {
-      grants: (data || []) as CreditGrant[],
-      total,
-      page,
-      totalPages
-    };
   }
 
   /**
