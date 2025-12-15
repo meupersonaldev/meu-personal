@@ -241,22 +241,53 @@ export async function requireFranqueadoraAdmin(req: Request, res: Response, next
     // Se for FRANCHISE_ADMIN e não encontrou na tabela franchise_admins, tentar buscar pela academy
     if (!franqueadoraId && canonicalRole === 'FRANCHISE_ADMIN') {
       console.log(`[AUTH] FRANCHISE_ADMIN sem franqueadora - tentando buscar pela academy do usuário`)
+      
+      // Primeiro, tentar buscar pelo academy_id do próprio usuário
       try {
-        // Buscar academias onde o usuário é admin (pode estar em academy_admins ou outra tabela)
-        const { data: userAcademies } = await supabase
-          .from('academies')
-          .select('id, franqueadora_id')
-          .or(`owner_id.eq.${userId}`)
-          .limit(1)
+        const { data: userData } = await supabase
+          .from('users')
+          .select('academy_id')
+          .eq('id', userId)
           .single()
         
-        if (userAcademies?.franqueadora_id) {
-          franqueadoraId = userAcademies.franqueadora_id
-          franchiseId = userAcademies.id
-          console.log(`[AUTH] FRANCHISE_ADMIN encontrado como owner - franqueadora_id: ${franqueadoraId}, franchise_id: ${franchiseId}`)
+        console.log(`[AUTH] users.academy_id result:`, userData?.academy_id)
+        
+        if (userData?.academy_id) {
+          franchiseId = userData.academy_id
+          // Buscar a franqueadora da academy
+          const { data: academy } = await supabase
+            .from('academies')
+            .select('franqueadora_id')
+            .eq('id', userData.academy_id)
+            .single()
+          
+          if (academy?.franqueadora_id) {
+            franqueadoraId = academy.franqueadora_id
+            console.log(`[AUTH] FRANCHISE_ADMIN via users.academy_id - franqueadora_id: ${franqueadoraId}, franchise_id: ${franchiseId}`)
+          }
         }
       } catch (err) {
-        console.warn('[AUTH] Erro ao buscar academy do FRANCHISE_ADMIN:', err)
+        console.warn('[AUTH] Erro ao buscar academy_id do usuário:', err)
+      }
+      
+      // Se ainda não encontrou, tentar buscar academias onde o usuário é owner
+      if (!franqueadoraId) {
+        try {
+          const { data: userAcademies } = await supabase
+            .from('academies')
+            .select('id, franqueadora_id')
+            .eq('owner_id', userId)
+            .limit(1)
+            .single()
+          
+          if (userAcademies?.franqueadora_id) {
+            franqueadoraId = userAcademies.franqueadora_id
+            franchiseId = userAcademies.id
+            console.log(`[AUTH] FRANCHISE_ADMIN encontrado como owner - franqueadora_id: ${franqueadoraId}, franchise_id: ${franchiseId}`)
+          }
+        } catch (err) {
+          console.warn('[AUTH] Erro ao buscar academy do FRANCHISE_ADMIN:', err)
+        }
       }
     }
 
