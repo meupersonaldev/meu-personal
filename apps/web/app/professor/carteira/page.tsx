@@ -304,7 +304,7 @@ export default function ProfessorCarteira() {
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val)
   const formatHours = (val: number) => `${val.toFixed(1)}h`
 
-  const handleExport = () => {
+  const handleExport = async () => {
     const dataToExport = filteredTransactions.length > 0 ? filteredTransactions : transactions
     
     if (dataToExport.length === 0) {
@@ -312,33 +312,68 @@ export default function ProfessorCarteira() {
       return
     }
 
-    const headers = ['Data', 'Hora', 'Descrição', 'Tipo', 'Horas', 'Valor (R$)', 'Status']
-    const rows = dataToExport.map(tx => [
-      new Date(tx.created_at).toLocaleDateString('pt-BR'),
-      new Date(tx.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-      tx.description || '',
-      tx.type,
-      tx.hours.toFixed(1),
-      formatCurrency(tx.amount),
-      tx.status || 'COMPLETED'
-    ])
+    try {
+      const ExcelJS = await import('exceljs')
+      const workbook = new ExcelJS.Workbook()
+      const worksheet = workbook.addWorksheet('Carteira')
 
-    const csv = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
-    ].join('\n')
+      // Definir colunas
+      worksheet.columns = [
+        { header: 'Data', key: 'data', width: 12 },
+        { header: 'Hora', key: 'hora', width: 8 },
+        { header: 'Descrição', key: 'descricao', width: 35 },
+        { header: 'Tipo', key: 'tipo', width: 18 },
+        { header: 'Horas', key: 'horas', width: 10 },
+        { header: 'Valor (R$)', key: 'valor', width: 15 },
+        { header: 'Status', key: 'status', width: 12 }
+      ]
 
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    const url = URL.createObjectURL(blob)
-    link.setAttribute('href', url)
-    link.setAttribute('download', `carteira-${new Date().toISOString().split('T')[0]}.csv`)
-    link.style.visibility = 'hidden'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    
-    showToast(`${dataToExport.length} transações exportadas com sucesso!`, 'success')
+      // Estilizar header
+      worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } }
+      worksheet.getRow(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF2563EB' }
+      }
+
+      // Adicionar dados
+      dataToExport.forEach(tx => {
+        worksheet.addRow({
+          data: new Date(tx.created_at).toLocaleDateString('pt-BR'),
+          hora: new Date(tx.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+          descricao: tx.description || '',
+          tipo: tx.type === 'PURCHASE' ? 'Compra de Horas' : 
+                tx.type === 'CONSUME' ? 'Aula Academia' :
+                tx.type === 'BONUS_LOCK' ? 'Aula Agendada' :
+                tx.type === 'BONUS_UNLOCK' ? 'Aula Concluída' :
+                tx.type === 'REVOKE' ? 'Cancelado' :
+                tx.type === 'REFUND' ? 'Reembolso' :
+                tx.type === 'PRIVATE_CLASS' ? 'Aula Particular' : tx.type,
+          horas: tx.hours.toFixed(1),
+          valor: formatCurrency(tx.amount),
+          status: tx.status === 'COMPLETED' ? 'Concluído' : 
+                  tx.status === 'PENDING' ? 'Pendente' : 
+                  tx.status === 'CANCELED' ? 'Cancelado' : tx.status || 'Concluído'
+        })
+      })
+
+      // Gerar buffer e download
+      const buffer = await workbook.xlsx.writeBuffer()
+      const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      })
+      const link = document.createElement('a')
+      const url = URL.createObjectURL(blob)
+      link.href = url
+      link.download = `carteira-${new Date().toISOString().split('T')[0]}.xlsx`
+      link.click()
+      URL.revokeObjectURL(url)
+      
+      showToast(`${dataToExport.length} transações exportadas com sucesso!`, 'success')
+    } catch (error) {
+      console.error('Erro ao exportar:', error)
+      showToast('Erro ao exportar transações', 'error')
+    }
   }
 
   const filteredTransactions = transactions.filter(tx => {
