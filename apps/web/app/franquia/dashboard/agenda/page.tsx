@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { User, GraduationCap, CheckCircle, XCircle, Filter, Eye, X as XIcon, Loader2, Settings, TrendingUp, Calendar as CalendarLucide } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { User, Users, GraduationCap, CheckCircle, XCircle, Filter, Eye, X as XIcon, Loader2, Calendar as CalendarLucide } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -10,7 +11,7 @@ import { Calendar, dateFnsLocalizer, View } from 'react-big-calendar'
 import { format, parse, startOfWeek, getDay, startOfMonth, endOfMonth } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { toast } from 'sonner'
-import { utcToLocal } from '@/lib/timezone-utils'
+import { utcToLocal, getLocalTimeFromUtc } from '@/lib/timezone-utils'
 import 'react-big-calendar/lib/css/react-big-calendar.css'
 import './calendar-custom.css'
 
@@ -95,11 +96,11 @@ export default function AgendaAcademiaPage() {
 
       const data = await response.json()
 
-      // Converter para formato do calendário (corrigir timezone e normalizar status)
+      // Converter para formato do calendário e normalizar status
       const calendarEvents = data.events.map((event: any) => {
-        // Usar função utilitária para conversão de timezone
-        const startLocal = utcToLocal(event.start)
-        const endLocal = utcToLocal(event.end)
+        // Criar objetos Date diretamente - a API já envia no formato correto
+        const startDate = new Date(event.start)
+        const endDate = new Date(event.end)
 
         // Normalizar status para garantir consistência
         let normalizedStatus = event.status
@@ -116,8 +117,8 @@ export default function AgendaAcademiaPage() {
         return {
           ...event,
           status: normalizedStatus,
-          start: startLocal,
-          end: endLocal
+          start: startDate,
+          end: endDate
         }
       })
 
@@ -305,104 +306,122 @@ export default function AgendaAcademiaPage() {
         </div>
       </Card>
 
-      {/* Modal de Detalhes - Premium Style */}
-      {selectedEvent && (
-        <div 
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 animate-in fade-in duration-200"
-          onClick={() => setSelectedEvent(null)}
+      {/* Modal de Detalhes - Premium Style (Portal para evitar problemas de z-index/space-y) */}
+      {selectedEvent && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 flex items-center justify-center p-4 sm:p-6"
+          style={{ zIndex: 99999 }}
         >
-          <Card 
-            className="w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl border-0 animate-in zoom-in-95 slide-in-from-bottom-4 duration-300"
+          {/* Backdrop with Blur */}
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-md animate-in fade-in duration-300"
+            onClick={() => setSelectedEvent(null)}
+          />
+
+          {/* Modal Content */}
+          <Card
+            className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl border-0 ring-1 ring-black/5 animate-in zoom-in-95 slide-in-from-bottom-8 duration-300 bg-white rounded-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header com cor do status */}
-            <div 
-              className="relative p-6 pb-4"
-              style={{ 
+            {/* Header com gradiente e branding */}
+            <div
+              className="relative p-6 sm:p-8 pb-6 overflow-hidden"
+              style={{
                 background: `linear-gradient(135deg, ${selectedEvent.color}15 0%, ${selectedEvent.color}05 100%)`,
-                borderBottom: `3px solid ${selectedEvent.color}`
               }}
             >
+              {/* Decorative Circle */}
+              <div
+                className="absolute -top-10 -right-10 w-40 h-40 rounded-full opacity-50 blur-3xl"
+                style={{ backgroundColor: selectedEvent.color }}
+              />
+
               <Button
                 onClick={() => setSelectedEvent(null)}
                 variant="ghost"
-                size="sm"
-                className="absolute top-4 right-4 h-8 w-8 p-0 rounded-full hover:bg-black/10"
+                size="icon"
+                className="absolute top-4 right-4 h-8 w-8 rounded-full hover:bg-black/5 text-gray-500 hover:text-gray-700 transition-colors z-10"
               >
-                <XIcon className="h-4 w-4" />
+                <XIcon className="h-5 w-5" />
               </Button>
-              
-              <div className="flex items-center gap-3 mb-3">
-                <div 
-                  className="h-12 w-12 rounded-xl flex items-center justify-center"
-                  style={{ backgroundColor: `${selectedEvent.color}20` }}
-                >
-                  <CalendarLucide className="h-6 w-6" style={{ color: selectedEvent.color }} />
+
+              <div className="relative z-10">
+                <div className="flex items-center gap-4 mb-4">
+                  <div
+                    className="h-14 w-14 rounded-2xl flex items-center justify-center shadow-sm ring-1 ring-black/5 bg-white"
+                  >
+                    <CalendarLucide className="h-7 w-7" style={{ color: selectedEvent.color }} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      {getStatusBadge(selectedEvent.status)}
+                    </div>
+                    <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Detalhes da Aula</h2>
+                    <p className="text-gray-500 font-medium">
+                      {format(selectedEvent.start, "EEEE, d 'de' MMMM", { locale: ptBR })}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900">Detalhes da Aula</h2>
-                  <p className="text-sm text-gray-500">
-                    {format(selectedEvent.start, "EEEE, dd 'de' MMMM", { locale: ptBR })}
-                  </p>
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-2">
-                {getStatusBadge(selectedEvent.status)}
-                <span className="text-sm text-gray-500">•</span>
-                <span className="text-sm font-medium text-gray-700">{selectedEvent.duration} min</span>
               </div>
             </div>
 
+            {/* Separator with accent */}
+            <div className="h-1 w-full" style={{ backgroundColor: selectedEvent.color }} />
+
             {/* Conteúdo */}
-            <div className="p-6 space-y-5">
-              {/* Horário destacado */}
-              <div className="flex items-center justify-center gap-4 py-4 px-6 bg-meu-primary/5 rounded-xl border border-meu-primary/10">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-meu-primary">
-                    {format(selectedEvent.start, 'HH:mm')}
-                  </div>
-                  <div className="text-xs text-gray-500 uppercase tracking-wider">Início</div>
-                </div>
-                <div className="h-8 w-px bg-gray-200" />
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-meu-primary">
-                    {format(selectedEvent.end, 'HH:mm')}
-                  </div>
-                  <div className="text-xs text-gray-500 uppercase tracking-wider">Término</div>
-                </div>
+            <div className="p-6 sm:p-8 space-y-6">
+              {/* Horário da Aula - Design Simples */}
+              <div className="flex items-center justify-center gap-3 p-4 rounded-xl bg-meu-primary/5 border border-meu-primary/10">
+                <CalendarLucide className="h-5 w-5 text-meu-primary" />
+                <span className="text-lg font-semibold text-gray-900">
+                  {selectedEvent.start instanceof Date 
+                    ? selectedEvent.start.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                    : format(new Date(selectedEvent.start), 'HH:mm')}
+                  {' - '}
+                  {selectedEvent.end instanceof Date 
+                    ? selectedEvent.end.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                    : format(new Date(selectedEvent.end), 'HH:mm')}
+                </span>
+                <span className="text-sm text-gray-500">({selectedEvent.duration} min)</span>
               </div>
 
-              {/* Participantes */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Aluno */}
-                <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 hover:border-meu-primary/30 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
-                      <User className="h-5 w-5 text-blue-600" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs text-gray-500 uppercase tracking-wider mb-0.5">Aluno</div>
-                      <div className="font-semibold text-gray-900 truncate">{selectedEvent.studentName}</div>
-                      {selectedEvent.studentEmail && (
-                        <div className="text-xs text-gray-500 truncate">{selectedEvent.studentEmail}</div>
-                      )}
+              {/* Participantes - Cards melhorados */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider flex items-center gap-2">
+                  <Users className="h-4 w-4 text-meu-primary" />
+                  Participantes
+                </h3>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Aluno */}
+                  <div className="group p-4 bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md hover:border-meu-primary/20 transition-all duration-200">
+                    <div className="flex items-start gap-4">
+                      <div className="h-10 w-10 rounded-full bg-blue-50 flex items-center justify-center ring-2 ring-white shadow-sm group-hover:scale-105 transition-transform">
+                        <User className="h-5 w-5 text-blue-600" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-medium text-blue-600 mb-0.5 uppercase tracking-wide">Aluno</p>
+                        <p className="font-semibold text-gray-900 truncate text-sm sm:text-base">{selectedEvent.studentName}</p>
+                        {selectedEvent.studentEmail && (
+                          <p className="text-xs text-gray-500 truncate mt-0.5">{selectedEvent.studentEmail}</p>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Professor */}
-                <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 hover:border-meu-primary/30 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center">
-                      <GraduationCap className="h-5 w-5 text-emerald-600" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs text-gray-500 uppercase tracking-wider mb-0.5">Professor</div>
-                      <div className="font-semibold text-gray-900 truncate">{selectedEvent.teacherName}</div>
-                      {selectedEvent.teacherEmail && (
-                        <div className="text-xs text-gray-500 truncate">{selectedEvent.teacherEmail}</div>
-                      )}
+                  {/* Professor */}
+                  <div className="group p-4 bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md hover:border-emerald-500/20 transition-all duration-200">
+                    <div className="flex items-start gap-4">
+                      <div className="h-10 w-10 rounded-full bg-emerald-50 flex items-center justify-center ring-2 ring-white shadow-sm group-hover:scale-105 transition-transform">
+                        <GraduationCap className="h-5 w-5 text-emerald-600" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-medium text-emerald-600 mb-0.5 uppercase tracking-wide">Professor</p>
+                        <p className="font-semibold text-gray-900 truncate text-sm sm:text-base">{selectedEvent.teacherName}</p>
+                        {selectedEvent.teacherEmail && (
+                          <p className="text-xs text-gray-500 truncate mt-0.5">{selectedEvent.teacherEmail}</p>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -410,31 +429,30 @@ export default function AgendaAcademiaPage() {
 
               {/* Observações */}
               {selectedEvent.notes && (
-                <div className="p-4 bg-amber-50 rounded-xl border border-amber-100">
-                  <div className="flex items-start gap-3">
-                    <div className="h-8 w-8 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
-                      <Eye className="h-4 w-4 text-amber-600" />
-                    </div>
-                    <div>
-                      <div className="text-xs text-amber-700 uppercase tracking-wider mb-1 font-medium">Observações</div>
-                      <div className="text-sm text-gray-700">{selectedEvent.notes}</div>
-                    </div>
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider flex items-center gap-2">
+                    <Eye className="h-4 w-4 text-amber-500" />
+                    Observações
+                  </h3>
+                  <div className="p-4 bg-amber-50/50 rounded-xl border border-amber-100 text-sm text-gray-700 leading-relaxed">
+                    {selectedEvent.notes}
                   </div>
                 </div>
               )}
             </div>
 
             {/* Footer */}
-            <div className="px-6 pb-6">
+            <div className="px-6 sm:px-8 pb-8 pt-2">
               <Button
                 onClick={() => setSelectedEvent(null)}
-                className="w-full bg-meu-primary hover:bg-meu-primary/90 text-white"
+                className="w-full bg-gray-900 hover:bg-gray-800 text-white font-medium h-12 rounded-xl shadow-lg shadow-gray-200 transition-all active:scale-[0.98]"
               >
-                Fechar
+                Fechar Detalhes
               </Button>
             </div>
           </Card>
-        </div>
+        </div>,
+        document.body
       )}
 
     </div>

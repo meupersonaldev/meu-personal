@@ -24,6 +24,8 @@ router.get('/events', async (req, res) => {
       .select(`
         id,
         date,
+        start_at,
+        end_at,
         duration,
         status,
         status_canonical,
@@ -44,9 +46,9 @@ router.get('/events', async (req, res) => {
       .eq('franchise_id', academy_id)
       .not('student_id', 'is', null) // Apenas agendamentos com aluno
       .in('status_canonical', ['PAID', 'DONE', 'CANCELED']) // Apenas status visíveis para franquia (PAID=confirmado, DONE=concluído, CANCELED=cancelado)
-      .gte('date', `${start_date}T00:00:00Z`)
-      .lte('date', `${end_date}T23:59:59Z`)
-      .order('date', { ascending: true })
+      .gte('start_at', `${start_date}T00:00:00Z`)
+      .lte('start_at', `${end_date}T23:59:59Z`)
+      .order('start_at', { ascending: true })
 
     if (bookingsError) {
       console.error('[calendar/events] Erro ao buscar bookings:', bookingsError)
@@ -66,11 +68,20 @@ router.get('/events', async (req, res) => {
 
     // Transformar bookings em eventos de calendário
     const events = validBookings.map((booking: any) => {
-      const startDate = new Date(booking.date)
-      const endDate = new Date(startDate.getTime() + (booking.duration || 60) * 60 * 1000)
+      // Usar start_at/end_at (horário agendado da aula)
+      // Se não existir, usar date como fallback
+      const startDate = booking.start_at ? new Date(booking.start_at) : new Date(booking.date)
+      const endDate = booking.end_at 
+        ? new Date(booking.end_at) 
+        : new Date(startDate.getTime() + (booking.duration || 60) * 60 * 1000)
+      
+      // Log para debug
+      if (!booking.start_at) {
+        console.log(`[calendar/events] Booking ${booking.id} sem start_at, usando date: ${booking.date}`)
+      }
+      
       const student = booking.student as any
       const teacher = booking.teacher as any
-
 
       // Normalizar status para garantir consistência
       const normalizedStatus = booking.status_canonical || booking.status || 'PENDING'
