@@ -1545,7 +1545,7 @@ export default function AulasPage() {
                   <div className="text-sm text-violet-900">
                     <p className="font-semibold mb-1">Aguardando confirmação</p>
                     <p className="leading-relaxed opacity-90">
-                      Você tem aulas aguardando confirmação do seu professor. Ele precisa ter créditos disponíveis para confirmar a aula.
+                      Você tem aulas aguardando confirmação do seu professor.
                     </p>
                   </div>
                 </div>

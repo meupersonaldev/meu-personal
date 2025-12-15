@@ -338,13 +338,30 @@ export default function AgendaPage() {
         accent: 'border-l-yellow-500',
         border: 'border-yellow-200'
       },
+      PENDING: {
+        // Aluno agendou, aguardando confirmação do professor
+        bg: 'bg-orange-50',
+        text: 'text-orange-700',
+        label: 'Aguardando Confirmação',
+        icon: 'clock',
+        accent: 'border-l-orange-500',
+        border: 'border-orange-200'
+      },
       COMPLETED: {
-        bg: 'bg-gray-100',
-        text: 'text-gray-600',
-        label: 'Concluída',
+        bg: 'bg-blue-50',
+        text: 'text-blue-700',
+        label: '✓ Aula Realizada',
         icon: 'check-circle',
-        accent: 'border-l-gray-400',
-        border: 'border-gray-200'
+        accent: 'border-l-blue-500',
+        border: 'border-blue-200'
+      },
+      DONE: {
+        bg: 'bg-blue-50',
+        text: 'text-blue-700',
+        label: '✓ Aula Realizada',
+        icon: 'check-circle',
+        accent: 'border-l-blue-500',
+        border: 'border-blue-200'
       },
       CANCELED: {
         bg: 'bg-red-50',
@@ -514,8 +531,10 @@ export default function AgendaPage() {
           <div className="flex flex-wrap items-center gap-3 mt-2 md:mt-0">
             {[
               { color: 'bg-emerald-500', label: 'Confirmado', desc: 'Aula confirmada com créditos', border: 'border-emerald-100', bg: 'bg-emerald-50/50' },
+              { color: 'bg-orange-500', label: 'Pendente', desc: 'Aguardando sua confirmação', border: 'border-orange-100', bg: 'bg-orange-50/50' },
               { color: 'bg-yellow-500', label: 'Reservado', desc: 'Série pendente de crédito do aluno', border: 'border-yellow-100', bg: 'bg-yellow-50/50' },
               { color: 'bg-violet-500', label: 'Aguardando', desc: 'Você precisa comprar crédito', border: 'border-violet-100', bg: 'bg-violet-50/50' },
+              { color: 'bg-blue-500', label: 'Realizada', desc: 'Aula já foi dada', border: 'border-blue-100', bg: 'bg-blue-50/50' },
               { color: 'bg-red-500', label: 'Cancelado', desc: 'Aula cancelada', border: 'border-red-100', bg: 'bg-red-50/50' }
             ].map((item, i) => (
               <div key={i} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${item.border} ${item.bg} transition-all hover:shadow-sm`}>

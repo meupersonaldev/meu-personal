@@ -355,12 +355,14 @@ router.get(
         // Campo date é apenas data, então comparamos diretamente com YYYY-MM-DD
         teacherQuery = teacherQuery.gte('date', fromStr)
       } else {
-        // Caso não tenha "from", usar apenas bookings futuros para evitar excesso de registros
+        // Incluir últimos 7 dias para mostrar aulas recentes (COMPLETED/DONE) na agenda
         // Extrair a data de hoje no fuso de São Paulo (UTC-3)
         const now = new Date()
-        const saoPauloNow = new Date(now.getTime() - (3 * 60 * 60 * 1000))
-        const todayStr = saoPauloNow.toISOString().split('T')[0] // YYYY-MM-DD em São Paulo
-        teacherQuery = teacherQuery.gte('date', todayStr)
+        const saoPauloNow = new Date(now.getTime() - 3 * 60 * 60 * 1000)
+        // Subtrair 7 dias para incluir histórico recente
+        const pastDate = new Date(saoPauloNow.getTime() - 7 * 24 * 60 * 60 * 1000)
+        const pastDateStr = pastDate.toISOString().split('T')[0] // YYYY-MM-DD
+        teacherQuery = teacherQuery.gte('date', pastDateStr)
       }
 
       if (to) {
