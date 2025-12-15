@@ -305,85 +305,133 @@ export default function AgendaAcademiaPage() {
         </div>
       </Card>
 
-      {/* Modal de Detalhes */}
+      {/* Modal de Detalhes - Premium Style */}
       {selectedEvent && (
-        <div className="fixed inset-0 left-0 top-0 right-0 bottom-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
-          <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="p-4 sm:p-6">
-              <div className="flex items-center justify-between mb-4 sm:mb-6">
-                <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Detalhes do Agendamento</h2>
-                <Button
-                  onClick={() => setSelectedEvent(null)}
-                  variant="ghost"
-                  size="sm"
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 animate-in fade-in duration-200"
+          onClick={() => setSelectedEvent(null)}
+        >
+          <Card 
+            className="w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl border-0 animate-in zoom-in-95 slide-in-from-bottom-4 duration-300"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header com cor do status */}
+            <div 
+              className="relative p-6 pb-4"
+              style={{ 
+                background: `linear-gradient(135deg, ${selectedEvent.color}15 0%, ${selectedEvent.color}05 100%)`,
+                borderBottom: `3px solid ${selectedEvent.color}`
+              }}
+            >
+              <Button
+                onClick={() => setSelectedEvent(null)}
+                variant="ghost"
+                size="sm"
+                className="absolute top-4 right-4 h-8 w-8 p-0 rounded-full hover:bg-black/10"
+              >
+                <XIcon className="h-4 w-4" />
+              </Button>
+              
+              <div className="flex items-center gap-3 mb-3">
+                <div 
+                  className="h-12 w-12 rounded-xl flex items-center justify-center"
+                  style={{ backgroundColor: `${selectedEvent.color}20` }}
                 >
-                  <XIcon className="h-5 w-5" />
-                </Button>
+                  <CalendarLucide className="h-6 w-6" style={{ color: selectedEvent.color }} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">Detalhes da Aula</h2>
+                  <p className="text-sm text-gray-500">
+                    {format(selectedEvent.start, "EEEE, dd 'de' MMMM", { locale: ptBR })}
+                  </p>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                {getStatusBadge(selectedEvent.status)}
+                <span className="text-sm text-gray-500">•</span>
+                <span className="text-sm font-medium text-gray-700">{selectedEvent.duration} min</span>
+              </div>
+            </div>
+
+            {/* Conteúdo */}
+            <div className="p-6 space-y-5">
+              {/* Horário destacado */}
+              <div className="flex items-center justify-center gap-4 py-4 px-6 bg-meu-primary/5 rounded-xl border border-meu-primary/10">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-meu-primary">
+                    {format(selectedEvent.start, 'HH:mm')}
+                  </div>
+                  <div className="text-xs text-gray-500 uppercase tracking-wider">Início</div>
+                </div>
+                <div className="h-8 w-px bg-gray-200" />
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-meu-primary">
+                    {format(selectedEvent.end, 'HH:mm')}
+                  </div>
+                  <div className="text-xs text-gray-500 uppercase tracking-wider">Término</div>
+                </div>
               </div>
 
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <div className="text-sm text-gray-600 mb-1">Status</div>
-                    {getStatusBadge(selectedEvent.status)}
-                  </div>
-                  <div>
-                    <div className="text-sm text-gray-600 mb-1">Duração</div>
-                    <div className="font-medium text-gray-900">{selectedEvent.duration} minutos</div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <div className="text-sm text-gray-600 mb-1">Aluno</div>
-                    <div className="flex items-center space-x-2">
-                      <User className="h-4 w-4 text-gray-500" />
-                      <div>
-                        <div className="font-medium text-gray-900">{selectedEvent.studentName}</div>
-                        {selectedEvent.studentEmail && (
-                          <div className="text-xs text-gray-500">{selectedEvent.studentEmail}</div>
-                        )}
-                      </div>
+              {/* Participantes */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Aluno */}
+                <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 hover:border-meu-primary/30 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                      <User className="h-5 w-5 text-blue-600" />
                     </div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-gray-600 mb-1">Professor</div>
-                    <div className="flex items-center space-x-2">
-                      <GraduationCap className="h-4 w-4 text-gray-500" />
-                      <div>
-                        <div className="font-medium text-gray-900">{selectedEvent.teacherName}</div>
-                        {selectedEvent.teacherEmail && (
-                          <div className="text-xs text-gray-500">{selectedEvent.teacherEmail}</div>
-                        )}
-                      </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs text-gray-500 uppercase tracking-wider mb-0.5">Aluno</div>
+                      <div className="font-semibold text-gray-900 truncate">{selectedEvent.studentName}</div>
+                      {selectedEvent.studentEmail && (
+                        <div className="text-xs text-gray-500 truncate">{selectedEvent.studentEmail}</div>
+                      )}
                     </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <div className="text-sm text-gray-600 mb-1">Data</div>
-                    <div className="font-medium text-gray-900">
-                      {format(selectedEvent.start, 'dd/MM/yyyy', { locale: ptBR })}
+                {/* Professor */}
+                <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 hover:border-meu-primary/30 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                      <GraduationCap className="h-5 w-5 text-emerald-600" />
                     </div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-gray-600 mb-1">Horário</div>
-                    <div className="font-medium text-gray-900">
-                      {format(selectedEvent.start, 'HH:mm')} - {format(selectedEvent.end, 'HH:mm')}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs text-gray-500 uppercase tracking-wider mb-0.5">Professor</div>
+                      <div className="font-semibold text-gray-900 truncate">{selectedEvent.teacherName}</div>
+                      {selectedEvent.teacherEmail && (
+                        <div className="text-xs text-gray-500 truncate">{selectedEvent.teacherEmail}</div>
+                      )}
                     </div>
                   </div>
                 </div>
-
-                {selectedEvent.notes && (
-                  <div>
-                    <div className="text-sm text-gray-600 mb-1">Observações</div>
-                    <div className="p-3 bg-gray-50 rounded-lg text-gray-900">
-                      {selectedEvent.notes}
-                    </div>
-                  </div>
-                )}
               </div>
+
+              {/* Observações */}
+              {selectedEvent.notes && (
+                <div className="p-4 bg-amber-50 rounded-xl border border-amber-100">
+                  <div className="flex items-start gap-3">
+                    <div className="h-8 w-8 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
+                      <Eye className="h-4 w-4 text-amber-600" />
+                    </div>
+                    <div>
+                      <div className="text-xs text-amber-700 uppercase tracking-wider mb-1 font-medium">Observações</div>
+                      <div className="text-sm text-gray-700">{selectedEvent.notes}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 pb-6">
+              <Button
+                onClick={() => setSelectedEvent(null)}
+                className="w-full bg-meu-primary hover:bg-meu-primary/90 text-white"
+              >
+                Fechar
+              </Button>
             </div>
           </Card>
         </div>
