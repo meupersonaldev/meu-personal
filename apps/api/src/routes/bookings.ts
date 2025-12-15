@@ -2506,4 +2506,61 @@ router.post(
   })
 )
 
+// Schema para reagendamento
+const rescheduleBookingSchema = z.object({
+  startAt: z.string().min(1, 'startAt é obrigatório'),
+  endAt: z.string().min(1, 'endAt é obrigatório')
+})
+
+// PATCH /api/bookings/:id/reschedule - Reagendar um booking (Requirement 1.3)
+router.patch(
+  '/:id/reschedule',
+  requireAuth,
+  asyncErrorHandler(async (req, res) => {
+    const { id } = req.params
+    const user = req.user
+
+    const { startAt, endAt } = rescheduleBookingSchema.parse(req.body)
+
+    // Buscar booking para verificar permissão
+    const { data: booking, error: getError } = await supabase
+      .from('bookings')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (getError || !booking) {
+      return res.status(404).json({ error: 'Agendamento não encontrado' })
+    }
+
+    // Verificar permissão (aluno, professor ou admin podem reagendar)
+    const hasPermission =
+      booking.student_id === user.userId ||
+      booking.teacher_id === user.userId ||
+      ['FRANQUIA', 'FRANCHISE_ADMIN', 'FRANQUEADORA', 'ADMIN', 'SUPER_ADMIN'].includes(user.role)
+
+    if (!hasPermission) {
+      return res.status(403).json({ error: 'Acesso não autorizado' })
+    }
+
+    try {
+      const updatedBooking = await bookingCanonicalService.rescheduleBooking(
+        id,
+        new Date(startAt),
+        new Date(endAt),
+        user.userId
+      )
+
+      res.json({
+        message: 'Agendamento reagendado com sucesso',
+        booking: updatedBooking
+      })
+    } catch (error) {
+      console.error('[PATCH /api/bookings/:id/reschedule] Erro:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao reagendar agendamento'
+      return res.status(400).json({ error: errorMessage })
+    }
+  })
+)
+
 export default router

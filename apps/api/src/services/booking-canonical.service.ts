@@ -5,6 +5,8 @@ import {
   ProfHourBalance
 } from './balance.service';
 import { policyService } from './policy.service';
+import { onCreditsRefunded } from '../lib/events';
+import { createNotificationService } from './notification.service';
 
 async function fetchFranqueadoraIdFromAcademy(academyId: string): Promise<string> {
   console.log(`🔍 Buscando franqueadora_id para academyId: ${academyId}`)
@@ -1091,6 +1093,12 @@ class BookingCanonicalService {
 
           // Sincronizar cache de créditos
           await this.syncUserCredits(booking.student_id, franqueadoraId);
+
+          // Send refund notification (Requirement 3.4)
+          const newAvailableBalance = getAvailableClasses(restoredBalance);
+          onCreditsRefunded(booking.student_id, 1, newAvailableBalance).catch(err => {
+            console.error('[CANCEL BOOKING] Error sending refund notification:', err);
+          });
         } catch (error) {
           console.error('[CANCEL BOOKING] ❌ Erro ao estornar crédito:', error);
           // Não lançar o erro para não impedir o cancelamento, mas logar para debug
@@ -1274,6 +1282,28 @@ class BookingCanonicalService {
       } catch (syncError) {
         console.error(`[cancelBooking] Erro ao sincronizar locked_hours:`, syncError);
       }
+    }
+
+    // Enviar notificações de cancelamento (Requirements 1.2, 2.1, 7.2)
+    try {
+      const { onBookingCancelled } = await import('../lib/events');
+      // Determinar quem cancelou baseado no userId
+      let cancelledBy: 'student' | 'teacher' | 'admin' = 'admin';
+      if (userId === booking.student_id) {
+        cancelledBy = 'student';
+      } else if (userId === booking.teacher_id) {
+        cancelledBy = 'teacher';
+      }
+      
+      await onBookingCancelled(
+        booking.franchise_id,
+        booking.teacher_id,
+        booking.student_id,
+        bookingId,
+        cancelledBy
+      );
+    } catch (notifyError) {
+      console.error(`[cancelBooking] Erro ao enviar notificações:`, notifyError);
     }
 
     return updatedBooking;
@@ -1490,6 +1520,119 @@ class BookingCanonicalService {
           error
         );
       }
+    }
+
+    // Notificar professor sobre ganhos (Requirement 9.1)
+    if (updatedBooking.teacher_id) {
+      try {
+        // Calcular valor ganho pelo professor
+        let earningsAmount = 0;
+        
+        if (isPortfolioStudent && updatedBooking.student_id) {
+          // Aluno fidelizado: usar hourly_rate do teacher_students
+          const { data: teacherStudent } = await supabase
+            .from('teacher_students')
+            .select('hourly_rate')
+            .eq('teacher_id', updatedBooking.teacher_id)
+            .eq('user_id', updatedBooking.student_id)
+            .single();
+          
+          earningsAmount = teacherStudent?.hourly_rate || 0;
+        } else {
+          // Aluno da plataforma: usar hourly_rate do teacher_profiles
+          const { data: teacherProfile } = await supabase
+            .from('teacher_profiles')
+            .select('hourly_rate')
+            .eq('user_id', updatedBooking.teacher_id)
+            .single();
+          
+          earningsAmount = teacherProfile?.hourly_rate || 0;
+        }
+
+        // Só notificar se houver valor a ser creditado
+        if (earningsAmount > 0) {
+          const notificationService = createNotificationService(supabase);
+          await notificationService.notifyTeacherEarnings(
+            { id: updatedBooking.teacher_id, academy_id: updatedBooking.franchise_id },
+            earningsAmount,
+            {
+              id: updatedBooking.id,
+              date: updatedBooking.date || updatedBooking.start_at,
+              academy_id: updatedBooking.franchise_id
+            }
+          );
+          console.log(`[completeBooking] ✅ Notificação de ganhos enviada para professor ${updatedBooking.teacher_id}: R$ ${earningsAmount}`);
+        }
+      } catch (notifyError) {
+        // Não impedir a conclusão do booking por erro de notificação
+        console.error(`[completeBooking] ❌ Erro ao notificar professor sobre ganhos:`, notifyError);
+      }
+    }
+
+    return updatedBooking;
+  }
+
+  /**
+   * Reagenda um booking para uma nova data/horário
+   * Requirement 1.3 - Notifica professor sobre reagendamento
+   */
+  async rescheduleBooking(
+    bookingId: string,
+    newStartAt: Date,
+    newEndAt: Date,
+    userId: string
+  ): Promise<BookingCanonical> {
+    const { data: booking, error: fetchError } = await supabase
+      .from('bookings')
+      .select('*')
+      .eq('id', bookingId)
+      .single();
+
+    if (fetchError || !booking) {
+      throw fetchError || new Error('Booking não encontrado');
+    }
+
+    // Guardar a data antiga para a notificação
+    const oldDate = booking.start_at || booking.date;
+
+    // Calcular nova duração
+    const duration = Math.max(
+      15,
+      Math.round((newEndAt.getTime() - newStartAt.getTime()) / (60 * 1000))
+    );
+
+    // Atualizar o booking com a nova data
+    const now = new Date();
+    const { data: updatedBooking, error: updateError } = await supabase
+      .from('bookings')
+      .update({
+        date: newStartAt.toISOString(),
+        start_at: newStartAt.toISOString(),
+        end_at: newEndAt.toISOString(),
+        duration,
+        updated_at: now.toISOString()
+      })
+      .eq('id', bookingId)
+      .select()
+      .single();
+
+    if (updateError || !updatedBooking) {
+      throw updateError || new Error('Falha ao reagendar booking');
+    }
+
+    // Enviar notificação de reagendamento (Requirement 1.3)
+    try {
+      const { onBookingRescheduled } = await import('../lib/events');
+      await onBookingRescheduled(
+        booking.franchise_id,
+        booking.teacher_id,
+        booking.student_id,
+        bookingId,
+        oldDate,
+        newStartAt.toISOString()
+      );
+    } catch (notifyError) {
+      console.error(`[rescheduleBooking] Erro ao enviar notificação:`, notifyError);
     }
 
     return updatedBooking;

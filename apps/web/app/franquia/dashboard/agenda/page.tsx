@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { User, GraduationCap, CheckCircle, XCircle, Filter, Eye, X as XIcon, Loader2, Settings } from 'lucide-react'
+import { User, GraduationCap, CheckCircle, XCircle, Filter, Eye, X as XIcon, Loader2, Settings, TrendingUp, Calendar as CalendarLucide } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -72,7 +72,7 @@ export default function AgendaAcademiaPage() {
     try {
       // Calcular range baseado na view
       let startDate, endDate
-      
+
       if (view === 'month') {
         startDate = startOfMonth(currentDate)
         endDate = endOfMonth(currentDate)
@@ -94,13 +94,13 @@ export default function AgendaAcademiaPage() {
       if (!response.ok) throw new Error('Failed to fetch events')
 
       const data = await response.json()
-      
+
       // Converter para formato do calendário (corrigir timezone e normalizar status)
       const calendarEvents = data.events.map((event: any) => {
         // Usar função utilitária para conversão de timezone
         const startLocal = utcToLocal(event.start)
         const endLocal = utcToLocal(event.end)
-        
+
         // Normalizar status para garantir consistência
         let normalizedStatus = event.status
         if (event.status === 'PAID' || event.status_canonical === 'PAID') {
@@ -112,7 +112,7 @@ export default function AgendaAcademiaPage() {
         } else if (event.status === 'RESERVED' || event.status_canonical === 'RESERVED') {
           normalizedStatus = 'CONFIRMED'
         }
-        
+
         return {
           ...event,
           status: normalizedStatus,
@@ -129,8 +129,8 @@ export default function AgendaAcademiaPage() {
     }
   }
 
-  const filteredEvents = statusFilter === 'all' 
-    ? events 
+  const filteredEvents = statusFilter === 'all'
+    ? events
     : events.filter(e => e.status === statusFilter)
 
   const getStatusBadge = (status: string) => {
@@ -149,7 +149,7 @@ export default function AgendaAcademiaPage() {
   const eventStyleGetter = (event: CalendarEvent) => {
     // Definir cor baseada no status
     let backgroundColor = event.color
-    
+
     if (event.status === 'CANCELLED') {
       backgroundColor = '#ef4444' // Vermelho (red-500 do Tailwind)
     } else if (event.status === 'COMPLETED') {
@@ -157,7 +157,7 @@ export default function AgendaAcademiaPage() {
     } else if (event.status === 'CONFIRMED') {
       backgroundColor = event.color || '#10b981' // Verde para confirmados
     }
-    
+
     return {
       style: {
         backgroundColor,
@@ -184,85 +184,90 @@ export default function AgendaAcademiaPage() {
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
-      {/* Header */}
-      <div className="mb-6 sm:mb-8">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Agenda da Academia</h1>
-            <p className="text-sm sm:text-base text-gray-600">
-              Visualize todos os agendamentos em um calendário
-            </p>
+    <div className="p-4 sm:p-6 lg:p-10 max-w-[1920px] mx-auto space-y-6 sm:space-y-8 mb-20">
+      {/* Header Section - Premium Style */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-gray-200">
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <span className="px-3 py-1 bg-meu-primary/5 text-meu-primary text-[10px] sm:text-xs font-bold rounded-full uppercase tracking-wider">
+              Agenda
+            </span>
           </div>
-          <div className="flex items-center space-x-3">
-            <Filter className="h-4 w-4 sm:h-5 sm:w-5 text-gray-500" />
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-              className="px-3 py-2 sm:px-4 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
-            >
-              <option value="all">Todos</option>
-              <option value="CONFIRMED">Confirmados</option>
-              <option value="COMPLETED">Concluídos</option>
-              <option value="CANCELLED">Cancelados</option>
-            </select>
-          </div>
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-meu-primary tracking-tight">
+            Agenda da Academia
+          </h1>
+          <p className="text-sm sm:text-base text-gray-500 mt-2 max-w-2xl">
+            Visualize todos os agendamentos em um calendário interativo.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Filter className="h-4 w-4 text-gray-400" />
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+            className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-meu-primary focus:border-transparent bg-white"
+          >
+            <option value="all">Todos</option>
+            <option value="CONFIRMED">Confirmados</option>
+            <option value="COMPLETED">Concluídos</option>
+            <option value="CANCELLED">Cancelados</option>
+          </select>
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
-        <Card className="p-4 sm:p-6">
-          <div className="flex items-center space-x-3 sm:space-x-4">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
-              <CheckCircle className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
+      {/* Stats - Premium KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <Card className="relative overflow-hidden border border-gray-100 shadow-sm hover:shadow-lg transition-all duration-300 bg-white group">
+          <div className="absolute top-0 left-0 w-1 h-full bg-meu-primary group-hover:w-2 transition-all duration-300" />
+          <div className="p-4 sm:p-6 pl-6 sm:pl-8">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs sm:text-sm font-semibold text-gray-500 uppercase tracking-wider">Total</h3>
+              <CalendarLucide className="h-4 w-4 sm:h-5 sm:w-5 text-meu-primary/40 group-hover:text-meu-primary transition-colors" />
             </div>
-            <div className="min-w-0">
-              <div className="text-xs sm:text-sm text-gray-600 mb-1">Total</div>
-              <div className="text-xl sm:text-2xl font-bold text-blue-600">{events.length}</div>
-            </div>
+            <span className="text-2xl sm:text-3xl font-bold text-meu-primary tracking-tight">{events.length}</span>
+            <p className="text-[10px] sm:text-xs text-gray-400 mt-2 font-medium">Agendamentos no período</p>
           </div>
         </Card>
 
-        <Card className="p-4 sm:p-6">
-          <div className="flex items-center space-x-3 sm:space-x-4">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
-              <CheckCircle className="h-5 w-5 sm:h-6 sm:w-6 text-green-600" />
+        <Card className="relative overflow-hidden border border-gray-100 shadow-sm hover:shadow-lg transition-all duration-300 bg-white group">
+          <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500 group-hover:w-2 transition-all duration-300" />
+          <div className="p-4 sm:p-6 pl-6 sm:pl-8">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs sm:text-sm font-semibold text-gray-500 uppercase tracking-wider">Confirmados</h3>
+              <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-500/40 group-hover:text-emerald-500 transition-colors" />
             </div>
-            <div className="min-w-0">
-              <div className="text-xs sm:text-sm text-gray-600 mb-1">Confirmados</div>
-              <div className="text-xl sm:text-2xl font-bold text-green-600">
-                {events.filter(e => e.status === 'CONFIRMED').length}
-              </div>
-            </div>
+            <span className="text-2xl sm:text-3xl font-bold text-emerald-600 tracking-tight">
+              {events.filter(e => e.status === 'CONFIRMED').length}
+            </span>
+            <p className="text-[10px] sm:text-xs text-gray-400 mt-2 font-medium">Aulas agendadas</p>
           </div>
         </Card>
 
-        <Card className="p-4 sm:p-6">
-          <div className="flex items-center space-x-3 sm:space-x-4">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
-              <CheckCircle className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
+        <Card className="relative overflow-hidden border border-gray-100 shadow-sm hover:shadow-lg transition-all duration-300 bg-white group">
+          <div className="absolute top-0 left-0 w-1 h-full bg-blue-500 group-hover:w-2 transition-all duration-300" />
+          <div className="p-4 sm:p-6 pl-6 sm:pl-8">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs sm:text-sm font-semibold text-gray-500 uppercase tracking-wider">Concluídos</h3>
+              <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 text-blue-500/40 group-hover:text-blue-500 transition-colors" />
             </div>
-            <div className="min-w-0">
-              <div className="text-xs sm:text-sm text-gray-600 mb-1">Concluídos</div>
-              <div className="text-xl sm:text-2xl font-bold text-blue-600">
-                {events.filter(e => e.status === 'COMPLETED').length}
-              </div>
-            </div>
+            <span className="text-2xl sm:text-3xl font-bold text-blue-600 tracking-tight">
+              {events.filter(e => e.status === 'COMPLETED').length}
+            </span>
+            <p className="text-[10px] sm:text-xs text-gray-400 mt-2 font-medium">Aulas realizadas</p>
           </div>
         </Card>
 
-        <Card className="p-4 sm:p-6">
-          <div className="flex items-center space-x-3 sm:space-x-4">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
-              <XCircle className="h-5 w-5 sm:h-6 sm:w-6 text-red-600" />
+        <Card className="relative overflow-hidden border border-gray-100 shadow-sm hover:shadow-lg transition-all duration-300 bg-white group">
+          <div className="absolute top-0 left-0 w-1 h-full bg-red-500 group-hover:w-2 transition-all duration-300" />
+          <div className="p-4 sm:p-6 pl-6 sm:pl-8">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs sm:text-sm font-semibold text-gray-500 uppercase tracking-wider">Cancelados</h3>
+              <XCircle className="h-4 w-4 sm:h-5 sm:w-5 text-red-500/40 group-hover:text-red-500 transition-colors" />
             </div>
-            <div className="min-w-0">
-              <div className="text-xs sm:text-sm text-gray-600 mb-1">Cancelados</div>
-              <div className="text-xl sm:text-2xl font-bold text-red-600">
-                {events.filter(e => e.status === 'CANCELLED').length}
-              </div>
-            </div>
+            <span className="text-2xl sm:text-3xl font-bold text-red-600 tracking-tight">
+              {events.filter(e => e.status === 'CANCELLED').length}
+            </span>
+            <p className="text-[10px] sm:text-xs text-gray-400 mt-2 font-medium">Aulas canceladas</p>
           </div>
         </Card>
       </div>

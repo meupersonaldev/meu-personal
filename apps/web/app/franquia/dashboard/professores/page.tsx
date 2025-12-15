@@ -76,13 +76,13 @@ export default function ProfessoresPage() {
   // Carregar dados ao montar
   useEffect(() => {
     fetchTeachers().finally(() => setLoading(false))
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const filteredTeachers = teachers.filter(teacher => {
     const matchesSearch = teacher.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         teacher.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         teacher.phone?.toLowerCase().includes(searchTerm.toLowerCase())
+      teacher.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      teacher.phone?.toLowerCase().includes(searchTerm.toLowerCase())
     return matchesSearch
   })
 
@@ -126,219 +126,220 @@ export default function ProfessoresPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Professores</h1>
-            <p className="text-sm text-gray-600 mt-1">
-              {filteredTeachers.length} professor{filteredTeachers.length !== 1 ? 'es' : ''} com disponibilidade para a unidade
-            </p>
+    <div className="p-4 sm:p-6 lg:p-10 max-w-[1920px] mx-auto space-y-6 sm:space-y-8 mb-20">
+      {/* Header Section - Premium Style */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-gray-200">
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <span className="px-3 py-1 bg-meu-primary/5 text-meu-primary text-[10px] sm:text-xs font-bold rounded-full uppercase tracking-wider">
+              Professores
+            </span>
           </div>
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-meu-primary tracking-tight">
+            Gestão de Professores
+          </h1>
+          <p className="text-sm sm:text-base text-gray-500 mt-2 max-w-2xl">
+            {filteredTeachers.length} professor{filteredTeachers.length !== 1 ? 'es' : ''} com disponibilidade para a unidade.
+          </p>
         </div>
+      </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <Users className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
-                </div>
-                <div className="ml-3 sm:ml-4 min-w-0 flex-1">
-                  <p className="text-xs sm:text-sm font-medium text-gray-600">Total</p>
-                  <p className="text-xl sm:text-2xl font-bold text-gray-900">{teachers.length}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <DollarSign className="h-6 w-6 sm:h-8 sm:w-8 text-green-600" />
-                </div>
-                <div className="ml-3 sm:ml-4 min-w-0 flex-1">
-                  <p className="text-xs sm:text-sm font-medium text-gray-600">Taxa Média</p>
-                  <p className="text-xl sm:text-2xl font-bold text-gray-900">
-                    R$ {teachers.length > 0
-                      ? (teachers.reduce((sum, t) => sum + (t.teacher_profiles?.[0]?.hourly_rate || 0), 0) / teachers.length).toFixed(0)
-                      : '0'}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Search and Filters */}
-        <Card>
-          <CardContent className="p-4 sm:p-6">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                <Input
-                  placeholder="Buscar por nome, email ou telefone..."
-                  value={searchTerm}
-                  onChange={(e) => {
-                    setSearchTerm(e.target.value)
-                    setCurrentPage(1)
-                  }}
-                  className="pl-10"
-                />
-              </div>
+      {/* Stats - Premium KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <Card className="relative overflow-hidden border border-gray-100 shadow-sm hover:shadow-lg transition-all duration-300 bg-white group">
+          <div className="absolute top-0 left-0 w-1 h-full bg-meu-primary group-hover:w-2 transition-all duration-300" />
+          <div className="p-4 sm:p-6 pl-6 sm:pl-8">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs sm:text-sm font-semibold text-gray-500 uppercase tracking-wider">Total</h3>
+              <Users className="h-4 w-4 sm:h-5 sm:w-5 text-meu-primary/40 group-hover:text-meu-primary transition-colors" />
             </div>
-          </CardContent>
+            <span className="text-2xl sm:text-3xl font-bold text-meu-primary tracking-tight">{teachers.length}</span>
+            <p className="text-[10px] sm:text-xs text-gray-400 mt-2 font-medium">Professores cadastrados</p>
+          </div>
         </Card>
 
-        {/* Teachers Table */}
-        <Card>
-          <CardHeader className="pb-4">
-            <CardTitle className="text-xl">Lista de Professores</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            {filteredTeachers.length === 0 ? (
-              <div className="text-center py-12">
-                <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600">Nenhum professor encontrado</p>
-              </div>
-            ) : (
-              <>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Professor</TableHead>
-                        <TableHead>Contato</TableHead>
-                        <TableHead>Taxa/Hora</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Ações</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {paginatedTeachers.map((teacher) => {
-                        const profile = teacher.teacher_profiles?.[0]
-                        const hourlyRate = profile?.hourly_rate || 0
-
-                        return (
-                          <TableRow key={teacher.id} className="hover:bg-gray-50">
-                            <TableCell>
-                              <div className="flex items-center space-x-3">
-                                <Avatar className="h-10 w-10">
-                                  <AvatarFallback>
-                                    {getInitials(teacher.name)}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <div>
-                                  <p className="font-medium text-gray-900">{teacher.name}</p>
-                                  {profile?.specialties && profile.specialties.length > 0 && (
-                                    <p className="text-xs text-gray-500">
-                                      {profile.specialties.slice(0, 2).join(', ')}
-                                      {profile.specialties.length > 2 && '...'}
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="space-y-1">
-                                <div className="flex items-center text-sm text-gray-600">
-                                  <Mail className="h-3 w-3 mr-2" />
-                                  <span className="truncate max-w-[200px]">{teacher.email}</span>
-                                </div>
-                                {teacher.phone && (
-                                  <div className="flex items-center text-sm text-gray-600">
-                                    <Phone className="h-3 w-3 mr-2" />
-                                    <span>{teacher.phone}</span>
-                                  </div>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center text-gray-900">
-                                <DollarSign className="h-4 w-4 mr-1" />
-                                <span className="font-medium">R$ {hourlyRate.toFixed(2)}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              {getStatusBadge(teacher)}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleViewDetails(teacher)}
-                                className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                              >
-                                <Eye className="h-4 w-4 mr-2" />
-                                Ver Detalhes
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        )
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-
-                {/* Pagination */}
-                {totalPages > 1 && (
-                  <div className="flex items-center justify-between mt-4 pt-4 border-t">
-                    <div className="text-sm text-gray-600">
-                      Mostrando {startIndex + 1} a {Math.min(endIndex, filteredTeachers.length)} de {filteredTeachers.length} professores
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                        disabled={currentPage === 1}
-                      >
-                        Anterior
-                      </Button>
-                      <div className="flex items-center space-x-1">
-                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                          let pageNum: number
-                          if (totalPages <= 5) {
-                            pageNum = i + 1
-                          } else if (currentPage <= 3) {
-                            pageNum = i + 1
-                          } else if (currentPage >= totalPages - 2) {
-                            pageNum = totalPages - 4 + i
-                          } else {
-                            pageNum = currentPage - 2 + i
-                          }
-                          return (
-                            <Button
-                              key={pageNum}
-                              variant={currentPage === pageNum ? 'default' : 'outline'}
-                              size="sm"
-                              onClick={() => setCurrentPage(pageNum)}
-                              className="min-w-[40px]"
-                            >
-                              {pageNum}
-                            </Button>
-                          )
-                        })}
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                        disabled={currentPage === totalPages}
-                      >
-                        Próxima
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-          </CardContent>
+        <Card className="relative overflow-hidden border border-gray-100 shadow-sm hover:shadow-lg transition-all duration-300 bg-white group">
+          <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500 group-hover:w-2 transition-all duration-300" />
+          <div className="p-4 sm:p-6 pl-6 sm:pl-8">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs sm:text-sm font-semibold text-gray-500 uppercase tracking-wider">Taxa Média</h3>
+              <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-500/40 group-hover:text-emerald-500 transition-colors" />
+            </div>
+            <span className="text-2xl sm:text-3xl font-bold text-emerald-600 tracking-tight">
+              R$ {teachers.length > 0
+                ? (teachers.reduce((sum, t) => sum + (t.teacher_profiles?.[0]?.hourly_rate || 0), 0) / teachers.length).toFixed(0)
+                : '0'}
+            </span>
+            <p className="text-[10px] sm:text-xs text-gray-400 mt-2 font-medium">Valor médio por hora</p>
+          </div>
         </Card>
       </div>
+
+      {/* Search and Filters */}
+      <Card>
+        <CardContent className="p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+              <Input
+                placeholder="Buscar por nome, email ou telefone..."
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value)
+                  setCurrentPage(1)
+                }}
+                className="pl-10"
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Teachers Table */}
+      <Card>
+        <CardHeader className="pb-4">
+          <CardTitle className="text-xl">Lista de Professores</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          {filteredTeachers.length === 0 ? (
+            <div className="text-center py-12">
+              <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-600">Nenhum professor encontrado</p>
+            </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Professor</TableHead>
+                      <TableHead>Contato</TableHead>
+                      <TableHead>Taxa/Hora</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedTeachers.map((teacher) => {
+                      const profile = teacher.teacher_profiles?.[0]
+                      const hourlyRate = profile?.hourly_rate || 0
+
+                      return (
+                        <TableRow key={teacher.id} className="hover:bg-gray-50">
+                          <TableCell>
+                            <div className="flex items-center space-x-3">
+                              <Avatar className="h-10 w-10">
+                                <AvatarFallback>
+                                  {getInitials(teacher.name)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div>
+                                <p className="font-medium text-gray-900">{teacher.name}</p>
+                                {profile?.specialties && profile.specialties.length > 0 && (
+                                  <p className="text-xs text-gray-500">
+                                    {profile.specialties.slice(0, 2).join(', ')}
+                                    {profile.specialties.length > 2 && '...'}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="space-y-1">
+                              <div className="flex items-center text-sm text-gray-600">
+                                <Mail className="h-3 w-3 mr-2" />
+                                <span className="truncate max-w-[200px]">{teacher.email}</span>
+                              </div>
+                              {teacher.phone && (
+                                <div className="flex items-center text-sm text-gray-600">
+                                  <Phone className="h-3 w-3 mr-2" />
+                                  <span>{teacher.phone}</span>
+                                </div>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center text-gray-900">
+                              <DollarSign className="h-4 w-4 mr-1" />
+                              <span className="font-medium">R$ {hourlyRate.toFixed(2)}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {getStatusBadge(teacher)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleViewDetails(teacher)}
+                              className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                            >
+                              <Eye className="h-4 w-4 mr-2" />
+                              Ver Detalhes
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                  <div className="text-sm text-gray-600">
+                    Mostrando {startIndex + 1} a {Math.min(endIndex, filteredTeachers.length)} de {filteredTeachers.length} professores
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      Anterior
+                    </Button>
+                    <div className="flex items-center space-x-1">
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        let pageNum: number
+                        if (totalPages <= 5) {
+                          pageNum = i + 1
+                        } else if (currentPage <= 3) {
+                          pageNum = i + 1
+                        } else if (currentPage >= totalPages - 2) {
+                          pageNum = totalPages - 4 + i
+                        } else {
+                          pageNum = currentPage - 2 + i
+                        }
+                        return (
+                          <Button
+                            key={pageNum}
+                            variant={currentPage === pageNum ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => setCurrentPage(pageNum)}
+                            className="min-w-[40px]"
+                          >
+                            {pageNum}
+                          </Button>
+                        )
+                      })}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                    >
+                      Próxima
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Details Modal */}
       {showDetailsModal && selectedTeacher && (
@@ -421,19 +422,19 @@ export default function ProfessoresPage() {
                   </div>
 
                   {/* Specialties */}
-                  {selectedTeacher.teacher_profiles[0].specialties && 
-                   selectedTeacher.teacher_profiles[0].specialties.length > 0 && (
-                    <div className="border-t pt-4">
-                      <h4 className="font-semibold text-gray-900 mb-3">Especialidades</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {selectedTeacher.teacher_profiles[0].specialties.map((specialty, idx) => (
-                          <Badge key={idx} variant="outline" className="text-sm">
-                            {specialty}
-                          </Badge>
-                        ))}
+                  {selectedTeacher.teacher_profiles[0].specialties &&
+                    selectedTeacher.teacher_profiles[0].specialties.length > 0 && (
+                      <div className="border-t pt-4">
+                        <h4 className="font-semibold text-gray-900 mb-3">Especialidades</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {selectedTeacher.teacher_profiles[0].specialties.map((specialty, idx) => (
+                            <Badge key={idx} variant="outline" className="text-sm">
+                              {specialty}
+                            </Badge>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
                   {/* Bio */}
                   {selectedTeacher.teacher_profiles[0].bio && (
@@ -482,31 +483,31 @@ export default function ProfessoresPage() {
               )}
 
               {/* Subscriptions */}
-              {selectedTeacher.teacher_subscriptions && 
-               selectedTeacher.teacher_subscriptions.length > 0 && (
-                <div className="border-t pt-4">
-                  <h4 className="font-semibold text-gray-900 mb-3">Planos Ativos</h4>
-                  <div className="space-y-2">
-                    {selectedTeacher.teacher_subscriptions
-                      .filter((sub: any) => sub.status === 'active')
-                      .map((sub: any) => (
-                        <div key={sub.id} className="p-3 bg-gray-50 rounded-lg">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="text-sm font-medium text-gray-900">
-                                {sub.teacher_plans?.name || 'Plano'}
-                              </p>
-                              <p className="text-xs text-gray-500">
-                                {new Date(sub.start_date).toLocaleDateString('pt-BR')} - {new Date(sub.end_date).toLocaleDateString('pt-BR')}
-                              </p>
+              {selectedTeacher.teacher_subscriptions &&
+                selectedTeacher.teacher_subscriptions.length > 0 && (
+                  <div className="border-t pt-4">
+                    <h4 className="font-semibold text-gray-900 mb-3">Planos Ativos</h4>
+                    <div className="space-y-2">
+                      {selectedTeacher.teacher_subscriptions
+                        .filter((sub: any) => sub.status === 'active')
+                        .map((sub: any) => (
+                          <div key={sub.id} className="p-3 bg-gray-50 rounded-lg">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">
+                                  {sub.teacher_plans?.name || 'Plano'}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  {new Date(sub.start_date).toLocaleDateString('pt-BR')} - {new Date(sub.end_date).toLocaleDateString('pt-BR')}
+                                </p>
+                              </div>
+                              <Badge className="bg-green-100 text-green-800">Ativo</Badge>
                             </div>
-                            <Badge className="bg-green-100 text-green-800">Ativo</Badge>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
             </CardContent>
           </Card>
         </div>

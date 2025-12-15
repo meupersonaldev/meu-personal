@@ -103,7 +103,7 @@ export default function FinancePageNew() {
       }
 
       const data = await response.json()
-      
+
       // Mapear para formato esperado pelo frontend
       const mappedPayments = (data.payments || []).map((p: any) => ({
         id: p.id,
@@ -113,9 +113,9 @@ export default function FinancePageNew() {
           email: '',
           role: 'STUDENT'
         },
-        type: p.description?.includes('Plano') ? 'PLAN_PURCHASE' : 
-              p.description?.includes('Aula') ? 'BOOKING_PAYMENT' : 
-              p.description?.includes('Assinatura') ? 'SUBSCRIPTION' : 'PLAN_PURCHASE',
+        type: p.description?.includes('Plano') ? 'PLAN_PURCHASE' :
+          p.description?.includes('Aula') ? 'BOOKING_PAYMENT' :
+            p.description?.includes('Assinatura') ? 'SUBSCRIPTION' : 'PLAN_PURCHASE',
         billing_type: p.billing_type || 'PIX',
         status: p.status,
         amount: p.franchise_split, // Valor que a franquia recebe (90% do total)
@@ -176,7 +176,7 @@ export default function FinancePageNew() {
       }
 
       const data = await response.json()
-      
+
       // Usar stats do Asaas (já calculados com split)
       if (data.stats) {
         setStats({
@@ -251,39 +251,46 @@ export default function FinancePageNew() {
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
-      {/* Header */}
-      <div className="mb-6 sm:mb-8">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Financeiro</h1>
-            <p className="text-sm sm:text-base text-gray-600">Acompanhe pagamentos e receitas via Asaas</p>
+    <div className="p-4 sm:p-6 lg:p-10 max-w-[1920px] mx-auto space-y-6 sm:space-y-8 mb-20">
+      {/* Header Section - Premium Style */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-gray-200">
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <span className="px-3 py-1 bg-meu-primary/5 text-meu-primary text-[10px] sm:text-xs font-bold rounded-full uppercase tracking-wider">
+              Financeiro
+            </span>
           </div>
-
-          <Button 
-            onClick={() => { 
-              // Forçar refresh do cache
-              fetchPayments(true); 
-              fetchStats(true) 
-            }} 
-            variant="outline" 
-            className="w-full sm:w-auto"
-          >
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Atualizar
-          </Button>
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-meu-primary tracking-tight">
+            Gestão Financeira
+          </h1>
+          <p className="text-sm sm:text-base text-gray-500 mt-2 max-w-2xl">
+            Acompanhe pagamentos e receitas via Asaas.
+          </p>
         </div>
+
+        <Button
+          onClick={() => {
+            fetchPayments(true);
+            fetchStats(true)
+          }}
+          variant="outline"
+          size="sm"
+          className="text-xs border-gray-200"
+        >
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Atualizar
+        </Button>
       </div>
 
       {/* Filtros */}
-      <Card className="p-4 mb-6">
+      <Card className="p-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-meu-primary focus:border-transparent bg-white"
             >
               <option value="all">Todos</option>
               <option value="PENDING">Pendente</option>
@@ -300,7 +307,7 @@ export default function FinancePageNew() {
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-meu-primary focus:border-transparent bg-white"
             />
           </div>
 
@@ -310,7 +317,7 @@ export default function FinancePageNew() {
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-meu-primary focus:border-transparent"
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-meu-primary focus:border-transparent bg-white"
             />
           </div>
 
@@ -322,7 +329,8 @@ export default function FinancePageNew() {
                 setEndDate('')
               }}
               variant="outline"
-              className="w-full"
+              size="sm"
+              className="w-full text-xs"
             >
               Limpar Filtros
             </Button>
@@ -330,67 +338,68 @@ export default function FinancePageNew() {
         </div>
       </Card>
 
-      {/* Métricas Principais */}
+      {/* Stats - Premium KPI Cards */}
       {stats && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
-          <Card className="p-4 sm:p-6 border-t-4 border-t-green-500">
-            <div className="flex items-center justify-between mb-2">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-green-600" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <Card className="relative overflow-hidden border border-gray-100 shadow-sm hover:shadow-lg transition-all duration-300 bg-white group">
+            <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500 group-hover:w-2 transition-all duration-300" />
+            <div className="p-4 sm:p-6 pl-6 sm:pl-8">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-xs sm:text-sm font-semibold text-gray-500 uppercase tracking-wider">Receita Recebida</h3>
+                <Check className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-500/40 group-hover:text-emerald-500 transition-colors" />
               </div>
-              <Check className="h-5 w-5 text-green-600" />
-            </div>
-            <div className="text-xs sm:text-sm text-gray-600 mb-1">Receita Recebida</div>
-            <div className="text-2xl sm:text-3xl font-bold text-gray-900">
-              R$ {stats.total_revenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-            </div>
-            <div className="text-xs text-gray-500 mt-1">
-              {stats.by_status.received + stats.by_status.confirmed} pagamento(s)
+              <span className="text-2xl sm:text-3xl font-bold text-emerald-600 tracking-tight">
+                R$ {stats.total_revenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              </span>
+              <p className="text-[10px] sm:text-xs text-gray-400 mt-2 font-medium">
+                {stats.by_status.received + stats.by_status.confirmed} pagamento(s)
+              </p>
             </div>
           </Card>
 
-          <Card className="p-4 sm:p-6 border-t-4 border-t-yellow-500">
-            <div className="flex items-center justify-between mb-2">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                <Clock className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-600" />
+          <Card className="relative overflow-hidden border border-gray-100 shadow-sm hover:shadow-lg transition-all duration-300 bg-white group">
+            <div className="absolute top-0 left-0 w-1 h-full bg-yellow-500 group-hover:w-2 transition-all duration-300" />
+            <div className="p-4 sm:p-6 pl-6 sm:pl-8">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-xs sm:text-sm font-semibold text-gray-500 uppercase tracking-wider">Pendente</h3>
+                <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-500/40 group-hover:text-yellow-500 transition-colors" />
               </div>
-            </div>
-            <div className="text-xs sm:text-sm text-gray-600 mb-1">Pendente</div>
-            <div className="text-2xl sm:text-3xl font-bold text-gray-900">
-              R$ {stats.pending_revenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-            </div>
-            <div className="text-xs text-gray-500 mt-1">
-              {stats.by_status.pending} pagamento(s)
+              <span className="text-2xl sm:text-3xl font-bold text-yellow-600 tracking-tight">
+                R$ {stats.pending_revenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              </span>
+              <p className="text-[10px] sm:text-xs text-gray-400 mt-2 font-medium">
+                {stats.by_status.pending} pagamento(s)
+              </p>
             </div>
           </Card>
 
-          <Card className="p-4 sm:p-6 border-t-4 border-t-red-500">
-            <div className="flex items-center justify-between mb-2">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-red-100 rounded-lg flex items-center justify-center">
-                <XCircle className="h-5 w-5 sm:h-6 sm:w-6 text-red-600" />
+          <Card className="relative overflow-hidden border border-gray-100 shadow-sm hover:shadow-lg transition-all duration-300 bg-white group">
+            <div className="absolute top-0 left-0 w-1 h-full bg-red-500 group-hover:w-2 transition-all duration-300" />
+            <div className="p-4 sm:p-6 pl-6 sm:pl-8">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-xs sm:text-sm font-semibold text-gray-500 uppercase tracking-wider">Vencidos</h3>
+                <XCircle className="h-4 w-4 sm:h-5 sm:w-5 text-red-500/40 group-hover:text-red-500 transition-colors" />
               </div>
-            </div>
-            <div className="text-xs sm:text-sm text-gray-600 mb-1">Vencidos</div>
-            <div className="text-2xl sm:text-3xl font-bold text-gray-900">
-              R$ {stats.overdue_revenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-            </div>
-            <div className="text-xs text-gray-500 mt-1">
-              {stats.by_status.overdue} pagamento(s)
+              <span className="text-2xl sm:text-3xl font-bold text-red-600 tracking-tight">
+                R$ {stats.overdue_revenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              </span>
+              <p className="text-[10px] sm:text-xs text-gray-400 mt-2 font-medium">
+                {stats.by_status.overdue} pagamento(s)
+              </p>
             </div>
           </Card>
 
-          <Card className="p-4 sm:p-6 border-t-4 border-t-blue-500">
-            <div className="flex items-center justify-between mb-2">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
+          <Card className="relative overflow-hidden border border-gray-100 shadow-sm hover:shadow-lg transition-all duration-300 bg-white group">
+            <div className="absolute top-0 left-0 w-1 h-full bg-meu-primary group-hover:w-2 transition-all duration-300" />
+            <div className="p-4 sm:p-6 pl-6 sm:pl-8">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-xs sm:text-sm font-semibold text-gray-500 uppercase tracking-wider">Transações</h3>
+                <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-meu-primary/40 group-hover:text-meu-primary transition-colors" />
               </div>
-            </div>
-            <div className="text-xs sm:text-sm text-gray-600 mb-1">Total de Transações</div>
-            <div className="text-2xl sm:text-3xl font-bold text-gray-900">
-              {stats.total_transactions}
-            </div>
-            <div className="text-xs text-gray-500 mt-1">
-              No período selecionado
+              <span className="text-2xl sm:text-3xl font-bold text-meu-primary tracking-tight">
+                {stats.total_transactions}
+              </span>
+              <p className="text-[10px] sm:text-xs text-gray-400 mt-2 font-medium">No período selecionado</p>
             </div>
           </Card>
         </div>

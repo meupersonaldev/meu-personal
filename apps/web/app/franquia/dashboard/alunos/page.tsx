@@ -69,7 +69,7 @@ export default function AlunosPage() {
   useEffect(() => {
     // Academy já vem do login via store - não precisa setar manualmente
     fetchStudents().finally(() => setLoading(false))
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const [formData, setFormData] = useState({
     name: '',
@@ -83,11 +83,11 @@ export default function AlunosPage() {
 
   const filteredStudents = students.filter(student => {
     const matchesSearch = student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         student.email.toLowerCase().includes(searchTerm.toLowerCase())
+      student.email.toLowerCase().includes(searchTerm.toLowerCase())
 
     const matchesStatus = statusFilter === 'all' ||
-                         (statusFilter === 'active' && student.status === 'active') ||
-                         (statusFilter === 'inactive' && student.status === 'inactive')
+      (statusFilter === 'active' && student.status === 'active') ||
+      (statusFilter === 'inactive' && student.status === 'inactive')
 
     return matchesSearch && matchesStatus
   })
@@ -163,7 +163,7 @@ export default function AlunosPage() {
       },
       cancel: {
         label: 'Cancelar',
-        onClick: () => {}
+        onClick: () => { }
       }
     })
   }
@@ -216,71 +216,80 @@ export default function AlunosPage() {
   }
 
   return (
-    <div className="content-with-sidebar min-h-screen bg-gray-50 p-6 ml-8">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Alunos</h1>
-            <p className="text-gray-600">Gerencie os alunos da sua academia</p>
+    <div className="p-4 sm:p-6 lg:p-10 max-w-[1920px] mx-auto space-y-6 sm:space-y-8 mb-20">
+      {/* Header Section - Premium Style */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-gray-200">
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <span className="px-3 py-1 bg-meu-primary/5 text-meu-primary text-[10px] sm:text-xs font-bold rounded-full uppercase tracking-wider">
+              Alunos
+            </span>
           </div>
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-meu-primary tracking-tight">
+            Gestão de Alunos
+          </h1>
+          <p className="text-sm sm:text-base text-gray-500 mt-2 max-w-2xl">
+            Gerencie os alunos da sua academia.
+          </p>
+        </div>
         <Button
           onClick={() => setShowCreateModal(true)}
           className="bg-meu-primary hover:bg-meu-primary/90"
+          size="sm"
         >
           <Plus className="h-4 w-4 mr-2" />
           Novo Aluno
         </Button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card className="hover:shadow-lg transition-shadow">
-          <CardContent className="p-8">
-            <div className="flex items-center">
-              <Users className="h-8 w-8 text-meu-primary" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total de Alunos</p>
-                <p className="text-2xl font-bold text-gray-900">{students.length}</p>
-              </div>
+      {/* Stats - Premium KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <Card className="relative overflow-hidden border border-gray-100 shadow-sm hover:shadow-lg transition-all duration-300 bg-white group">
+          <div className="absolute top-0 left-0 w-1 h-full bg-meu-primary group-hover:w-2 transition-all duration-300" />
+          <div className="p-4 sm:p-6 pl-6 sm:pl-8">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs sm:text-sm font-semibold text-gray-500 uppercase tracking-wider">Total</h3>
+              <Users className="h-4 w-4 sm:h-5 sm:w-5 text-meu-primary/40 group-hover:text-meu-primary transition-colors" />
             </div>
-          </CardContent>
+            <span className="text-2xl sm:text-3xl font-bold text-meu-primary tracking-tight">{students.length}</span>
+            <p className="text-[10px] sm:text-xs text-gray-400 mt-2 font-medium">Alunos cadastrados</p>
+          </div>
         </Card>
 
-        <Card className="hover:shadow-lg transition-shadow">
-          <CardContent className="p-8">
-            <div className="flex items-center">
-              <UserCheck className="h-8 w-8 text-green-500" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Alunos Ativos</p>
-                <p className="text-2xl font-bold text-gray-900">{activeStudents}</p>
-              </div>
+        <Card className="relative overflow-hidden border border-gray-100 shadow-sm hover:shadow-lg transition-all duration-300 bg-white group">
+          <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500 group-hover:w-2 transition-all duration-300" />
+          <div className="p-4 sm:p-6 pl-6 sm:pl-8">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs sm:text-sm font-semibold text-gray-500 uppercase tracking-wider">Ativos</h3>
+              <UserCheck className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-500/40 group-hover:text-emerald-500 transition-colors" />
             </div>
-          </CardContent>
+            <span className="text-2xl sm:text-3xl font-bold text-emerald-600 tracking-tight">{activeStudents}</span>
+            <p className="text-[10px] sm:text-xs text-gray-400 mt-2 font-medium">Alunos ativos</p>
+          </div>
         </Card>
 
-        <Card className="hover:shadow-lg transition-shadow">
-          <CardContent className="p-8">
-            <div className="flex items-center">
-              <Activity className="h-8 w-8 text-meu-cyan" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total Créditos</p>
-                <p className="text-2xl font-bold text-gray-900">{totalCredits}</p>
-              </div>
+        <Card className="relative overflow-hidden border border-gray-100 shadow-sm hover:shadow-lg transition-all duration-300 bg-white group">
+          <div className="absolute top-0 left-0 w-1 h-full bg-cyan-500 group-hover:w-2 transition-all duration-300" />
+          <div className="p-4 sm:p-6 pl-6 sm:pl-8">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs sm:text-sm font-semibold text-gray-500 uppercase tracking-wider">Créditos</h3>
+              <Activity className="h-4 w-4 sm:h-5 sm:w-5 text-cyan-500/40 group-hover:text-cyan-500 transition-colors" />
             </div>
-          </CardContent>
+            <span className="text-2xl sm:text-3xl font-bold text-cyan-600 tracking-tight">{totalCredits}</span>
+            <p className="text-[10px] sm:text-xs text-gray-400 mt-2 font-medium">Total de créditos</p>
+          </div>
         </Card>
 
-        <Card className="hover:shadow-lg transition-shadow">
-          <CardContent className="p-8">
-            <div className="flex items-center">
-              <UserX className="h-8 w-8 text-red-500" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Inativos</p>
-                <p className="text-2xl font-bold text-gray-900">{inactiveStudents}</p>
-              </div>
+        <Card className="relative overflow-hidden border border-gray-100 shadow-sm hover:shadow-lg transition-all duration-300 bg-white group">
+          <div className="absolute top-0 left-0 w-1 h-full bg-red-500 group-hover:w-2 transition-all duration-300" />
+          <div className="p-4 sm:p-6 pl-6 sm:pl-8">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs sm:text-sm font-semibold text-gray-500 uppercase tracking-wider">Inativos</h3>
+              <UserX className="h-4 w-4 sm:h-5 sm:w-5 text-red-500/40 group-hover:text-red-500 transition-colors" />
             </div>
-          </CardContent>
+            <span className="text-2xl sm:text-3xl font-bold text-red-600 tracking-tight">{inactiveStudents}</span>
+            <p className="text-[10px] sm:text-xs text-gray-400 mt-2 font-medium">Alunos inativos</p>
+          </div>
         </Card>
       </div>
 
@@ -409,7 +418,7 @@ export default function AlunosPage() {
                 <Input
                   id="name"
                   value={formData.name}
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   required
                 />
               </div>
@@ -420,7 +429,7 @@ export default function AlunosPage() {
                   id="email"
                   type="email"
                   value={formData.email}
-                  onChange={(e) => setFormData({...formData, email: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   required
                 />
               </div>
@@ -430,7 +439,7 @@ export default function AlunosPage() {
                 <Input
                   id="phone"
                   value={formData.phone}
-                  onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                 />
               </div>
 
@@ -479,7 +488,7 @@ export default function AlunosPage() {
                 <Input
                   id="edit-name"
                   value={formData.name}
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   required
                 />
               </div>
@@ -490,7 +499,7 @@ export default function AlunosPage() {
                   id="edit-email"
                   type="email"
                   value={formData.email}
-                  onChange={(e) => setFormData({...formData, email: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   required
                 />
               </div>
@@ -500,7 +509,7 @@ export default function AlunosPage() {
                 <Input
                   id="edit-phone"
                   value={formData.phone}
-                  onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                 />
               </div>
 
@@ -509,7 +518,7 @@ export default function AlunosPage() {
                 <select
                   id="edit-status"
                   value={selectedStudent?.status || 'active'}
-                  onChange={(e) => setSelectedStudent({...selectedStudent, status: e.target.value})}
+                  onChange={(e) => setSelectedStudent({ ...selectedStudent, status: e.target.value })}
                   className="w-full px-3 py-2 border rounded-md"
                 >
                   <option value="active">Ativo</option>
@@ -540,7 +549,6 @@ export default function AlunosPage() {
           </div>
         </div>
       )}
-      </div>
     </div>
   )
 }

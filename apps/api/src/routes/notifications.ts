@@ -9,22 +9,10 @@ import {
   subscribe,
   topicForFranqueadora
 } from '../lib/notify'
-
-const notificationTypes = [
-  'new_booking',
-  'booking_cancelled',
-  'checkin',
-  'new_student',
-  'payment_received',
-  'plan_purchased',
-  'teacher_approval_needed',
-  'student_approval_needed',
-  'new_teacher',
-  'booking_created',
-  'new_teacher_link'
-] as const
-
-type NotificationType = typeof notificationTypes[number]
+import {
+  notificationTypes,
+  NotificationType
+} from '../types/notification-types'
 
 const router = express.Router()
 

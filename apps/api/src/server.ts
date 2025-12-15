@@ -189,6 +189,7 @@ import emailLogsRoutes from './routes/email-logs'
 import { bookingScheduler } from './jobs/booking-scheduler'
 import { reservationScheduler } from './jobs/reservation-processor'
 import { teacherAvailabilityScheduler } from './jobs/teacher-availability-scheduler'
+import { notificationScheduler } from './jobs/notification-scheduler'
 import { asaasSyncService } from './services/asaas-sync.service'
 
 // SEGURANÇA CRÍTICA: Rate limit específico para auth (mais restritivo)
@@ -294,6 +295,16 @@ if (process.env.NODE_ENV !== 'test') {
     teacherAvailabilityScheduler.startDailyScheduler(availabilityHour)
     console.log(
       `✅ Scheduler de disponibilidade configurado para rodar às ${availabilityHour}:00`
+    )
+
+    // Iniciar scheduler de notificações agendadas (a cada 15 minutos)
+    console.log('⏰ Iniciando scheduler de notificações...')
+    const notificationInterval = process.env.NOTIFICATION_SCHEDULER_INTERVAL_MINUTES
+      ? parseInt(process.env.NOTIFICATION_SCHEDULER_INTERVAL_MINUTES)
+      : 15 // Padrão: 15 minutos
+    notificationScheduler.startScheduler(notificationInterval)
+    console.log(
+      `✅ Scheduler de notificações configurado para rodar a cada ${notificationInterval} minutos`
     )
 
     // Sincronizar subcontas Asaas na inicialização (assíncrono, não bloqueia)

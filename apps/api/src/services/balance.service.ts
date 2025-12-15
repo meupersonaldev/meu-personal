@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { onCreditsDebited } from '../lib/events';
 
 export interface BalanceScope {
   franqueadoraId: string;
@@ -418,6 +419,12 @@ class BalanceService {
     const updatedBalance = await this.updateStudentBalance(studentId, franqueadoraId, {
       total_consumed: balance.total_consumed + qty,
       locked_qty: balance.locked_qty - lockedToConsume
+    });
+
+    // Calculate new available balance and send notification (Requirements 3.1, 3.2, 3.7)
+    const newAvailableBalance = updatedBalance.total_purchased - updatedBalance.total_consumed - updatedBalance.locked_qty;
+    onCreditsDebited(studentId, qty, newAvailableBalance, bookingId).catch(err => {
+      console.error('[consumeStudentClasses] Error sending credit notification:', err);
     });
 
     return { balance: updatedBalance, transaction };

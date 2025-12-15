@@ -12,6 +12,7 @@ import { auditService } from '../services/audit.service'
 import { emailService } from '../services/email.service'
 import { validateCpfCnpj, validateCpfWithAPI } from '../utils/validation'
 import { getHtmlEmailTemplate, getWelcomeStudentEmail, getWelcomeTeacherEmail, getPasswordResetEmail } from '../services/email-templates'
+import { onNewTeacherRegistered, onNewStudentRegistered } from '../lib/events'
 
 const router = express.Router()
 
@@ -413,6 +414,47 @@ router.post(
           })
         } catch (e) {
           console.warn('Falha ao criar approval_request de professor:', e)
+        }
+
+        // Notificar franquia sobre novo professor cadastrado (Requirements 5.1, 7.4)
+        // Buscar academia associada ao professor (se houver)
+        if (franqueadora?.id) {
+          // Buscar primeira academia da franqueadora para notificação
+          const { data: academyData } = await supabase
+            .from('academies')
+            .select('id')
+            .eq('franqueadora_id', franqueadora.id)
+            .eq('is_active', true)
+            .limit(1)
+            .single()
+
+          if (academyData?.id) {
+            try {
+              await onNewTeacherRegistered(createdUser.id, academyData.id)
+            } catch (notifError) {
+              console.warn('Falha ao enviar notificação de novo professor:', notifError)
+            }
+          }
+        }
+      }
+
+      // Notificar franquia sobre novo aluno cadastrado (Requirements 5.2, 7.3)
+      if (userData.role === 'STUDENT' && franqueadora?.id) {
+        // Buscar primeira academia da franqueadora para notificação
+        const { data: academyData } = await supabase
+          .from('academies')
+          .select('id')
+          .eq('franqueadora_id', franqueadora.id)
+          .eq('is_active', true)
+          .limit(1)
+          .single()
+
+        if (academyData?.id) {
+          try {
+            await onNewStudentRegistered(createdUser.id, academyData.id)
+          } catch (notifError) {
+            console.warn('Falha ao enviar notificação de novo aluno:', notifError)
+          }
         }
       }
 

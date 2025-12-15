@@ -3,6 +3,7 @@ import { CustomError } from '../middleware/errorHandler';
 import { getPaymentProvider } from './payments/provider';
 import { balanceService } from './balance.service';
 import { asaasService } from './asaas.service';
+import { onCreditsPurchased } from '../lib/events';
 
 export interface PaymentIntent {
   id: string;
@@ -300,6 +301,12 @@ class PaymentIntentService {
             }
           }
         );
+
+        // Calculate new available balance and send notification (Requirement 3.3)
+        const newAvailableBalance = result.balance.total_purchased - result.balance.total_consumed - result.balance.locked_qty;
+        onCreditsPurchased(intent.actor_user_id, metadata.classes_qty, newAvailableBalance).catch(err => {
+          console.error('[creditPackage] Error sending credit purchase notification:', err);
+        });
 
         console.log(`✅ Aluno ${intent.actor_user_id} recebeu ${metadata.classes_qty} aulas`, {
           balance: result.balance,

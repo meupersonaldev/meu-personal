@@ -16,7 +16,9 @@ import {
   Filter,
   Shield,
   CreditCard,
-  Clock
+  Clock,
+  TrendingUp,
+  Activity
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -29,6 +31,45 @@ import StudentModal from '@/components/modals/student-modal'
 import type { Teacher as LegacyTeacher, Student as LegacyStudent } from '@/lib/stores/franquia-store'
 import NotificationsBell from '@/components/layout/notifications-bell'
 import ConfirmDialog from '@/components/ui/confirm-dialog'
+
+// Premium KPI Card Component (seguindo padrão Franqueadora)
+const KPICard = ({
+  title,
+  value,
+  trend,
+  trendLabel,
+  icon: Icon,
+}: {
+  title: string
+  value: string | number
+  trend?: string
+  trendLabel?: string
+  icon: any
+}) => (
+  <Card className="relative overflow-hidden border border-gray-100 shadow-sm hover:shadow-lg transition-all duration-300 bg-white group">
+    <div className="absolute top-0 left-0 w-1 h-full bg-meu-primary group-hover:w-2 transition-all duration-300" />
+    <div className="p-4 sm:p-6 pl-6 sm:pl-8">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-xs sm:text-sm font-semibold text-gray-500 uppercase tracking-wider">{title}</h3>
+        <Icon className="h-4 w-4 sm:h-5 sm:w-5 text-meu-primary/40 group-hover:text-meu-primary transition-colors" />
+      </div>
+      <div className="flex flex-col sm:flex-row sm:items-baseline sm:space-x-3">
+        <span className="text-2xl sm:text-3xl font-bold text-meu-primary font-feature-settings-tnum tracking-tight">
+          {value}
+        </span>
+        {trend && (
+          <span className="inline-flex items-center text-[10px] sm:text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full mt-1 sm:mt-0 w-fit">
+            <TrendingUp className="h-3 w-3 mr-1" />
+            {trend}
+          </span>
+        )}
+      </div>
+      {trendLabel && (
+        <p className="text-[10px] sm:text-xs text-gray-400 mt-2 font-medium">{trendLabel}</p>
+      )}
+    </div>
+  </Card>
+)
 
 // Tipos locais para compatibilidade com os Modais (que usam o store legado)
 type ModalTeacher = {
@@ -58,13 +99,13 @@ type ModalStudent = {
 
 export default function FranquiaDashboard() {
   const router = useRouter()
-  const { 
-    franquiaUser, 
-    isAuthenticated, 
-    teachers, 
-    students, 
-    analytics, 
-    deleteTeacher, 
+  const {
+    franquiaUser,
+    isAuthenticated,
+    teachers,
+    students,
+    analytics,
+    deleteTeacher,
     deleteStudent,
     fetchTeachers,
     fetchStudents,
@@ -87,7 +128,7 @@ export default function FranquiaDashboard() {
       await fetchAnalytics()
     }
     loadData()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Modal states
@@ -121,138 +162,73 @@ export default function FranquiaDashboard() {
     switch (activeTab) {
       case 'overview':
         return (
-          <div className="space-y-6">
+          <div className="space-y-6 sm:space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             {/* KPIs Principais - Linha 1 */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6">
-              <Card className="p-4 sm:p-6">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <Users className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
-                  </div>
-                  <div className="ml-3 sm:ml-4 min-w-0 flex-1">
-                    <p className="text-xs sm:text-sm font-medium text-gray-600">Total Alunos</p>
-                    <p className="text-xl sm:text-2xl font-bold text-gray-900">{students.length}</p>
-                    <p className="text-xs sm:text-sm text-blue-600 truncate">
-                      {students.filter(s => s.status === 'active').length} ativos
-                    </p>
-                  </div>
-                </div>
-              </Card>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+              <KPICard
+                title="Total Alunos"
+                value={students.length}
+                trend={`${students.filter(s => s.status === 'active').length} ativos`}
+                trendLabel="Alunos cadastrados"
+                icon={Users}
+              />
 
-              <Card className="p-4 sm:p-6">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <GraduationCap className="h-6 w-6 sm:h-8 sm:w-8 text-emerald-600" />
-                  </div>
-                  <div className="ml-3 sm:ml-4 min-w-0 flex-1">
-                    <p className="text-xs sm:text-sm font-medium text-gray-600">Professores</p>
-                    <p className="text-xl sm:text-2xl font-bold text-gray-900">{teachers.length}</p>
-                    <p className="text-xs sm:text-sm text-emerald-600 truncate">
-                      {teachers.filter(t => t.status === 'active').length} ativos
-                      {teachers.filter(t => t.status === 'pending').length > 0 && `, ${teachers.filter(t => t.status === 'pending').length} pendente(s)`}
-                    </p>
-                  </div>
-                </div>
-              </Card>
+              <KPICard
+                title="Professores"
+                value={teachers.length}
+                trend={`${teachers.filter(t => t.status === 'active').length} ativos`}
+                trendLabel={teachers.filter(t => t.status === 'pending').length > 0 ? `${teachers.filter(t => t.status === 'pending').length} pendente(s)` : 'Equipe ativa'}
+                icon={GraduationCap}
+              />
 
-              <Card className="p-4 sm:p-6">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <Calendar className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600" />
-                  </div>
-                  <div className="ml-3 sm:ml-4 min-w-0 flex-1">
-                    <p className="text-xs sm:text-sm font-medium text-gray-600">Aulas Este Mês</p>
-                    <p className="text-xl sm:text-2xl font-bold text-gray-900">{analytics?.totalClasses || 0}</p>
-                    <p className="text-xs sm:text-sm text-purple-600 truncate">Agendamentos válidos</p>
-                  </div>
-                </div>
-              </Card>
+              <KPICard
+                title="Aulas Este Mês"
+                value={analytics?.totalClasses || 0}
+                trendLabel="Agendamentos válidos"
+                icon={Calendar}
+              />
 
-              <Card className="p-4 sm:p-6 bg-gradient-to-br from-amber-50 to-yellow-50 border-amber-200">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <DollarSign className="h-6 w-6 sm:h-8 sm:w-8 text-amber-700" />
-                  </div>
-                  <div className="ml-3 sm:ml-4 min-w-0 flex-1">
-                    <p className="text-xs sm:text-sm font-medium text-amber-700">Receita Mensal</p>
-                    <p className="text-xl sm:text-2xl font-bold text-amber-900">
-                      R$ {analytics ? ((analytics.totalRevenue || 0) / 1000).toFixed(1) : '0'}k
-                    </p>
-                    <p className="text-xs sm:text-sm text-amber-600 truncate">Faturamento estimado</p>
-                  </div>
-                </div>
-              </Card>
+              <KPICard
+                title="Receita Mensal"
+                value={`R$ ${analytics ? ((analytics.totalRevenue || 0) / 1000).toFixed(1) : '0'}k`}
+                trendLabel="Faturamento estimado"
+                icon={DollarSign}
+              />
             </div>
 
             {/* KPIs Secundários - Linha 2 */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6">
-              <Card className="p-6">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <DollarSign className="h-8 w-8 text-green-600" />
-                  </div>
-                  <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-600">Créditos Ativos</p>
-                    <p className="text-2xl font-bold text-gray-900">
-                      {students.reduce((sum, s) => sum + s.credits, 0)}
-                    </p>
-                    <p className="text-sm text-green-600">Em circulação</p>
-                  </div>
-                </div>
-              </Card>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+              <KPICard
+                title="Créditos Ativos"
+                value={students.reduce((sum, s) => sum + s.credits, 0)}
+                trendLabel="Em circulação"
+                icon={CreditCard}
+              />
 
-              <Card className="p-6">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <BarChart3 className="h-8 w-8 text-cyan-600" />
-                  </div>
-                  <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-600">Taxa de Ocupação</p>
-                    <p className="text-2xl font-bold text-gray-900">
-                      {students.length > 0 
-                        ? ((students.filter(s => s.status === 'active').length / students.length) * 100).toFixed(0)
-                        : '0'
-                      }%
-                    </p>
-                    <p className="text-sm text-cyan-600">Alunos ativos</p>
-                  </div>
-                </div>
-              </Card>
+              <KPICard
+                title="Taxa de Ocupação"
+                value={`${students.length > 0
+                  ? ((students.filter(s => s.status === 'active').length / students.length) * 100).toFixed(0)
+                  : '0'}%`}
+                trendLabel="Alunos ativos"
+                icon={Activity}
+              />
 
-              <Card className="p-6">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <Users className="h-8 w-8 text-pink-600" />
-                  </div>
-                  <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-600">Média Alunos/Prof</p>
-                    <p className="text-2xl font-bold text-gray-900">
-                      {teachers.filter(t => t.status === 'active').length > 0
-                        ? (students.filter(s => s.status === 'active').length / teachers.filter(t => t.status === 'active').length).toFixed(1)
-                        : '0'
-                      }
-                    </p>
-                    <p className="text-sm text-pink-600">Distribuição</p>
-                  </div>
-                </div>
-              </Card>
+              <KPICard
+                title="Média Alunos/Prof"
+                value={teachers.filter(t => t.status === 'active').length > 0
+                  ? (students.filter(s => s.status === 'active').length / teachers.filter(t => t.status === 'active').length).toFixed(1)
+                  : '0'}
+                trendLabel="Distribuição"
+                icon={BarChart3}
+              />
 
-              <Card className="p-6">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <GraduationCap className="h-8 w-8 text-indigo-600" />
-                  </div>
-                  <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-600">Professores Ativos</p>
-                    <p className="text-2xl font-bold text-gray-900">
-                      {teachers.filter(t => t.status === 'active').length}
-                    </p>
-                    <p className="text-sm text-indigo-600">
-                      de {teachers.length} no total
-                    </p>
-                  </div>
-                </div>
-              </Card>
+              <KPICard
+                title="Professores Ativos"
+                value={teachers.filter(t => t.status === 'active').length}
+                trendLabel={`de ${teachers.length} no total`}
+                icon={GraduationCap}
+              />
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -262,24 +238,24 @@ export default function FranquiaDashboard() {
                 {(() => {
                   const now = new Date()
                   const monthsData = []
-                  
+
                   for (let i = 5; i >= 0; i--) {
                     const monthDate = new Date(now.getFullYear(), now.getMonth() - i, 1)
                     const nextMonthDate = new Date(now.getFullYear(), now.getMonth() - i + 1, 1)
-                    
+
                     const count = students.filter(s => {
                       const joinDate = new Date(s.join_date)
                       return joinDate >= monthDate && joinDate < nextMonthDate
                     }).length
-                    
+
                     monthsData.push({
                       month: monthDate.toLocaleDateString('pt-BR', { month: 'short' }),
                       count
                     })
                   }
-                  
+
                   const maxCount = Math.max(...monthsData.map(m => m.count), 1)
-                  
+
                   return (
                     <div className="h-56">
                       <div className="flex items-end justify-between h-full space-x-2">
@@ -289,9 +265,9 @@ export default function FranquiaDashboard() {
                               <span className="text-xs font-semibold text-blue-600 mb-1">
                                 {data.count}
                               </span>
-                              <div 
+                              <div
                                 className="w-full bg-gradient-to-t from-blue-500 to-cyan-400 rounded-t-lg transition-all duration-500 hover:opacity-80"
-                                style={{ 
+                                style={{
                                   height: `${(data.count / maxCount) * 100}%`,
                                   minHeight: data.count > 0 ? '8px' : '0px'
                                 }}
@@ -756,7 +732,7 @@ export default function FranquiaDashboard() {
 
       const result = await deleteResp.json()
       toast.success(`${result.deleted || orphans.length} agendamentos órfãos excluídos com sucesso`)
-      
+
       // Recarregar analytics
       await fetchAnalytics()
     } catch (error: any) {
@@ -785,35 +761,40 @@ export default function FranquiaDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="p-4 sm:p-6 lg:p-8">
-          <div className="lg:hidden mb-4 sm:mb-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Dashboard</h1>
-                <p className="text-xs sm:text-sm text-gray-600">Bem-vindo, {franquiaUser?.name || 'Admin'}</p>
-              </div>
-            </div>
-          </div>
+    <div className="p-4 sm:p-6 lg:p-10 max-w-[1920px] mx-auto space-y-6 sm:space-y-10 mb-20">
 
-          <div className="hidden lg:flex items-center justify-between mb-8">
-            <div>
-              <p className="text-sm uppercase tracking-wide text-gray-500">Painel</p>
-              <h1 className="text-3xl font-bold text-gray-900">Dashboard da Franquia</h1>
-            </div>
-            <Button
-              onClick={handleCleanupOrphans}
-              variant="outline"
-              className="text-red-600 hover:bg-red-50 border-red-200"
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Limpar Agendamentos Órfãos
-            </Button>
+      {/* Header Section - Premium Style */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-gray-200">
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <span className="px-3 py-1 bg-meu-primary/5 text-meu-primary text-[10px] sm:text-xs font-bold rounded-full uppercase tracking-wider">
+              Dashboard
+            </span>
           </div>
-
-        <div className="space-y-4 sm:space-y-6">
-          {renderTabContent()}
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-meu-primary tracking-tight">
+            Visão Geral
+          </h1>
+          <p className="text-sm sm:text-base text-gray-500 mt-2 max-w-2xl">
+            Bem-vindo, {franquiaUser?.name || 'Admin'}. Acompanhe o desempenho da sua academia.
+          </p>
         </div>
+
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
+          <Button
+            onClick={handleCleanupOrphans}
+            variant="outline"
+            size="sm"
+            className="text-xs border-gray-200 text-gray-600 hover:text-red-600 hover:border-red-300 transition-colors"
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Limpar Órfãos
+          </Button>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="space-y-4 sm:space-y-6">
+        {renderTabContent()}
       </div>
 
       <TeacherModal

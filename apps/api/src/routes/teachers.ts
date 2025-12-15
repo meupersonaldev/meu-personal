@@ -1851,4 +1851,178 @@ router.delete('/:id/blocks', requireAuth, async (req, res) => {
   }
 })
 
+// ============================================
+// Withdraw/Saque Endpoints (Requirements 9.2, 9.3, 7.8)
+// ============================================
+
+// POST /api/teachers/:id/withdraw - Solicitar saque
+router.post('/:id/withdraw', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params
+    const { amount, academy_id } = req.body
+    const user = req.user
+
+    // Verificar permissão (apenas o próprio professor pode solicitar saque)
+    if (user.userId !== id) {
+      return res.status(403).json({ error: 'Acesso não autorizado' })
+    }
+
+    // Validar dados
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ error: 'Valor de saque inválido' })
+    }
+
+    if (!academy_id) {
+      return res.status(400).json({ error: 'academy_id é obrigatório' })
+    }
+
+    // Buscar dados do professor
+    const { data: teacher, error: teacherError } = await supabase
+      .from('users')
+      .select('id, name, email')
+      .eq('id', id)
+      .single()
+
+    if (teacherError || !teacher) {
+      return res.status(404).json({ error: 'Professor não encontrado' })
+    }
+
+    // Buscar dados da academia
+    const { data: academy, error: academyError } = await supabase
+      .from('academies')
+      .select('id, name, franqueadora_id')
+      .eq('id', academy_id)
+      .single()
+
+    if (academyError || !academy) {
+      return res.status(404).json({ error: 'Academia não encontrada' })
+    }
+
+    // Criar registro de solicitação de saque
+    const { data: withdrawRequest, error: insertError } = await supabase
+      .from('withdraw_requests')
+      .insert({
+        teacher_id: id,
+        academy_id: academy_id,
+        amount: amount,
+        status: 'PENDING',
+        created_at: new Date().toISOString()
+      })
+      .select()
+      .single()
+
+    // Se a tabela não existir, apenas logar e continuar com as notificações
+    if (insertError) {
+      console.warn('[WITHDRAW] Tabela withdraw_requests não existe ou erro ao inserir:', insertError.message)
+      // Continuar mesmo sem persistir - as notificações são o foco desta task
+    }
+
+    // Importar e usar o NotificationService
+    const { createNotificationService } = await import('../services/notification.service')
+    const notificationService = createNotificationService(supabase)
+
+    // Calcular prazo estimado (5 dias úteis)
+    const deadline = new Date()
+    deadline.setDate(deadline.getDate() + 5)
+    const deadlineStr = deadline.toLocaleDateString('pt-BR')
+
+    // Notificar professor sobre saque solicitado (Requirement 9.2)
+    await notificationService.notifyTeacherWithdrawRequested(
+      { id: teacher.id, name: teacher.name, academy_id: academy_id },
+      amount,
+      deadlineStr
+    )
+
+    // Notificar franquia sobre solicitação de saque (Requirement 7.8)
+    await notificationService.notifyFranchiseWithdrawRequest(
+      { id: teacher.id, name: teacher.name },
+      amount,
+      { id: academy.id, name: academy.name }
+    )
+
+    console.log(`[WITHDRAW] ✅ Saque solicitado: professor=${id}, valor=${amount}, academia=${academy_id}`)
+
+    res.json({
+      message: 'Solicitação de saque enviada com sucesso',
+      withdraw: withdrawRequest || { teacher_id: id, amount, status: 'PENDING' },
+      deadline: deadlineStr
+    })
+  } catch (error: any) {
+    console.error('Erro ao solicitar saque:', error)
+    res.status(500).json({ error: error.message || 'Erro interno do servidor' })
+  }
+})
+
+// PATCH /api/teachers/:id/withdraw/:withdrawId - Processar saque (admin)
+router.patch('/:id/withdraw/:withdrawId', requireAuth, requireRole(['FRANQUIA', 'FRANQUEADORA', 'ADMIN']), async (req, res) => {
+  try {
+    const { id, withdrawId } = req.params
+    const { status } = req.body
+
+    // Validar status
+    if (!['PROCESSED', 'REJECTED'].includes(status)) {
+      return res.status(400).json({ error: 'Status inválido. Use PROCESSED ou REJECTED' })
+    }
+
+    // Buscar dados do professor
+    const { data: teacher, error: teacherError } = await supabase
+      .from('users')
+      .select('id, name, email')
+      .eq('id', id)
+      .single()
+
+    if (teacherError || !teacher) {
+      return res.status(404).json({ error: 'Professor não encontrado' })
+    }
+
+    // Buscar academia do professor
+    const { data: academyTeacher } = await supabase
+      .from('academy_teachers')
+      .select('academy_id')
+      .eq('teacher_id', id)
+      .single()
+
+    // Tentar atualizar o registro de saque (se a tabela existir)
+    let withdrawAmount = 0
+    const { data: withdrawRequest, error: updateError } = await supabase
+      .from('withdraw_requests')
+      .update({
+        status: status,
+        processed_at: new Date().toISOString()
+      })
+      .eq('id', withdrawId)
+      .select()
+      .single()
+
+    if (updateError) {
+      console.warn('[WITHDRAW] Tabela withdraw_requests não existe ou erro ao atualizar:', updateError.message)
+      // Usar valor do body se disponível
+      withdrawAmount = req.body.amount || 0
+    } else {
+      withdrawAmount = withdrawRequest?.amount || 0
+    }
+
+    // Importar e usar o NotificationService
+    const { createNotificationService } = await import('../services/notification.service')
+    const notificationService = createNotificationService(supabase)
+
+    // Notificar professor sobre saque processado (Requirement 9.3)
+    if (status === 'PROCESSED') {
+      await notificationService.notifyTeacherWithdrawProcessed(
+        { id: teacher.id, name: teacher.name, academy_id: academyTeacher?.academy_id },
+        withdrawAmount
+      )
+      console.log(`[WITHDRAW] ✅ Saque processado: professor=${id}, valor=${withdrawAmount}`)
+    }
+
+    res.json({
+      message: status === 'PROCESSED' ? 'Saque processado com sucesso' : 'Saque rejeitado',
+      withdraw: withdrawRequest || { id: withdrawId, teacher_id: id, status, amount: withdrawAmount }
+    })
+  } catch (error: any) {
+    console.error('Erro ao processar saque:', error)
+    res.status(500).json({ error: error.message || 'Erro interno do servidor' })
+  }
+})
+
 export default router

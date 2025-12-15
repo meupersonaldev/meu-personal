@@ -97,20 +97,20 @@ export default function AgendamentosGestaoPage() {
     try {
       // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
       const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-      
+
       console.log('[fetchBookings] Buscando agendamentos para academia:', franquiaUser.academyId)
-      
+
       const url = `/api/bookings?franchise_id=${franquiaUser.academyId}`
       const headers: HeadersInit = {
         'Content-Type': 'application/json'
       }
-      
+
       if (token) {
         headers['Authorization'] = `Bearer ${token}`
       }
 
       const response = await fetch(url, { headers })
-      
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
         console.error('[fetchBookings] Erro na resposta:', response.status, errorData)
@@ -182,7 +182,7 @@ export default function AgendamentosGestaoPage() {
     try {
       // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
       const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-      
+
       const response = await fetch(`/api/bookings/${bookingId}`, {
         method: 'PATCH',
         headers: {
@@ -216,7 +216,7 @@ export default function AgendamentosGestaoPage() {
     try {
       // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
       const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-      
+
       const updates: any = {}
       if (editingBooking.notes !== undefined) updates.notes = editingBooking.notes
       if (editingBooking.status) updates.status = editingBooking.status
@@ -256,7 +256,7 @@ export default function AgendamentosGestaoPage() {
     try {
       // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
       const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-      
+
       const response = await fetch(`/api/bookings/${deleteConfirm.bookingId}`, {
         method: 'DELETE',
         headers: {
@@ -312,7 +312,7 @@ export default function AgendamentosGestaoPage() {
     try {
       // Usar URL relativa para aproveitar o rewrite do Next.js (evita CORS)
       const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-      
+
       const deletePromises = Array.from(selectedBookings).map(bookingId =>
         fetch(`/api/bookings/${bookingId}`, {
           method: 'DELETE',
@@ -399,38 +399,44 @@ export default function AgendamentosGestaoPage() {
   const cancelledBookings = bookings.filter(b => b.status === 'CANCELLED').length
 
   return (
-    <div className="p-6">
-      {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Histórico de Agendamentos</h1>
-            <p className="text-gray-600">
-              Visualize e gerencie o histórico completo de todas as aulas agendadas na academia
-            </p>
+    <div className="p-4 sm:p-6 lg:p-10 max-w-[1920px] mx-auto space-y-6 sm:space-y-8 mb-20">
+      {/* Header Section - Premium Style */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-gray-200">
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <span className="px-3 py-1 bg-meu-primary/5 text-meu-primary text-[10px] sm:text-xs font-bold rounded-full uppercase tracking-wider">
+              Histórico
+            </span>
           </div>
-          <div className="flex items-center space-x-3">
-            {selectedBookings.size > 0 && (
-              <Button
-                onClick={handleBulkDelete}
-                variant="outline"
-                className="text-red-600 hover:bg-red-50 border-red-200"
-              >
-                <Trash className="h-4 w-4 mr-2" />
-                Excluir Selecionados ({selectedBookings.size})
-              </Button>
-            )}
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as any)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-meu-primary tracking-tight">
+            Histórico de Agendamentos
+          </h1>
+          <p className="text-sm sm:text-base text-gray-500 mt-2 max-w-2xl">
+            Visualize e gerencie o histórico completo de todas as aulas agendadas.
+          </p>
+        </div>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          {selectedBookings.size > 0 && (
+            <Button
+              onClick={handleBulkDelete}
+              variant="outline"
+              size="sm"
+              className="text-xs border-red-200 text-red-600 hover:bg-red-50 transition-colors"
             >
-              <option value="all">Todos</option>
-              <option value="CONFIRMED">Confirmados</option>
-              <option value="COMPLETED">Concluídos</option>
-              <option value="CANCELLED">Cancelados</option>
-            </select>
-          </div>
+              <Trash className="h-4 w-4 mr-2" />
+              Excluir ({selectedBookings.size})
+            </Button>
+          )}
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as any)}
+            className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-meu-primary focus:border-transparent bg-white"
+          >
+            <option value="all">Todos</option>
+            <option value="CONFIRMED">Confirmados</option>
+            <option value="COMPLETED">Concluídos</option>
+            <option value="CANCELLED">Cancelados</option>
+          </select>
         </div>
       </div>
 
@@ -438,490 +444,490 @@ export default function AgendamentosGestaoPage() {
       {!isHydrated || (!franquiaUser?.academyId && loading) ? (
         <div className="flex items-center justify-center py-12">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-meu-primary mx-auto mb-4"></div>
             <p className="text-gray-600">Carregando dados da academia...</p>
           </div>
         </div>
       ) : (
         <>
-          {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <Card className="p-6">
-          <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-              <Calendar className="h-6 w-6 text-blue-600" />
-            </div>
-            <div>
-              <div className="text-sm text-gray-600 mb-1">Total</div>
-              <div className="text-2xl font-bold text-blue-600">{bookings.length}</div>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-              <CheckCircle className="h-6 w-6 text-green-600" />
-            </div>
-            <div>
-              <div className="text-sm text-gray-600 mb-1">Confirmados</div>
-              <div className="text-2xl font-bold text-green-600">{confirmedBookings}</div>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-              <CheckCircle className="h-6 w-6 text-blue-600" />
-            </div>
-            <div>
-              <div className="text-sm text-gray-600 mb-1">Concluídos</div>
-              <div className="text-2xl font-bold text-blue-600">{completedBookings}</div>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-              <XCircle className="h-6 w-6 text-red-600" />
-            </div>
-            <div>
-              <div className="text-sm text-gray-600 mb-1">Cancelados</div>
-              <div className="text-2xl font-bold text-red-600">{cancelledBookings}</div>
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      {/* Bookings Table */}
-      <Card>
-        {filteredBookings.length === 0 ? (
-          <div className="p-8 text-center">
-            <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
-              Nenhum agendamento encontrado
-            </h3>
-            <p className="text-gray-600">
-              {statusFilter === 'all'
-                ? 'Ainda não há aulas agendadas na academia'
-                : `Nenhum agendamento com status "${statusFilter}"`
-              }
-            </p>
-          </div>
-        ) : (
-          <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12">
-                    <input
-                      type="checkbox"
-                      checked={selectedBookings.size === paginatedBookings.length && paginatedBookings.length > 0}
-                      onChange={handleSelectAll}
-                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
-                    />
-                  </TableHead>
-                  <TableHead>Data</TableHead>
-                  <TableHead>Horário</TableHead>
-                  <TableHead>Aluno</TableHead>
-                  <TableHead>Professor</TableHead>
-                  <TableHead>Duração</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paginatedBookings.map((booking) => (
-                  <TableRow key={booking.id} className={`hover:bg-gray-50 ${selectedBookings.has(booking.id) ? 'bg-blue-50' : ''}`}>
-                    <TableCell>
-                      <input
-                        type="checkbox"
-                        checked={selectedBookings.has(booking.id)}
-                        onChange={() => handleSelectBooking(booking.id)}
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
-                      />
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      {formatDate(booking.date)}
-                    </TableCell>
-                    <TableCell>
-                      {formatTime(booking.date)}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center space-x-2">
-                        <User className="h-4 w-4 text-gray-400" />
-                        <span>{booking.studentName}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center space-x-2">
-                        <GraduationCap className="h-4 w-4 text-gray-400" />
-                        <span>{booking.teacherName}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center space-x-2">
-                        <Clock className="h-4 w-4 text-gray-400" />
-                        <span>{booking.duration} min</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {getStatusBadge(booking.status)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end space-x-2">
-                        <Button
-                          onClick={() => setSelectedBooking(booking)}
-                          size="sm"
-                          variant="ghost"
-                          className="h-8 w-8 p-0"
-                          title="Ver detalhes"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          onClick={() => handleEdit(booking)}
-                          size="sm"
-                          variant="ghost"
-                          className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700"
-                          title="Editar"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        {booking.status === 'CONFIRMED' && (
-                          <>
-                            <Button
-                              onClick={() => handleComplete(booking.id)}
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0 text-green-600 hover:text-green-700"
-                              title="Marcar como concluída"
-                            >
-                              <CheckCircle className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              onClick={() => handleCancel(booking.id)}
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0 text-orange-600 hover:text-orange-700"
-                              title="Cancelar"
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </>
-                        )}
-                        <Button
-                          onClick={() => handleDelete(booking.id)}
-                          size="sm"
-                          variant="ghost"
-                          className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
-                          title="Excluir"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-
-            {/* Paginação */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between px-4 py-4 border-t">
-                <div className="text-sm text-gray-600">
-                  Mostrando {startIndex + 1} a {Math.min(endIndex, filteredBookings.length)} de {filteredBookings.length} agendamentos
+          {/* Stats - Premium KPI Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <Card className="relative overflow-hidden border border-gray-100 shadow-sm hover:shadow-lg transition-all duration-300 bg-white group">
+              <div className="absolute top-0 left-0 w-1 h-full bg-meu-primary group-hover:w-2 transition-all duration-300" />
+              <div className="p-4 sm:p-6 pl-6 sm:pl-8">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-xs sm:text-sm font-semibold text-gray-500 uppercase tracking-wider">Total</h3>
+                  <Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-meu-primary/40 group-hover:text-meu-primary transition-colors" />
                 </div>
-                <div className="flex items-center space-x-2">
-                  <Button
-                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                    disabled={currentPage === 1}
-                    variant="outline"
-                    size="sm"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                    Anterior
-                  </Button>
-                  <div className="flex items-center space-x-1">
-                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                      let pageNum
-                      if (totalPages <= 5) {
-                        pageNum = i + 1
-                      } else if (currentPage <= 3) {
-                        pageNum = i + 1
-                      } else if (currentPage >= totalPages - 2) {
-                        pageNum = totalPages - 4 + i
-                      } else {
-                        pageNum = currentPage - 2 + i
-                      }
-                      return (
-                        <Button
-                          key={pageNum}
-                          onClick={() => setCurrentPage(pageNum)}
-                          variant={currentPage === pageNum ? "default" : "outline"}
-                          size="sm"
-                          className="w-10"
-                        >
-                          {pageNum}
-                        </Button>
-                      )
-                    })}
-                  </div>
-                  <Button
-                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                    disabled={currentPage === totalPages}
-                    variant="outline"
-                    size="sm"
-                  >
-                    Próxima
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
+                <span className="text-2xl sm:text-3xl font-bold text-meu-primary tracking-tight">{bookings.length}</span>
+                <p className="text-[10px] sm:text-xs text-gray-400 mt-2 font-medium">Agendamentos registrados</p>
               </div>
+            </Card>
+
+            <Card className="relative overflow-hidden border border-gray-100 shadow-sm hover:shadow-lg transition-all duration-300 bg-white group">
+              <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500 group-hover:w-2 transition-all duration-300" />
+              <div className="p-4 sm:p-6 pl-6 sm:pl-8">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-xs sm:text-sm font-semibold text-gray-500 uppercase tracking-wider">Confirmados</h3>
+                  <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-500/40 group-hover:text-emerald-500 transition-colors" />
+                </div>
+                <span className="text-2xl sm:text-3xl font-bold text-emerald-600 tracking-tight">{confirmedBookings}</span>
+                <p className="text-[10px] sm:text-xs text-gray-400 mt-2 font-medium">Aulas agendadas</p>
+              </div>
+            </Card>
+
+            <Card className="relative overflow-hidden border border-gray-100 shadow-sm hover:shadow-lg transition-all duration-300 bg-white group">
+              <div className="absolute top-0 left-0 w-1 h-full bg-blue-500 group-hover:w-2 transition-all duration-300" />
+              <div className="p-4 sm:p-6 pl-6 sm:pl-8">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-xs sm:text-sm font-semibold text-gray-500 uppercase tracking-wider">Concluídos</h3>
+                  <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 text-blue-500/40 group-hover:text-blue-500 transition-colors" />
+                </div>
+                <span className="text-2xl sm:text-3xl font-bold text-blue-600 tracking-tight">{completedBookings}</span>
+                <p className="text-[10px] sm:text-xs text-gray-400 mt-2 font-medium">Aulas realizadas</p>
+              </div>
+            </Card>
+
+            <Card className="relative overflow-hidden border border-gray-100 shadow-sm hover:shadow-lg transition-all duration-300 bg-white group">
+              <div className="absolute top-0 left-0 w-1 h-full bg-red-500 group-hover:w-2 transition-all duration-300" />
+              <div className="p-4 sm:p-6 pl-6 sm:pl-8">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-xs sm:text-sm font-semibold text-gray-500 uppercase tracking-wider">Cancelados</h3>
+                  <XCircle className="h-4 w-4 sm:h-5 sm:w-5 text-red-500/40 group-hover:text-red-500 transition-colors" />
+                </div>
+                <span className="text-2xl sm:text-3xl font-bold text-red-600 tracking-tight">{cancelledBookings}</span>
+                <p className="text-[10px] sm:text-xs text-gray-400 mt-2 font-medium">Aulas canceladas</p>
+              </div>
+            </Card>
+          </div>
+
+          {/* Bookings Table */}
+          <Card>
+            {filteredBookings.length === 0 ? (
+              <div className="p-8 text-center">
+                <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  Nenhum agendamento encontrado
+                </h3>
+                <p className="text-gray-600">
+                  {statusFilter === 'all'
+                    ? 'Ainda não há aulas agendadas na academia'
+                    : `Nenhum agendamento com status "${statusFilter}"`
+                  }
+                </p>
+              </div>
+            ) : (
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-12">
+                        <input
+                          type="checkbox"
+                          checked={selectedBookings.size === paginatedBookings.length && paginatedBookings.length > 0}
+                          onChange={handleSelectAll}
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
+                        />
+                      </TableHead>
+                      <TableHead>Data</TableHead>
+                      <TableHead>Horário</TableHead>
+                      <TableHead>Aluno</TableHead>
+                      <TableHead>Professor</TableHead>
+                      <TableHead>Duração</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedBookings.map((booking) => (
+                      <TableRow key={booking.id} className={`hover:bg-gray-50 ${selectedBookings.has(booking.id) ? 'bg-blue-50' : ''}`}>
+                        <TableCell>
+                          <input
+                            type="checkbox"
+                            checked={selectedBookings.has(booking.id)}
+                            onChange={() => handleSelectBooking(booking.id)}
+                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {formatDate(booking.date)}
+                        </TableCell>
+                        <TableCell>
+                          {formatTime(booking.date)}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center space-x-2">
+                            <User className="h-4 w-4 text-gray-400" />
+                            <span>{booking.studentName}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center space-x-2">
+                            <GraduationCap className="h-4 w-4 text-gray-400" />
+                            <span>{booking.teacherName}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center space-x-2">
+                            <Clock className="h-4 w-4 text-gray-400" />
+                            <span>{booking.duration} min</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {getStatusBadge(booking.status)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end space-x-2">
+                            <Button
+                              onClick={() => setSelectedBooking(booking)}
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 p-0"
+                              title="Ver detalhes"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              onClick={() => handleEdit(booking)}
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700"
+                              title="Editar"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            {booking.status === 'CONFIRMED' && (
+                              <>
+                                <Button
+                                  onClick={() => handleComplete(booking.id)}
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 w-8 p-0 text-green-600 hover:text-green-700"
+                                  title="Marcar como concluída"
+                                >
+                                  <CheckCircle className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  onClick={() => handleCancel(booking.id)}
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 w-8 p-0 text-orange-600 hover:text-orange-700"
+                                  title="Cancelar"
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </>
+                            )}
+                            <Button
+                              onClick={() => handleDelete(booking.id)}
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
+                              title="Excluir"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+
+                {/* Paginação */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between px-4 py-4 border-t">
+                    <div className="text-sm text-gray-600">
+                      Mostrando {startIndex + 1} a {Math.min(endIndex, filteredBookings.length)} de {filteredBookings.length} agendamentos
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Button
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1}
+                        variant="outline"
+                        size="sm"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                        Anterior
+                      </Button>
+                      <div className="flex items-center space-x-1">
+                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                          let pageNum
+                          if (totalPages <= 5) {
+                            pageNum = i + 1
+                          } else if (currentPage <= 3) {
+                            pageNum = i + 1
+                          } else if (currentPage >= totalPages - 2) {
+                            pageNum = totalPages - 4 + i
+                          } else {
+                            pageNum = currentPage - 2 + i
+                          }
+                          return (
+                            <Button
+                              key={pageNum}
+                              onClick={() => setCurrentPage(pageNum)}
+                              variant={currentPage === pageNum ? "default" : "outline"}
+                              size="sm"
+                              className="w-10"
+                            >
+                              {pageNum}
+                            </Button>
+                          )
+                        })}
+                      </div>
+                      <Button
+                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                        disabled={currentPage === totalPages}
+                        variant="outline"
+                        size="sm"
+                      >
+                        Próxima
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
-          </>
-        )}
-      </Card>
-
-      {/* Info Section */}
-      {bookings.length > 0 && (
-        <Card className="mt-8 p-6 bg-blue-50 border-blue-200">
-          <div className="flex items-start space-x-3">
-            <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5" />
-            <div>
-              <h4 className="text-sm font-medium text-blue-900 mb-1">
-                Sobre a Gestão de Agendamentos
-              </h4>
-              <div className="text-sm text-blue-700 space-y-1">
-                <p>• Aulas podem ser agendadas diretamente pelos alunos nos horários disponíveis dos professores</p>
-                <p>• Aulas podem ser agendadas diretamente pelo professor nos horários disponíveis da academia</p>
-                <p>• Você pode cancelar aulas confirmadas se necessário</p>
-                <p>• Regra de cancelamento: gratuito até 4 horas antes; dentro das 4 horas, 1 crédito do aluno é consumido</p>
-                <p>• Marque aulas como concluídas após a realização se necessário</p>
-                <p>• Use os filtros para visualizar agendamentos por status</p>
-              </div>
-            </div>
-          </div>
-        </Card>
-      )}
-
-      {/* Details Modal */}
-      {selectedBooking && (
-        <div className="fixed inset-0 left-0 top-0 right-0 bottom-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
-          <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-gray-900">Detalhes do Agendamento</h2>
-                <Button
-                  onClick={() => setSelectedBooking(null)}
-                  variant="ghost"
-                  size="sm"
-                >
-                  <X className="h-5 w-5" />
-                </Button>
-              </div>
-
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <div className="text-sm text-gray-600 mb-1">Status</div>
-                    {getStatusBadge(selectedBooking.status)}
-                  </div>
-                  <div>
-                    <div className="text-sm text-gray-600 mb-1">Custo</div>
-                    <div className="font-medium text-gray-900">{selectedBooking.credits_cost} créditos</div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-gray-600 mb-1">Aluno</div>
-                    <div className="font-medium text-gray-900">{selectedBooking.studentName}</div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-gray-600 mb-1">Professor</div>
-                    <div className="font-medium text-gray-900">{selectedBooking.teacherName}</div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-gray-600 mb-1">Data</div>
-                    <div className="font-medium text-gray-900">{formatDate(selectedBooking.date)}</div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-gray-600 mb-1">Horário</div>
-                    <div className="font-medium text-gray-900">{formatTime(selectedBooking.date)}</div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-gray-600 mb-1">Duração</div>
-                    <div className="font-medium text-gray-900">{selectedBooking.duration} minutos</div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-gray-600 mb-1">Criado em</div>
-                    <div className="font-medium text-gray-900">
-                      {new Date(selectedBooking.created_at).toLocaleDateString('pt-BR')}
-                    </div>
-                  </div>
-                </div>
-
-                {selectedBooking.notes && (
-                  <div>
-                    <div className="text-sm text-gray-600 mb-1">Observações</div>
-                    <div className="p-3 bg-gray-50 rounded-lg text-gray-900">
-                      {selectedBooking.notes}
-                    </div>
-                  </div>
-                )}
-
-                {selectedBooking.status === 'CONFIRMED' && (
-                  <div className="flex items-center space-x-3 pt-4">
-                    <Button
-                      onClick={() => {
-                        handleComplete(selectedBooking.id)
-                        setSelectedBooking(null)
-                      }}
-                      className="flex-1 bg-blue-600 hover:bg-blue-700"
-                    >
-                      <CheckCircle className="h-4 w-4 mr-2" />
-                      Marcar como Concluída
-                    </Button>
-                    <Button
-                      onClick={() => {
-                        handleCancel(selectedBooking.id)
-                        setSelectedBooking(null)
-                      }}
-                      variant="outline"
-                      className="flex-1 text-red-600 hover:bg-red-50 border-red-200"
-                    >
-                      <X className="h-4 w-4 mr-2" />
-                      Cancelar
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </div>
           </Card>
-        </div>
-      )}
 
-        {/* Modal de Confirmação de Cancelamento */}
-        <ConfirmDialog
-          isOpen={cancelConfirm.isOpen}
-          onClose={() => setCancelConfirm({ isOpen: false, bookingId: null })}
-          onConfirm={confirmCancel}
-          title="Cancelar Agendamento"
-          description={`Cancelamento gratuito até ${cancelFreeUntilLabel || '4 horas antes do horário agendado'}. Após esse prazo, 1 crédito do aluno será consumido. Tem certeza que deseja cancelar?`}
-          confirmText="Cancelar Agendamento"
-          cancelText="Voltar"
-          type="warning"
-        />
-
-        {/* Modal de Confirmação de Exclusão */}
-        <ConfirmDialog
-          isOpen={deleteConfirm.isOpen}
-          onClose={() => setDeleteConfirm({ isOpen: false, bookingId: null })}
-          onConfirm={confirmDelete}
-          title="Excluir Agendamento"
-          description="Tem certeza que deseja excluir permanentemente este agendamento? Esta ação não pode ser desfeita."
-          confirmText="Excluir"
-          cancelText="Cancelar"
-          type="danger"
-        />
-
-        {/* Modal de Confirmação de Exclusão em Massa */}
-        <ConfirmDialog
-          isOpen={bulkDeleteConfirm}
-          onClose={() => setBulkDeleteConfirm(false)}
-          onConfirm={confirmBulkDelete}
-          title="Excluir Agendamentos Selecionados"
-          description={`Tem certeza que deseja excluir permanentemente ${selectedBookings.size} agendamento(s)? Esta ação não pode ser desfeita.`}
-          confirmText="Excluir Todos"
-          cancelText="Cancelar"
-          type="danger"
-        />
-
-        {/* Modal de Edição */}
-        {editingBooking && (
-          <div className="fixed inset-0 left-0 top-0 right-0 bottom-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
-            <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-2xl font-bold text-gray-900">Editar Agendamento</h2>
-                  <Button
-                    onClick={() => setEditingBooking(null)}
-                    variant="ghost"
-                    size="sm"
-                  >
-                    <X className="h-5 w-5" />
-                  </Button>
-                </div>
-
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Status
-                    </label>
-                    <select
-                      value={editingBooking.status}
-                      onChange={(e) => setEditingBooking({ ...editingBooking, status: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-600"
-                    >
-                      <option value="CONFIRMED">Confirmado</option>
-                      <option value="COMPLETED">Concluído</option>
-                      <option value="CANCELLED">Cancelado</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Observações
-                    </label>
-                    <textarea
-                      value={editingBooking.notes || ''}
-                      onChange={(e) => setEditingBooking({ ...editingBooking, notes: e.target.value })}
-                      rows={4}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-600"
-                      placeholder="Adicione observações sobre o agendamento..."
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4 pt-4">
-                    <div>
-                      <div className="text-sm text-gray-600 mb-1">Aluno</div>
-                      <div className="font-medium text-gray-900">{editingBooking.studentName}</div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-gray-600 mb-1">Professor</div>
-                      <div className="font-medium text-gray-900">{editingBooking.teacherName}</div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-gray-600 mb-1">Data</div>
-                      <div className="font-medium text-gray-900">{formatDate(editingBooking.date)}</div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-gray-600 mb-1">Horário</div>
-                      <div className="font-medium text-gray-900">{formatTime(editingBooking.date)}</div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center space-x-3 pt-4">
-                    <Button
-                      onClick={handleSaveEdit}
-                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
-                    >
-                      <Save className="h-4 w-4 mr-2" />
-                      Salvar Alterações
-                    </Button>
-                    <Button
-                      onClick={() => setEditingBooking(null)}
-                      variant="outline"
-                      className="flex-1"
-                    >
-                      Cancelar
-                    </Button>
+          {/* Info Section */}
+          {bookings.length > 0 && (
+            <Card className="mt-8 p-6 bg-blue-50 border-blue-200">
+              <div className="flex items-start space-x-3">
+                <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5" />
+                <div>
+                  <h4 className="text-sm font-medium text-blue-900 mb-1">
+                    Sobre a Gestão de Agendamentos
+                  </h4>
+                  <div className="text-sm text-blue-700 space-y-1">
+                    <p>• Aulas podem ser agendadas diretamente pelos alunos nos horários disponíveis dos professores</p>
+                    <p>• Aulas podem ser agendadas diretamente pelo professor nos horários disponíveis da academia</p>
+                    <p>• Você pode cancelar aulas confirmadas se necessário</p>
+                    <p>• Regra de cancelamento: gratuito até 4 horas antes; dentro das 4 horas, 1 crédito do aluno é consumido</p>
+                    <p>• Marque aulas como concluídas após a realização se necessário</p>
+                    <p>• Use os filtros para visualizar agendamentos por status</p>
                   </div>
                 </div>
               </div>
             </Card>
-          </div>
-        )}
+          )}
+
+          {/* Details Modal */}
+          {selectedBooking && (
+            <div className="fixed inset-0 left-0 top-0 right-0 bottom-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
+              <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-2xl font-bold text-gray-900">Detalhes do Agendamento</h2>
+                    <Button
+                      onClick={() => setSelectedBooking(null)}
+                      variant="ghost"
+                      size="sm"
+                    >
+                      <X className="h-5 w-5" />
+                    </Button>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <div className="text-sm text-gray-600 mb-1">Status</div>
+                        {getStatusBadge(selectedBooking.status)}
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-600 mb-1">Custo</div>
+                        <div className="font-medium text-gray-900">{selectedBooking.credits_cost} créditos</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-600 mb-1">Aluno</div>
+                        <div className="font-medium text-gray-900">{selectedBooking.studentName}</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-600 mb-1">Professor</div>
+                        <div className="font-medium text-gray-900">{selectedBooking.teacherName}</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-600 mb-1">Data</div>
+                        <div className="font-medium text-gray-900">{formatDate(selectedBooking.date)}</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-600 mb-1">Horário</div>
+                        <div className="font-medium text-gray-900">{formatTime(selectedBooking.date)}</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-600 mb-1">Duração</div>
+                        <div className="font-medium text-gray-900">{selectedBooking.duration} minutos</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-600 mb-1">Criado em</div>
+                        <div className="font-medium text-gray-900">
+                          {new Date(selectedBooking.created_at).toLocaleDateString('pt-BR')}
+                        </div>
+                      </div>
+                    </div>
+
+                    {selectedBooking.notes && (
+                      <div>
+                        <div className="text-sm text-gray-600 mb-1">Observações</div>
+                        <div className="p-3 bg-gray-50 rounded-lg text-gray-900">
+                          {selectedBooking.notes}
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedBooking.status === 'CONFIRMED' && (
+                      <div className="flex items-center space-x-3 pt-4">
+                        <Button
+                          onClick={() => {
+                            handleComplete(selectedBooking.id)
+                            setSelectedBooking(null)
+                          }}
+                          className="flex-1 bg-blue-600 hover:bg-blue-700"
+                        >
+                          <CheckCircle className="h-4 w-4 mr-2" />
+                          Marcar como Concluída
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            handleCancel(selectedBooking.id)
+                            setSelectedBooking(null)
+                          }}
+                          variant="outline"
+                          className="flex-1 text-red-600 hover:bg-red-50 border-red-200"
+                        >
+                          <X className="h-4 w-4 mr-2" />
+                          Cancelar
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </Card>
+            </div>
+          )}
+
+          {/* Modal de Confirmação de Cancelamento */}
+          <ConfirmDialog
+            isOpen={cancelConfirm.isOpen}
+            onClose={() => setCancelConfirm({ isOpen: false, bookingId: null })}
+            onConfirm={confirmCancel}
+            title="Cancelar Agendamento"
+            description={`Cancelamento gratuito até ${cancelFreeUntilLabel || '4 horas antes do horário agendado'}. Após esse prazo, 1 crédito do aluno será consumido. Tem certeza que deseja cancelar?`}
+            confirmText="Cancelar Agendamento"
+            cancelText="Voltar"
+            type="warning"
+          />
+
+          {/* Modal de Confirmação de Exclusão */}
+          <ConfirmDialog
+            isOpen={deleteConfirm.isOpen}
+            onClose={() => setDeleteConfirm({ isOpen: false, bookingId: null })}
+            onConfirm={confirmDelete}
+            title="Excluir Agendamento"
+            description="Tem certeza que deseja excluir permanentemente este agendamento? Esta ação não pode ser desfeita."
+            confirmText="Excluir"
+            cancelText="Cancelar"
+            type="danger"
+          />
+
+          {/* Modal de Confirmação de Exclusão em Massa */}
+          <ConfirmDialog
+            isOpen={bulkDeleteConfirm}
+            onClose={() => setBulkDeleteConfirm(false)}
+            onConfirm={confirmBulkDelete}
+            title="Excluir Agendamentos Selecionados"
+            description={`Tem certeza que deseja excluir permanentemente ${selectedBookings.size} agendamento(s)? Esta ação não pode ser desfeita.`}
+            confirmText="Excluir Todos"
+            cancelText="Cancelar"
+            type="danger"
+          />
+
+          {/* Modal de Edição */}
+          {editingBooking && (
+            <div className="fixed inset-0 left-0 top-0 right-0 bottom-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
+              <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-2xl font-bold text-gray-900">Editar Agendamento</h2>
+                    <Button
+                      onClick={() => setEditingBooking(null)}
+                      variant="ghost"
+                      size="sm"
+                    >
+                      <X className="h-5 w-5" />
+                    </Button>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Status
+                      </label>
+                      <select
+                        value={editingBooking.status}
+                        onChange={(e) => setEditingBooking({ ...editingBooking, status: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-600"
+                      >
+                        <option value="CONFIRMED">Confirmado</option>
+                        <option value="COMPLETED">Concluído</option>
+                        <option value="CANCELLED">Cancelado</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Observações
+                      </label>
+                      <textarea
+                        value={editingBooking.notes || ''}
+                        onChange={(e) => setEditingBooking({ ...editingBooking, notes: e.target.value })}
+                        rows={4}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-600"
+                        placeholder="Adicione observações sobre o agendamento..."
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 pt-4">
+                      <div>
+                        <div className="text-sm text-gray-600 mb-1">Aluno</div>
+                        <div className="font-medium text-gray-900">{editingBooking.studentName}</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-600 mb-1">Professor</div>
+                        <div className="font-medium text-gray-900">{editingBooking.teacherName}</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-600 mb-1">Data</div>
+                        <div className="font-medium text-gray-900">{formatDate(editingBooking.date)}</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-600 mb-1">Horário</div>
+                        <div className="font-medium text-gray-900">{formatTime(editingBooking.date)}</div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center space-x-3 pt-4">
+                      <Button
+                        onClick={handleSaveEdit}
+                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                      >
+                        <Save className="h-4 w-4 mr-2" />
+                        Salvar Alterações
+                      </Button>
+                      <Button
+                        onClick={() => setEditingBooking(null)}
+                        variant="outline"
+                        className="flex-1"
+                      >
+                        Cancelar
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            </div>
+          )}
         </>
       )}
     </div>

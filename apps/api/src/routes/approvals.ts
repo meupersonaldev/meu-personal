@@ -1,6 +1,12 @@
 import express from 'express'
 import { supabase } from '../lib/supabase'
 import { createNotification } from './notifications'
+import { 
+  onTeacherApproved, 
+  onTeacherRejected, 
+  onNewTeacherRegistered, 
+  onNewStudentRegistered 
+} from '../lib/events'
 
 const router = express.Router()
 
@@ -64,7 +70,18 @@ router.post('/', async (req, res) => {
 
     if (error) throw error
 
-    // Buscar admin da franquia para notificar
+    // Notificar franquia sobre novo cadastro (Requirements 5.1, 5.2, 7.3, 7.4)
+    if (academy_id) {
+      if (type === 'teacher_registration') {
+        // Notificar franquia sobre novo professor (Requirements 5.1, 7.4)
+        await onNewTeacherRegistered(user_id, academy_id)
+      } else if (type === 'student_registration') {
+        // Notificar franquia sobre novo aluno (Requirements 5.2, 7.3)
+        await onNewStudentRegistered(user_id, academy_id)
+      }
+    }
+
+    // Buscar admin da franquia para notificar (legacy notification)
     const { data: franchiseAdmin } = await supabase
       .from('franqueadora_admins')
       .select('user_id')
@@ -173,7 +190,13 @@ router.put('/:id', async (req, res) => {
               })
           }
 
-          // Buscar admin da franquia para notificar
+          // Notificar professor sobre aprovação (Requirement 5.3)
+          // Notificar franqueadora sobre professor aprovado (Requirement 11.6)
+          if (request.academy_id) {
+            await onTeacherApproved(request.user_id, request.academy_id)
+          }
+
+          // Buscar admin da franquia para notificar (legacy notification)
           const { data: franchiseAdmin } = await supabase
             .from('franqueadora_admins')
             .select('user_id')
@@ -241,6 +264,11 @@ router.put('/:id', async (req, res) => {
           error: 'Erro ao processar aprovação'
         })
       }
+    }
+
+    // Se rejeitado, notificar o professor (Requirement 5.4)
+    if (status === 'rejected' && request.type === 'teacher_registration' && request.academy_id) {
+      await onTeacherRejected(request.user_id, request.academy_id, rejection_reason)
     }
 
     res.json(data)

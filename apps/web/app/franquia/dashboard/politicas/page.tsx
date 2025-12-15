@@ -62,7 +62,7 @@ export default function FranquiaPoliticasPage() {
         if (token) {
           headers['Authorization'] = `Bearer ${token}`
         }
-        
+
         const response = await fetch(`${API_URL}/api/academies/${academy.id}/policies-effective`, {
           credentials: 'include',
           headers
@@ -132,15 +132,20 @@ export default function FranquiaPoliticasPage() {
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="p-4 sm:p-6 lg:p-10 max-w-[1920px] mx-auto space-y-6 sm:space-y-8 mb-20">
+      {/* Header Section - Premium Style */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-gray-200">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-meu-primary tracking-tight">
+          <div className="flex items-center gap-3 mb-2">
+            <span className="px-3 py-1 bg-meu-primary/5 text-meu-primary text-[10px] sm:text-xs font-bold rounded-full uppercase tracking-wider">
+              Políticas
+            </span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-meu-primary tracking-tight">
             Políticas de Operação
           </h1>
-          <p className="text-gray-500 mt-1">
-            Regras definidas pela franqueadora para sua unidade
+          <p className="text-sm sm:text-base text-gray-500 mt-2 max-w-2xl">
+            Regras definidas pela franqueadora para sua unidade.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -310,7 +315,7 @@ export default function FranquiaPoliticasPage() {
         <Card className="border-blue-200 bg-blue-50">
           <CardContent className="p-4">
             <p className="text-sm text-blue-800">
-              <strong>Nota:</strong> Os campos marcados com borda azul possuem valores personalizados 
+              <strong>Nota:</strong> Os campos marcados com borda azul possuem valores personalizados
               para sua unidade, diferentes da política padrão da franqueadora.
             </p>
           </CardContent>
@@ -320,13 +325,13 @@ export default function FranquiaPoliticasPage() {
   )
 }
 
-function PolicyCard({ 
-  label, 
-  value, 
-  unit, 
-  description, 
-  hasOverride 
-}: { 
+function PolicyCard({
+  label,
+  value,
+  unit,
+  description,
+  hasOverride
+}: {
   label: string
   value: string
   unit?: string
