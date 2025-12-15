@@ -49,10 +49,7 @@ export class NotificationScheduler {
           student_id,
           teacher_id,
           academy_id,
-          status_canonical,
-          students:users!bookings_student_id_fkey(id, full_name, email),
-          teachers:users!bookings_teacher_id_fkey(id, full_name, email),
-          academies:academies!bookings_academy_id_fkey(id, name)
+          status_canonical
         `)
         .in('status_canonical', ['RESERVED', 'CONFIRMED'])
         .gte('start_at', reminderStart.toISOString())
@@ -85,9 +82,16 @@ export class NotificationScheduler {
             continue
           }
 
-          const student = booking.students as any
-          const teacher = booking.teachers as any
-          const academy = booking.academies as any
+          // Buscar dados do aluno e professor separadamente
+          const [studentResult, teacherResult, academyResult] = await Promise.all([
+            supabase.from('users').select('id, name, email').eq('id', booking.student_id).single(),
+            supabase.from('users').select('id, name, email').eq('id', booking.teacher_id).single(),
+            supabase.from('academies').select('id, name').eq('id', booking.academy_id).single()
+          ])
+
+          const student = studentResult.data
+          const teacher = teacherResult.data
+          const academy = academyResult.data
 
           if (!student || !teacher) {
             console.log(`[NotificationScheduler] ⚠️ Booking ${booking.id} sem aluno ou professor`)
@@ -103,13 +107,13 @@ export class NotificationScheduler {
 
           const studentData: Student = {
             id: student.id,
-            full_name: student.full_name,
+            name: student.name,
             email: student.email
           }
 
           const teacherData: Teacher = {
             id: teacher.id,
-            full_name: teacher.full_name,
+            name: teacher.name,
             email: teacher.email,
             academy_id: booking.academy_id
           }
@@ -161,9 +165,7 @@ export class NotificationScheduler {
           student_id,
           teacher_id,
           academy_id,
-          status_canonical,
-          students:users!bookings_student_id_fkey(id, full_name, email),
-          teachers:users!bookings_teacher_id_fkey(id, full_name, email)
+          status_canonical
         `)
         .in('status_canonical', ['RESERVED', 'CONFIRMED'])
         .gte('start_at', noShowStart.toISOString())
@@ -208,8 +210,14 @@ export class NotificationScheduler {
             continue
           }
 
-          const student = booking.students as any
-          const teacher = booking.teachers as any
+          // Buscar dados do aluno e professor separadamente
+          const [studentResult, teacherResult] = await Promise.all([
+            supabase.from('users').select('id, name, email').eq('id', booking.student_id).single(),
+            supabase.from('users').select('id, name, email').eq('id', booking.teacher_id).single()
+          ])
+
+          const student = studentResult.data
+          const teacher = teacherResult.data
 
           if (!student || !teacher) {
             continue
@@ -224,12 +232,12 @@ export class NotificationScheduler {
 
           const studentData: Student = {
             id: student.id,
-            full_name: student.full_name
+            name: student.name
           }
 
           const teacherData: Teacher = {
             id: teacher.id,
-            full_name: teacher.full_name,
+            name: teacher.name,
             academy_id: booking.academy_id
           }
 
@@ -278,8 +286,7 @@ export class NotificationScheduler {
           unit_id,
           qty,
           unlock_at,
-          type,
-          students:users!student_class_tx_student_id_fkey(id, full_name, email)
+          type
         `)
         .eq('type', 'PURCHASE')
         .gte('unlock_at', expirationStart.toISOString())
@@ -288,10 +295,6 @@ export class NotificationScheduler {
       if (error) {
         // Se a tabela não existir ou erro de query, tentar abordagem alternativa
         console.log(`[NotificationScheduler] ⚠️ Erro ao buscar student_class_tx: ${error.message}`)
-        console.log('[NotificationScheduler] ℹ️ Tentando abordagem alternativa via credit_grants...')
-        
-        // Abordagem alternativa: buscar credit_grants recentes e calcular expiração
-        // Por enquanto, apenas logar que não há créditos expirando
         console.log('[NotificationScheduler] ✅ Nenhum crédito expirando encontrado (tabela não disponível)')
         return result
       }
@@ -304,20 +307,18 @@ export class NotificationScheduler {
       console.log(`[NotificationScheduler] 📊 Encontrados ${expiringCredits.length} créditos expirando`)
 
       // Agrupar por aluno para enviar uma única notificação
-      const creditsByStudent = new Map<string, { student: any; totalAmount: number; expirationDate: Date }>()
+      const creditsByStudent = new Map<string, { studentId: string; totalAmount: number; expirationDate: Date }>()
 
       for (const credit of expiringCredits) {
         const studentId = credit.student_id
-        const student = credit.students as any
-
-        if (!studentId || !student) continue
+        if (!studentId) continue
 
         const existing = creditsByStudent.get(studentId)
         if (existing) {
           existing.totalAmount += credit.qty || 0
         } else {
           creditsByStudent.set(studentId, {
-            student,
+            studentId,
             totalAmount: credit.qty || 0,
             expirationDate: new Date(credit.unlock_at)
           })
@@ -341,10 +342,19 @@ export class NotificationScheduler {
             continue
           }
 
+          // Buscar dados do aluno
+          const { data: studentUser } = await supabase
+            .from('users')
+            .select('id, name, email')
+            .eq('id', studentId)
+            .single()
+
+          if (!studentUser) continue
+
           const studentData: Student = {
-            id: data.student.id,
-            full_name: data.student.full_name,
-            email: data.student.email
+            id: studentUser.id,
+            name: studentUser.name,
+            email: studentUser.email
           }
 
           // Notificar aluno sobre créditos expirando (Requirement 3.5)
@@ -388,8 +398,7 @@ export class NotificationScheduler {
           unit_id,
           qty,
           unlock_at,
-          type,
-          students:users!student_class_tx_student_id_fkey(id, full_name, email)
+          type
         `)
         .eq('type', 'EXPIRED')
         .gte('created_at', expiredStart.toISOString())
@@ -409,20 +418,18 @@ export class NotificationScheduler {
       console.log(`[NotificationScheduler] 📊 Encontrados ${expiredCredits.length} créditos expirados`)
 
       // Agrupar por aluno
-      const creditsByStudent = new Map<string, { student: any; totalAmount: number }>()
+      const creditsByStudent = new Map<string, { studentId: string; totalAmount: number }>()
 
       for (const credit of expiredCredits) {
         const studentId = credit.student_id
-        const student = credit.students as any
-
-        if (!studentId || !student) continue
+        if (!studentId) continue
 
         const existing = creditsByStudent.get(studentId)
         if (existing) {
           existing.totalAmount += Math.abs(credit.qty || 0)
         } else {
           creditsByStudent.set(studentId, {
-            student,
+            studentId,
             totalAmount: Math.abs(credit.qty || 0)
           })
         }
@@ -445,10 +452,19 @@ export class NotificationScheduler {
             continue
           }
 
+          // Buscar dados do aluno
+          const { data: studentUser } = await supabase
+            .from('users')
+            .select('id, name, email')
+            .eq('id', studentId)
+            .single()
+
+          if (!studentUser) continue
+
           const studentData: Student = {
-            id: data.student.id,
-            full_name: data.student.full_name,
-            email: data.student.email
+            id: studentUser.id,
+            name: studentUser.name,
+            email: studentUser.email
           }
 
           // Notificar aluno sobre créditos expirados (Requirement 3.6)
@@ -491,9 +507,7 @@ export class NotificationScheduler {
         .select(`
           student_id,
           academy_id,
-          status,
-          students:users!academy_students_student_id_fkey(id, full_name, email),
-          academies:academies!academy_students_academy_id_fkey(id, name)
+          status
         `)
         .eq('status', 'active')
 
@@ -513,10 +527,19 @@ export class NotificationScheduler {
         try {
           const studentId = studentLink.student_id
           const academyId = studentLink.academy_id
-          const student = studentLink.students as any
-          const academy = studentLink.academies as any
 
-          if (!studentId || !academyId || !student || !academy) continue
+          if (!studentId || !academyId) continue
+
+          // Buscar dados do aluno e academia separadamente
+          const [studentResult, academyResult] = await Promise.all([
+            supabase.from('users').select('id, name, email').eq('id', studentId).single(),
+            supabase.from('academies').select('id, name').eq('id', academyId).single()
+          ])
+
+          const student = studentResult.data
+          const academy = academyResult.data
+
+          if (!student || !academy) continue
 
           // Verificar última atividade (booking ou check-in)
           const { data: lastBooking } = await supabase
@@ -561,7 +584,7 @@ export class NotificationScheduler {
 
           const studentData: Student = {
             id: student.id,
-            full_name: student.full_name,
+            name: student.name,
             email: student.email
           }
 

@@ -135,6 +135,8 @@ export async function requireFranqueadoraAdmin(req: Request, res: Response, next
     const userId = req.user.userId
     // 1) Tabela preferida: franqueadora_admins
     let franqueadoraId: string | null = null
+    let franchiseId: string | null = null
+    
     try {
       const { data, error } = await supabase
         .from('franqueadora_admins')
@@ -173,6 +175,31 @@ export async function requireFranqueadoraAdmin(req: Request, res: Response, next
           // Fallback: permitir acesso com o identificador informado na query
           franqueadoraId = queryFranqueadoraId
         }
+      } else if (canonicalRole === 'FRANCHISE_ADMIN') {
+        // Para admin de franquia, buscar a franqueadora através da franquia
+        try {
+          const { data: franchiseAdmin } = await supabase
+            .from('franchise_admins')
+            .select('franchise_id')
+            .eq('user_id', userId)
+            .single()
+          
+          if (franchiseAdmin?.franchise_id) {
+            franchiseId = franchiseAdmin.franchise_id
+            // Buscar a franqueadora da franquia
+            const { data: academy } = await supabase
+              .from('academies')
+              .select('franqueadora_id')
+              .eq('id', franchiseAdmin.franchise_id)
+              .single()
+            
+            if (academy?.franqueadora_id) {
+              franqueadoraId = academy.franqueadora_id
+            }
+          }
+        } catch (err) {
+          console.warn('[AUTH] Erro ao buscar franqueadora do admin de franquia:', err)
+        }
       } else if (elevated && queryFranqueadoraId) {
         franqueadoraId = queryFranqueadoraId
       }
@@ -209,6 +236,12 @@ export async function requireFranqueadoraAdmin(req: Request, res: Response, next
     if (franqueadoraId) {
       req.franqueadoraAdmin = { franqueadora_id: franqueadoraId }
     }
+    
+    // Armazenar franchiseId para uso em rotas que precisam filtrar por franquia
+    if (franchiseId) {
+      (req as any).franchiseId = franchiseId
+    }
+    
     return next()
   } catch (err) {
     return res.status(403).json({ message: 'Forbidden' })
