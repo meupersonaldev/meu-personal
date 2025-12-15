@@ -17,6 +17,8 @@ router.get('/events', async (req, res) => {
     }
 
     // Buscar bookings do período - apenas com alunos (agendamentos reais, não disponibilidades)
+    // Para franquia: mostrar apenas aulas CONFIRMADAS, CONCLUÍDAS e CANCELADAS
+    // Status como RESERVED, PENDING, REQUESTED são visíveis apenas para o professor
     const { data: bookings, error: bookingsError } = await supabase
       .from('bookings')
       .select(`
@@ -41,6 +43,7 @@ router.get('/events', async (req, res) => {
       `)
       .eq('franchise_id', academy_id)
       .not('student_id', 'is', null) // Apenas agendamentos com aluno
+      .in('status_canonical', ['CONFIRMED', 'DONE', 'CANCELED', 'COMPLETED', 'CANCELLED']) // Apenas status visíveis para franquia
       .gte('date', `${start_date}T00:00:00Z`)
       .lte('date', `${end_date}T23:59:59Z`)
       .order('date', { ascending: true })
